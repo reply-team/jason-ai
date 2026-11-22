@@ -24,7 +24,7 @@ public static partial class JournalKinds
     /// </summary>
     public const string ContactsFinished = "contacts_finished";
 
-    /// <summary>One request continued the lines of people held in a campaign: the counts of its items and the people enrolled again.</summary>
+    /// <summary>One request continued the paused lines of people in a campaign: the counts of its items and the people enrolled again.</summary>
     public const string ContactsContinued = "contacts_continued";
 
     /// <summary>
@@ -34,7 +34,7 @@ public static partial class JournalKinds
     public const string ContactsReopened = "contacts_reopened";
 
     /// <summary>
-    /// A reply line held a person's line in a campaign: the person, enrolled until then, is <c>paused</c>, so the claim takes
+    /// A reply line paused a person's line in a campaign: the person, enrolled until then, is <c>paused</c>, so the claim takes
     /// none of their touches there until the line is continued or ended. Names the person and the reply line, by ids only,
     /// written by the respond step as the dispatcher.
     /// </summary>

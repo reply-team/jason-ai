@@ -201,7 +201,7 @@ An item is **eligible** — the dispatcher would claim it right now — when all
    `dispatch.in_archived_campaign: runs`, today `audience.search_cancel` alone: archiving is how a person stops a
    campaign, so the archive cancels the campaign's open work but such a stop, and the next scan makes one stop for each
    search of the campaign still in flight, which ends it `cancelled`;
-3. it is not a touch of a person held in its campaign: an item whose operation's document says `touch: true` —
+3. it is not a touch of a person paused in its campaign: an item whose operation's document says `touch: true` —
    `message.send`, `social_invitation.send` and `campaign.enroll` — about a person whose membership in the item's
    campaign is `paused` waits, as a paused campaign's work does: it stays `created`, and no status, wait or attempt is
    written, until the line is continued or ended ([A person's line in a campaign](#a-persons-line-in-a-campaign)). A
@@ -213,7 +213,7 @@ An item is **eligible** — the dispatcher would claim it right now — when all
 `eligible` is never stored. It is computed from one shared expression that the item list and the DTO
 use, and that the claim query states again in SQL — a window function the expression cannot carry — held to
 it by a test across every campaign state and every state of a person's membership, so `workitem.list --eligible`
-tells you exactly what the next scan would consider. Every way a letter comes to be sent passes the claim, so a held
+tells you exactly what the next scan would consider. Every way a letter comes to be sent passes the claim, so a paused
 person's letter waits whether it was waiting for its `not_before`, parked for an approval the person then gave, or
 released from a wait. A letter already `scheduled` or `processing` is on its way and is not held; one the provider
 already took for a later moment cannot be held, only taken back (below), and so is one on its way at the hold that the
@@ -843,7 +843,7 @@ manager, and the deep review accounts for every person paused.
 `inbound_reply_observed` line names, by the line's contact column, inside the transaction that reads the line and before
 anything else it does with it: whether or not `Responder:OnReply` is on, and whatever skip passes the line over. An
 `enrolled` member of the campaign becomes `paused`, and one reserved line says it, `contacts_paused`, as
-`system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already held, ended or
+`system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already paused, ended or
 removed is left as they are, and a line that names no contact — the thread's person is pinned to none, or to more than
 one — holds nobody. A thread moves when Jason writes into it too, so a line that may be Jason's own move holds nobody
 either: one whose `last_activity_at` is not later than the latest moment one of Jason's letters to the person in the
@@ -882,12 +882,16 @@ result per item in the order asked, as `campaign.remove_contacts` does, and writ
   there is taken back (above). Any named actor may end a line, a role from its run among them, and the `reason` is
   required (`validation_failed`, `required` on `reason`). The line is `contacts_finished`, with the people whose line it
   ended and the reason.
-- **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose held
+- **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose waiting
   touches are candidates again by that alone; any named actor may. The line is `contacts_continued`.
 - **`campaign.reopen_contacts`** (`jason campaign reopen-contacts`) enrols a `finished` member again. It is the person's
   decision, carried one of two ways: their own word, from a named `human` outside any run, or a run that names, in
   `decision_id`, the campaign's question a named person answered about the `contacts_finished` line that ended those
-  lines, a person that line does not name answered `not_in_decision`. The runtime never reads the answer's words, so
+  lines. A person counts only where that line is the latest `contacts_finished` of the campaign naming them, so one
+  answer reopens the end it was asked about and never a later one; a person that line does not name, or whose line a
+  later `contacts_finished` ended again, is answered `not_in_decision`. No later reopen is looked for: a person the
+  question reopened and nobody ended since is `enrolled`, and a second reopen answers `not_finished`, as it does for
+  any line that is not ended. The runtime never reads the answer's words, so
   the manager reopens only on an answer that says yes. The line is `contacts_reopened`, with the question where a run
   carried it. Touches counted before the line ended stay counted: the ceiling counts work items, never a state.
 
@@ -910,8 +914,10 @@ how their latest work ended, or when in the period it happened, the latest first
 the latest of what happened to them, its `text` naming the count it was. Each row also says how many touches the
 person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
 exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
-shows is the number the ceiling stops at, and its moment is the item's finish where it succeeded, else the end of the
-latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+shows is the number the ceiling stops at. A send that a succeeded `message.cancel` of the campaign took back never
+went: it is no touch, and no row's last touch either. A touch's moment, where it succeeded, is the one the provider took
+it for, its result's `accepted_for`, read in UTC as the hold reads it, else the item's finish; where it did not, the end
+of the latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
 sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
 (`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
@@ -1442,13 +1448,14 @@ whose document says `touch: true`, today `message.send`, `social_invitation.send
 contact: they ask by the person and the operation, never by a channel, so a reply in a thread the person opened
 (`conversation.reply`), a take-back (`message.cancel`) and every read pass whatever the line's state. `line_finished`
 refuses a touch to a person whose membership of the campaign is `finished`: the line with them was ended, and only the
-person reopens it; a `paused` membership is not refused here, since a held person's touch is no candidate at all
+person reopens it; a `paused` membership is not refused here, since a paused person's touch is no candidate at all
 ([Eligibility](#eligibility), rule 3). `touch_ceiling_reached` refuses a touch to a person who has
 already had `Lines:MaxTouches` touches in this campaign (§Settings): a touch counts when it is one of those operations
 about the person in this campaign, other than the item being claimed, and it succeeded, or any attempt of it ended classed
 `ambiguous`, since that attempt may have reached the person, whatever came after it and whatever became of the item —
-put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most — one definition, which
-the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most, and a send that a
+succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended
+`ambiguous` leaves it counted, since the letter may still go — one definition, which the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
 dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
 cannot both pass the count: the claim takes one item of a campaign at a time and none while another of its items is
 `scheduled` or `processing`, so every touch claimed before is counted by its attempts once it has left

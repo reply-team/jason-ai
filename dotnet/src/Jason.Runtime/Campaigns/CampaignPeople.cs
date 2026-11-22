@@ -206,7 +206,7 @@ internal static partial class CampaignPeople
     private const string Current = "f.state <> 'excluded'";
 
     // A member whose line is ended: nobody still to start on and nobody left idle, so New and Idle leave them out, while a
-    // held line, paused, is not ended and leaves them where they stood.
+    // paused line is not ended and leaves them where they stood.
     private const string LineOpen = "f.state <> 'finished'";
 
     // Everyone it happened to, removed since or not: last week does not change because somebody was taken out today.
@@ -402,13 +402,15 @@ internal static partial class CampaignPeople
     /// How many touches each membership of a page's people has had, and when the last one was: <c>{0}</c> is the campaigns
     /// of those memberships and <c>{1}</c> the people, the work read by its index on the campaign and the person as the
     /// work part reads it. Which work is a touch is <see cref="LineTouches.CountedSql"/>, spliced in whole, so the number a
-    /// row shows is the number the claim's ceiling counts. A touch's moment is its item's finish where it succeeded, else
-    /// the end of the latest attempt of it that ended classed <c>ambiguous</c>, which is what made it count.
+    /// row shows is the number the claim's ceiling counts. A touch's moment, where it succeeded, is the one the provider took
+    /// it for, its result's <c>accepted_for</c>, read in UTC as the hold reads it, and else its item's finish; where it did
+    /// not, the end of the latest attempt of it that ended classed <c>ambiguous</c>, which is what made it count.
     /// </summary>
     internal static readonly string TouchesSql = $$"""
         SELECT t.campaign_id AS CampaignId, t.contact_id AS ContactId, count(*) AS Touches, max(t.at) AS LastTouchAt
         FROM (SELECT w.campaign_id, w.contact_id,
-                     coalesce(CASE WHEN w.status = 'succeeded' THEN w.finished_at END,
+                     coalesce(CASE WHEN w.status = 'succeeded'
+                                   THEN coalesce(strftime('%Y-%m-%d %H:%M:%f', json_extract(w.result_json, '$.items[0].accepted_for')), w.finished_at) END,
                               (SELECT max(a.finished_at) FROM attempts AS a
                                WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous')) AS at
               FROM work_items AS w

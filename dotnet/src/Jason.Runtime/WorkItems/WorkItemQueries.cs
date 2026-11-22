@@ -23,7 +23,7 @@ public static class WorkItemQueries
     private static readonly string[] RunsInArchivedCampaign = [.. OperationCatalog.RunsInArchivedCampaign];
 
     /// <summary>
-    /// The operations that open or carry on a line with a person, as their contracts declare it: a held person's are not
+    /// The operations that open or carry on a line with a person, as their contracts declare it: a paused person's are not
     /// candidates. Matched against the operation column, as the campaign's rule is.
     /// </summary>
     private static readonly string[] Touches = [.. OperationCatalog.Touches];

@@ -296,7 +296,7 @@ public static class CampaignRenderers
         return RenderText.Lines(lines);
     }
 
-    /// <summary>The outcome of continuing held lines, counted the way the API counts it.</summary>
+    /// <summary>The outcome of continuing paused lines, counted the way the API counts it.</summary>
     public static string? ContinueBatch(string json)
     {
         var result = RenderText.Read<ContinueContactsResult>(json);

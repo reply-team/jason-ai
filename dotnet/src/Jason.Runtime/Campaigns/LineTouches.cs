@@ -1,5 +1,6 @@
 using Jason.Contracts.Operations;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Campaigns;
@@ -17,7 +18,9 @@ namespace Jason.Runtime.Campaigns;
 /// item put back for a repeat, parked again, failed, cancelled or expired after such an attempt still counts. One item is
 /// one touch at most. Where a later attempt found that nothing had been sent this counts one too many, which is the safe
 /// side of a ceiling; nothing the store keeps proves an earlier attempt did not act. Work none of whose attempts ended
-/// ambiguous, and that did not succeed, reached nobody, and counts for nothing.
+/// ambiguous, and that did not succeed, reached nobody, and counts for nothing. Nor does a send a succeeded
+/// <c>message.cancel</c> of the campaign names (<see cref="HeldSends.Cancel"/>): the provider held it, and said it took it
+/// back, so it never went, as the hold reads it too; a cancel that failed, or is still to run, takes nothing back.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
@@ -37,7 +40,10 @@ internal static class LineTouches
          AND w.operation IN ({{TouchesSql}})
          AND (w.status = 'succeeded'
               OR EXISTS (SELECT 1 FROM attempts AS a
-                         WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous')))
+                         WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous'))
+         AND NOT EXISTS (SELECT 1 FROM work_items AS k
+                         WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
+                           AND json_extract(k.context_json, '$.input.send') = w.public_id))
         """;
 
     /// <summary>

@@ -367,7 +367,7 @@ export type CampaignSummaryRow = {
     idle: number;
     sequence: number;
     out: number;
-    /** The members whose line is held. Absent from a runtime that does not count it. */
+    /** The members whose line is paused. Absent from a runtime that does not count it. */
     paused?: number;
     /** The members whose line is ended; new and idle leave them out. Absent from a runtime that does not count it. */
     finished?: number;

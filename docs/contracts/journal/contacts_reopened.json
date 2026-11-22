@@ -22,7 +22,7 @@
         "required": ["reopened", "not_finished", "not_member", "excluded", "not_in_decision", "rejected", "contact_ids", "decision_id"],
         "properties": {
           "reopened": { "type": "integer", "minimum": 0, "description": "Items that enrolled a member whose line was ended again." },
-          "not_finished": { "type": "integer", "minimum": 0, "description": "Items naming a member whose line was not ended: enrolled, or held." },
+          "not_finished": { "type": "integer", "minimum": 0, "description": "Items naming a member whose line was not ended: enrolled, or paused." },
           "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
           "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },
           "not_in_decision": { "type": "integer", "minimum": 0, "description": "Items naming a person the ended line the question is about does not name." },

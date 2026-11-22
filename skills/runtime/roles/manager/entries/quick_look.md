@@ -56,14 +56,15 @@ Something is off when it will not right itself before the next review, and waiti
 - a failure nobody has interpreted, which your skill's failed inbox says how to read;
 - an item you watch that has ended, whose result asks for the next step;
 - a question the person answered that nobody has acted on;
-- a held line whose reply now has its verdict, which the `inbound_reply` entry says how to end or continue;
+- a paused line whose reply now has its verdict, which the `inbound_reply` entry says how to end or continue;
 - work stuck past its moment, or waiting on an approval nobody was told of;
 - a reserve that runs low, or replies that should have come and have not, by the counts;
 - one of Jason's own letters in a campaign linked to a provider's sequence.
 
 Act on each as your skill says, inside your boundary, or ask one question. Everything else is the deep review's: do not
 create a person's next touch, end a line whose touches are spent, or widen, at a quick look, and do not read people one
-by one to find out whether you should. Where the counts say something the deep review must look at, put it under `off`.
+by one to find out whether you should. A touch refused `touch_ceiling_reached` is the exception: it is a failure, and
+its line is ended where you meet it, with the ceiling as the reason, as your skill's failed inbox says. Where the counts say something the deep review must look at, put it under `off`.
 
 **Nothing off is a good quick look.** A campaign whose counts moved as they should, with nothing failed or stuck, is the
 quick look done: one line saying what you read and that nothing was off, `outcome: "nothing"`, and end. A quick look

@@ -866,7 +866,7 @@ public sealed class WorkItemService(
     /// <summary>
     /// Work about a person is only meaningful while the campaign is allowed to touch that person, so membership
     /// is checked here rather than left to the executor to discover. The membership is read tracked, so the person's
-    /// memberships hold it and the create's answer says whether a held person's touch waits, as a listing would.
+    /// memberships hold it and the create's answer says whether a paused person's touch waits, as a listing would.
     /// </summary>
     private async Task<Contact?> LoadMemberAsync(Campaign campaign, string? contactId, CancellationToken cancellationToken)
     {

@@ -192,6 +192,67 @@ public class CampaignPeopleSummaryTests
         }
     }
 
+    /// <summary>
+    /// A send the provider held for a later moment counts at that moment, its result's <c>accepted_for</c> read in UTC
+    /// whatever its offset, and not when the provider accepted it; a send a succeeded <c>message.cancel</c> of the campaign
+    /// took back never went, and the row leaves it out, as the ceiling does: from its count, and as its last touch, though its
+    /// moment is the later of the two.
+    /// </summary>
+    [Fact]
+    public async Task A_row_counts_a_held_send_at_its_moment_and_leaves_out_one_a_cancel_took_back()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var noon = new DateTime(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+        var campaign = WorkItemFactory.NewCampaign(now: noon.AddDays(-7));
+        var touched = Person("Marta", noon);
+        db.Campaigns.Add(campaign);
+        db.CampaignContacts.Add(new CampaignContact { Campaign = campaign, Contact = touched, AddedAt = noon.AddDays(-7), UpdatedAt = noon.AddDays(-7) });
+
+        var held = Sent(noon.AddHours(-6));
+        held.Result = Accepted("2026-11-09T12:00:00+01:00");
+        var takenBack = Sent(noon.AddHours(-5));
+        takenBack.Result = Accepted("2026-11-10T09:00:00Z");
+        var cancel = WorkItemFactory.NewProviderOp(campaign, "message.cancel", noon.AddHours(-4));
+        cancel.Status = WorkItemStatus.Succeeded;
+        cancel.FinishedAt = noon.AddHours(-4);
+        cancel.Context = new System.Text.Json.Nodes.JsonObject { ["input"] = new System.Text.Json.Nodes.JsonObject { ["send"] = takenBack.PublicId } };
+        db.WorkItems.Add(cancel);
+        await db.SaveChangesAsync(Ct);
+
+        var memberships = new MembershipService(db, new JournalWriter(TimeProvider.System), TimeProvider.System, TestCanceller.New(TimeProvider.System));
+        var row = Assert.Single((await memberships.ListAsync(new ListContactsRequest(campaign.PublicId, null, null, null), Ct)).Items);
+
+        Assert.Equal(1, row.Touches);
+        Assert.Equal(await LineTouches.OthersAsync(db, campaign.Id, touched.Id, 0, Ct), row.Touches);
+        Assert.Equal(new DateTimeOffset(noon.AddHours(-1)), row.LastTouchAt);
+
+        WorkItem Sent(DateTime finishedAt)
+        {
+            var item = WorkItemFactory.NewProviderOp(campaign, "message.send", noon.AddDays(-1));
+            item.Contact = touched;
+            item.Status = WorkItemStatus.Succeeded;
+            item.FinishedAt = finishedAt;
+            item.AttemptCount = 1;
+            var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, finishedAt.AddMinutes(-5));
+            attempt.FinishedAt = finishedAt;
+            db.WorkItems.Add(item);
+            db.Attempts.Add(attempt);
+            return item;
+        }
+
+        static System.Text.Json.Nodes.JsonObject Accepted(string moment) => new()
+        {
+            ["items"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject
+            {
+                ["status"] = "accepted",
+                ["accepted_for"] = moment,
+                ["reference"] = "snd_1",
+                ["cancelable"] = true,
+            }),
+        };
+    }
+
     private static Contact Person(string name, DateTime now) =>
         new() { PublicId = Jason.Contracts.Ids.PublicId.New("cnt"), FirstName = name, CreatedAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) };
 

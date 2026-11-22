@@ -486,20 +486,20 @@ public static class CampaignCommands
     {
         var command = new Command(
             "finish-contacts",
-            "End the line with people in a campaign: an enrolled or held member is finished, their open touches there "
+            "End the line with people in a campaign: an enrolled or paused member is finished, their open touches there "
                 + "(message.send, social_invitation.send, campaign.enroll) are cancelled, and no touch reaches them until the line is reopened. "
                 + "Their conversation goes on: a reply in their thread is not refused. --reason is required: the line records why it ended.");
         return LineVerb(command, "A contact whose line to end, as cnt_.... Repeat the option for more than one.", Operations.CampaignFinishContacts, CampaignRenderers.FinishBatch, env, actor);
     }
 
-    /// <summary>Continues the lines of people held in a campaign; any named actor may, so the default actor applies.</summary>
+    /// <summary>Continues the paused lines of people in a campaign; any named actor may, so the default actor applies.</summary>
     private static Command ContinueContacts(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command(
             "continue-contacts",
-            "Continue the line with people held in a campaign: a paused member is enrolled again, and the touches held for them may go again. "
-                + "A member who is not held is answered not_paused.");
-        return LineVerb(command, "A held contact to continue, as cnt_.... Repeat the option for more than one.", Operations.CampaignContinueContacts, CampaignRenderers.ContinueBatch, env, actor);
+            "Continue the line with people whose line in a campaign is paused: a paused member is enrolled again, and the touches waiting for them may go again. "
+                + "A member who is not paused is answered not_paused.");
+        return LineVerb(command, "A paused contact to continue, as cnt_.... Repeat the option for more than one.", Operations.CampaignContinueContacts, CampaignRenderers.ContinueBatch, env, actor);
     }
 
     /// <summary>

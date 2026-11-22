@@ -245,7 +245,7 @@ public sealed class MembershipService(
     }
 
     /// <summary>
-    /// Ends the line with each person named: an enrolled or a held member becomes <c>finished</c>, which the claim refuses a
+    /// Ends the line with each person named: an enrolled or a paused member becomes <c>finished</c>, which the claim refuses a
     /// touch, and in the same save their open touches in this campaign are cancelled — the operations
     /// <see cref="OperationCatalog.Touches"/> names, and nothing else, so a responder and its read, a reply and a cancel of
     /// a send go on. Any named actor may, a role inside a run among them: ending a line is the manager's judgement, and the
@@ -504,8 +504,9 @@ public sealed class MembershipService(
     /// <summary>
     /// The people whose lines the person's answered question is about: the question is of this campaign, answered, by a
     /// person who gave their name, and names among its references at least one <c>contacts_finished</c> line of this
-    /// campaign; the people are those lines' own. The lookup reads the journal's own columns and the ids a line lists,
-    /// never a word of the question or its answer.
+    /// campaign; the people are those lines' own, each only where that line is the latest <c>contacts_finished</c> of the
+    /// campaign naming them, by the journal's order, so one answer reopens the end it was asked about and never a later
+    /// one. The lookup reads the journal's own columns and the ids a line lists, never a word of the question or its answer.
     /// </summary>
     private async Task<HashSet<string>> DecidedAsync(string id, Campaign campaign, CancellationToken cancellationToken)
     {
@@ -531,7 +532,7 @@ public sealed class MembershipService(
             .ToList();
         var lines = await db.Journal.AsNoTracking()
             .Where(entry => entries.Contains(entry.PublicId) && entry.CampaignId == campaign.Id && entry.Kind == JournalKinds.ContactsFinished)
-            .Select(entry => entry.New)
+            .Select(entry => new { entry.Id, entry.New })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         if (lines.Count == 0)
@@ -539,12 +540,32 @@ public sealed class MembershipService(
             throw DomainErrors.ReopenDecisionNotAboutFinish(decision.PublicId);
         }
 
+        // One answer reopens the end it is about: a person counts only where the line the question names is the latest
+        // that ended their line here, so a yes spent on one reopen cannot reopen a later end the person never answered.
+        var first = lines.Min(line => line.Id);
+        var later = await db.Journal.AsNoTracking()
+            .Where(entry => entry.CampaignId == campaign.Id && entry.Kind == JournalKinds.ContactsFinished && entry.Id > first)
+            .Select(entry => new { entry.Id, entry.New })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var latest = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var line in later)
+        {
+            foreach (var contact in ContactIds(line.New))
+            {
+                latest[contact] = Math.Max(latest.GetValueOrDefault(contact), line.Id);
+            }
+        }
+
         return lines
-            .SelectMany(line => line?["contact_ids"] as JsonArray ?? [])
+            .SelectMany(line => ContactIds(line.New).Where(contact => latest.GetValueOrDefault(contact) <= line.Id))
+            .ToHashSet(StringComparer.Ordinal);
+
+        static IEnumerable<string> ContactIds(JsonNode? line) =>
+            (line?["contact_ids"] as JsonArray ?? [])
             .OfType<JsonValue>()
             .Select(node => node.TryGetValue<string>(out var value) ? value : null)
-            .OfType<string>()
-            .ToHashSet(StringComparer.Ordinal);
+            .OfType<string>();
     }
 
     /// <summary>

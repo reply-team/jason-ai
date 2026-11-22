@@ -31,7 +31,7 @@ jason rolenote set --role manager --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --no
 ## A start after a pause is not a new campaign
 
 Work the pause held runs again by itself, and the people in flight keep their lines: a line that was going on goes on,
-a held one stays held for you to end or continue, and an ended one stays ended. Nothing is planned again from the
+a paused one stays paused for you to end or continue, and an ended one stays ended. Nothing is planned again from the
 start. The line that woke you is the start, and the one before it is the pause, with its reason:
 
 ```
@@ -40,7 +40,7 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind campaign_pau
 ```
 
 **Read what changed while it stood.** From the last review your note names, as your skill's review says: replies, and
-the lines they held, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill);
+the lines they paused, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill);
 failures; questions answered while it stood; people added; lines ended or continued by somebody else. Where you paused
 it yourself for an incident, read what the person answered and what they set before they started it again, and do not
 undo it: their start is their word that what you asked is settled.

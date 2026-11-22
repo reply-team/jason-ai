@@ -25,10 +25,10 @@ First, in that transaction and before anything else the step does with the line,
 line's contact column names a person who is an `enrolled` member of the campaign, the membership becomes `paused`, and
 one reserved line, `contacts_paused`, says so as `system:dispatcher`, with the person and the reply line by their ids.
 It holds whatever follows — `Responder:OnReply` off, and every skip below, included — since a person who wrote is not
-written to again before somebody has read what they wrote. While the line is held the claim takes none of the person's
+written to again before somebody has read what they wrote. While the line is paused the claim takes none of the person's
 touches in that campaign, and in the same transaction what the provider already holds for them there for a later moment
 is taken back, one `message.cancel` a letter ([work execution](work-execution.md), "A person's line in a campaign"). A
-member whose line is already held, ended or removed, and a line that names no contact, hold nobody; nor does a line
+member whose line is already paused, ended or removed, and a line that names no contact, hold nobody; nor does a line
 that may be Jason's own letter moving the thread (§4, "What a line does not know"). The hold is set again in the
 transaction that passes a line whose write was refused, so a responder that could not be made does not let the person's
 touches go on; a refusal of the hold itself there is logged once for the campaign, by its code, and the watermark still

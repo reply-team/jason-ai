@@ -7,7 +7,7 @@ namespace Jason.Cli.Tests.Commands;
 
 /// <summary>
 /// The three verbs of a person's line in a campaign, one operation each: <c>finish-contacts</c> ends it with a reason,
-/// <c>continue-contacts</c> enrols a held person again, and <c>reopen-contacts</c> enrols a finished one again on the
+/// <c>continue-contacts</c> enrols a paused person again, and <c>reopen-contacts</c> enrols a finished one again on the
 /// person's decision, which names who decided and, from a run, the question they answered.
 /// </summary>
 public class CampaignLineCommandsTests
@@ -68,7 +68,7 @@ public class CampaignLineCommandsTests
     [Theory]
     [InlineData("finish-contacts", "End the line")]
     [InlineData("finish-contacts", "--reason is required")]
-    [InlineData("continue-contacts", "held")]
+    [InlineData("continue-contacts", "whose line in a campaign is paused")]
     [InlineData("reopen-contacts", "the person's decision")]
     [InlineData("reopen-contacts", "--decision")]
     [InlineData("reopen-contacts", ActorOption.NoDefault)]
