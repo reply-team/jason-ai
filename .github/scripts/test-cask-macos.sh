@@ -54,6 +54,8 @@ TOKEN=jason
 TEST_TAP=jasonproof/test
 AUDIT_TAP=jasonproof/audit
 IDENTIFIER=ai.jasonharness.desktop
+# The person's own quick-start the machine before holds (the job's before step), which no uninstall of Jason's may take.
+OWN_SKILL_FILE="$HOME/.agents/skills/quick-start/SKILL.md"
 APP=/Applications/Jason.app
 CARRIED="$APP/Contents/Resources/bundle/jason"
 ZIP_NAME=jason-desktop-macos-arm64.zip
@@ -64,6 +66,13 @@ case "$step" in
 esac
 
 fail() { echo "::error title=Cask::$1"; exit 1; }
+
+# The person's own skill, after an uninstall or a zap: still there, as it was written.
+own_skill_kept() {
+    [ -f "$OWN_SKILL_FILE" ] || fail "$1 took the person's own skill at $OWN_SKILL_FILE"
+    [ "$(cat "$OWN_SKILL_FILE")" = "a person's own skill" ] || fail "$1 changed the person's own skill at $OWN_SKILL_FILE"
+    say "after $1 the person's own skill at $OWN_SKILL_FILE is there, as it was"
+}
 
 # What a wait that reached its bound leaves to see, on stderr: every process of Jason's, the desktop's last log lines, the
 # last lines Gatekeeper and LaunchServices logged, and the screen, kept beside the listings. Each read is bounded itself.
@@ -346,6 +355,7 @@ uninstall)
     running="$(ps -axo command= | grep -iE '(Jason\.app/|/bundle/jason)' | grep -v grep || true)"
     [ -z "$running" ] || fail "a Jason process is left after brew uninstall --cask: $running"
     say "brew uninstall --cask took the application, its link and Homebrew's record"
+    own_skill_kept 'brew uninstall --cask'
     ;;
 
 uninstall-left)
@@ -380,6 +390,7 @@ carried-uninstall)
     grep -qF 'brew uninstall --zap --cask jason' "$OUT/cask-carried-uninstall.json" || fail "the carried jason uninstall does not name brew uninstall --zap --cask jason"
     [ ! -e "$HOME/.local/bin/jason" ] || fail "the carried jason uninstall left the wrapper"
     say "the carried jason uninstall exited 0, left the application, its link and its state to Homebrew, and named brew uninstall --zap --cask jason"
+    own_skill_kept 'the carried jason uninstall'
     ;;
 
 zap)
@@ -397,6 +408,7 @@ zap)
     skills="$( { find "$HOME/.claude/skills" -mindepth 1 -maxdepth 1 2>/dev/null || true; find "$HOME/.agents/skills" -mindepth 1 -maxdepth 1 2>/dev/null || true; } | wc -l | tr -d ' ')"
     say "recorded, not asserted: after the zap the profiles naming ~/.local/bin are '${profiles:-none}', and $skills skill folder(s) are under ~/.claude/skills and ~/.agents/skills"
     say "brew uninstall --zap --cask jason, with no --force, took the application, its link, Homebrew's record, the wrapper and both launch agents' files"
+    own_skill_kept 'brew uninstall --zap --cask'
     ;;
 
 formula)
