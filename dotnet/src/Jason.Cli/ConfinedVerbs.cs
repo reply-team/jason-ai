@@ -55,6 +55,7 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "campaign reopen-contacts"),
         (Kind.PersonsWord, "block clear"),
         (Kind.PersonsWord, "workitem resume"),
+        (Kind.PersonsWord, "launches lift"),
         (Kind.PersonsWord, "workitem review"),
         (Kind.PersonsWord, "report submit"),
         (Kind.PersonsWord, "subscription rewind"),

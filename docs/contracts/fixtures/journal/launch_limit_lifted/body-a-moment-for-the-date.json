@@ -1,0 +1,18 @@
+{
+  "kind": "launch_limit_lifted",
+  "version": 1,
+  "case": "the key is the local date the lift covers, never a moment",
+  "body": {
+    "key": "2026-10-07T00:00:00Z",
+    "old": null,
+    "new": { "until": "2026-10-07T15:00:00.000Z", "time_zone": "Asia/Tokyo", "released": 0 }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/key",
+        "reason": "pattern"
+      }
+    ]
+  }
+}

@@ -311,6 +311,7 @@ public class DefaultActorTests
         ["campaign", "reopen-contacts", "cmp_A", "--contact", "cnt_A"],
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
+        ["launches", "lift"],
         ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],

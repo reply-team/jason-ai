@@ -121,6 +121,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.PreferenceUnset,
         JournalKinds.SubscriptionFailed,
         JournalKinds.SubscriptionCursorRewound,
+        JournalKinds.LaunchLimitLifted,
     };
 
     /// <summary>

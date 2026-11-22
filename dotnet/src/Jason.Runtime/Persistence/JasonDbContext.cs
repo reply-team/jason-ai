@@ -66,6 +66,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Preference> Preferences => Set<Preference>();
 
+    public DbSet<LaunchLimitLift> LaunchLimitLifts => Set<LaunchLimitLift>();
+
     public DbSet<SubscriptionCursor> SubscriptionCursors => Set<SubscriptionCursor>();
 
     public DbSet<SubscriptionRun> SubscriptionRuns => Set<SubscriptionRun>();
@@ -928,6 +930,18 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             preference.ToTable(t => t.HasCheckConstraint("ck_preferences_value_json", "json_valid(value_json)"));
             preference.Property(p => p.ValueHash).HasMaxLength(80);
             preference.Property(p => p.UpdatedById).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<LaunchLimitLift>(lift =>
+        {
+            lift.HasKey(l => l.Id);
+
+            // One lift per day of a zone: a second lift of the same day answers what stands and writes nothing, and the
+            // claim's one question is this index's.
+            lift.Property(l => l.TimeZone).HasMaxLength(64);
+            lift.HasIndex(l => new { l.LocalDate, l.TimeZone }).IsUnique();
+            lift.Property(l => l.ActorId).HasMaxLength(100);
+            lift.Property(l => l.Reason).HasMaxLength(2000);
         });
 
         modelBuilder.Entity<Audience>(audience =>
