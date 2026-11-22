@@ -1280,10 +1280,10 @@ public partial class InteractiveSkillTests
         Assert.Contains(Fence, section, StringComparison.Ordinal);
         Assert.Contains("The rule is the campaign's, not one person's: a campaign linked to a sequence gets no letter of Jason's own.", section, StringComparison.Ordinal);
 
-        // The philosophy page, which the README links, says the same rule, and no longer steers towards a sequence
-        // "where that is the better tool".
+        // The philosophy page, which the README links, no longer steers towards a sequence "where that is the better
+        // tool": its paragraph ends on the provider's sequences staying the provider's.
         var philosophy = Whitespace().Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "philosophy.md")), " ");
-        Assert.Contains("a campaign is linked to one only where the person asks for it; such a campaign gets no letters of Jason's own.", philosophy, StringComparison.Ordinal);
+        Assert.Contains("without an approval for each: a provider's sequences stay the provider's. ## Providers and plugins", philosophy, StringComparison.Ordinal);
         Assert.DoesNotContain("the better tool", philosophy, StringComparison.Ordinal);
     }
 

@@ -48,8 +48,7 @@ Two things Jason is not follow from this. It is not a model or a chat: it uses t
 not a sequencer: it runs no sequence of its own, plans a line per person and reaches people one at a time, and every
 operation that reaches a person waits for a person's approval. A direct message is approved as it will be sent. An
 enrolment into a provider's sequence is approved once for that person, and the provider then sends that sequence's
-steps on its own, without an approval for each: a provider's sequences stay the provider's, and a campaign is linked to
-one only where the person asks for it; such a campaign gets no letters of Jason's own.
+steps on its own, without an approval for each: a provider's sequences stay the provider's.
 
 ## Providers and plugins
 
