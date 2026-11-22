@@ -1639,10 +1639,8 @@ jobs:
           bash .github/scripts/test-cask-macos.sh taps "$FEED" "$VERSION"
           bash .github/scripts/test-cask-macos.sh audit
 
-      # Every brew command and every open inside a leg is bounded at one to three minutes: a hang fails the leg in minutes
-      # with what was running, the desktop's log, Gatekeeper's lines and the screen. A leg's limit, 30 minutes, is above the
-      # sum of its bounds (the upgrade's, the longest, about 26), and the job's, 150, above its legs', so a slow run fails at
-      # a bound with its report, never at a step's or the job's limit.
+      # Every single wait inside a leg is bounded at 5 minutes or less: a hang fails with what was running, the desktop's
+      # log, Gatekeeper's lines and the screen, long before a leg's limit of 30 minutes or the job's of 150.
       # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
       # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
       - name: Install with the cask, uninstall it, and zap it

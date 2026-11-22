@@ -80,7 +80,7 @@ seen_at_bound() {
 }
 
 # A command run to its end, or to its bound: at the bound what it waited for is named, seen_at_bound says what was there,
-# the command is ended and the step fails. Its exit otherwise. Every brew command of the legs (the taps and audit step
+# the command is ended and the shell exits 124, which no command here exits with itself. Its exit otherwise. Every brew command of the legs (the taps and audit step
 # aside, which runs before them under its own limit, and brew --prefix and brew --repository), every carried jason and
 # every open of the application here runs under one, so a hang fails the leg in minutes, never at the step's own limit.
 bounded() {
@@ -95,7 +95,7 @@ bounded() {
             # Its children first: a shell function run under the bound (trusted) holds brew as a child of its own.
             pkill -TERM -P "$pid" 2>/dev/null || true; kill -TERM "$pid" 2>/dev/null || true; sleep 2
             pkill -KILL -P "$pid" 2>/dev/null || true; kill -KILL "$pid" 2>/dev/null || true
-            exit 1
+            exit 124
         fi
         sleep 0.5
     done
@@ -450,7 +450,11 @@ formula-off)
 
 reset)
     for kind in --cask --formula; do
-        if ( bounded 60 "reset: brew list $kind" brew list "$kind" "$TOKEN" > /dev/null 2>&1 ); then
+        # brew list exits non-zero for a token not installed, which is an answer; its bound reached is not, and fails reset.
+        listed=0
+        ( bounded 60 "reset: brew list $kind" brew list "$kind" "$TOKEN" > /dev/null 2>&1 ) || listed=$?
+        [ "$listed" != 124 ] || fail "reset could not ask Homebrew whether $kind $TOKEN is installed: brew list did not end within 60 s"
+        if [ "$listed" = 0 ]; then
             if [ "$kind" = --cask ]; then ( bounded 120 'reset: brew uninstall --zap --force --cask' brew uninstall --zap --force --cask "$TOKEN" ) || true; else ( bounded 120 'reset: brew uninstall --force --formula' brew uninstall --force --formula "$TOKEN" ) || true; fi
             say "reset: Homebrew's $kind $TOKEN, left by a step before, taken off by Homebrew's own uninstall"
         fi
