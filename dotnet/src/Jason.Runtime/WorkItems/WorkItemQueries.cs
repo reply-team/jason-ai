@@ -64,11 +64,15 @@ public static class WorkItemQueries
     /// <summary>
     /// Everything the mapper needs: an item without its campaign cannot say whether it is eligible, nor one without its
     /// person's held memberships whether its touch waits. Only the held ones are loaded: a person is held in few campaigns.
+    /// A filtered include cannot name the item's own campaign, so the held memberships of every campaign come; and where a
+    /// caller loads the attempts too, the item carries two collections, so the query is split, one statement per
+    /// collection, rather than one statement multiplying attempts by memberships, and EF Core has nothing to warn of.
     /// </summary>
     public static IQueryable<WorkItem> WithNavigation(this IQueryable<WorkItem> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return query
+            .AsSplitQuery()
             .Include(w => w.Campaign)
             .Include(w => w.Contact)
             .ThenInclude(c => c!.Memberships.Where(m => m.State == MembershipState.Paused));

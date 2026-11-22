@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.WorkItems;
 
-public class WorkItemQueriesTests
+public partial class WorkItemQueriesTests
 {
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
