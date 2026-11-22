@@ -1540,7 +1540,16 @@ build's report never has.
 `jason update rollback` does not roll Jason 0.49 back from a move of a command-line install into Jason Desktop: once the
 move is done, it refuses with `update_carried_by_desktop` and points here. Going back is taking Jason off and installing
 0.48.7, with the data directory kept. 0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7
-opens the same data as it is, and there is no backup to put back.
+opens the same data as it is, and there is no backup to put back. These steps, and that there is no backup to put back,
+hold for data that no release after 0.49 has opened.
+
+0.50 migrates the database. From 0.49.0 on, a runtime refuses a database holding a migration it does not know
+(`data_newer`, "Going back" above), so 0.49 refuses data that 0.50 has opened; a version before 0.49.0, 0.48.7 among
+them, has no such check and runs its own model over the newer schema. Going back from 0.50 therefore starts from the
+database as it stood before 0.50 migrated it: "Going back" above says when `jason update rollback` restores the backup
+that migration took, which is only while the chronicle stands where it stood at `healthy`, and what the rollback of an
+update a carried `jason` handed to Jason Desktop puts back; where the chronicle has moved, "Restoring a database by
+hand" above is how you put that backup back yourself.
 
 Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one "Jason did not deploy,
 under a name Jason ships, left as it is", move that folder out of the skills folder before step 3 and put it back after
