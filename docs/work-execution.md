@@ -1672,6 +1672,7 @@ mistyped one.
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Manager:ReviewSeconds` | `21600` | 300..604800 | how long after a campaign's last review of any kind, with nothing happened, its manager is given a quick look, unless the campaign names its own pace ([docs/campaign-manager.md](campaign-manager.md) §4) |
 | `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the interval of a campaign's deep review grid, started at every going live and moved only by a deep review; the installation's only, no campaign carries its own ([docs/campaign-manager.md](campaign-manager.md) §4) |
+| `Manager:AudienceThreshold` | `20` | 1..100000 | the `audience_threshold` the runtime gives a campaign at its first start, from `draft`, where it holds none and its people come from a search: one `campaign_updated` line by `system:runtime`; never at a resume ([docs/campaign-manager.md](campaign-manager.md) §9) |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 | `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
 | `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the reads of sends a bounce asks for sit one below it, and the inbound read's `conversation.list` items ten above it |
