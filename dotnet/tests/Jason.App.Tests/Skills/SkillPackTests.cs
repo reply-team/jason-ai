@@ -16,6 +16,7 @@ public class SkillPackTests
     /// each other while each looked correct.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_skill_declares_itself_in_the_shape_the_pack_agreed()
     {
         var skills = SkillPack.All();
@@ -37,6 +38,7 @@ public class SkillPackTests
     /// installs, and an entry with no directory behind it is a broken link in the first file anybody opens.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_skill_is_in_the_catalog_and_every_catalog_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.Catalog());
@@ -76,6 +78,7 @@ public class SkillPackTests
     /// rewritten and was replaced with nothing.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void What_a_skill_says_about_itself_agrees_with_its_front_matter()
     {
         const string Draft = "**Status: draft.**";
@@ -108,6 +111,7 @@ public class SkillPackTests
     /// kind of wrong nobody notices because nobody re-reads it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_pages_that_pointed_at_a_revision_that_was_coming_point_at_it_now()
     {
         // 6.4 and 7.2 both said published runtime guidance "is being revised". It has been: this pack is it.
@@ -136,6 +140,7 @@ public class SkillPackTests
     /// be red at every push or would have to carry a commit sha.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_catalog_names_the_version_this_tree_carries()
     {
         var version = Jason.Contracts.Update.SemanticVersion.Current;
@@ -204,10 +209,77 @@ public class SkillPackTests
     /// Every table row whose first cell names this skill. More than one table lists a skill now — the
     /// interactive readings and the roles — so this reads them all rather than the first it meets.
     /// </summary>
+    /// <remarks>
+    /// The cell is matched whole, closing backtick included: a role's entry rows begin with the role's name too,
+    /// <c>`manager/start`</c>, and are the entry's rows, never the head's.
+    /// </remarks>
     private static IReadOnlyList<string> Rows(string catalog, string name) =>
     [
-        .. catalog.Split('\n').Where(line => line.StartsWith($"| `{name}`", StringComparison.Ordinal)),
+        .. catalog.Split('\n').Where(line => line.StartsWith($"| `{name}` |", StringComparison.Ordinal)),
     ];
+
+    /// <summary>
+    /// A role's entry is read by a host beside its head, so what a verified entry claims is that a host read both: the
+    /// head's description and body and the entry's body. Every entry has exactly one row, keyed <c>`role/entry`</c>, so a
+    /// reader sees at a glance which entries a host has read; a draft's row records no reading, and a verified one records
+    /// the digest of what is here now, which an edit to the head or to the entry turns stale.
+    /// </summary>
+    [Fact]
+    public void Every_verified_entry_is_the_text_a_host_actually_read()
+    {
+        var catalog = File.ReadAllText(SkillPack.Catalog());
+        var entries = SkillPack.AllEntries();
+        Assert.NotEmpty(entries);
+
+        foreach (var entry in entries)
+        {
+            var status = SkillFrontMatter.Read(entry.File).Metadata.GetValueOrDefault("status");
+            var rows = Rows(catalog, entry.Row);
+            Assert.True(rows.Count == 1, $"The entry '{entry.Row}' has {rows.Count} row(s) in the catalog's readings, and it has one.");
+            var row = rows[0];
+
+            if (status != "verified")
+            {
+                Assert.Equal("draft", status);
+                Assert.False(
+                    row.Contains("sha256:", StringComparison.Ordinal),
+                    $"The entry '{entry.Row}' is '{status}' and the catalog records a reading of it anyway: {row}");
+                continue;
+            }
+
+            var digest = SkillPack.EntryReadingDigest(entry);
+            Assert.True(
+                row.Contains(digest, StringComparison.Ordinal),
+                $"The entry '{entry.Row}' says it is verified, and its head and its body as they are now digest to {digest}, "
+                + $"which is not what the catalog records: {row}. Either one of them was edited after the reading, in which "
+                + "case it is a draft again until a host has read it, or the row is wrong.");
+            Assert.Contains("Claude Code 2.1.", row, StringComparison.Ordinal);
+        }
+
+        // And no row for an entry that is not there: a row is a claim about a file.
+        foreach (var line in catalog.Split('\n').Where(line => line.StartsWith("| `", StringComparison.Ordinal)))
+        {
+            var cell = line.Split('|', StringSplitOptions.TrimEntries)[1].Trim('`');
+            if (cell.Split('/') is [var role, var name])
+            {
+                Assert.True(
+                    entries.Any(entry => entry.Role == role && entry.Name == name),
+                    $"The catalog has a row for '{cell}', and there is no such entry: {line}");
+            }
+        }
+    }
+
+    /// <summary>What an entry's row digests: the head's reading and the entry's own body, never its front matter.</summary>
+    [Fact]
+    public void An_entry_s_reading_is_its_head_s_reading_and_its_own_body()
+    {
+        var entry = Assert.Single(SkillPack.Entries("manager"), one => one.Name == "deep_review");
+        var reading = SkillPack.EntryReading(entry);
+
+        Assert.StartsWith(SkillPack.Reading(SkillPack.Find("manager").File) + "\n", reading, StringComparison.Ordinal);
+        Assert.EndsWith(SkillPack.Body(entry.File), reading, StringComparison.Ordinal);
+        Assert.DoesNotContain("entry: deep_review", reading, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// The detector, before the pack. Every phrase on the list is absent from the pack today, so a guard with
@@ -216,6 +288,7 @@ public class SkillPackTests
     /// been written.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("The orchestrator decides when the work runs.")]
     [InlineData("Keep a markdown workspace beside the campaign.")]
     [InlineData("Each task gets a work item file under the plan.")]
@@ -234,6 +307,7 @@ public class SkillPackTests
     /// this reason: an account may be a workspace, and a role's note is its own memory.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_detector_leaves_the_words_this_pack_really_uses_alone()
     {
         Assert.Empty(SupersededVocabulary.Find("--account names an identity - a mailbox, a workspace, a login."));
@@ -247,6 +321,7 @@ public class SkillPackTests
     /// thing the architecture explicitly superseded.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_skill_teaches_the_model_this_pack_replaces()
     {
         foreach (var skill in SkillPack.All())

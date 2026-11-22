@@ -17,6 +17,7 @@ namespace Jason.App.Tests.Skills;
 public class BusinessPackTests
 {
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_business_pack_ships_nine_skills_and_a_catalog()
     {
         var skills = SkillPack.Business();
@@ -68,6 +69,7 @@ public class BusinessPackTests
     /// for reasons nobody could reconstruct.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_business_skill_declares_itself_in_the_shape_the_pack_agreed()
     {
         var skills = SkillPack.Business();
@@ -104,6 +106,7 @@ public class BusinessPackTests
     /// where a reader ends up, and a pointer is as broken there as it is in a skill's own text.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_business_file_points_at_a_pack_this_repository_does_not_ship()
     {
         foreach (var file in Files())
@@ -122,6 +125,7 @@ public class BusinessPackTests
     /// it clean afterwards.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_business_file_teaches_the_model_this_runtime_replaced()
     {
         foreach (var file in Files())
@@ -148,6 +152,7 @@ public class BusinessPackTests
     /// which is a worse outcome than the problem.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_skill_that_names_an_enforced_operation_points_at_the_contract()
     {
         var enforced = Directory
@@ -186,6 +191,7 @@ public class BusinessPackTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_business_skill_is_in_the_catalog_and_every_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.BusinessCatalog());
@@ -213,6 +219,7 @@ public class BusinessPackTests
     /// row carrying one would be a claim about a reading that never happened.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_catalog_row_records_a_reading_that_never_happened()
     {
         Assert.DoesNotContain("sha256:", File.ReadAllText(SkillPack.BusinessCatalog()), StringComparison.Ordinal);
@@ -230,6 +237,7 @@ public class BusinessPackTests
     /// a second copy of it.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public async Task Any_jason_command_this_pack_prints_is_a_real_one()
     {
         foreach (var skill in SkillPack.Business())
@@ -247,6 +255,7 @@ public class BusinessPackTests
     /// what went out is read afterwards, in vendor-neutral words.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_approval_boundaries_say_what_is_approved_of_a_message_composed_as_a_template()
     {
         var skill = string.Join(' ', File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "approval-boundaries", "SKILL.md"))
@@ -276,6 +285,7 @@ public class BusinessPackTests
     /// put two answers in front of one prospect.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Inbox_triage_starts_from_what_the_responder_left_and_never_drafts_a_second_answer()
     {
         var skill = Flat("inbox-triage");
@@ -301,6 +311,7 @@ public class BusinessPackTests
     /// Length and depth are answered; the openers to avoid, subject lines and the ask stay open for an expert.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Campaign_launch_keeps_a_first_message_short_and_built_on_what_is_known_about_the_person()
     {
         var skill = Flat("campaign-launch");
@@ -327,6 +338,7 @@ public class BusinessPackTests
     /// campaign's allowance for searches is the other kind, capped in people.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_approval_boundaries_map_a_standing_approval_onto_a_campaign_and_a_category_of_reply()
     {
         var skill = Flat("approval-boundaries");
@@ -369,6 +381,7 @@ public class BusinessPackTests
     /// recorded.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Campaign_launch_defers_to_the_set_up()
     {
         Assert.Equal(
@@ -381,6 +394,7 @@ public class BusinessPackTests
     /// and its description ends by sending the host to the set-up.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Audience_building_defers_to_the_set_up()
     {
         Assert.Equal(
@@ -395,6 +409,7 @@ public class BusinessPackTests
     /// this turns red rather than leaving the sentence wrong.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Campaign_launch_says_which_of_its_operations_this_build_performs()
     {
         SaysWhichOfItsOperationsThisBuildPerforms("campaign-launch");
@@ -402,6 +417,7 @@ public class BusinessPackTests
 
     /// <summary>The same fact for the audience skill, whose names include the runtime's own <c>audience</c> family.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Audience_building_says_which_of_its_operations_this_build_performs()
     {
         SaysWhichOfItsOperationsThisBuildPerforms("audience-building");
@@ -414,6 +430,7 @@ public class BusinessPackTests
     /// beside. The go-live gate says whose it is, and what holds where messages go one at a time.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Campaign_launch_assumes_no_shape_of_campaign()
     {
         var skill = Flat("campaign-launch");
@@ -469,6 +486,7 @@ public class BusinessPackTests
     /// provider's own, and a skill that quoted it would teach one provider's tariff as the operation's.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("audience-building")]
     [InlineData("sdr-operations")]
     public void The_skills_that_map_the_audience_family_name_no_provider(string name)

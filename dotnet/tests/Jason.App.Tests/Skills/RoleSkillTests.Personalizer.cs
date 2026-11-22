@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_personalizer_is_told_that_nothing_here_stores_a_draft_about_a_person()
     {
         var skill = Flattened("personalizer");
@@ -21,6 +24,7 @@ public partial class RoleSkillTests
     /// is sent, and that a template is the copywriter's shape where its own is final text for one person.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_personalizer_is_told_which_operations_write_a_message_a_person_receives()
     {
         var skill = Flattened("personalizer");
@@ -52,6 +56,7 @@ public partial class RoleSkillTests
     /// that what the person has said about length or content holds; and that templates for many are not held to it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_personalizer_keeps_a_first_message_short_and_builds_it_on_what_is_known_about_the_person()
     {
         var skill = Flattened("personalizer");

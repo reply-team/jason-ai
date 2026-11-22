@@ -93,6 +93,28 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// Who contributes what to a role's folder, with the manager's entries in it: the runtime pack's head and its entry
+    /// files beside it, one for each name the runtime may put on a check-in, and the skills pack's own page saying the same.
+    /// </summary>
+    [Fact]
+    public void The_layout_says_the_runtime_pack_contributes_the_manager_s_entries_beside_its_head()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+        Assert.Contains(
+            "This repository's runtime pack contributes `SKILL.md`: the launch contract every role is held to and what that role is for; and, for the manager, `entries/<name>.md` beside it, one file for each of its five entries, its `SKILL.md` then being the head every review shares.",
+            contract,
+            StringComparison.Ordinal);
+        Assert.Equal(5, Jason.Contracts.Execution.RoleEntries.Of("manager").Count);
+
+        var catalog = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "..", "skills", "runtime", "README.md")));
+        Assert.Contains("This pack contributes `SKILL.md` — the runtime's launch contract and the role's purpose — and, for the manager, one file under `entries/` for each named way into its job:", catalog, StringComparison.Ordinal);
+        foreach (var entry in Jason.Contracts.Execution.RoleEntries.Of("manager"))
+        {
+            Assert.Contains($"[`{entry}`](roles/manager/entries/{entry}.md)", catalog, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Why a launched role's memory is a table here at all, and what that does not make it. The claim is easy
     /// to lose in a later edit — a section about a feature drifts into describing what it does and stops saying
     /// what it is worth — and a reader who loses it will write code that believes a note.

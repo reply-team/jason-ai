@@ -1,5 +1,6 @@
 using Jason.Cli;
 using Jason.Cli.Tests.Process;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -32,6 +33,7 @@ public class DocumentedCommandsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.D1, "a page prints a command the CLI does not understand")]
     public async Task Every_command_the_walkthrough_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Documentation", "golden-path.md"));
 

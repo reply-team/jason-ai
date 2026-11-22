@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_is_told_that_nothing_here_stores_a_plan()
     {
         var skill = Flattened("planner");
@@ -26,6 +29,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_meets_a_population_that_moved_with_a_new_item_for_the_new_number()
     {
         var skill = Flattened("planner");
@@ -47,6 +51,7 @@ public partial class RoleSkillTests
     /// planner leaves in campaign context. Pinned here once; the craft guard carries it to the other file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_says_who_decides_and_which_roles_read_the_campaign()
     {
         var skill = Flattened("planner");
@@ -84,6 +89,7 @@ public partial class RoleSkillTests
     /// provider's own unit, and leaves the probe, the threshold and the allowance to the person.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_forms_the_audience_and_leaves_what_it_spends_to_the_person()
     {
         var skill = Flattened("planner");
@@ -114,6 +120,7 @@ public partial class RoleSkillTests
     /// craft guard carries it to the other file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_plans_a_direct_send_as_one_item_for_one_person_and_never_again_after_an_unknown_end()
     {
         var skill = Flattened("planner");
@@ -149,6 +156,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_leaves_the_account_a_send_goes_from_to_the_person()
     {
         var skill = Flattened("planner");
@@ -160,6 +168,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_leaves_the_watching_to_the_manager()
     {
         var skill = Flattened("planner");
@@ -172,6 +181,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_asks_what_the_opening_needs_through_a_decision()
     {
         var skill = Flattened("planner");
@@ -192,6 +202,7 @@ public partial class RoleSkillTests
     /// rule's home again, or a dropped "until then" fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_raises_a_standing_rule_as_a_decision_and_keeps_it_nowhere_else()
     {
         var text = File.ReadAllText(SkillPack.Find("planner").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -220,6 +231,7 @@ public partial class RoleSkillTests
     /// judgement it shares with the session file is the same wherever the planner works, and a session does not wait.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_runs_a_pilot_as_waits_in_the_order_the_chain_takes()
     {
         var file = SkillPack.Find("planner").File;
@@ -273,6 +285,7 @@ public partial class RoleSkillTests
     /// planner that raised it as final text would send the braces, or have the item refused.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_gives_a_message_send_that_carries_a_template_compose_template()
     {
         var skill = Flattened("planner");
@@ -290,6 +303,7 @@ public partial class RoleSkillTests
     /// campaign that behaved like a demo what it had been given.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_settles_the_goals_with_the_person_and_states_the_default_in_both_seats()
     {
         foreach (var name in new[] { "planner", "planner-in-session" })
@@ -314,6 +328,7 @@ public partial class RoleSkillTests
     /// writes them only as the person gave them. The patch replaces the list, so it is told to send every goal back.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_reads_the_goals_from_the_campaign_and_keeps_them_there()
     {
         var skill = Flattened("planner");

@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
@@ -7,6 +9,7 @@ public partial class RoleSkillTests
     /// judgement nobody asked it to act on.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_analyst_judges_an_audience_and_neither_searches_nor_defines_one()
     {
         var skill = Flattened("analyst");
@@ -16,6 +19,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_analyst_is_told_that_this_build_records_no_metrics()
     {
         var skill = Flattened("analyst");
@@ -36,6 +40,7 @@ public partial class RoleSkillTests
     /// a reply stands, so a count that kept every line, or ran past the window's end, would be a wrong figure said plainly.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_analyst_counts_replies_by_category_over_a_window_from_the_verdict_lines()
     {
         var skill = Flattened("analyst");

@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.Cli.Tests.Documentation;
 
 public partial class PageClaimsTests
@@ -10,6 +12,7 @@ public partial class PageClaimsTests
     /// which chats a browser tab sends to, as the desktop's does.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_pages_say_the_turns_folder_the_way_back_from_an_earlier_desktop_and_where_the_feed_and_a_tab_stand()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
@@ -38,6 +41,7 @@ public partial class PageClaimsTests
     /// chat taught the other answered "is Jason running?" with a card in Ask first, or with a verb it said it did not know.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_skills_check_whether_jason_runs_with_jason_status()
     {
         var managed = Page("skills", "runtime", "managed-campaign-work", "SKILL.md");
@@ -63,6 +67,7 @@ public partial class PageClaimsTests
     /// where the cause holds a minute, and "until Jason Desktop starts again" only where a tool ran that the check never saw.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_desktop_pages_say_what_a_full_access_turn_carries_and_how_long_a_bypass_not_available_holds()
     {
         const string carried = "a key and the credentials the turn carries reach the commands the agent runs";

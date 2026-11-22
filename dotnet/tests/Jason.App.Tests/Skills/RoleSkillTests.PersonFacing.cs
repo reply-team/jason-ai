@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Cli.Tests.Documentation;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -17,6 +18,7 @@ public partial class RoleSkillTests
     /// <c>--contact</c> and input — and a role copies what its skill prints.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void What_a_role_writes_for_a_person_carries_no_identifier()
     {
         foreach (var role in new[] { "manager", "responder", "planner", "critic", "copywriter", "personalizer" })
@@ -47,6 +49,7 @@ public partial class RoleSkillTests
 
     /// <summary>The guard's own rows: what it refuses and what it lets through, whatever the case of a word.</summary>
     [Theory]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     [InlineData("In thread 501 Marta Alvarez replied", true)]
     [InlineData("Thread 501 needs an answer", true)]
     [InlineData("THREAD 12 needs an answer", true)]

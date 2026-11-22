@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_reporting_skill_keeps_a_guess_a_credential_and_a_repeat_out_of_the_record()
     {
         var skill = Flattened("reporting-outside-effects");

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -12,6 +13,7 @@ public partial class RoleSkillTests
     /// the person gave for that sender rather than ones guessed from a name.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     [InlineData("copywriter")]
     [InlineData("personalizer")]
     public void A_role_that_writes_copy_writes_in_the_tone_as_the_sender_in_their_gender_forms(string role)
@@ -38,6 +40,7 @@ public partial class RoleSkillTests
     /// called <c>neutral</c>: that word is one of the gender forms in the same section.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     [InlineData("copywriter")]
     [InlineData("personalizer")]
     public void A_role_that_writes_copy_says_what_it_does_when_a_preference_has_no_value(string role)
@@ -60,6 +63,7 @@ public partial class RoleSkillTests
 
     /// <summary>The catalog says what each role now does, so a reader choosing a role learns it before opening the file.</summary>
     [Theory]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     [InlineData("copywriter", "the tone and the sender it writes in")]
     [InlineData("personalizer", "the tone and the sender's forms it writes in")]
     public void The_catalog_says_that_a_role_that_writes_copy_writes_in_the_tone_and_as_the_sender(string role, string phrase)
@@ -78,6 +82,7 @@ public partial class RoleSkillTests
     /// not the other would be two roles writing the same campaign by two rules.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_two_roles_that_write_copy_say_it_in_the_same_words()
     {
         var copywriter = CopyRule("copywriter");

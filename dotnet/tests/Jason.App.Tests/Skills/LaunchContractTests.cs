@@ -96,6 +96,7 @@ public partial class LaunchContractTests
     /// words as overruled by a client's, or a preference as overruled by a file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_launch_contract_reads_the_persons_words_in_one_order_and_by_path()
     {
         var contract = Flattened(LaunchContract.Extract(SkillPack.All().First(skill => skill.IsRole).File) ?? string.Empty);
@@ -153,6 +154,7 @@ public partial class LaunchContractTests
     /// still said it names a campaign and a role would send a role to one level of three.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_skill_says_role_memory_names_a_campaign_and_a_role()
     {
         foreach (var skill in SkillPack.All())
@@ -171,6 +173,7 @@ public partial class LaunchContractTests
     /// enumeration rather than typed here, less the two a role's wait never has.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_launch_contract_teaches_a_run_to_end_by_waiting_and_to_read_why_it_woke()
     {
         var file = SkillPack.All().First(skill => skill.IsRole).File;
@@ -213,6 +216,7 @@ public partial class LaunchContractTests
     /// is the quiet way a correction lands in a file and changes nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_role_carries_the_launch_contract_once()
     {
         foreach (var role in SkillPack.All().Where(skill => skill.IsRole))

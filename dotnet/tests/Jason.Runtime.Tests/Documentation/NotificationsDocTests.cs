@@ -17,6 +17,7 @@ public sealed partial class NotificationsDocTests
     private static string Page() => Flat(Source("docs/notifications.md"));
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("A notification is a pointer: how many approvals and questions are waiting, how many replies came in, how many protective actions failed, how many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to it.")]
     [InlineData("Eight things, and only these:")]
     [InlineData("**a reply a person wrote** — a reply a role judged, inside a run, a person's own: a `reply_classified` verdict with the nature `person` that names the run's attempt ([inbound-sync.md](inbound-sync.md)). It wakes a pointer when the run that judged it ends — its `workitem_succeeded`, `workitem_failed` or `workitem_expired` line — so the approval the answer the responder drafted needs, parked at the claim a tick later, is said in the same pointer; a verdict recorded after its run already ended wakes one by its own line.")]
@@ -58,36 +59,43 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>Where a pointer about failed protective work sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_failed_work_sends_a_person() =>
         Assert.Contains($"1 protective action failed in Jason, in cmp_01K…. {Jason.Runtime.Notifications.NotificationComposer.LookAtFailures}", Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about an account whose events were not read sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_unread_events_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, eventGaps: 1).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about a provider block sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_a_block_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, blocks: new HeldByBlocks(1, 4)).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about items held at a daily limit sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_a_hold_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, held: 2).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>The way out the page quotes is the one the composer says, word for word.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_quotes_the_hold_s_way_out_as_the_composer_says_it() =>
         Assert.Contains($"\"{Jason.Runtime.Notifications.NotificationComposer.LiftHold}\"", Regex.Replace(Page(), @"\s+", " "), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about emails that bounced sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_bounces_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, bounces: 2).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about replies sends a person, alone and beside the approval an answer needs, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_replies_sends_a_person()
     {
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, replies: 2).Text, Page(), StringComparison.Ordinal);
@@ -96,6 +104,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>How a count past four digits is said, as the composer says it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_how_a_count_past_four_digits_is_said() =>
         Assert.Contains(
             $"A count past {Jason.Runtime.Notifications.NotificationComposer.MaxSaid.ToString(CultureInfo.InvariantCulture)} is said as \"{Jason.Runtime.Notifications.NotificationComposer.PastFourDigits}\", so the longest pointer fits whatever the counts are",
@@ -104,6 +113,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The settings table is the code's own: every name the section binds, with its default.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_table_prints_the_settings_this_build_has_with_their_defaults()
     {
         var page = Source("docs/notifications.md");
@@ -129,6 +139,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The ranges the table prints are the validator's own, read from the constants it checks against.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_table_prints_the_ranges_the_validator_holds()
     {
         var page = Page();
@@ -140,6 +151,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>"At most so many a day" is the floor's arithmetic at the defaults, said from the code.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_how_many_a_day_the_floor_allows_at_the_defaults()
     {
         var perDay = 24 * 60 / new NotificationsOptions().MinIntervalMinutes;
@@ -148,6 +160,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The words a line can carry, each printed on the page, from the constants the line is written with.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_prints_every_word_a_line_can_carry()
     {
         var page = Page();
@@ -159,6 +172,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The pages that used to say nothing notifies anybody, or that notification plugins are only reserved, say what is true now.</summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md", "`kind: notification` plugins are invoked for the delivery contract, never for a canonical operation: §14")]
     [InlineData("docs/plugins.md", "a `notification` plugin was asked for a canonical operation, or a provider for a delivery")]
     [InlineData("docs/plugins.md", "**Notification plugins are not routed**: a route to one is refused at activation with `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).")]
@@ -203,6 +217,7 @@ public sealed partial class NotificationsDocTests
     /// names is the one the sender writes, and it is reserved: only the runtime writes it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_decision_register_records_what_a_notification_is()
     {
         var architecture = Source("docs/architecture.md");
@@ -219,6 +234,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>What a page claims has to be as narrow as what the code does.</summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/notifications.md", "the next sign-in sends what is still waiting and was not said yet — once, after the start grace")]
     [InlineData("docs/notifications.md", "A pointer already sent is not sent again at the next sign-in: there are no reminders.")]
     [InlineData("docs/notifications.md", "The floor allows at most 48 a day at the defaults that reach somebody")]
@@ -252,6 +268,7 @@ public sealed partial class NotificationsDocTests
     /// values as properties, so that is what the page shows — the template the sender logs with, not a rendering of it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_a_failed_channel_s_log_line_as_the_file_holds_it()
     {
         var page = Page();
@@ -269,6 +286,7 @@ public sealed partial class NotificationsDocTests
     /// take three launches, each at the channel's own bound, and none of them is on the scan.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_a_linux_toast_s_worst_case_at_the_channel_s_bound()
     {
         Assert.Equal(TimeSpan.FromSeconds(5), ToastChannel.Bound);
@@ -278,6 +296,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>Every plugin in the marketplace's index is a row of one table: a blank line ends a Markdown table.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_marketplace_index_is_one_table()
     {
         var lines = Source("plugins/README.md").Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
@@ -287,6 +306,7 @@ public sealed partial class NotificationsDocTests
     }
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md", "invoking `kind: notification` plugins")]
     [InlineData("docs/plugins.md", "`kind: notification` is reserved")]
     [InlineData("docs/plugins.md", "its operation contract is not written yet")]
@@ -309,6 +329,7 @@ public sealed partial class NotificationsDocTests
     /// toast host say no more than the walk saw.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_records_what_the_walk_proved_and_what_it_did_not()
     {
         var page = Page();
