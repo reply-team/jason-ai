@@ -108,9 +108,10 @@ public partial class InteractiveSkillTests
             printed[create].Contains(" --project prj_", StringComparison.Ordinal),
             $"The first campaign create under \"The work itself\" names no project: {printed[create]}");
 
-        // The section's lead-in says the same order in words, so a reader who skims to the commands meets it first.
+        // The section's lead-in says the same order in words, so a reader who skims to the commands meets it first; and
+        // it says that the start is the set-up's, and a campaign's own messages are never the session's work.
         Assert.Contains(
-            "A project for what is sold, a campaign under it, the people the campaign is about, and then one work item per thing to be done.",
+            "A project for what is sold, a campaign under it, the people the campaign is about, and the start, as \"Setting a campaign up, and starting it\" leads them. The work a person asks for by name afterwards, an answer in a thread, a read or a pause, is one work item per thing to be done. A campaign's own messages are its roles' work, never yours.",
             Flattened("managed-campaign-work"),
             StringComparison.Ordinal);
     }
@@ -206,7 +207,9 @@ public partial class InteractiveSkillTests
 
         var brief = text.IndexOf("**The brief becomes the campaign.**", StringComparison.Ordinal);
         var keys = text.IndexOf("**Give every create a key you could send again.**", StringComparison.Ordinal);
-        var printed = text.IndexOf("\njason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD ", StringComparison.Ordinal);
+        // The set-up prints a change of context of its own, the first batch, before the work block; the line meant here
+        // is the first one after the paragraph.
+        var printed = text.IndexOf("\njason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD ", Math.Max(start, 0), StringComparison.Ordinal);
         Assert.True(
             brief >= 0 && start > brief && printed > start && keys > printed,
             $"The paragraph on a change of direction is at offset {start} and its line at {printed}; they belong after the paragraph on the brief (offset {brief}) and before the one on keys (offset {keys}).");
@@ -869,5 +872,291 @@ public partial class InteractiveSkillTests
 
         Assert.Equal(600, new Jason.Runtime.Configuration.DispatcherOptions().EventsCadenceSeconds);
         Assert.Equal(900, new Jason.Runtime.Configuration.InboundOptions().SyncSeconds);
+    }
+
+    /// <summary>The section that leads a campaign's set-up and its start, by its heading.</summary>
+    private const string SetUp = "Setting a campaign up, and starting it";
+
+    /// <summary>
+    /// A host loads a skill by its description, and a person who asks to have a campaign set up, or to fill in the draft
+    /// a click already made, says neither of the words the description was first written with. It names the set-up and
+    /// the start, the draft filled in, and, last, the business pack's two skills as the set-up's method, so a host that
+    /// matched the business pack's launch skill on "start a campaign" meets this one too.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_s_description_names_the_start_and_its_method()
+    {
+        var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+        Assert.Contains("when a person wants a campaign set up and started, a new one or a draft campaign filled in", description, StringComparison.Ordinal);
+        Assert.Contains("started on their yes, after which Jason's roles write and send", description, StringComparison.Ordinal);
+        Assert.EndsWith("Its set-up and start use `campaign-launch` and `audience-building` as their method.", description, StringComparison.Ordinal);
+    }
+
+    /// <summary>The catalog says the managed path sets a campaign up and starts it, and names the set-up's method.</summary>
+    [Fact]
+    public void The_catalog_says_the_managed_path_sets_a_campaign_up_with_its_method()
+    {
+        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
+        var start = catalog.IndexOf("- [`managed-campaign-work`]", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The catalog has no line for 'managed-campaign-work'.");
+        var end = catalog.IndexOf(" - [`", start + 1, StringComparison.Ordinal);
+        var line = end > start ? catalog[start..end] : catalog[start..];
+
+        Assert.Contains("a campaign set up with the person and started on their yes, with `campaign-launch` and `audience-building` as its method", line, StringComparison.Ordinal);
+        Assert.Contains("its first batch of twenty", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The set-up's method is the business pack's, named once: what must hold before a campaign reaches anybody, and who
+    /// belongs on it. A rule copied from either drifts from it the day that skill changes, so the section's own prose
+    /// shares no run of eight words with them.
+    /// </summary>
+    [Fact]
+    public void The_start_names_its_method_and_copies_no_rule()
+    {
+        var section = Section(SetUp);
+        Assert.Contains(
+            "The set-up's method is the business pack's: `campaign-launch` for what must hold before a campaign reaches anybody, and `audience-building` for who belongs on it and where they come from. Read them for that judgement; what Jason performs, in which order, and what it leaves to its roles after the start is said here, and where the two differ, this section holds.",
+            Whitespace().Replace(section, " "),
+            StringComparison.Ordinal);
+
+        var own = Runs(ProseOf(section.Split('\n')));
+        Assert.True(own.Count > 50, $"The set-up's own prose gave {own.Count} runs of eight words, so this guard holds little.");
+        foreach (var method in new[] { "campaign-launch", "audience-building" })
+        {
+            var file = Path.Combine(SkillPack.BusinessRoot(), method, SkillPack.SkillFile);
+            var shared = own.Intersect(Runs(Prose(file)), StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+            Assert.True(
+                shared.Count == 0,
+                $"\"{SetUp}\" shares {shared.Count} runs of eight words with '{method}', the first '{shared.FirstOrDefault()}'. "
+                + "Name that skill as the method rather than copying its rule.");
+        }
+    }
+
+    /// <summary>
+    /// The quick start and Jason Desktop's New agent both make the campaign before the set-up begins. A set-up that made
+    /// one of its own would leave the person with two campaigns of one brief, the second holding none of what the first
+    /// was told.
+    /// </summary>
+    [Fact]
+    public void The_start_fills_a_draft_that_already_exists()
+    {
+        var section = Whitespace().Replace(Section(SetUp), " ");
+        Assert.Contains(
+            "Where a draft campaign already exists, made by `quick-start` or by New agent in Jason Desktop, the set-up fills that one: read what it holds, ask only for what is missing, and make no second campaign.",
+            section,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The set-up leads and does no role's work. A session that wrote the first letter, planned the steps or built a
+    /// sequence at the provider would send what no role follows up and no critic read; and one that refused a person's
+    /// plain request would stand between them and their own act. Said once, at the head of the section, and the section
+    /// prints no send.
+    /// </summary>
+    [Fact]
+    public void The_set_up_writes_no_letter_unasked()
+    {
+        var raw = Section(SetUp);
+        var section = Whitespace().Replace(raw, " ");
+        Assert.Contains(
+            "So you write no message, no template and no plan of steps or follow-ups, you say nothing of a sequence at a provider, and you create no send.",
+            section,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "When the person asks in plain words for the thing itself, \"write this letter yourself\" or \"send it to her now\", say once what is lost: no role follows it up, and no critic has read it. Then do what they asked, as their act and in their name.",
+            section,
+            StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        Assert.DoesNotContain(printed, line => line.Contains(" --operation message.send", StringComparison.Ordinal)
+            || line.Contains(" --operation social_invitation.send", StringComparison.Ordinal)
+            || line.Contains(" --operation campaign.", StringComparison.Ordinal)
+            || line.Contains(" --role copywriter", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Who the messages are written as is asked once, and first, where it has no value: the roles that write end their
+    /// work failed without it, so a campaign started before it is a campaign whose first review writes nothing. Once it
+    /// has a value it is said back and never asked again.
+    /// </summary>
+    [Fact]
+    public void The_set_up_asks_the_sender_s_name_once_and_first()
+    {
+        var section = Whitespace().Replace(Section(SetUp), " ");
+        foreach (var fact in new[]
+        {
+            "**Who the messages are written as, first.** Read `jason preference list`. Where `sender.identity` has no value, ask once, before anything else,",
+            "Once it has a value it is said back in one line of the question below, and never asked again.",
+            "Until it has one, the roles that write end their work failed with `sender_identity_unset`, so the campaign is not started.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
+        }
+
+        var first = section.IndexOf("**Who the messages are written as, first.**", StringComparison.Ordinal);
+        var sold = section.IndexOf("**What is sold, and to whom.**", StringComparison.Ordinal);
+        var people = section.IndexOf("**The people.**", StringComparison.Ordinal);
+        Assert.True(first >= 0 && sold > first && people > sold, $"The set-up collects the sender at {first}, what is sold at {sold} and the people at {people}: the sender first.");
+    }
+
+    /// <summary>
+    /// How messages go is said in the question as a fact read from the campaign, never assumed and never asked: a
+    /// session that said "every message waits" of a campaign whose cold sends go on their own would tell the person a
+    /// thing that is not so, and one that asked them to choose there would set a mode on a word given to another question.
+    /// </summary>
+    [Fact]
+    public void The_set_up_says_how_messages_go_from_what_the_campaign_answers()
+    {
+        var section = Whitespace().Replace(Section(SetUp), " ");
+        foreach (var fact in new[]
+        {
+            "How messages go is said as a fact, read from `send_modes_in_force` in what `jason campaign get` answers.",
+            "Where a kind goes automatically, say which kind, and that the critic reads each such message before it goes.",
+            "Never ask the person to choose here, and never set a mode: `approvals-and-questions` asks it at an approval.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
+        }
+
+        Assert.True(
+            typeof(Jason.Contracts.Api.CampaignDto).GetProperty("SendModesInForce") is not null,
+            "The set-up reads `send_modes_in_force` from `campaign get`, and the campaign's answer carries no such field.");
+    }
+
+    /// <summary>
+    /// A start summons the manager at once, and the manager is a role: on an installation where no role can run, the
+    /// start ends in a review that fails before anything is planned. So the roles check stops the start and names the
+    /// check's own repair, which is an operator's act the session proposes; and like every readiness read it says
+    /// nothing where all is well.
+    /// </summary>
+    [Fact]
+    public void The_roles_check_speaks_only_on_a_problem_and_stops_the_start()
+    {
+        var raw = Section(SetUp);
+        var section = Whitespace().Replace(raw, " ");
+        foreach (var fact in new[]
+        {
+            "These reads speak only where something is wrong: where every one passes, say nothing of them and go on to the question.",
+            "**Can a role run here?** Read the `roles_launchable` check in what `jason status` answers.",
+            "Do not ask the question and do not start the campaign: say plainly that no role can run here yet, and give the repair the check names, in its own words.",
+            "It is an operator's act on this machine, `operating-the-installation`'s: propose it, and run it only when the person asks.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
+        }
+
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var status = printed.IndexOf("jason status");
+        var start = printed.FindIndex(line => line.StartsWith("jason campaign start ", StringComparison.Ordinal));
+        Assert.True(status >= 0 && start > status, $"\"{SetUp}\" prints the readiness read at {status} and the start at {start} of: {string.Join(" | ", printed)}. The read comes first.");
+    }
+
+    /// <summary>
+    /// The early check of notifications reads what `jason status` already says, and only speaks on a problem: a person
+    /// whose notifications are off hears once that nothing will tell them when Jason waits for them, and may still start;
+    /// a person whose notifications work hears nothing of them.
+    /// </summary>
+    [Fact]
+    public void The_early_check_says_once_that_nothing_will_tell_them_and_never_stops_the_start()
+    {
+        Assert.Contains(
+            "**Will they hear back?** Read the `notifications` check in the same answer. Where it is `absent` or `failed`, say in one sentence that nothing will tell them when Jason starts waiting for them, and give the check's own words; it never stops the start. Where it is `ok`, say nothing.",
+            Whitespace().Replace(Section(SetUp), " "),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first batch is twenty, said as a fact in the question and asked about nowhere; a number the person names is
+    /// recorded where the roles read it, the campaign's context, under one key.
+    /// </summary>
+    [Fact]
+    public void The_set_up_says_the_first_batch_is_twenty_and_records_another_number_the_person_names()
+    {
+        var raw = Section(SetUp);
+        var section = Whitespace().Replace(raw, " ");
+        Assert.Contains("After the start, the first work is for a first batch of twenty people", section, StringComparison.Ordinal);
+        Assert.Contains("Where the person names another number, there or earlier, record it as the context's `first_batch`.", section, StringComparison.Ordinal);
+        Assert.Contains("that the first work is for the first twenty people, or the number they named;", section, StringComparison.Ordinal);
+
+        var batch = Assert.Single(SkillPack.Printed(raw.Split('\n')), command => command.Line.StartsWith("jason campaign update-context ", StringComparison.Ordinal));
+        Assert.True(
+            batch.Body is { } body && JsonNode.Parse(body)?["set"]?["first_batch"]?.GetValue<int>() is > 0,
+            $"\"{SetUp}\" records another first batch with '{batch.Line}', whose request sets no `first_batch`.");
+    }
+
+    /// <summary>
+    /// The set-up ends in one question, and a yes to it starts the campaign and nothing else, under the person's own name,
+    /// which the session says: the journal cannot tell their act from the session's, so the name is said aloud each time.
+    /// A start at a moment the person names does not exist, and is never promised.
+    /// </summary>
+    [Fact]
+    public void The_start_comes_on_the_person_s_yes_and_says_whose_name_it_carries()
+    {
+        var raw = Section(SetUp);
+        var section = Whitespace().Replace(raw, " ");
+        foreach (var fact in new[]
+        {
+            "The message ends with exactly: \"Everything is ready. Start it?\"",
+            "**Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then read it back.",
+            "Say \"Started, as you said. It is recorded under your name, {name}.\" only once `jason campaign get` answers the status `active`.",
+            "A yes to that question starts the campaign and nothing else: it lets no message go, answers no question and sets no send mode.",
+            "Jason has no start at a moment the person names, \"Monday at nine\", and a session cannot wake itself: say so plainly where they ask for one, and never promise it.",
+            "No launched role can start it for them: a start from inside a run is refused, because it is a person's word.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
+        }
+
+        var start = Assert.Single(SkillPack.PrintedCommands(raw.Split('\n')), line => line.StartsWith("jason campaign start ", StringComparison.Ordinal));
+        Assert.True(
+            Regex.IsMatch(start, @"^jason campaign start cmp_\S+ --actor human:\S+ --reason '[^']*'$"),
+            $"\"{SetUp}\" starts the campaign with '{start}': the person is named as the actor, with a reason, at the end of the command.");
+    }
+
+    /// <summary>
+    /// Where the set-up sits: after what the person has already written down, which it reads first, and before the work
+    /// block, whose commands it points to. And what a session's acts carry is said once, before either.
+    /// </summary>
+    [Fact]
+    public void The_set_up_stands_before_the_work_and_says_whose_name_the_acts_carry()
+    {
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var names = text.IndexOf("\n## Whose name your acts carry\n", StringComparison.Ordinal);
+        var written = text.IndexOf("\n## What the person has already written down\n", StringComparison.Ordinal);
+        var setUp = text.IndexOf($"\n## {SetUp}\n", StringComparison.Ordinal);
+        var work = text.IndexOf("\n## The work itself\n", StringComparison.Ordinal);
+        Assert.True(
+            names >= 0 && written > names && setUp > written && work > setUp,
+            $"managed-campaign-work has whose name the acts carry at {names}, what was written down at {written}, the set-up at {setUp} and the work at {work}: in that order.");
+
+        var section = Whitespace().Replace(Section("Whose name your acts carry"), " ");
+        foreach (var fact in new[]
+        {
+            "In a person's own session, a command you run without `--actor` is recorded as theirs: `human:` with the name of the account you run under.",
+            "The journal cannot tell their act from yours. So you act as the person only on what they said.",
+            "Their word covers what it names and nothing beside it:",
+            "Where you are not sure that what they said covers an act, ask before you act.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Whose name your acts carry\" does not say: {fact}");
+        }
+    }
+
+    /// <summary>
+    /// The runtime wakes a campaign that has no item: its manager is summoned at the start, on the events it is summoned
+    /// by, and on its own cadence. A session that believed it had to keep the campaign moving would stay and create work
+    /// in the manager's place.
+    /// </summary>
+    [Fact]
+    public void A_campaign_with_no_item_is_woken_by_its_manager_and_the_session_ends_at_the_start()
+    {
+        var skill = Flattened("managed-campaign-work");
+        Assert.Contains(
+            "A campaign with no item is woken the same way: the runtime summons its manager when it starts, on the events the manager is summoned by, and on its own cadence. So a session's job ends when what the person asked for is recorded in Jason, for a new campaign when it has started, and the person has been told what to expect.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("The person may ask you to stay and watch; then you read and tell them what you see, and what you see is no reason to create work.", skill, StringComparison.Ordinal);
     }
 }

@@ -342,7 +342,8 @@ public partial class InteractiveSkillTests
     public void The_planner_in_a_persons_session_shows_the_first_message_and_keeps_a_standing_rule_at_its_level()
     {
         var skill = Flattened("planner-in-session");
-        Assert.Contains("show it to the person as it would go out. Change it with them until they confirm it.", skill, StringComparison.Ordinal);
+        Assert.Contains("In a session you neither write the first message nor have it written before the start", skill, StringComparison.Ordinal);
+        Assert.Contains("When the person brings it to you, read it with them as it would go out, and change it with them until they confirm it.", skill, StringComparison.Ordinal);
         Assert.Contains("Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.", skill, StringComparison.Ordinal);
         Assert.Contains("into their memory file at the level it belongs to: the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone", skill, StringComparison.Ordinal);
         Assert.Contains("nor a role's note, which is that role's own", skill, StringComparison.Ordinal);
@@ -418,6 +419,23 @@ public partial class InteractiveSkillTests
         Assert.True(said == 1, $"planner-in-session says 'a name of its own' {said} times; it is said once, where the campaign is created.");
     }
 
+    /// <summary>
+    /// What a session commits is the set-up, and the set-up is the managed path's to lead to its question and the start:
+    /// a planner in a session that created the letters, the sends or a plan of steps would do, before the start and
+    /// unread by any critic, the work the roles do after it. And after an audience's window is agreed it goes on with the
+    /// set-up instead of ending its turn with a campaign nobody started.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_commits_the_set_up_and_creates_nothing_that_writes()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("Once the direction is agreed, it is recorded, and the set-up goes on in `managed-campaign-work`, \"Setting a campaign up, and starting it\".", skill, StringComparison.Ordinal);
+        Assert.Contains("What you commit in a session is the set-up: the campaign, its context and goals, and its people or the probe that will find them.", skill, StringComparison.Ordinal);
+        Assert.Contains("You create no work that writes to anybody: no letter, no send and no plan of steps.", skill, StringComparison.Ordinal);
+        Assert.Contains("Then go on with the set-up there, which creates the probe and ends with the question whether to start, and the start.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("say so, and end your turn", skill, StringComparison.Ordinal);
+    }
+
     /// <summary>The sentence the planner opens with, as the install says it.</summary>
     private const string OpeningSentence =
         "Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and "
@@ -451,59 +469,6 @@ public partial class InteractiveSkillTests
         }
     }
 
-    /// <summary>
-    /// The prose of a skill: its body without the front matter, the status paragraph, any fenced block, the headings and
-    /// the craft block.
-    /// </summary>
-    private static string Prose(string file)
-    {
-        var kept = new List<string>();
-        var status = false;
-        foreach (var (line, fenced) in SkillPack.Fenced(SkillPack.Body(file).Split('\n')))
-        {
-            var start = line.TrimStart();
-            if (fenced || start.StartsWith('#'))
-            {
-                continue;
-            }
-
-            if (start.StartsWith("**Status:", StringComparison.Ordinal))
-            {
-                status = true;
-            }
-
-            if (status)
-            {
-                status = start.Length > 0;
-                continue;
-            }
-
-            kept.Add(line);
-        }
-
-        // The form of the person's word in the chat is rule 13 of the chat's instructions, given where each skill sets or
-        // runs an act on that word; quoting the chat's own rule is not copying a sibling's.
-        var prose = Regex.Replace(CraftBlockText().Replace(string.Join('\n', kept), " "), @"\s+", " ");
-        return ChatsForm().Replace(prose, " ");
-    }
-
-    /// <summary>The form of the person's word that rule 13 of the chat's instructions gives, as a skill quotes it.</summary>
-    [GeneratedRegex(@"with `--actor human:<account>` as Jason's first paragraph names them and `--reason '\.\.\.'` in your own words(?: \([^)]*\))?, at the end of the command")]
-    private static partial Regex ChatsForm();
-
-    /// <summary>Every run of eight consecutive words, lower-cased, punctuation and emphasis dropped.</summary>
-    private static HashSet<string> Runs(string prose)
-    {
-        var words = ProseWord().Matches(prose.ToLowerInvariant()).Select(match => match.Value).ToList();
-        var runs = new HashSet<string>(StringComparer.Ordinal);
-        for (var index = 0; index + 8 <= words.Count; index++)
-        {
-            runs.Add(string.Join(' ', words.Skip(index).Take(8)));
-        }
-
-        return runs;
-    }
-
     [GeneratedRegex(@"`(jason [^`]+)`")]
     private static partial Regex InlineCommand();
 
@@ -514,12 +479,6 @@ public partial class InteractiveSkillTests
     /// <summary>A session giving an approval: on somebody's behalf, or "approve it" here, itself or for them.</summary>
     [GeneratedRegex(@"\bon (the person's|their|his|her|somebody's|someone's) behalf\b|\bapprove (it|them|this|that|the \w+) (here|now|yourself|for (them|the person|him|her))\b", RegexOptions.IgnoreCase)]
     private static partial Regex ApprovesForSomebody();
-
-    [GeneratedRegex(@"<!-- craft:begin -->.*?<!-- craft:end -->", RegexOptions.Singleline)]
-    private static partial Regex CraftBlockText();
-
-    [GeneratedRegex(@"[a-z0-9']+")]
-    private static partial Regex ProseWord();
 
     /// <summary>
     /// In a person's session the goals are asked as one question once the audience and the channels are settled, with
@@ -591,7 +550,14 @@ public partial class InteractiveSkillTests
         Assert.Contains("With one channel routed, name only that channel's accounts.", skill, StringComparison.Ordinal);
         Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
         Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
-        Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("The message after \"go\" that hands over to the set-up ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+
+        // "Go" says the plan stands and starts nothing: the set-up goes on in the campaign that exists and ends with its
+        // own question, and the quick start writes no letter and creates no send.
+        Assert.Contains("\"Go\" is not yet the start: it says the plan stands.", skill, StringComparison.Ordinal);
+        Assert.Contains("From \"go\" the set-up goes on in the campaign that exists, through `managed-campaign-work`, \"Setting a campaign up, and starting it\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Either way you write no message, no template and no plan of steps, and you create no send", skill, StringComparison.Ordinal);
+        Assert.Contains("Never ask for a preference here, in the quick start; the set-up in `managed-campaign-work` asks for who the messages are written as, once, when the sender has no value.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
 
         // The accounts are read on request in step 2, before the plan message and before "go", and never submitted as work:
