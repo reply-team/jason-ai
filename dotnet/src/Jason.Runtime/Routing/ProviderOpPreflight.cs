@@ -285,7 +285,7 @@ public static class ProviderOpPreflight
         // end. They are the person's checks, decided by the operation and not by a channel, so they sit outside the channel's
         // block and ask only of a touch — an act that opens or carries on the line — that names somebody. A reply in a thread
         // the person opened, a take-back and every read pass, whatever the line's state. An ended line answers first: it is
-        // what a person decided, and the ceiling only what the count reached.
+        // what the manager judged, with a reason, and the ceiling only what the count reached.
         if (OperationCatalog.Touches.Contains(contract.Id) && facts.Contact is not null && facts.Line is { } line)
         {
             if (line.State == MembershipState.Finished)

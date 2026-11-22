@@ -320,8 +320,8 @@ public sealed class Claimer(
     /// per-campaign choice is a window function: doing it in memory would either idle a slot or read the whole
     /// backlog. Its campaign rule is the eligible predicate's, written a second time here and held to it by a test:
     /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there. Its
-    /// person's rule too: a touch (<see cref="OperationCatalog.Touches"/>) of a person held in the item's campaign is no
-    /// candidate, so it neither runs nor holds its campaign's turn.
+    /// person's rule too: a touch (<see cref="OperationCatalog.Touches"/>) of a person whose line is paused in the item's
+    /// campaign is no candidate, so it neither runs nor holds its campaign's turn.
     /// </summary>
     internal static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
     {
@@ -331,7 +331,7 @@ public sealed class Claimer(
         var active = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Active);
         var paused = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Paused);
         var archived = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Archived);
-        var held = SnakeCaseEnumConverter<MembershipState>.Format(MembershipState.Paused);
+        var pausedMember = SnakeCaseEnumConverter<MembershipState>.Format(MembershipState.Paused);
         var runsInPaused = JsonSerializer.Serialize(OperationCatalog.RunsInPausedCampaign);
         var runsInArchived = JsonSerializer.Serialize(OperationCatalog.RunsInArchivedCampaign);
         var touches = JsonSerializer.Serialize(OperationCatalog.Touches);
@@ -349,7 +349,7 @@ public sealed class Claimer(
                 AND NOT (w.operation IS NOT NULL
                          AND w.operation IN (SELECT value FROM json_each({touches}))
                          AND EXISTS (SELECT 1 FROM campaign_contacts m
-                                     WHERE m.campaign_id = w.campaign_id AND m.contact_id = w.contact_id AND m.state = {held}))
+                                     WHERE m.campaign_id = w.campaign_id AND m.contact_id = w.contact_id AND m.state = {pausedMember}))
                 AND (w.not_before IS NULL OR w.not_before <= {now})
                 AND (w.due_at IS NULL OR w.due_at > {now})
                 AND (w.retry_after IS NULL OR w.retry_after <= {now})

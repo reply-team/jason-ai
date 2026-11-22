@@ -15,7 +15,7 @@ namespace Jason.Runtime.Contacts;
 /// The hold a reply sets on a person's line: a person who is an <c>enrolled</c> member of the campaign becomes
 /// <c>paused</c>, so the claim takes none of their touches there (<see cref="Jason.Contracts.Operations.OperationCatalog.Touches"/>)
 /// until the line is continued (<c>campaign.continue_contacts</c>) or ended (<c>campaign.finish_contacts</c>). A member
-/// whose line is already held, ended or removed is left as they are, and so is anyone who is not a member. One reserved
+/// whose line is already paused, ended or removed is left as they are, and so is anyone who is not a member. One reserved
 /// line says it, <c>contacts_paused</c>, as the dispatcher, naming the person and the reply line by their ids alone.
 /// <para>
 /// A thread moves when Jason writes into it too, and a line that does not know who moved the thread says every move: the
