@@ -104,8 +104,21 @@ left_running() {
     { pgrep -lf "$1/Contents/MacOS/" || true; pgrep -lf "ai\.jasonharness\.desktop\.ShipIt|$1/Contents/Frameworks/Squirrel\.framework/" || true; } | sort -u | tr '\n' ';'
 }
 
+# What a wait that reached its bound leaves to see, on stderr: the desktop's last log lines, the last lines Gatekeeper and
+# LaunchServices logged (a first-open confirmation nobody answers shows there), and the screen, kept beside the listings.
+# Each read is bounded itself, so the bound's own report never hangs.
+seen_at_bound() {
+    local shot
+    echo "the desktop's last log lines:" >&2
+    tail -n 20 "$DATA"/logs/desktop-*.jsonl >&2 2>/dev/null || echo "  (none)" >&2
+    echo "the last lines of Gatekeeper and LaunchServices:" >&2
+    { perl -e 'alarm 30; exec @ARGV' log show --last 3m --style compact --predicate 'process == "syspolicyd" OR process == "CoreServicesUIAgent" OR process == "launchservicesd"' 2>/dev/null || true; } | tail -n 40 >&2
+    shot="$OUT/at-bound-$(date +%s).png"
+    if perl -e 'alarm 15; exec @ARGV' screencapture -x "$shot" 2>/dev/null; then echo "the screen at the bound: $shot, kept with the listings" >&2; else echo "the screen could not be captured" >&2; fi
+}
+
 # A command run to its end, or to its bound: at the bound what it waited for is named on stderr, with every process of
-# Jason's, and the command is ended and the step fails. Its exit otherwise.
+# Jason's and what seen_at_bound reads, and the command is ended and the step fails. Its exit otherwise.
 within() {
     local seconds="$1" what="$2"; shift 2
     "$@" &
@@ -115,6 +128,7 @@ within() {
         if [ "$(date +%s)" -ge "$until" ]; then
             echo "::error title=Installation::$what did not end within $seconds s" >&2
             jason_processes >&2
+            seen_at_bound
             kill -TERM "$pid" 2>/dev/null || true; sleep 2; kill -KILL "$pid" 2>/dev/null || true
             exit 1
         fi
@@ -223,7 +237,8 @@ open_app() {
     local bundle="$1" log="$2" pattern pids command until
     : > "$log"
     rm -f "$OUT/open-app-failure.txt"
-    within 60 "open $bundle" open --stdout "$log" --stderr "$log" "$bundle" || { printf 'open %s failed\n' "$bundle" > "$OUT/open-app-failure.txt"; return 1; }
+    # In a subshell: within ends its shell at the bound, and the failure is said here, not lost with the substitution.
+    ( within 60 "open $bundle" open --stdout "$log" --stderr "$log" "$bundle" ) || { printf 'open %s did not end within 60 s, or failed; its quarantine attribute: %s\n' "$bundle" "$(xattr -p com.apple.quarantine "$bundle" 2>/dev/null || echo none)" > "$OUT/open-app-failure.txt"; return 1; }
     pattern="^$(printf '%s' "$bundle" | sed 's#[][\.*^$+?(){}|]#\\&#g')/Contents/MacOS/Jason( |\$)"
     until=$(( $(date +%s) + 30 ))
     pids=""
