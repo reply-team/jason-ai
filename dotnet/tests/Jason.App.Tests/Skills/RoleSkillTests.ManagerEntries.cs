@@ -33,6 +33,28 @@ public partial class RoleSkillTests
         Assert.Contains("## When a reply woke you", FlattenedEntry("manager", "inbound_reply"), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A review a person asked for is <c>requested</c>, names no cause, and is read from the person's own line, which the
+    /// runtime writes under the kind and the verb this build has; the two review entries say what it means for each depth,
+    /// and a deep one asked for leaves the daily grid where it stands.
+    /// </summary>
+    [Fact]
+    public void The_manager_reads_a_review_a_person_asked_for_from_their_line()
+    {
+        var head = Flattened("manager");
+
+        Assert.Contains("`review_intent` is `requested` when a person asked for this review now, with `jason campaign review`: it names no trigger and no cause, and their `review_requested` line in the chronicle says who asked, the depth they asked for and why.", head, StringComparison.Ordinal);
+        Assert.Contains("A review is asked for by a person only; a run never asks for one.", head, StringComparison.Ordinal);
+        Assert.Equal("review_requested", Jason.Runtime.Journal.JournalKinds.ReviewRequested);
+        Assert.Equal("campaign.review", Jason.Contracts.Api.Operations.CampaignReview);
+
+        Assert.Contains("where `review_intent` is `requested`, a person asked for a quick look now", FlattenedEntry("manager", "quick_look"), StringComparison.Ordinal);
+        Assert.Contains("know that the daily one still comes at its own moment, which this review does not move", FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            SkillPack.Entries("manager").SelectMany(entry => SkillPack.PrintedCommands(entry.File)).Concat(SkillPack.PrintedCommands(SkillPack.Find("manager").File)),
+            line => line.StartsWith("jason campaign review", StringComparison.Ordinal));
+    }
+
     /// <summary>One manager, from one review to the next: the head says the note is where a review starts and never the truth.</summary>
     [Fact]
     public void The_manager_s_head_says_one_manager_starts_from_its_note_and_believes_the_runtime_over_it()
