@@ -85,7 +85,7 @@ a sentence, the runtime starts at logon by default, and the Reply package needs 
 - **A message the chat writes follows its campaign's send mode.** In Ask first, Auto-edit and Full access on Claude
   Code, and in Full access on Codex, a message the chat writes is treated as one written from a terminal: it follows
   its campaign's send mode, and under "every message" it still waits for your approval. One written in a turn that can
-  only read and propose, as a Codex chat's other modes are, always waits for you.
+  only read and propose, as Plan only and a Codex chat's other modes are, always waits for you.
 - **It asks in words before what cannot be undone.** A direct command is done at once, with no
   "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "archive all my campaigns"
   say, it says in a sentence or two what will happen, how many and that it cannot be undone, and asks once; your answer
@@ -201,27 +201,16 @@ a sentence, the runtime starts at logon by default, and the Reply package needs 
 - **A new campaign's folder is named by when it was made**, for example `2026-11-21-143005-k3x9qa`: the moment in the
   local time of the computer the runtime runs on, then the end of its id. A rename never moves it, and a move to
   another project keeps it. Existing campaigns keep their folders. `jason campaign get --human` shows a `Folder:` line.
-- **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install it with the one line. On a Mac where
-  Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the application, its link
-  and its state under `~/Library` to Homebrew, and its report names `brew uninstall --zap --cask jason`, which takes
-  them off. On macOS and Linux, where the older Homebrew formula is
+- **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install it with the one line. On a Mac
+  where Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the application, its
+  link and its state under `~/Library` to Homebrew, and its report names `brew uninstall --zap --cask jason`, which
+  takes them off. On macOS and Linux, where the older Homebrew formula is
   still linked beside the `jason` Jason Desktop carries, set-up says so and stops a runtime started from it, and set-up
   and `jason status` name `brew uninstall --formula jason`, which takes it off; every command Jason prints for the
   formula now says `--formula`.
 
 ## Fixed since 0.49.1
 
-- **A question is no longer answered as if you asked it twice.** A conversation whose message had to be started again
-  in Ask first now holds that message once; before, the session it went on in could hold it twice.
-- **A refused Full access turn keeps the whole conversation.** When Claude Code refuses Full access on a turn of a
-  conversation it already holds, and no Full access turn has worked since Jason Desktop started or since Full access
-  was last refused, Jason Desktop now runs that turn in Ask first in that conversation itself, with all of it in
-  Claude Code's memory, instead of in a fresh session given a recap of it. The first refusal after a Full access turn
-  worked still takes the fresh session with the recap.
-- **A tool the mode takes out is no longer taken for a tool that ran unchecked.** In Ask first and Auto-edit, where
-  Claude Code refuses a tool the mode takes out, PowerShell say, in a conversation that used it in Full access, the
-  chat no longer says that Jason's check before each tool did not run, and Full access is still offered afterwards,
-  with no restart. Such a tool that did run keeps the full warning.
 - **Needs you speaks only of what left in sight.** "What you had open is no longer waiting" is said only when the item
   you had open was decided or withdrawn while Needs you was on screen, not on a later visit with other items waiting.
 - **A start at logon that Homebrew's formula registered is moved to the `jason` Jason Desktop carries** on macOS and
@@ -272,8 +261,8 @@ a sentence, the runtime starts at logon by default, and the Reply package needs 
   it was installed, with `npm install -g reply-cli`; where npm's global folder is not your account's own,
   `npm install -g --prefix ~/.local reply-cli`.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
-  in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
-  again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
+  in Plan only keeps Plan only. 0.49.1 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
+  again from the menu; from now on it is kept. The standing choice of Full access that 0.49.1 offered is gone, and its
   file is removed at the first start.
 - **Going back.** If you go back to an earlier Jason Desktop and then return to this one, the chats that earlier
   version used open in Ask first, a chat in Plan only keeps it, and each says why once. The earlier version does not
