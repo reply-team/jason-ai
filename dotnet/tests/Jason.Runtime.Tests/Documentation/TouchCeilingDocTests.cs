@@ -58,6 +58,18 @@ public sealed class TouchCeilingDocTests
     }
 
     [Fact]
+    public void The_people_list_s_touches_leave_out_a_send_taken_back_and_take_a_held_send_s_moment()
+    {
+        var page = Regex.Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "work-execution.md")), @"\s+", " ");
+
+        Assert.Contains("A send that a succeeded `message.cancel` of the campaign took back never went: it is no touch, and no row's last touch either.", page, StringComparison.Ordinal);
+        Assert.Contains("A touch's moment, where it succeeded, is the one the provider took it for, its result's `accepted_for`, read in UTC as the hold reads it, else the item's finish", page, StringComparison.Ordinal);
+        Assert.Contains("a send that a succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended `ambiguous` leaves it counted", page, StringComparison.Ordinal);
+        Assert.Contains("A person counts only where that line is the latest `contacts_finished` of the campaign naming them", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("its moment is the item's finish where it succeeded", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_reopen_s_paragraph_says_one_answer_reopens_the_end_it_is_about()
     {
         var page = Regex.Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "runtime-api.md")), @"\s+", " ");
