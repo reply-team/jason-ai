@@ -309,7 +309,11 @@ upgrade)
     else fail "the old runtime's process $old_pid still runs after the upgrade, and no note says a start is owed"; fi
     kill -0 "$old_pid" 2>/dev/null && fail "the old runtime's process $old_pid still runs after the upgrade"
     sleep 10
-    if ( bounded 60 'the carried jason runtime status' "$CARRIED" runtime status > "$OUT/cask-runtime-after.json" 2>/dev/null ); then
+    # A runtime that does not answer is an answer; a status that does not end is not, and fails here.
+    st=0
+    ( bounded 60 'the carried jason runtime status' "$CARRIED" runtime status > "$OUT/cask-runtime-after.json" 2>/dev/null ) || st=$?
+    [ "$st" != 124 ] || fail "the carried jason runtime status after the upgrade did not end within 60 s"
+    if [ "$st" = 0 ]; then
         answered="$(field "$OUT/cask-runtime-after.json" runtime_version)"
         case "$answered" in "$version"|"$version+"*) ;; *) fail "the runtime answering after the upgrade is $answered, not $version" ;; esac
         say "the uninstall stanza stopped the old runtime ($stopped), and a runtime answers at $answered after the upgrade"
