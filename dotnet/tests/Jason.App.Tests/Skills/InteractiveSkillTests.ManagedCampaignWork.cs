@@ -1253,21 +1253,27 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// A session neither runs a check-in nor does its work, and where a campaign seems to stand, the person may still have
-    /// its manager look now: the session asks for a review on their word, a quick look or a deep one, and knows the two
-    /// refusals it will meet, a review already open and the manager's launches of the day spent.
+    /// its manager look now: the session asks for a review on their word, the bare verb a quick look and `--depth deep` a
+    /// deep one, and knows the two refusals it will meet, a review already open and the manager's launches of the day
+    /// spent; at the second it says the refusal's words, and the lift that would let it go is the person's word alone.
     /// </summary>
     [Fact]
     public void A_session_asks_the_manager_to_look_now_on_the_person_s_word()
     {
         var skill = Flattened("managed-campaign-work");
         Assert.Contains(
-            "On the person's word, ask its manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).",
+            "On the person's word, ask its manager to look now with `jason campaign review <cmp>`, a quick look, or with `--depth deep` a deep review; it is refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).",
             skill,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "At `launches_spent`, say the refusal's words: the lift is the person's word, as \"Ignore the limit\" says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("**\"Ignore the limit\" lets held work go today, and only on the person's word.**", skill, StringComparison.Ordinal);
 
         // A review creates work, so a chat whose mode only reads and proposes asks for none, as it starts nothing.
         Assert.Contains(
-            "(`launches_spent`). Where the chat's mode only reads and proposes, you ask for no review: say that this mode does not.",
+            "as \"Ignore the limit\" says. Where the chat's mode only reads and proposes, you ask for no review: say that this mode does not.",
             skill,
             StringComparison.Ordinal);
 

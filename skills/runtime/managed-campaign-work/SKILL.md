@@ -862,9 +862,10 @@ A check-in is the launched manager's, and a session neither runs one nor does it
 campaign moving asks the person and commits what they decide, as above, and `approvals-and-questions` and
 `troubleshooting-jason` cover what is waiting and what stopped. Where a campaign seems to stand, say what you read and
 that its manager is the one to look again; do not fill the gap with work of your own. On the person's word, ask its
-manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open
-(`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`). Where the chat's
-mode only reads and proposes, you ask for no review: say that this mode does not.
+manager to look now with `jason campaign review <cmp>`, a quick look, or with `--depth deep` a deep review; it is
+refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent
+(`launches_spent`). At `launches_spent`, say the refusal's words: the lift is the person's word, as "Ignore the limit"
+says. Where the chat's mode only reads and proposes, you ask for no review: say that this mode does not.
 
 ```
 jason campaign review cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --depth deep --actor human:ada --reason 'the person asked for a look now'
