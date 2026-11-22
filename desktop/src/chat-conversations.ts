@@ -67,6 +67,13 @@ export interface Conversation {
      * agent, kept from that moment: the campaign carries the desktop's placeholder name until it is named.
      */
     made_at_click?: true;
+    /**
+     * Present, and true, for a conversation about no campaign begun from Start's box, which asks who the person wants to
+     * reach: what is sent there asks for an agent, so its header says it is where a campaign is set up. Absent for one the
+     * Chats plus made, and in every record written before the mark, each of them a chat about no agent. Read only on a
+     * record about no campaign that is not the Feed.
+     */
+    from_start?: true;
     created_at: string;
     updated_at: string;
     /** By host id, the session or thread that host named for this conversation. */
@@ -286,6 +293,7 @@ function readRecord(text: string, id: string): { conversation: Conversation; sta
         title: raw.title,
         ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
         ...(raw.made_at_click === true && typeof raw.campaign_id === 'string' ? { made_at_click: true as const } : {}),
+        ...(raw.from_start === true && raw.campaign_id === null && !main ? { from_start: true as const } : {}),
         created_at: raw.created_at,
         updated_at: raw.updated_at,
         sessions,
@@ -313,11 +321,12 @@ export function serialize(conversation: Conversation): string {
     const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
     const clicked = conversation.made_at_click === true ? { made_at_click: true } : {};
+    const begun = conversation.from_start === true && conversation.campaign_id === null && conversation.main !== true ? { from_start: true } : {};
     const moded = conversation.mode === undefined || conversation.mode === 'full_access' ? {} : { mode: conversation.mode };
     const owned = conversation.folder === 'own' ? { folder: 'own' } : {};
     const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
     const memory = memory_given === undefined || Object.keys(memory_given).length === 0 ? {} : { memory_given };
-    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, ...clicked, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...moded, ...owned, shape: recordShape });
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, ...clicked, ...begun, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...moded, ...owned, shape: recordShape });
 }
 
 /**

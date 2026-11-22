@@ -442,6 +442,20 @@ test('chat.create from a tab makes a chat as the window\'s own create does, in F
     assert.equal(real.chat.open(made.result.id).mode, 'full_access');
 });
 
+test('chat.create from a tab\'s Start marks the chat begun there, as the window\'s Start does, and its record keeps the mark', async (t) => {
+    const real = realChat(t);
+    const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
+    const secret = await r.pair();
+    const begun = (JSON.parse((await r.call(secret, 'chat.create', [null, 'start'])).body) as { result: { id: string } }).result.id;
+    const plain = (JSON.parse((await r.call(secret, 'chat.create', [null])).body) as { result: { id: string } }).result.id;
+    for (const id of [begun, plain]) {
+        await r.call(secret, 'chat.send', [id, 'hello from a tab', { host: 'claude' }]);
+        await turnsEnded(real, id, 1);
+    }
+    const markOf = (id: string) => (JSON.parse(readFileSync(join(real.b.paths.conversations, `${id}.json`), 'utf8')) as { from_start?: boolean }).from_start;
+    assert.deepEqual([markOf(begun), markOf(plain)], [true, undefined]);
+});
+
 test('the chat\'s own check is the second line: a send read as Ask first while the chat is in Full access is refused by the chat', async (t) => {
     const real = realChat(t);
     const full = await real.chat.create();

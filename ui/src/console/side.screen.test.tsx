@@ -246,6 +246,8 @@ describe('the sidebar', () => {
         await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.click(newChat());
         await waitFor(() => expect(calls(desktop, 'chat.create')).toHaveLength(1));
+        // The plus makes a plain chat about no agent: nothing marks it begun from Start.
+        expect(calls(desktop, 'chat.create')[0]!.args).toEqual([]);
         await waitFor(() => expect(shown()).toMatch(/^chat:/));
     });
 

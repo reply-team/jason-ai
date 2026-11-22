@@ -279,8 +279,12 @@ does not find it.
   holds a space; a name of anything but letters, digits, dots, underscores, hyphens and spaces, longer than the
   runtime's 100 units or with white space at either end is never given, and a sentence says to ask instead; then which
   campaign the conversation is about, its name quoted on one line, with every control, format and separator character
-  dropped and cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it
-  as they are. A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the
+  dropped and cut at 120 characters, and its folder; or, for a conversation about no campaign begun from Start's box
+  (`chat.create(null, 'start')`, kept as `from_start` on its record), that it is about no campaign yet and is where a
+  campaign is set up; or, for any other, the Chats plus's, that it is a chat about no campaign, which the person's
+  screen calls a chat about no agent, with no word of setting one up (rule 7 of the instruction text makes an agent there
+  only when the person asks for one). A record written before the mark has none, and is read as the plain chat. The
+  person's words follow it as they are. A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the
   desktop did not make or keep is refused.
 - **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
   letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not

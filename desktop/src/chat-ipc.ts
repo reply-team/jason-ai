@@ -44,7 +44,8 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.answer', origin, (chatId, requestId, decision) => chat.answer(chatId, requestId, decision), refused);
     handle(ipc, 'chat.list', origin, () => chat.list(), refused);
     handle(ipc, 'chat.open', origin, (chatId) => answered(() => chat.open(chatId)), refused);
-    handle(ipc, 'chat.create', origin, (campaignId) => answered(() => chat.create(campaignId)), refused);
+    // Beside the campaign only the one word that marks a chat begun from Start's box is passed on; anything else is dropped.
+    handle(ipc, 'chat.create', origin, (campaignId, begun) => answered(() => (begun === 'start' ? chat.create(campaignId, begun) : chat.create(campaignId))), refused);
     handle(ipc, 'chat.createAgent', origin, (clickId) => answered(() => chat.createAgent(clickId)), refused);
     handle(ipc, 'chat.remove', origin, (chatId) => answered(() => chat.remove(chatId)), refused);
     handle(ipc, 'chat.restart', origin, (chatId) => answered(() => chat.restart(chatId)), refused);

@@ -22,6 +22,8 @@ build, because every skill's do.
 What this file says otherwise for the chat of Jason Desktop is gathered here. In that chat it overrides what follows,
 and in a person's own session nothing here holds.
 
+- In the chat of Jason Desktop, where the conversation is about no campaign, `managed-campaign-work` says in its own
+  chat passage when an agent is set up there, and until then you plan no new campaign and propose none.
 - In the chat of Jason Desktop you set the two preferences, who writes and how the company sounds, on the person's
   word too, with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words
   (the form of rule 13 of the chat's instructions), at the end of the command; where its mode only reads and proposes,

@@ -275,7 +275,9 @@ public partial class ChatWordsTests
     [InlineData("an act spelled", "An act is spelled when the person names the items, says all of these about a list you showed them, or says all but those they name, as in \"archive all campaigns except X\": that is their word already, so do all of it, one after another, and report once at the end.")]
     [InlineData("campaigns named", "Work on that campaign only, unless the person names others or says all: then pausing, starting and archiving alike reach what they named.")]
     [InlineData("what waits", "Never say from memory what waits: run `jason approval list` and `jason decision list` first, each time.")]
-    [InlineData("whether Jason runs", "Two verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, and `jason logs` reads its log files.")]
+    [InlineData("whether Jason runs", "Seven verbs stand alone, with no noun: `jason status` says whether Jason runs and can work, `jason logs` reads its log files,")]
+    [InlineData("whether the runtime answers", "`jason runtime status`, for one, says whether the runtime answers.")]
+    [InlineData("a command the person named", "When the person names a jason command themselves, run the one they named; where it is refused or does not exist, say exactly what was answered. Never run another in its place.")]
     [InlineData("a file named", "22. A file the person names is theirs to have read, wherever it is on their computer. In Full access, read it and write it as they ask. In Ask first and Auto-edit, read it; a change to it outside this chat's folders is shown to them once first. In Plan only, read it and change nothing. Never answer that this chat works only in its folder.")]
     [InlineData("Jason's own files", "Three things are Jason's, not the person's, and stay refused in every mode: Jason's settings and run files; its data directory outside this conversation's folder; and what Jason itself sets for the turn, meaning its variables, such as `JASON_CHAT_TURN`, and its permission tool.")]
     [InlineData("a refusal", "23. When something is refused, say in one sentence exactly what was refused and why, and give the path in a code block. Where opening a folder would help, name Open folder, in the menu of the agent's row and of its header. Where a `jason` verb does what they wanted, name it, and run it where these rules let you. Never try another way around a refusal.")]
@@ -300,6 +302,13 @@ public partial class ChatWordsTests
         var commands = Commands(root, []).ToHashSet(StringComparer.Ordinal);
         Assert.Contains("status", commands);
         Assert.Contains("logs", commands);
+
+        // Every command rule 18 names by its words is one the CLI has, `jason runtime status` among them.
+        var rule = File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-instructions.md")).Single(line => line.StartsWith("18. ", StringComparison.Ordinal));
+        var named = Regex.Matches(rule, @"`jason ([a-z][a-z -]*[a-z])`").Select(match => match.Groups[1].Value).ToList();
+        Assert.Contains("runtime status", named);
+        Assert.True(named.Count >= 8, $"Rule 18 names {named.Count} commands: {string.Join(", ", named)}.");
+        Assert.All(named, command => Assert.Contains(command, commands));
 
         var skill = File.ReadAllText(Path.Combine(RepositoryRoot(), "skills", "runtime", "managed-campaign-work", "SKILL.md"));
         var flat = System.Text.RegularExpressions.Regex.Replace(skill, @"\s+", " ");

@@ -777,7 +777,9 @@ Claude Code.
 
 Each campaign has one conversation, and any number of set-up chats are about no campaign yet. An agent's conversation is
 made at your first message or choice in it: opening its Chat, by a link, a reload, Back or the Agents list, makes
-nothing. The window opens on Start, and a set-up chat is made when you send from it. A set-up chat whose turn made exactly one campaign becomes that
+nothing. The window opens on Start, and a set-up chat is made when you send from it: what you send there asks for an
+agent, and the AI sets one up at once. A chat the plus over **Chats** makes is a plain chat about no agent: the AI there
+answers what you ask, may speak of any agent, and offers to make none; it makes one only when you ask it to. A set-up chat whose turn made exactly one campaign becomes that
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
 conversation is kept from its first turn, and one never sent to leaves nothing. An agent's conversation is its **Chat**
 tab, the first of its tabs, under the agent's one header, which stays while you move between its tabs: its name, its

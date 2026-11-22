@@ -321,7 +321,8 @@ describe('the start screen', () => {
         await ready();
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Start's box asks for an agent: the chat is made marked begun there, so the AI sets one up at once.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'start'] }]);
         expect(calls(desktop, 'chat.send')[0]!.args[1]).toBe('Heads of sales at logistics firms in Poland');
         await waitFor(() => screen.getByRole('form', { name: 'Message' }));
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
@@ -384,7 +385,8 @@ describe('the start screen', () => {
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         // The desktop makes it in Full access: no host is named and no mode asked for.
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Start's box asks for an agent: the chat is made marked begun there, so the AI sets one up at once.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'start'] }]);
         expect(calls(desktop, 'chat.setMode')).toEqual([]);
         await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
     });
@@ -398,7 +400,8 @@ describe('the start screen', () => {
         expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Start's box asks for an agent: the chat is made marked begun there, so the AI sets one up at once.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'start'] }]);
         // Asked of the desktop once the chat is made, before its first message.
         expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
         await waitFor(() => screen.getByRole('form', { name: 'Message' }));
@@ -427,7 +430,8 @@ describe('the start screen', () => {
         await waitFor(() => within(startForm()).getByRole('button', { name: 'Access mode: Ask first' }));
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        // Start's box asks for an agent: the chat is made marked begun there, so the AI sets one up at once.
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'start'] }]);
         expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toEqual(['ask_first']);
     });
 

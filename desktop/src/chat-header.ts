@@ -68,6 +68,12 @@ export function quoted(text: string): string {
 /** What a header says about the campaign; `campaign` null for a set-up chat and for the Feed, which `main` marks. */
 export interface About {
     main?: true;
+    /**
+     * Present, and true, for a conversation about no campaign begun from Start's box (`from_start` on its record): its
+     * header says it is where a campaign is set up. Without it such a conversation is a chat about no agent. Said nothing
+     * of for the Feed or a campaign's conversation.
+     */
+    fromStart?: true;
     campaign: {
         id: string;
         /** As the runtime answered it, or null when it did not answer. */
@@ -157,8 +163,11 @@ function headerBody(about: About, account?: string | null): string {
     if (about.main === true) {
         return `${lead} This conversation is the Feed, the person's main chat: it is about no campaign, and a campaign made in it keeps a conversation of its own.`;
     }
-    if (campaign === null) {
+    if (campaign === null && about.fromStart === true) {
         return `${lead} This conversation is about no campaign yet: it is where a campaign is set up.`;
+    }
+    if (campaign === null) {
+        return `${lead} This conversation is a chat about no campaign, which the person's screen calls a chat about no agent.`;
     }
     const parts = [`${lead} This conversation is about the campaign ${campaign.id}.`];
     if (campaign.name === null) {

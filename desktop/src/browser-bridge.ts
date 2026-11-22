@@ -73,7 +73,8 @@ const rows = new Map<InvokeMember, Row>([
     ['setup.status', { arity: 0 }],
     ['chat.list', { arity: 0 }],
     ['chat.open', { arity: 1 }],
-    ['chat.create', { arity: 1 }],
+    // The campaign, and the one word that marks a chat begun from Start's box, as a tab's Start sends it.
+    ['chat.create', { arity: 2 }],
     // Whatever may make a chat may make an agent, by the same road: a tab's click makes it as the window's does.
     ['chat.createAgent', { arity: 1 }],
     [
