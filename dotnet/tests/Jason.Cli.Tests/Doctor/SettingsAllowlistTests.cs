@@ -53,6 +53,7 @@ public sealed class SettingsAllowlistTests
         "Launches:MaxPerDay:personalizer", "Launches:MaxPerDay:critic", "Launches:MaxPerDay:responder", "Launches:MaxPerDay:analyst",
         "Launches:MaxPerDay:deliverability-specialist",
         "Sending:AutomaticMaxPerDay",
+        "Lines:MaxTouches",
         "Subscriptions:RunRecordsPerKind", "Subscriptions:EnvelopeBytes", "Subscriptions:TransientRetries",
         "Subscriptions:RetryBackoffSeconds", "Subscriptions:MaxParallel",
     ];

@@ -8,6 +8,7 @@ using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -44,6 +45,7 @@ public sealed class Claimer(
     LiveSettings<DispatcherOptions> settings,
     LiveSettings<LaunchesOptions> launches,
     LiveSettings<SendingOptions> sending,
+    LiveSettings<LinesOptions> lines,
     JasonPaths paths,
     ILogger<Claimer> logger,
     PatternTiming? timing = null) : IClaimReading
@@ -115,6 +117,9 @@ public sealed class Claimer(
         // And the daily ceiling of automatic sends, for the same reason and over the same UTC day.
         var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, today);
 
+        // And the ceiling of touches a person may have in a campaign, for the same reason.
+        var maxTouches = lines.Current.MaxTouches;
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
         // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
@@ -137,7 +142,7 @@ public sealed class Claimer(
             // The decision before the record of it. Everything that can refuse a provider item is decided here,
             // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
             // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
-            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, ct).ConfigureAwait(false) : null;
+            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, maxTouches, ct).ConfigureAwait(false) : null;
             var verdict = facts is null ? null : ProviderOpPreflight.Check(facts, packages, routing, _timing);
 
             // A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences
@@ -586,7 +591,7 @@ public sealed class Claimer(
             .FirstAsync(w => w.Id == item.Id, ct)
             .ConfigureAwait(false);
         var routing = routes.Snapshot;
-        var facts = await FactsAsync(beside, current, routing, ct).ConfigureAwait(false);
+        var facts = await FactsAsync(beside, current, routing, lines.Current.MaxTouches, ct).ConfigureAwait(false);
         var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
         var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
         if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
@@ -843,7 +848,7 @@ public sealed class Claimer(
     /// read is the routed plugin's question, and an item nothing routes needs no reads at all. An audience the work names
     /// by its number is read by that number, in the work's own campaign.
     /// </summary>
-    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, CancellationToken ct)
+    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, int maxTouches, CancellationToken ct)
     {
         var campaign = item.Campaign!;
         var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
@@ -942,6 +947,7 @@ public sealed class Claimer(
 
         var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
         var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
+        var line = OperationCatalog.Touches.Contains(contract.Id) ? await LineAsync(db, item, contact, maxTouches, ct).ConfigureAwait(false) : null;
         return new PreflightFacts(
             item,
             campaign,
@@ -957,7 +963,32 @@ public sealed class Claimer(
             audience,
             inTheWay,
             thread,
-            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false));
+            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false),
+            line);
+    }
+
+    /// <summary>
+    /// Where the line with the person stands in the item's campaign, for a touch: their membership's state, and how many
+    /// touches that count they have had there besides this item (<see cref="LineTouches"/>), beside the ceiling this scan
+    /// read. Read inside the claim's transaction like every other fact.
+    /// </summary>
+    /// <remarks>
+    /// Two touches to one person cannot both pass the count. The claim takes at most one item per campaign per scan, and
+    /// none from a campaign while another of its items is scheduled or processing (<see cref="CandidatesAsync"/>, the
+    /// <c>NOT EXISTS</c> at Claimer.cs:338-339), all inside one immediate transaction; so the touch claimed before this one
+    /// has ended by the time this one is counted, and is in the count if it reached the person. A touch that left the queue
+    /// without ending — parked for an approval, waiting on a block — is counted again at its own next claim, against every
+    /// touch that ended meanwhile.
+    /// </remarks>
+    private static async Task<LineFacts> LineAsync(JasonDbContext db, WorkItem item, Contact contact, int ceiling, CancellationToken ct)
+    {
+        var state = await db.CampaignContacts.AsNoTracking()
+            .Where(membership => membership.CampaignId == item.CampaignId && membership.ContactId == contact.Id)
+            .Select(membership => (MembershipState?)membership.State)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        var touches = await LineTouches.OthersAsync(db, item.CampaignId, contact.Id, item.Id, ct).ConfigureAwait(false);
+        return new LineFacts(state, touches, ceiling);
     }
 
     /// <summary>

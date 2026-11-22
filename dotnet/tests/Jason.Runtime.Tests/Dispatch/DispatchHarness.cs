@@ -87,6 +87,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
         services.AddSingleton<IOptionsMonitor<LaunchesOptions>>(Launches);
         services.AddSingleton<IOptionsMonitor<SendingOptions>>(Sending);
+        services.AddSingleton<IOptionsMonitor<LinesOptions>>(Lines);
 
         // The subscription runner's numbers, as the runtime ships them unless a test changes them between turns.
         services.AddSingleton<IOptionsMonitor<SubscriptionsOptions>>(Subscriptions);
@@ -184,6 +185,9 @@ internal sealed class DispatchHarness : IDisposable
 
     /// <summary>The daily ceiling of automatic sends, as the runtime ships it unless a test changes it between turns.</summary>
     public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
+
+    /// <summary>The ceiling of touches a person may have in a campaign, as the runtime ships it unless a test changes it between turns.</summary>
+    public TestOptionsMonitor<LinesOptions> Lines { get; } = new(new LinesOptions());
 
     public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
 
