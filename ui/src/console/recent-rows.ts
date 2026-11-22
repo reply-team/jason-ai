@@ -47,7 +47,8 @@ export interface RecentInput {
     titles: (id: string) => string | undefined;
     /**
      * The agent a chat the console holds is about now, by conversation id: a hand-over reaches the chat before the
-     * desktop's list says so. Undefined for a chat it does not hold, or one about no agent; absent for none held.
+     * desktop's list says so. Null for a chat it holds about no agent, undefined for one it does not hold; absent for
+     * none held.
      */
     campaignOf?: (id: string) => string | null | undefined;
     /** Whether a chat the console holds has a turn running now; undefined for one it does not hold. */

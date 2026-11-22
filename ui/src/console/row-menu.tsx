@@ -11,7 +11,7 @@ import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { openFolder, openSession } from './open-folder';
 import { closeRowMenu, dotsElement, drawnRow, focusOpener, rowDrawn, rowElement, rowMenu } from './recent';
 import { openAgentRow, openRow } from './side';
-import { conversations, here } from './state';
+import { conversations, here, sideAway } from './state';
 
 // The menu on a row of AGENTS or CHATS: the acts the row's own view offers, opened on the row by a right-click, Shift+F10,
 // the menu key (`side.rowmenu`) or its three dots (`side.rowdots`), and never opening the row by itself. An agent with no
@@ -125,6 +125,9 @@ export function RowMenu() {
         closeRowMenu();
         // The focus goes back to what opened the menu, where the act shows nothing that takes it: never to the page.
         focusOpener(at);
+        // An act that shows something in the area puts a narrow window's drawer away, as the row's own click does.
+        if (item.kind === 'open' || item.kind === 'rename' || item.kind === 'fresh' || item.kind === 'remove')
+            sideAway.value += 1;
         if (item.kind === 'open') (unspoken(row) ? openAgentRow : openRow)(row);
         else if (item.kind === 'folder' || item.kind === 'session') {
             const campaign = campaignOf(row);

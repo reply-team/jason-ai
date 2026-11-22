@@ -624,6 +624,21 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
 });
 
 describe('the sidebar where the window is narrow', () => {
+    it('puts the drawer away for an act of a row menu that shows something in the area, as the row itself does', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000M1', title: 'Mailboxes' });
+        renderConsole(desktop);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = () => document.querySelector<HTMLElement>('.jc-console .side')!;
+        fireEvent.click(screen.getByRole('button', { name: 'Sidebar' }));
+        fireEvent.click(await waitFor(() => side().getByRole('button', { name: 'More for Mailboxes' })));
+        const opened = await screen.findByRole('menu', { name: 'Mailboxes' });
+        expect(aside().classList.contains('open')).toBe(true);
+        fireEvent.click(within(opened).getByRole('menuitem', { name: 'Open' }));
+        await waitFor(() => expect(aside().classList.contains('open')).toBe(false));
+        await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000M1'));
+    });
+
     it('keeps the drawer open for a row menu its three dots open, and Escape gives the focus back inside it', async () => {
         renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });

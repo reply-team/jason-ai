@@ -27,6 +27,11 @@ export const chats = signal<Readonly<Record<string, Chat>>>({});
 export const conversations = signal<readonly DesktopConversation[]>([]);
 /** Whether the desktop has listed its conversations since the console was bound: before that, none is not yet known. */
 export const conversationsListed = signal(false);
+/**
+ * Asks the narrow window's drawer to put itself away, as a click in it does, for an act that shows something in the area
+ * from outside the drawer's own controls: a row menu's Open, say. Each ask is one more.
+ */
+export const sideAway = signal(0);
 /** The conversation whose chat is shown, which the sidebar marks in its sections; null while anything else is shown. */
 export const currentChat = signal<string | null>(null);
 /** The Feed's id, once the desktop answered the first ask; null before. */

@@ -74,6 +74,7 @@ import {
     feedUnseen,
     here,
     keepLine,
+    sideAway,
     streamState,
     type Dock,
     type PanelName,
@@ -495,6 +496,15 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const [bound, setBound] = useState(false);
     // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
     const [sideOpen, setSideOpen] = useState(false);
+    // An act that shows something in the area from a menu over the drawer puts it away too.
+    useEffect(() => {
+        let first = true;
+        return effect(() => {
+            void sideAway.value;
+            if (first) first = false;
+            else setSideOpen(false);
+        });
+    }, []);
     // While it is over the area the page behind is out of reach, the sidebar takes the focus, Escape puts it away and gives
     // the focus back to its button, and a window that grows past the narrow edge leaves nothing of it standing.
     useEffect(() => {
