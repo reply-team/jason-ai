@@ -85,6 +85,42 @@ public partial class InteractiveSkillTests
     public void The_skills_that_teach_notifications_say_so_in_their_description(string name, string words) =>
         Assert.Contains(words, SkillFrontMatter.Read(SkillPack.Find(name).File).Top["description"], StringComparison.Ordinal);
 
+    /// <summary>
+    /// Only a send written under the chat's mark, by a chat turn that can only read and propose, parks whatever the send
+    /// mode says; one the chat writes in Ask first, Auto-edit or Full access follows the campaign's send mode, as one from a
+    /// terminal does (docs/work-execution.md, "The chat's mark"). A skill that said every send written in the chat waits
+    /// would tell an agent in the chat that a message will wait for the person when, under an automatic mode, it goes to a
+    /// real person. So the sentence is pinned, and no skill of either pack may say that a send always waits whatever the
+    /// send mode unless the same sentence names the chat's mark.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void Only_a_send_written_under_the_chats_mark_always_waits_whatever_the_send_mode()
+    {
+        Assert.Contains(
+            "A send the chat of Jason Desktop writes follows the send mode, as one written in a terminal does; only one written under the chat's mark, by a chat turn that can only read and propose, always waits for the person, whatever the send mode or a standing approval says.",
+            Flattened("approvals-and-questions"),
+            StringComparison.Ordinal);
+
+        foreach (var skill in SkillPack.All().Concat(SkillPack.Business()))
+        {
+            var text = Whitespace().Replace(File.ReadAllText(skill.File), " ");
+            Assert.DoesNotContain("written in Jason's chat", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("written in the desktop's chat", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("written or edited in the desktop's chat", text, StringComparison.Ordinal);
+            foreach (var sentence in SentenceEnd().Split(text))
+            {
+                if (sentence.Contains("always waits for the person, whatever the send mode", StringComparison.Ordinal))
+                {
+                    Assert.True(
+                        sentence.Contains("the chat's mark", StringComparison.Ordinal),
+                        $"{skill.Name} says a send always waits whatever the send mode without naming the chat's mark: {sentence}");
+                }
+            }
+        }
+    }
+
+
     [Fact]
     [Critical(Family.S2, "the approvals skill never decides")]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
@@ -95,7 +131,8 @@ public partial class InteractiveSkillTests
         // are read, the failed action goes to the skill that reads failures, and reacting to the notification approves
         // nothing. A session that treated "you have 3 approvals" as the request would be deciding on a count; one that
         // took the failed action for something to decide would put it in front of the person as a choice it is not.
-        Assert.Contains("A notification says how many approvals and questions wait, and may add that protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both — `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a decision, and `troubleshooting-jason` is where it is read.", skill, StringComparison.Ordinal);
+        Assert.Contains("A notification says how many approvals and questions wait, and may add how many replies came in, protective actions that failed in campaigns it names by id, accounts whose events were not read, provider blocks, items held at a daily limit and emails that bounced. The approvals and questions are yours here: list both — `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a decision, and `troubleshooting-jason` is where it is read. A hold is lifted only on the person's word, as `managed-campaign-work` says; replies, blocks, accounts and bounces are read as `operating-the-installation`'s \"Notifications\" says.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("and may add that protective actions failed in campaigns it names by id.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("A notification says only how many approvals and questions wait.", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs.", skill, StringComparison.Ordinal);
 

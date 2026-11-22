@@ -190,7 +190,7 @@ public partial class LaunchContractTests
         Assert.Contains("raise that work as work items, then end this attempt by waiting for them", contract, StringComparison.Ordinal);
         Assert.Contains("**Never poll, sleep or hold your attempt open** to watch the work you raised", contract, StringComparison.Ordinal);
         Assert.Contains("while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start", contract, StringComparison.Ordinal);
-        Assert.Contains("A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait is refused with `wait_not_allowed`.", contract, StringComparison.Ordinal);
+        Assert.Contains("A campaign review — on its cadence, because a line asked for one, or because a person asked for one now — never waits: its wait is refused with `wait_not_allowed`.", contract, StringComparison.Ordinal);
         Assert.Contains("The moment printed above is an example: `--until` names a moment ahead of now, and one already past is refused.", contract, StringComparison.Ordinal);
         Assert.Contains("A wait the runtime refuses changes nothing, and you still hold the attempt", contract, StringComparison.Ordinal);
 

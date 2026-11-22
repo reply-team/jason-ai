@@ -60,10 +60,13 @@ what is still open, and both take `--campaign` and `--work-item` to narrow to on
 ## When a notification brought them here
 
 A person may arrive because Jason told them something is waiting: a toast on their desktop, or a message from a
-notification plugin on their phone. A notification says how many approvals and questions wait, and may add that
-protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both —
-`jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
-decision, and `troubleshooting-jason` is where it is read. The notification itself names no item, so do not guess which one it meant,
+notification plugin on their phone. A notification says how many approvals and questions wait, and may add how many
+replies came in, protective actions that failed in campaigns it names by id, accounts whose events were not read,
+provider blocks, items held at a daily limit and emails that bounced. The approvals and questions are yours here: list
+both — `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
+decision, and `troubleshooting-jason` is where it is read. A hold is lifted only on the person's word, as
+`managed-campaign-work` says; replies, blocks, accounts and bounces are read as `operating-the-installation`'s
+"Notifications" says. The notification itself names no item, so do not guess which one it meant,
 and the counts may already be smaller: something may have been answered since it was sent.
 
 A person may instead arrive with a prompt that names one item — an approval id or a question id — from the UI's Copy
@@ -177,7 +180,8 @@ the manager asks it as a question whose references name the `contacts_finished` 
 answers yes, record their answer as above, then reopen the line as theirs, naming that question with `--decision`. The
 runtime takes only a question that is answered, so the answer comes first. It checks that the question is the
 campaign's, answered by a named person, and about that line, and reopens only the people the line ended
-(`not_in_decision` for anybody else); it never reads what the answer says, so you run the reopen on a yes alone. On any
+whose line it was the latest to end (`not_in_decision` for anybody else, and for a person whose line was ended again
+later, who needs a question of their own); it never reads what the answer says, so you run the reopen on a yes alone. On any
 other answer, record it and reopen nothing. When the person tells you directly to reopen somebody's line, with no
 question behind it, run it as theirs without `--decision`:
 
@@ -244,8 +248,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_sta
 them is an `approved` approval whose reason is `automatic_mode`, decided under the name of the person who set the mode,
 with a line `approval_automatic_applied` in the campaign's chronicle. A send the mode held waits as any approval does,
 and its reason says why: `approval get --human` gives it as a sentence on its `Why:` line, and the facts on its
-`Send mode:` line. Give the person that sentence with the send. A send written in Jason's chat always waits for the
-person, whatever the send mode or a standing approval says.
+`Send mode:` line. Give the person that sentence with the send. A send the chat of Jason Desktop writes follows the
+send mode, as one written in a terminal does; only one written under the chat's mark, by a chat turn that can only read
+and propose, always waits for the person, whatever the send mode or a standing approval says.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_automatic_applied
@@ -309,8 +314,8 @@ should every message wait, or go automatically? And the same for people who have
   reaches anyone who asked not to be contacted, and it touches no operation that is not a message to a person. A
   message still waits for the person where its creator or a reviewer doubted it, where neither the critic nor a person
   passed its text, where the contact has a reply not yet judged, where it answers an automatic reply, a bounce or a
-  request to stop, or a conversation marked for the person, where it was written in Jason's chat, and once the
-  campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
+  request to stop, or a conversation marked for the person, where a chat turn that can only read and propose wrote it,
+  and once the campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
   next send and leaves what already waits where it is.
 - **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
   automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.

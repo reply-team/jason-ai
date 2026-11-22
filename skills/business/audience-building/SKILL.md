@@ -117,10 +117,10 @@ which of them this build performs, and how, is the runtime's to say:
    Do not talk a user out of it when the list is twenty companies. It is a human errand with no
    operation of its own — what it produces re-enters at route 1.
 
-**What the adapter decides, not this skill.** An operation existing in the contract is not a
+**What the provider's plugin decides, not this skill.** An operation existing in the contract is not a
 promise that the provider in use performs it. Whether `candidate.search` or `contact.enrich` is
-fulfilled, partially fulfilled or absent is a fact about the product, and the adapter skill for
-that provider is what states it. Consult it rather than assuming, and treat a partial as a
+fulfilled, partially fulfilled or absent is a fact about the product, and the provider's plugin
+is what states it. Consult it rather than assuming, and treat a partial as a
 partial when planning around it.
 
 ### Outward search with Jason

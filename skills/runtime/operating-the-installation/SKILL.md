@@ -200,11 +200,13 @@ the runtime by hand.
 
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective
 action fails, when it finds a span of an account's events it will not read, when a provider block is open, when an
-email bounces, or when a role has judged a reply a person's own, it tells them once, with a pointer: how many, and where
-to look. A pointer that says an account has
+item is held at a daily limit of launches, when an email bounces, or when a role has judged a reply a person's own, it
+tells them once, with a pointer: how many, and where to look. A pointer that says an account has
 events Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that
 says provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where
-the person clears it. One that says emails bounced names no command and leaves them to you: a bounce is a
+the person clears it. One that says items wait on a daily limit gives the person's way out itself, "tell your agent:
+ignore the limit"; read what is held and lift it only on their word, as `managed-campaign-work`'s "Ignore the limit"
+says. One that says emails bounced names no command and leaves them to you: a bounce is a
 `provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its
 campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
 beside the replies the provider detected and the invitations accepted, so keep the bounces and say in which campaigns

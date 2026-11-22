@@ -48,10 +48,12 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        // Two items run without waiting for anybody, because their not running is the harm. A manager told there was
-        // one would treat the record of a stop as something to hold for a decision.
-        Assert.Contains("Two items run even while Jason's campaign is paused, and nobody approves them, because their not running is the harm.", skill, StringComparison.Ordinal);
+        // Four items run without waiting for anybody, because their not running is the harm. A manager told there were
+        // fewer would treat the record of a stop, or the taking back of a held letter, as something to hold for a decision.
+        Assert.Contains("Four items run even while Jason's campaign is paused, and nobody approves them, because their not running is the harm.", skill, StringComparison.Ordinal);
         Assert.Contains("`optout.record`", skill, StringComparison.Ordinal);
+        Assert.Contains("`message.cancel` takes back a letter the provider still holds, and `audience.search_cancel` stops a search", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Two items run even while Jason's campaign is paused", skill, StringComparison.Ordinal);
 
         // An incident pause is created, Jason's campaign paused, a person asked, and the run ended: a campaign runs one
         // item at a time, so the provider's pause is claimed only after the run that created it.

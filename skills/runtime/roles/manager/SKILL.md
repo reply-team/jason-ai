@@ -674,9 +674,10 @@ You do not approve it. You created it; a person decides it.
 person approved an activation. Read it again with `enrollment.list` and create a new `campaign.activate` for the new
 number. Both numbers are in the failed attempt's `trace`; never copy the old input.
 
-**Two items run even while Jason's campaign is paused, and nobody approves them, because their not running is the
+**Four items run even while Jason's campaign is paused, and nobody approves them, because their not running is the
 harm.** `optout.record` records that somebody said stop — the responder's to create, after Jason's own register.
-`campaign.pause` is the incident response, and yours.
+`campaign.pause` is the incident response, and yours. `message.cancel` takes back a letter the provider still holds,
+and `audience.search_cancel` stops a search; the runtime makes most of both itself.
 
 Two things are called "pause". `jason campaign pause` pauses Jason's campaign and stops Jason's own work; a
 `provider_op` item naming `campaign.pause` pauses the provider's campaign and stops it sending. In an incident, do
@@ -893,8 +894,8 @@ ahead of now, and one already past is refused. Once the wait is accepted this at
 more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
 while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
 wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
-above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
-is refused with `wait_not_allowed`.
+above. A campaign review — on its cadence, because a line asked for one, or because a person asked for one now —
+never waits: its wait is refused with `wait_not_allowed`.
 
 When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
 `resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,

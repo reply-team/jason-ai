@@ -159,7 +159,7 @@ to.
 | **AI / LLM** | Runs on your subscription, with no API key and nothing to connect. Any agent with a shell can run your session through Jason's CLI and skills. Six hosts can run the nine background roles: Claude Code, measured on real runs; Codex, measured on Windows but not yet run on an account (its sandbox there needs an administrator once); Cursor CLI, GitHub Copilot CLI, Gemini CLI and Antigravity CLI, built from each host's documentation and not yet run on an account. Jason ships no model and holds no model credentials. | [Which agent does what](#runs-on-the-plan-you-already-pay-for) · [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md) |
 | **Search and personalization** | Find leads through Reply's Live Data API (1B+ B2B contacts, with a preview of the audience size before you spend credits), or through your own tools: anything your agent can reach, a CSV, your CRM. A Researcher and a Personalizer role work per person. Jason has no contact database of its own. | [Finding leads](#finding-leads) |
 | **Deliverability and warm-up** | Deliverability modules ship with Jason: sending and LinkedIn guardrail skills (authentication, warm-up, pacing, bounces, recovery) and a Deliverability role that reads bounces, opt-outs and failures and can pause a campaign at once. Warm-up itself runs in the provider you connect: Reply, or TrulyInbox, Lemwarm, Warmy and others. Jason has no warm-up engine of its own. | [Deliverability](#deliverability-and-warm-up) |
-| **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
+| **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One installation on macOS, Windows and Linux, Jason Desktop and the `jason` it carries. No admin rights on macOS and Windows: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows all of it is. On Linux the deb asks for your password once and then updates with the system; the AppImage is your account's own. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 1001 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
@@ -273,7 +273,7 @@ the money.
 Every message travels the same line, and you sit in the middle of it:
 
 ```text
-plan → research → write → personalize → critique → ✋ you approve → send → read the reply → re-plan for that person
+plan → write → personalize → ✋ you approve, or a critic where you let it go on its own → send → read the reply → re-plan for that person
 ```
 
 Day to day, it goes like this:
@@ -337,7 +337,7 @@ Instead of one AI doing everything, the work is split the way a good sales team 
 | **Researcher** | Finds the right people and the facts about them | A new office, a funding round, a fresh job title |
 | **Copywriter** | Writes the core message and the follow-ups | The pitch, in your voice |
 | **Personalizer** | Makes each message about the person reading it | "Saw you just opened in Denver…" |
-| **Critic** | Reviews the drafts the planner hands it | Sends back a claim you can't prove |
+| **Critic** | Reads each message that would go on its own, before it goes | Sends back a claim you can't prove |
 | **Responder** | Reads replies and drafts the answer | Tells "not now" from "interested" from "talk to my colleague" |
 | **Analyst** | Tells you what's working | "LinkedIn gets twice the replies of email for this group." |
 | **Deliverability** | Keeps your mail out of spam | Pauses a campaign whose bounces climb |
@@ -346,7 +346,7 @@ The roles run in the background on the host you chose, on your plan. When one ca
 and the work waits for your answer in whichever session you give it.
 
 The Manager wakes on what happens: a campaign's start, a failure, a rejected approval, a reply, an answered question, a
-provider event or block, or something you reported. If nothing happens, it looks in anyway, every six hours unless you
+provider event or block, the audience running low or a search ending, or something you reported. If nothing happens, it looks in anyway, every six hours unless you
 set another pace for that campaign, and once a day it gives the campaign a deep review.
 
 ---

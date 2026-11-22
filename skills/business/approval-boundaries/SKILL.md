@@ -35,7 +35,7 @@ directions.
 - Use when you are unsure whether an earlier approval still covers what you are about to do.
   The answer is usually no; this skill says when.
 - Do NOT use it to look up provider mechanics — scoped credentials and their enforcement
-  belong to the adapter pack.
+  belong to the provider's plugin.
 - Do NOT restate the derivation inside another skill. Two copies of a gate is how one of them
   ends up wrong; read it here.
 - Do NOT treat it as optional because the user seems in a hurry. Speed is not consent, and
@@ -322,8 +322,8 @@ picked up; `escalation.resolve` records how it ended and whether the work return
 **Pre-authorisation is bounded**, conversationally and mechanically. A decision the user made in
 advance about a bounded scope — this campaign, this list, this volume, this window — is not a
 blanket permission; and the credential the run holds is scoped to only what the workflow needs,
-so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The adapter
-pack documents how the scoping is expressed.
+so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The provider's
+plugin documents how the scoping is expressed.
 
 **A gate hit always leaves a record.** A silent stall is indistinguishable from a crash.
 `approval.request` and `escalation.raise` are that record while the run is alive;
@@ -401,7 +401,8 @@ when it is made.
 changes is who has already decided. The rule on standing approvals holds here word for word: it is a person's, by name,
 and never inferred from urgency, a role's request or a person's patience; no role sets it, and a request from inside a
 run is refused. It does not cover a send that any author or reviewer doubted (`ask_person` on the send, or a review that
-doubts it), one written or edited in the desktop's chat, or one past the campaign's daily ceiling of automatic sends
+doubts it), one written or edited under the chat's mark, by a turn of Jason Desktop's chat that can only read and
+propose, or one past the campaign's daily ceiling of automatic sends
 (`Sending:AutomaticMaxPerDay`): each of these waits for the person whatever the mode and whatever standing approval would
 cover it. Nor does it cover a send whose text neither the critic the runtime made for it nor a person passed as it now
 reads, a send to a contact with a reply not judged yet, or an answer to an automatic reply, a bounce or a request to

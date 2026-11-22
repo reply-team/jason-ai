@@ -613,8 +613,8 @@ something different. What belongs here is only that they exist.
 **It may stop and wait for a person.** An operation whose contract says a person must confirm it parks at the
 claim (except a send the person's automatic send mode releases: one to a kind of contact they chose to send to
 automatically, passed by the critic or a person, doubted by nobody, to a contact with no reply waiting to be judged,
-answering no automatic, bounce or opt-out reply and no conversation marked for the person, not written in the
-desktop's chat, and within the campaign's daily ceiling; the choice is theirs and never a session's): the item's status
+answering no automatic, bounce or opt-out reply and no conversation marked for the person, not written by a chat
+turn that can only read and propose, and within the campaign's daily ceiling; the choice is theirs and never a session's): the item's status
 becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
 The decision is a person's — a session must not make it, and the runtime refuses a decision that does not name
 one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
@@ -817,7 +817,7 @@ EOF
 jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the wrong copy went out in step 2'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --not-before 2026-11-02T09:00:00Z --reason 'the person said not before Monday'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason 'the person wants this one first'
-jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the corrected copy is in place'
+jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the person said the corrected copy is in place: start it again'
 ```
 
 **"Ignore the limit" lets held work go today, and only on the person's word.** Work held at a daily limit of launches
