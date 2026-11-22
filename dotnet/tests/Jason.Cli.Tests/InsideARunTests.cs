@@ -315,7 +315,7 @@ public class InsideARunTests
         Walk(CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)), string.Empty);
 
         Assert.Equal(
-            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "campaign set-send-mode", "campaign start", "decision answer", "launches lift", "preference set", "preference unset" },
+            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "campaign review", "campaign set-send-mode", "campaign start", "decision answer", "launches lift", "preference set", "preference unset" },
             saying.Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)

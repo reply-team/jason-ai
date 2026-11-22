@@ -14,6 +14,40 @@ namespace Jason.Runtime.Tests.Documentation;
 /// </summary>
 public partial class CampaignManagerDocTests
 {
+    /// <summary>
+    /// A review asked for: the page says what it makes, what it does to the two clocks, what its line is, and each code it is
+    /// refused with, in the order the service refuses them, each code read from the runtime's own error.
+    /// </summary>
+    [Fact]
+    public void The_page_says_what_a_review_asked_for_makes_and_where_it_is_refused_in_order()
+    {
+        var page = Flattened(Read());
+
+        Assert.Contains("**A review asked for.**", page, StringComparison.Ordinal);
+        Assert.Contains("`jason campaign review <id>`", page, StringComparison.Ordinal);
+        Assert.Contains("its brief says `review_intent: \"requested\"` and names no trigger and no cause", page, StringComparison.Ordinal);
+        Assert.Contains("a review asked for moves the quick anchor, as every check-in does", page, StringComparison.Ordinal);
+        Assert.Contains("a deep review asked for leaves the grid where it was, so the daily deep review still comes at its moment", page, StringComparison.Ordinal);
+        Assert.Contains($"The request writes one `{JournalKinds.ReviewRequested}` line", page, StringComparison.Ordinal);
+        Assert.Contains("So `review_intent` is one of three values, `scheduled`, `triggered` and `requested`.", page, StringComparison.Ordinal);
+
+        string[] order =
+        [
+            Jason.Runtime.Domain.DomainErrors.ReviewInsideARun("att_x").Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewActorRequired().Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewNotHuman(Jason.Contracts.Api.ActorType.Role).Code,
+            Jason.Runtime.Domain.DomainErrors.CampaignNotFound("cmp_x").Code,
+            Jason.Runtime.Domain.DomainErrors.CampaignNotActive("cmp_x", Jason.Contracts.Api.CampaignStatus.Paused).Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewAlreadyOpen("cmp_x", "wi_x").Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewLaunchesSpent("cmp_x", 1, "2026-10-06T15:00:00Z", "UTC").Code,
+        ];
+        var section = page[page.IndexOf("**A review asked for.**", StringComparison.Ordinal)..];
+        var at = order.Select(code => section.IndexOf($"`{code}`", StringComparison.Ordinal)).ToList();
+        Assert.DoesNotContain(-1, at);
+        Assert.Equal(at.Order(), at);
+        Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.LiftHold, page, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_manager_contract_defines_the_check_in_and_prices_the_cadence()
     {

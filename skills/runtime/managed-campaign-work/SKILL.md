@@ -242,8 +242,8 @@ The message ends with exactly: "Everything is ready. Start it?"
 - **Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then
   read it back. Say "Started, as you said. It is recorded under your name, {name}." only once `jason campaign get`
   answers the status `active`.
-- **They will start it themselves**: leave it as it is. In Jason Desktop they press Start at the top of the campaign's
-  chat; in a terminal they type `jason campaign start` with the campaign's id.
+- **They will start it themselves**: leave it as it is. They start it when they choose, by telling this chat or any
+  session to start it, or by typing `jason campaign start` with the campaign's id in a terminal.
 - **Start it later**: leave it a draft, with everything recorded. When they tell you, or any session, to start it, read
   that it is ready again and start it then. A draft runs nothing, so nothing is lost by waiting. Jason has no start at
   a moment the person names, "Monday at nine", and a session cannot wake itself: say so plainly where they ask for one,

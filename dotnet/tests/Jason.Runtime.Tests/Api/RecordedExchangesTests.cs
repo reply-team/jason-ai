@@ -121,6 +121,32 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// A person's review asked of a campaign's manager: a deep review of an active campaign answers the check-in it made,
+    /// a second while that one is open is refused naming it, a role is refused, and a draft is refused.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_review_requested_already_open_by_a_role_and_of_a_draft()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var ada = new { type = "human", id = "ada" };
+        var spring = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct)).Id;
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = spring, actor = ada }, Ct);
+
+        var item = await api.RecordAsync<WorkItemDto>(Operations.CampaignReview, "requested", new { campaign_id = spring, depth = "deep", actor = ada, reason = "Before the board meeting." }, Ct);
+        Assert.Equal(("manager", "deep_review", "requested"), (item.Role, item.Entry, item.Context["review_intent"]!.GetValue<string>()));
+
+        var open = await api.RecordErrorAsync(Operations.CampaignReview, "already-open", new { campaign_id = spring, actor = ada }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("review_already_open", open.Code);
+
+        var role = await api.RecordErrorAsync(Operations.CampaignReview, "not-human", new { campaign_id = spring, actor = new { type = "role", id = "manager" } }, HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("review_not_human", role.Code);
+
+        var autumn = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn outreach" }, Ct)).Id;
+        var draft = await api.RecordErrorAsync(Operations.CampaignReview, "not-active", new { campaign_id = autumn, actor = ada }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("campaign_not_active", draft.Code);
+    }
+
+    /// <summary>
     /// What the blocks screen reads and writes: what is blocked now and what was, one block with the link a person clears
     /// it at, the work it holds, a person's clear, and the refusals a clear and a read can meet.
     /// </summary>

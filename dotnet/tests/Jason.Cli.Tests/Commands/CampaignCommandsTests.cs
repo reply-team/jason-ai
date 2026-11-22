@@ -197,6 +197,64 @@ public class CampaignCommandsTests
         Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A review asked of a campaign's manager: the campaign, the depth when one is named and the reason, under the actor the
+    /// command names; with no depth named nothing is sent for it, and the runtime takes it for a quick look.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "--depth", "deep", "--reason", "before the board meeting" }, "{\"campaign_id\":\"cmp_A\",\"depth\":\"deep\",\"reason\":\"before the board meeting\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    [InlineData(new[] { "--depth", "quick" }, "{\"campaign_id\":\"cmp_A\",\"depth\":\"quick\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    [InlineData(new string[0], "{\"campaign_id\":\"cmp_A\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    public async Task Review_sends_the_campaign_the_depth_named_and_the_reason(string[] options, string posted)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "review", "cmp_A", .. options]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignReview, posted);
+    }
+
+    /// <summary>A depth that is neither of the two is a usage error, said before anything is sent.</summary>
+    [Fact]
+    public async Task Review_refuses_a_depth_it_does_not_know()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("--actor", "human:Marta", "campaign", "review", "cmp_A", "--depth", "thorough");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--depth takes quick or deep; 'thorough' is not one of them.", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, cli.Requests);
+    }
+
+    /// <summary>
+    /// The help says what a review asked for is: the two depths and the default, that the daily deep review keeps its moment,
+    /// the refusals a person can meet, that it is a person's word refused inside a run, and that Jason Desktop's chat
+    /// refuses it under confinement.
+    /// </summary>
+    [Fact]
+    public async Task Review_help_says_the_depths_the_clocks_and_where_it_is_refused()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "review", "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var help = Flat(cli.Text);
+        foreach (var said in new[]
+        {
+            "--depth", "quick_look", "deep_review", "the daily deep review still comes at its moment",
+            "campaign_not_active", "review_already_open", "launches_spent", "jason launches lift",
+            Flat(ActorOption.RefusedInsideARun), Flat(ConfinedVerbs.Help),
+        })
+        {
+            Assert.Contains(said, help, StringComparison.Ordinal);
+        }
+
+        static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+    }
+
     [Theory]
     [InlineData("start", Operations.CampaignStart)]
     [InlineData("pause", Operations.CampaignPause)]

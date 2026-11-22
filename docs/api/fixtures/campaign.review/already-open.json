@@ -1,0 +1,19 @@
+{
+  "operation": "campaign.review",
+  "case": "already-open",
+  "request": {
+    "campaign_id": "cmp_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "review_already_open",
+      "message": "Campaign 'cmp_1' has a check-in open, 'wi_1', and one is open per campaign; the review asked for is that one. Follow it with jason workitem get wi_1.",
+      "retryable": false
+    }
+  }
+}

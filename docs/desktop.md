@@ -1112,9 +1112,10 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test; for each noun with a verb on that list, its help, exactly
   `jason <noun> --help`, which prints and changes nothing; and outside Plan only, these as well: `approval approve`,
-  `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
-  `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
-  the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
+  `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, `campaign review`, and
+  `preference set` and `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow
+  rule. When you ask the chat to approve, reject, answer, start a campaign, ask its manager for a review, take back a
+  standing approval or set your name or tone, it runs
   the command with no card, and the act is recorded under the actor the command names. On a Claude Code older than
   2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
   standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
@@ -1130,7 +1131,7 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `install`, `ui`, `session`,
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
-  `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
+  `notification disable`), and `role add`, `project link`, `campaign start`, `campaign archive` and `campaign review`. A command that
   names an operation these verbs call is refused there too. In every other mode none of them is refused: those the bullet
   above names run with no card; every other one, a standing approval, another preference and a campaign's send mode
   among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason`

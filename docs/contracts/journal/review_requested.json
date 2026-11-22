@@ -1,0 +1,30 @@
+{
+  "kind": "review_requested",
+  "version": 1,
+  "since": "0.50.0",
+  "summary": "A person asked a campaign's manager for a review now, a quick look or a deep review, and the line names the check-in it made, the summon's own, with that check-in's entry; it summons nothing.",
+  "subscribable": false,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "enum": ["quick", "deep"], "description": "The depth the person asked for: quick when the request named none." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item_id", "entry"],
+        "properties": {
+          "work_item_id": { "type": "string", "pattern": "^wi_", "description": "The check-in the request made." },
+          "entry": { "enum": ["quick_look", "deep_review"], "description": "The manager's entry the check-in was made with, the one the depth names." }
+        }
+      }
+    }
+  }
+}
