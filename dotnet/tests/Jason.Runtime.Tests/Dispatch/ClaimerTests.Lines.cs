@@ -167,6 +167,48 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A send the provider held and a succeeded <c>message.cancel</c> of the campaign took back never reached the person, so
+    /// it is no touch, and the next touch goes on to the person's approval. A cancel that failed, a cancel still waiting, or a
+    /// succeeded cancel of another campaign that names the same item takes nothing back, and the send still counts.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Succeeded, true, null)]
+    [InlineData(WorkItemStatus.Failed, true, AttemptErrors.TouchCeilingReached)]
+    [InlineData(WorkItemStatus.AwaitingApproval, true, AttemptErrors.TouchCeilingReached)]
+    [InlineData(WorkItemStatus.Succeeded, false, AttemptErrors.TouchCeilingReached)]
+    public async Task A_send_a_succeeded_cancel_of_the_campaign_took_back_is_no_touch(WorkItemStatus cancel, bool sameCampaign, string? refused)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LineHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        var (elsewhere, _) = await LineSceneAsync(db, "cnt_01K52JR0000000000000000002");
+        await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var held = await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var takeBack = WorkItemFactory.NewProviderOp(sameCampaign ? campaign : elsewhere, HeldSends.Cancel, Noon.AddHours(-1));
+        takeBack.Status = cancel;
+        takeBack.FinishedAt = cancel == WorkItemStatus.AwaitingApproval ? null : Noon.AddMinutes(-30);
+        takeBack.Context = new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["send"] = held.PublicId } };
+        db.WorkItems.Add(takeBack);
+        var next = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(refused is null ? 1 : 2, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, next.Id, Ct));
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == next.Id, Ct);
+        if (refused is null)
+        {
+            Assert.Equal(WorkItemStatus.AwaitingApproval, row.Status);
+        }
+        else
+        {
+            Assert.Equal(refused, await RefusalAsync(fresh, next));
+        }
+    }
+
+    /// <summary>
     /// The item being claimed is never counted against itself, whatever its own attempts were: an earlier attempt of it that
     /// lost its answer is the repeat's own concern (check 23), not one more touch. That attempt is ambiguous, so counted it
     /// would bring the item to the ceiling of two with the one other touch; left out, the claim goes on to check 23.
