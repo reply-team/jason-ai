@@ -202,7 +202,8 @@ public static class AttemptHandler
             attempt.Launch = launch;
         }
 
-        if (attempt.Status == AttemptStatus.Running)
+        var decided = attempt.Status == AttemptStatus.Running;
+        if (decided)
         {
             await DecideAsync(services, db, work, item, attempt, outcome).ConfigureAwait(false);
         }
@@ -215,6 +216,15 @@ public static class AttemptHandler
             if (db.Database.CurrentTransaction is { } open)
             {
                 await open.CommitAsync().ConfigureAwait(false);
+            }
+
+            // A touch this verdict ended in success may be one a reply held the person against while it was on its way:
+            // what the provider now holds for them is taken back, after the save the take-back reads.
+            if (decided)
+            {
+                await services.GetRequiredService<AttemptOutcomes>()
+                    .TakeBackAfterSuccessAsync(db, item, services.GetRequiredService<HeldSendCancels>(), CancellationToken.None)
+                    .ConfigureAwait(false);
             }
         }
         catch (DbUpdateException failure) when (!again
