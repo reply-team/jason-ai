@@ -418,8 +418,8 @@ campaign is told `provider_block_cleared`, and that line wakes nobody: the work 
 ## When the audience woke you
 
 `trigger` is `audience_reserve_low` when the campaign's people nobody has started on fell under the threshold the
-campaign holds — one batch, twenty, which the runtime sets at the campaign's first start where its people come from a
-search (`Manager:AudienceThreshold`), unless the person changed it — `audience_search_ended` when one of the campaign's
+campaign holds — twenty, the runtime's own number, which it sets at the campaign's first start where its people come
+from a search (`Manager:AudienceThreshold`), unless the person changed it — `audience_search_ended` when one of the campaign's
 searches ended, and `audience_search_held` when the provider holds one of them. The runtime counts the reserve and follows each search, and never starts one itself: whether
 the campaign needs more people, and from which audience, is yours. Three rules of the role hold here:
 

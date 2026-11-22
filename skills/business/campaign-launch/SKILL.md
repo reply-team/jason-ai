@@ -27,8 +27,8 @@ and an explicit go-ahead against a preview that names who will receive what.
 
 - Use to decide what a campaign must have settled before anybody is written to, and whether it is
   ready.
-- Do NOT use to link a campaign to a provider's sequence, or to create one: that request is
-  answered as *A provider's sequence* below says.
+- A request to link a campaign to a provider's sequence, or to create one, is answered as *A
+  provider's sequence* below says, and nothing more of this skill applies to it.
 - Do NOT use to turn a business goal into a plan — that is `campaign-planning`.
 - Do NOT use to build the audience first — that is `audience-building`.
 - Do NOT use to analyse a running campaign — that is `performance-analysis`.
@@ -249,6 +249,10 @@ The derivation itself, what a valid confirmation looks like and the release-vers
 distinction are in `approval-boundaries`. Do not restate them here.
 
 ### Before walking away
+
+This section and the two after it, *Validation* and *Reporting*, are written for a provider's
+programme: at the start of Jason's own campaign, read back that it is `active`, and name a step, a
+count or a check that does not apply as not made, never as none.
 
 Confirm the state actually flipped by reading it back, and set what stops the work by itself:
 `stoprule.set` over bounce rate, complaint rate, negative-reply rate, opt-out rate, error rate,
