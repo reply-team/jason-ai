@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
+import { styleOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
@@ -592,7 +593,9 @@ describe('Plan only’s plan card', () => {
         const text = card()!.querySelector('.plan-text')!;
         expect(text.textContent).toContain('Bold');
         expect(text.textContent).toContain('<script>');
-        expect(card()!.querySelector('script')).toBeNull();
+        expect(card()!.querySelector('a, script')).toBeNull();
+        // The view's own line breaks are not the card's: it does not keep them as blank lines.
+        expect(styleOf(text)['white-space']).toBe('normal');
         expect((window as { hit?: number }).hit).toBeUndefined();
         expect(card()!.textContent).toContain(
             'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
