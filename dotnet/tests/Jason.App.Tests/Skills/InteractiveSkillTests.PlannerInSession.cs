@@ -588,4 +588,18 @@ public partial class InteractiveSkillTests
         Assert.True(channels >= 0 && read > channels && read < plan, $"The account read is at offset {read}; it belongs in step 2, between offsets {channels} and {plan}.");
         Assert.DoesNotContain("--operation sender.list", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The planner in a session speaks of a campaign's letters with the same line the launched planner has: three touches
+    /// written when due, never past the ceiling. A session that offered the person a fixed run of letters planned at once
+    /// would promise what the manager does not do.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_session_says_the_default_line_and_the_ceiling()
+    {
+        var skill = Flattened("planner-in-session");
+
+        Assert.Contains(RoleSkillTests.PlannerLine, skill, StringComparison.Ordinal);
+        Assert.Contains(RoleSkillTests.PlannerCeiling, skill, StringComparison.Ordinal);
+    }
 }

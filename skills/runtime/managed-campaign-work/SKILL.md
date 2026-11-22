@@ -377,8 +377,14 @@ choose. If its answer never comes back — a timeout, a session that ended mid-c
 the same key: it answers with what the first one made, and nothing is made twice. A different request under a key
 you already used is refused with `idempotency_key_reused`; give it a key of its own. Nothing makes a key up for you.
 
-**The campaign's own people are `campaign list-contacts`**, each with where they stand in it: enrolled, paused,
-finished or excluded. `contact list --campaign cmp_…` lists the same people who are not excluded, as contact records.
+**The campaign's own people are `campaign list-contacts`**, each with where they stand in it, in one of four states.
+`enrolled`: on the campaign, their line open. `paused`: they replied, and the runtime holds every touch to them while
+the manager reads the reply and continues the line or ends it; an answer in their thread still goes. `finished`: their
+line in the campaign was ended, always with a reason, which its `contacts_finished` line in the chronicle keeps; no
+touch reaches them there, their conversation goes on, and the line is reopened only on the word of the person who runs
+the campaign, as `approvals-and-questions` says. `excluded`: removed from the campaign. A touch is a letter, an
+invitation or an enrolment; an answer in a thread is none. `contact list --campaign cmp_…` lists the same people who
+are not excluded, as contact records.
 **`enrolled` here is Jason's own membership and nothing more.** It says the person is on this campaign in Jason, and
 it is the state a person has the moment they are added. It does not say the person is in a sequence at the
 provider; that is a `campaign.enroll` work item that succeeded, and the provider's own list is read with

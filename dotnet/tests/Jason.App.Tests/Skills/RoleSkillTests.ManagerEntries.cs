@@ -324,6 +324,80 @@ public partial class RoleSkillTests
         Assert.DoesNotContain("--decision", record, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The default line is three touches, each written when it is due and never the whole line ahead; the start leaves the
+    /// follow-ups to the deep review, and the deep review creates them one at a time. A manager that queued the line at
+    /// once would have letters waiting when a reply comes.
+    /// </summary>
+    [Fact]
+    public void The_default_line_is_three_touches_written_one_at_a_time_when_due()
+    {
+        var head = Flattened("manager");
+        Assert.Contains("Three touches, the first message and two follow-ups, is the line where nothing better was thought out for the person. Each is written when it is due, one at a time, and the line is never planned ahead as a whole.", head, StringComparison.Ordinal);
+
+        var start = FlattenedEntry("manager", "start");
+        Assert.Contains("only the first touch is the pilot's: the follow-ups are created one at a time, when due, at the deep review", start, StringComparison.Ordinal);
+
+        var deep = FlattenedEntry("manager", "deep_review");
+        Assert.Contains("**Three touches, the first message and two follow-ups, is the line where nothing better was thought out.**", deep, StringComparison.Ordinal);
+        Assert.Contains("create the next touch at this review: never earlier, and never the whole line at once", deep, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// At the ceiling the claim refuses the touch, the failure wakes the manager, and the manager ends the line with a
+    /// reason; it never asks for the ceiling to be raised to go on. A manager that asked would be routing around the
+    /// person's own setting, and one that left the line open would leave the person standing without a reason.
+    /// </summary>
+    [Fact]
+    public void The_manager_ends_a_line_at_the_ceiling_and_never_asks_to_raise_it()
+    {
+        var head = Flattened("manager");
+        Assert.Contains("and the touch's item fails, which wakes you as any failure does. **At the ceiling, the line ends.** End it, `finish-contacts` with the ceiling as the reason, and never ask a person to raise the ceiling so that the line can go on", head, StringComparison.Ordinal);
+        Assert.Contains("A line is always ended with a reason, which its `contacts_finished` line keeps.", head, StringComparison.Ordinal);
+        Assert.Contains("`touch_ceiling_reached` and `line_finished` are a line's end, not a fault", head, StringComparison.Ordinal);
+
+        var deep = FlattenedEntry("manager", "deep_review");
+        Assert.Contains("and that failure is the line's end: end the line at this review, `finish-contacts` with the ceiling as the reason, and never ask for the ceiling to be raised as a way around it", deep, StringComparison.Ordinal);
+        Assert.Contains("a touch refused `touch_ceiling_reached` always ends it", deep, StringComparison.Ordinal);
+        Assert.Contains(
+            SkillPack.PrintedCommands(EntryFile("manager", "deep_review")),
+            line => line.StartsWith("jason campaign finish-contacts ", StringComparison.Ordinal) && line.Contains("touch_ceiling_reached", StringComparison.Ordinal));
+        Assert.Equal(5, new Jason.Runtime.Configuration.LinesOptions().MaxTouches);
+    }
+
+    /// <summary>
+    /// After a reply an out-of-office notice continues the line and moves the next letter to the day the reply names,
+    /// by a later moment or by cancelling it; a person who asked to stop is ended, and the register and the provider's
+    /// opt-out stay the responder's or the person's. A manager that suppressed on its own would make a second record of
+    /// a stop the responder already made.
+    /// </summary>
+    [Fact]
+    public void The_reply_entry_moves_an_away_letter_and_leaves_the_stop_s_register_to_the_responder()
+    {
+        var reply = FlattenedEntry("manager", "inbound_reply");
+
+        Assert.Contains("move a touch still queued for them to the day the reply names, which the responder's `returns` list gives under `back_at`: give it that later `not_before`, or cancel it, with a reason, and the deep review creates the next touch once the day has come", reply, StringComparison.Ordinal);
+        Assert.Contains("Where they asked to stop, ending the line is the whole of your part: the register's entry and the provider's opt-out are the responder's, recorded with its verdict, or the person's own, and you put nothing on the register yourself.", reply, StringComparison.Ordinal);
+        Assert.DoesNotContain(SkillPack.PrintedCommands(EntryFile("manager", "inbound_reply")), line => line.StartsWith("jason suppression add", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A reopen is asked as a question that references the line that ended it, and done only on a yes: the runtime checks
+    /// the question and never reads its answer, so the text has to say that the manager acts on a yes alone.
+    /// </summary>
+    [Fact]
+    public void The_manager_asks_to_reopen_by_the_finished_line_and_acts_on_a_yes_alone()
+    {
+        var head = Flattened("manager");
+
+        Assert.Contains("The runtime does not read the answer's words: it checks that the question is this campaign's, answered by a named person, and names the `contacts_finished` line among its references, and it reopens only the people that line ended. Whether the answer is yes is yours to read, so you reopen on a yes alone", head, StringComparison.Ordinal);
+        Assert.Contains("Where the person's session already reopened the line on their yes, the reopen answers `not_finished` for them, and nothing is left to do.", head, StringComparison.Ordinal);
+        var raise = Assert.Single(
+            SkillPack.PrintedCommands(SkillPack.Find("manager").File),
+            line => line.StartsWith("jason decision raise ", StringComparison.Ordinal) && line.Contains("--reference journal_entry:jrn_", StringComparison.Ordinal));
+        Assert.DoesNotContain("jrn_", raise[..raise.IndexOf("--reference", StringComparison.Ordinal)], StringComparison.Ordinal);
+    }
+
     /// <summary>To change how the manager does one kind of review, a person edits that entry's file, which an update keeps.</summary>
     [Fact]
     public void Customising_jason_says_one_kind_of_review_is_changed_in_its_entry_file()

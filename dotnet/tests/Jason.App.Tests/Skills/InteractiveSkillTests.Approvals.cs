@@ -211,4 +211,33 @@ public partial class InteractiveSkillTests
         Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
         Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
     }
+
+    /// <summary>
+    /// A session reopens a line on the person's word: on a yes to the manager's question, it records the answer and then
+    /// reopens as the person naming that question, since the runtime takes only an answered one; on the person's direct
+    /// word, it reopens as the person with no question. A session that reopened first would be refused, and one that
+    /// answered without reopening would leave the person's yes undone until the manager's next review.
+    /// </summary>
+    [Fact]
+    public void A_session_reopens_a_line_on_the_person_s_yes_and_on_their_direct_word()
+    {
+        var skill = Flattened("approvals-and-questions");
+
+        Assert.Contains("## A line the person says to reopen", skill, StringComparison.Ordinal);
+        Assert.Contains("When the person answers yes, record their answer as above, then reopen the line as theirs, naming that question with `--decision`.", skill, StringComparison.Ordinal);
+        Assert.Contains("it never reads what the answer says, so you run the reopen on a yes alone. On any other answer, record it and reopen nothing.", skill, StringComparison.Ordinal);
+        Assert.Contains("When the person tells you directly to reopen somebody's line, with no question behind it, run it as theirs without `--decision`", skill, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File).ToList();
+        var answer = printed.FindIndex(line => line.StartsWith("jason decision answer ", StringComparison.Ordinal) && line.Contains("write to them again", StringComparison.Ordinal));
+        var carried = printed.FindIndex(line => line.StartsWith("jason campaign reopen-contacts ", StringComparison.Ordinal) && line.Contains(" --decision dec_", StringComparison.Ordinal));
+        var direct = printed.FindIndex(line => line.StartsWith("jason campaign reopen-contacts ", StringComparison.Ordinal) && !line.Contains("--decision", StringComparison.Ordinal));
+        Assert.True(answer >= 0 && carried > answer, "The answer is recorded before the reopen that names its question: the runtime takes only an answered question.");
+        Assert.True(direct >= 0, "The skill prints no reopen on the person's direct word.");
+        foreach (var reopen in new[] { printed[carried], printed[direct] })
+        {
+            Assert.Contains(" --actor human:", reopen, StringComparison.Ordinal);
+            Assert.Contains(" --reason '", reopen, StringComparison.Ordinal);
+        }
+    }
 }
