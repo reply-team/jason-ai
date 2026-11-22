@@ -56,7 +56,7 @@ public class CampaignOwnTests
         var said = new List<string> { "docs/contracts/journal/inbound_reply_observed.json" };
         said.AddRange(Directory.EnumerateFiles(Path.Combine(root, "docs", "contracts", "fixtures", "journal", "inbound_reply_observed"), "*.json")
             .Select(path => Path.GetRelativePath(root, path)));
-        said.AddRange(["docs/events.md", "docs/inbound-sync.md", "docs/work-execution.md", "docs/architecture.md", "skills/runtime/roles/manager/SKILL.md"]);
+        said.AddRange(["docs/events.md", "docs/inbound-sync.md", "docs/work-execution.md", "docs/architecture.md", "skills/runtime/roles/manager/SKILL.md", "skills/runtime/roles/manager/entries/inbound_reply.md"]);
         foreach (var path in said)
         {
             Assert.DoesNotContain(Retired, File.ReadAllText(Path.Combine(root, path)), StringComparison.Ordinal);

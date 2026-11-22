@@ -110,9 +110,10 @@ public sealed partial class ReplyLoopSeamsTests
     {
         var lines = new[] { "manager", "approvals-and-questions" }
             .SelectMany(skill => SkillPack.PrintedCommands(SkillPack.Find(skill).File))
+            .Concat(SkillPack.Entries("manager").SelectMany(entry => SkillPack.PrintedCommands(entry.File)))
             .Where(command => command.StartsWith("jason reply record ", StringComparison.Ordinal))
             .ToList();
-        Assert.True(lines.Count >= 3, "the manager's two verdicts and the person's own");
+        Assert.True(lines.Count >= 4, "the manager's two verdicts on an answer, its own on a reply no responder judged, and the person's own");
         foreach (var line in lines)
         {
             var category = Regex.Match(line, @"--category (\S+)").Groups[1].Value;

@@ -13,6 +13,17 @@ namespace Jason.App.Tests.Skills;
 internal sealed record PackSkill(string Name, string Directory, string File, bool IsRole);
 
 /// <summary>
+/// One entry of a role as it sits on disk: the file <c>entries/&lt;name&gt;.md</c> of the role's folder, whose text the
+/// launch hands the host in the envelope when a work item carries that entry. It is no skill of its own: the role's
+/// <c>SKILL.md</c>, its head, is what a host loads, and the entry is read beside it.
+/// </summary>
+internal sealed record PackEntry(string Role, string Name, string File)
+{
+    /// <summary>The first cell of the entry's row in the catalog's table of readings.</summary>
+    public string Row => $"{Role}/{Name}";
+}
+
+/// <summary>
 /// One command a page prints: the line as typed, the here-document's body it hands the program on standard input, or
 /// the file it hands it there by name. At most one of the two is set. <paramref name="Number"/> is the line's own, from
 /// one, so a guard names where the page prints it.
@@ -64,6 +75,51 @@ internal static class SkillPack
     }
 
     public static PackSkill Find(string name) => Assert.Single(All(), skill => skill.Name == name);
+
+    /// <summary>
+    /// The entries a role's folder holds, as the files <c>entries/*.md</c> beside its head, in the order of their names;
+    /// none where the folder has no <c>entries</c>.
+    /// </summary>
+    public static IReadOnlyList<PackEntry> Entries(string role)
+    {
+        var folder = Path.Combine(Root(), "roles", role, Jason.Contracts.Execution.RoleEntries.Folder);
+        if (!Directory.Exists(folder))
+        {
+            return [];
+        }
+
+        return
+        [
+            .. Directory.EnumerateFiles(folder, "*.md", SearchOption.TopDirectoryOnly)
+                .Select(file => new PackEntry(role, Path.GetFileNameWithoutExtension(file), file))
+                .OrderBy(entry => entry.Name, StringComparer.Ordinal),
+        ];
+    }
+
+    /// <summary>Every entry of every role this pack ships, found by the folders, never by a list.</summary>
+    public static IReadOnlyList<PackEntry> AllEntries() =>
+    [
+        .. Directory.EnumerateDirectories(Path.Combine(Root(), "roles"))
+            .Select(directory => Path.GetFileName(directory))
+            .Order(StringComparer.Ordinal)
+            .SelectMany(Entries),
+    ];
+
+    /// <summary>
+    /// The text a host reads when it is launched with an entry: the head's reading, which it loaded as the role's skill,
+    /// a line break, and the entry's body, which the envelope handed it. A verified entry's row records the digest of
+    /// both, so an edit to the head turns the entries' rows stale as an edit to the entry does. The entry's front matter
+    /// is left out for the reason a skill's status is: promoting it would change the text it records.
+    /// </summary>
+    public static string EntryReading(PackEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return Reading(Path.Combine(Root(), "roles", entry.Role, SkillFile)) + "\n" + Body(entry.File);
+    }
+
+    /// <summary>The digest a verified entry's row records: of <see cref="EntryReading"/>.</summary>
+    public static string EntryReadingDigest(PackEntry entry) =>
+        "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(EntryReading(entry))));
 
     /// <summary>Every <c>jason …</c> line a skill prints, read from the file.</summary>
     public static IReadOnlyList<string> PrintedCommands(string file) =>

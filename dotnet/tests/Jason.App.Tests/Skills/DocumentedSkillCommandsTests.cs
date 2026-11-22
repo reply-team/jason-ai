@@ -52,6 +52,18 @@ public class DocumentedSkillCommandsTests
             }
         }
 
+        // A role's entries are read by its agent inside a run, beside the head, so their lines are typed as the head's are.
+        var entries = SkillPack.AllEntries();
+        Assert.NotEmpty(entries);
+        foreach (var entry in entries)
+        {
+            foreach (var command in SkillPack.Printed(entry.File))
+            {
+                await AssertUnderstoodAsync(command.Line, entry.File, ARun(), StandardInput(command));
+                printed++;
+            }
+        }
+
         Assert.True(printed > 0, "The pack printed no commands at all, so this guard asserted nothing.");
     }
 
