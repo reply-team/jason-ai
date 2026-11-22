@@ -261,7 +261,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-eight pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the thirty pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -927,7 +927,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-eight provider checks follow.
+existed. It is the same rule the thirty provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -1256,7 +1256,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-eight pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the thirty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -1279,18 +1279,18 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-eight checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, and the twenty-eighth, added after it, right after the tenth:
+**Everything that can stop it is decided at the claim, before a child process exists.** Thirty checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, the twenty-eighth, added after it, right after the tenth, and the twenty-ninth and the thirtieth, added after that, right after the twenty-eighth:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed → opted_out →
-contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
+line_finished → touch_ceiling_reached → contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
 search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-five are refusals and all of them are final: twenty-two are `permanent`, `input_invalid` and
+The first twenty-seven are refusals and all of them are final: twenty-four are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -1310,6 +1310,19 @@ verdict itself registers every value the contact had, in the same save, by the r
 reply in that verdict's campaign, under their name, outside any run, stating a nature other than `opt_out` — never by a
 role's or a run's, never by a person named from inside a run, never by a carried answer alone, and never by
 `suppression.remove` ([runtime API](runtime-api.md), `reply.record`).
+The twenty-ninth and the thirtieth, added after it, are asked right after `opted_out`, and only of a touch — an operation
+whose document says `touch: true`, today `message.send`, `social_invitation.send` and `campaign.enroll` — that names a
+contact: they ask by the person and the operation, never by a channel, so a reply in a thread the person opened
+(`conversation.reply`), a take-back (`message.cancel`) and every read pass whatever the line's state. `line_finished`
+refuses a touch to a person whose membership of the campaign is `finished`: the line with them was ended, and only the
+person reopens it; a `paused` membership is not refused here. `touch_ceiling_reached` refuses a touch to a person who has
+already had `Lines:MaxTouches` touches in this campaign (§Settings): a touch counts when it is one of those operations
+about the person in this campaign, other than the item being claimed, and it succeeded, or failed with a last attempt
+classed `ambiguous`, since that attempt may have reached the person — one definition, which the people list counts by
+too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
+cannot both pass the count, since the claim takes one item of a campaign at a time and none while another of its items
+is `scheduled` or `processing`.
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
@@ -1349,7 +1362,7 @@ the earlier act at the account whichever version of the package made it, so an u
 the repeat through.
 While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code, and so does check 27, and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
-(`docs/routing.md`). An answer that arrived and does not satisfy the
+(`docs/routing.md`). Checks 28, 29 and 30 are asked among the first of those, by their place, and are among them too. An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
 the operation does not declare, or declares under another class. An answer a pattern of
 that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
@@ -1587,6 +1600,7 @@ mistyped one.
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
 | `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
+| `Lines:MaxTouches` | `5` | 1..20 | the most touches — operations whose document says `touch: true` — a person may have in one campaign, counted by the work about them there that succeeded or failed with a last attempt classed `ambiguous`; at it the claim refuses the next touch with `touch_ceiling_reached`, before anybody is asked to approve it, and the manager ends the line (§Provider operations); there is no 0 and no unlimited, and no verb writes it, only the settings file |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps
