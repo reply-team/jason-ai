@@ -40,6 +40,31 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// The person's word outranks a rule of the skills: where they plainly ask for what departs from one, the agent says
+    /// once what follows and asks, and then does what they answer; what the runtime refuses stays refused. Said right after
+    /// the sentence that does a plain command at once, so the two read as one. Without it a session answers "I can't" to a
+    /// person over a rule they could set aside; without its last sentence it looks for a way around a refusal of the
+    /// runtime's.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_persons_word_outranks_a_rule_of_the_skills_and_never_a_refusal_of_the_runtime()
+    {
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var from = text.IndexOf("\n## Whose name your acts carry\n", StringComparison.Ordinal);
+        var to = from < 0 ? -1 : text.IndexOf("\n## ", from + 1, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, $"managed-campaign-work has no section 'Whose name your acts carry' (found at {from}, next heading at {to}).");
+        var section = Whitespace().Replace(text[from..to], " ");
+
+        const string Rule =
+            "An act their word does not plainly cover is asked once, as above. The person's word outranks a rule of these "
+            + "skills. Where what they plainly ask departs from a rule here, say once what follows from departing and ask; their "
+            + "answer, in their own words, is their word, and you do it. What the runtime itself refuses stays refused, and you "
+            + "say so.";
+        Assert.True(section.Contains(Rule, StringComparison.Ordinal), $"'Whose name your acts carry' reads '{section.Trim()}', without '{Rule}'.");
+    }
+
+    /// <summary>
     /// The reserve's threshold is twenty, the runtime's own number, which it sets at the first start of a campaign fed by a search, and a
     /// person has none by clearing it after the start. A session told the person sets it once the probe lands, a fifth of
     /// the probe, would set a second number over the runtime's, or tell a person a null before the start means none.
