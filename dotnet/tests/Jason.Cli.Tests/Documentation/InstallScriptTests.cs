@@ -1134,6 +1134,7 @@ public partial class InstallScriptTests
     /// end, where a here-document on a later line would escape the reading, is refused as well.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_opens_no_here_document_inside_a_command_substitution()
     {
         var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
@@ -1153,6 +1154,7 @@ public partial class InstallScriptTests
     /// that starts it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_starts_every_application_with_a_terminals_PATH()
     {
         var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
@@ -1176,6 +1178,7 @@ public partial class InstallScriptTests
     /// temporary folder holds, and the one helper that opens it holds the process it then finds to run from that bundle.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_opens_the_application_by_its_bundle_in_the_legs_of_a_persons_opening_alone()
     {
         var text = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1193,7 +1196,8 @@ public partial class InstallScriptTests
         }
         var byName = text.Split('\n').Where(line => !line.TrimStart().StartsWith('#') && Regex.IsMatch(line, @"\bopen\s+-[ab]\b")).ToList();
         wrong.AddRange(byName.Select(line => $"opens by name: {line.Trim()}"));
-        var opened = Regex.Matches(text, @"(?m)^\s*within \d+ ""open \$bundle"" open --stdout ""\$log"" --stderr ""\$log"" ""\$bundle"" ").Count;
+        // The one open, under its bound; the bound runs in a subshell of its own, so its failure is said rather than lost.
+        var opened = Regex.Matches(text, @"(?m)^\s*(?:\(\s*)?within \d+ ""open \$bundle"" open --stdout ""\$log"" --stderr ""\$log"" ""\$bundle""(?: \)| )").Count;
         if (opened != 1) wrong.Add($"open_app's one open by the bundle's path is found {opened} times");
         if (!text.Contains("\"$bundle/Contents/MacOS/Jason\"|\"$bundle/Contents/MacOS/Jason \"*) ;;", StringComparison.Ordinal)) wrong.Add("open_app does not hold the process it finds to run from the bundle it opened");
         Assert.True(wrong.Count == 0, string.Join("; ", wrong));
@@ -1206,6 +1210,7 @@ public partial class InstallScriptTests
     /// the step refuses. A step added to either script falls under it by default.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_proof_scripts_change_a_machine_on_a_GitHub_hosted_runner_alone()
     {
         var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1235,6 +1240,7 @@ public partial class InstallScriptTests
     /// failed only at its held step, and no leg was named for it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_leg_whose_own_compare_differs_is_recorded_failed_and_its_end_fails_its_step()
     {
         var root = RepositoryRoot();
@@ -1272,6 +1278,7 @@ public partial class InstallScriptTests
     /// saying the open's environment and opening.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_legs_hold_the_profiles_by_the_PATH_a_new_login_shell_answered_before_the_open()
     {
         var root = RepositoryRoot();
@@ -1411,6 +1418,7 @@ public partial class InstallScriptTests
     /// before it reads the machine, so the next leg runs.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -2360,6 +2368,7 @@ public partial class InstallScriptTests
     /// from running.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_clean_begin_takes_every_place_a_macOS_leg_refuses_to_find_there_already()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -2388,6 +2397,7 @@ public partial class InstallScriptTests
     /// person's copy is still in it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_clean_begin_puts_the_person_s_own_quick_start_back_over_a_stand_in_before_it_removes_any_scratch()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -2408,6 +2418,7 @@ public partial class InstallScriptTests
     /// printing the server's log, its process and what holds the port where it never answers.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_legs_serve_their_feed_by_the_proofs_own_server_and_say_why_it_never_answered()
     {
         var root = RepositoryRoot();
@@ -2490,6 +2501,7 @@ public partial class InstallScriptTests
     /// carries is in the log; the reading never fails the leg, which stands on the uninstall's exit and the files.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_menu_leg_says_what_its_report_says_and_never_fails_on_reading_it()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
