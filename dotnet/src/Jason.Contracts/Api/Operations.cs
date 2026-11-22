@@ -30,6 +30,7 @@ public static class Operations
     public const string CampaignStart = "campaign.start";
     public const string CampaignPause = "campaign.pause";
     public const string CampaignArchive = "campaign.archive";
+    public const string CampaignReview = "campaign.review";
     public const string CampaignUpdateContext = "campaign.update_context";
     public const string CampaignSetSendMode = "campaign.set_send_mode";
     public const string CampaignAddContacts = "campaign.add_contacts";

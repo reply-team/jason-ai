@@ -350,6 +350,13 @@ public sealed class Summoner(
         OpenCheckIns(db).AnyAsync(item => item.CampaignId == campaignId, ct);
 
     /// <summary>
+    /// The campaign's open check-in by its public id, by the same look that stops a second one here, a held one included, or
+    /// null where none is open: what a review a person asks for is refused naming.
+    /// </summary>
+    public static Task<string?> OpenCheckInIdAsync(JasonDbContext db, int campaignId, CancellationToken ct) =>
+        OpenCheckIns(db).Where(item => item.CampaignId == campaignId).OrderBy(item => item.Id).Select(item => (string?)item.PublicId).FirstOrDefaultAsync(ct);
+
+    /// <summary>
     /// Which of these lines are a check-in's own: about a check-in, about one's attempt, or written <em>by</em>
     /// one's attempt. Asked once per campaign for the whole read rather than once per line, and asked at all
     /// because a manager that could summon a manager would summon one for ever.

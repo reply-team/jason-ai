@@ -1,0 +1,18 @@
+{
+  "kind": "review_requested",
+  "version": 1,
+  "case": "the key is one of the two depths, never a word of the caller's",
+  "body": {
+    "key": "thorough",
+    "old": null,
+    "new": { "work_item_id": "wi_01K7QN0000000000000000000A", "entry": "deep_review" }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/key",
+        "reason": "enum"
+      }
+    ]
+  }
+}
