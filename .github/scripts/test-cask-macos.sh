@@ -13,13 +13,19 @@
 #                                  as the real tap renders it; a word of Homebrew's that a tap is not trusted or ignored
 #                                  fails it
 #   render <zip> <version>         jasonproof/test's cask rendered again, at <version>, for <zip>
-#   install <version>              brew install --cask: the application in /Applications names Jason Desktop's identifier
+#   install <version> [--after-plain-uninstall]
+#                                  brew install --cask: the application in /Applications names Jason Desktop's identifier
 #                                  at <version>, the link in Homebrew's bin leads into it and answers --version before any
 #                                  open, Homebrew's record of the cask printed, the quarantine attribute recorded, and the
-#                                  first-open confirmation answered as a person's click answers it (approved, below)
-#   open <version>                 the application opened as a person opens it, its first start's set-up waited for, its
+#                                  first-open confirmation answered as a person's click answers it (approved, below); no
+#                                  wrapper at ~/.local/bin/jason before the open or, after a plain uninstall, only the one
+#                                  it is declared to leave: the application's wrapper, running the carried jason
+#   open <version> [--beside-formula]
+#                                  the application opened as a person opens it, its first start's set-up waited for, its
 #                                  record written anew, and the application quit again (test-installation-macos.sh
-#                                  by-hand --placed holds that start in full, on a machine with no wrapper yet)
+#                                  by-hand --placed holds that start in full, on a machine with no wrapper yet); beside the
+#                                  linked formula the set-up reports the formula as a problem, so no record is written, and
+#                                  the wait is for the set-up's end in the desktop's log instead
 #   left-to-homebrew               the carried jason uninstall --dry-run says application_fate left_to_homebrew
 #   start-runtime                  a runtime started from the carried jason, answering
 #   upgrade <version>              brew upgrade --cask: the application at <version>, the runtime the uninstall stanza
@@ -29,15 +35,17 @@
 #                                  no Jason process left
 #   uninstall-left                 the listing after-cask-uninstall against before: nothing differs outside what a plain
 #                                  uninstall may leave (what Jason set up, the state under ~/Library, data, harness root)
-#   carried-uninstall              the carried jason uninstall: exit 0, the application, its link and its state under
-#                                  ~/Library kept, and brew uninstall --zap --cask jason named
+#   carried-uninstall              the carried jason uninstall: exit 0, the application, its link and whatever of its state
+#                                  under ~/Library was there before kept, and brew uninstall --zap --cask jason named; the
+#                                  preferences file and domain said before it, since the application writes none of the
+#                                  other places (Electron's own files are under the data directory)
 #   zap                            brew uninstall --zap --cask jason, with no --force: the application, the link,
 #                                  Homebrew's record, the wrapper and both launch agents' files gone; the profile lines and
 #                                  the skills recorded, not held
 #   formula <tarball> <version>    jasonproof/test's formula, installing the command line of <tarball>, the older formula's
 #                                  release, installed and linked
 #   beside-formula                 the cask installed beside the linked formula: Homebrew's warning that it skipped the link
-#   formula-named                  set-up's report and jason status name brew uninstall --formula jason
+#   formula-named                  jason status names brew uninstall --formula jason
 #   formula-off                    jason runtime stop and brew uninstall --formula jason; the cask's link still missing,
 #                                  said, which is not a fault
 #   reset                          whatever a failed step left of the cask or the formula taken off by Homebrew's own
@@ -146,6 +154,25 @@ field() { python3 -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))
 except Exception: print("")' "$1" "$2"; }
 
+# The desktop's lines of a start's set-up in this data directory's log: the machine_setup_ran lines counted, with the last
+# one's exit and whether it completed, then the machine_setup_finished lines counted, with whether the last completed.
+setup_lines() {
+    python3 -c 'import glob,json,os,sys
+ran, finished = [], []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("Why") == "start":
+            if event.get("EventName") == "machine_setup_ran": ran.append(event)
+            if event.get("EventName") == "machine_setup_finished": finished.append(event)
+last_ran = ran[-1] if ran else {}
+last_finished = finished[-1] if finished else {}
+print("%d %s %s %d %s" % (len(ran), last_ran.get("Exit", "none"), str(last_ran.get("Completed", "none")).lower(), len(finished), str(last_finished.get("Completed", "none")).lower()))' "$DATA"
+}
+
 # The cask from the template, at a version, for a zip, with the url as the real tap renders it or naming a file here.
 render() {
     local version="$1" sha="$2" url="${3:-}" target="$4"
@@ -239,7 +266,8 @@ render)
     ;;
 
 install)
-    version="$1"
+    version="$1"; after="${2:-}"
+    case "$after" in ''|--after-plain-uninstall) ;; *) fail "install takes <version> [--after-plain-uninstall], not '$after'" ;; esac
     [ ! -e "$APP" ] || fail "an application is in place before the cask's install: $APP"
     status=0
     ( bounded 120 'brew install --cask' trusted "$OUT/cask-install.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" ) || status=$?
@@ -255,7 +283,16 @@ install)
     [ "$resolved" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$CARRIED")" ] || fail "$(link) leads to $resolved, not into $APP"
     answered="$( ( bounded 60 "$(link) --version" "$(link)" --version ) 2>&1 || true)"
     case "$answered" in *"$version"*) ;; *) fail "$(link) --version answered '$answered', not $version" ;; esac
-    [ ! -e "$HOME/.local/bin/jason" ] || fail "a wrapper is in place before any open: $HOME/.local/bin/jason"
+    wrapper="$HOME/.local/bin/jason"
+    if [ -e "$wrapper" ] || [ -L "$wrapper" ]; then
+        # A plain uninstall leaves the application's wrapper, as the cask's caveats say, so an install after one may find
+        # it: only that one, a file of text and not an executable, running the carried jason of the application at $APP.
+        [ "$after" = --after-plain-uninstall ] || fail "a wrapper is in place before any open: $wrapper"
+        [ -f "$wrapper" ] || fail "after the plain uninstall $wrapper is there and is not a file: $(ls -l "$wrapper")"
+        if file "$wrapper" | grep -q 'Mach-O'; then fail "after the plain uninstall $wrapper is an executable, not the wrapper a plain uninstall is declared to leave"; fi
+        grep -qF "$CARRIED" "$wrapper" || fail "after the plain uninstall $wrapper does not run $CARRIED, so it is not the wrapper a plain uninstall is declared to leave: $(cat "$wrapper")"
+        say "before this open the wrapper the plain uninstall is declared to leave is at $wrapper, running $CARRIED"
+    fi
     say "$APP names $IDENTIFIER at $version; $(link) leads into it and answers '$answered' before any open"
     for file in INSTALL_RECEIPT.json config.json; do
         echo "Homebrew's record, $(caskroom)/.metadata/$file:"
@@ -270,22 +307,40 @@ install)
     ;;
 
 open)
-    version="$1"
+    version="$1"; beside="${2:-}"
+    case "$beside" in ''|--beside-formula) ;; *) fail "open takes <version> [--beside-formula], not '$beside'" ;; esac
     record="$DATA/desktop/machine-setup.json"
     [ "$(version_of "$APP")" = "$version" ] || fail "$APP is $(version_of "$APP"), not $version"
     before="$(stat -f %m "$record" 2>/dev/null || echo 0)"
+    lines_before="$(setup_lines)" || fail "the desktop's log could not be read before the open"
     sleep 1
     say "opening $APP; its quarantine attribute: $(xattr -p com.apple.quarantine "$APP" 2>/dev/null || echo none)"
     ( bounded 60 "open $APP" open "$APP" ) || { pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true; fail "open $APP did not end within 60 s, or failed"; }
     until=$(( $(date +%s) + 180 ))
-    while [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
-    if [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ]; then seen_at_bound; fail "the application's start wrote no set-up record at $record within 180 s"; fi
+    if [ "$beside" = --beside-formula ]; then
+        # Beside the linked formula the set-up reports the formula as a problem and leaves it as it is, so it does not
+        # complete, and the desktop writes its record only where both steps completed: the set-up's end is the finishing
+        # step's line after this open, in the desktop's own log.
+        finished_before="$(echo "$lines_before" | cut -d' ' -f4)"
+        lines_after="$lines_before"
+        while [ "$(echo "$lines_after" | cut -d' ' -f4)" -le "$finished_before" ] && [ "$(date +%s)" -lt "$until" ]; do
+            sleep 2
+            lines_after="$(setup_lines)" || fail "the desktop's log could not be read after the open"
+        done
+        if [ "$(echo "$lines_after" | cut -d' ' -f4)" -le "$finished_before" ]; then seen_at_bound; fail "the application's start wrote no machine_setup_finished line within 180 s of the open"; fi
+        if [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -gt "$before" ]; then written='was written'; else written='was not written'; fi
+        say "beside the formula the start's set-up ended: jason install exited $(echo "$lines_after" | cut -d' ' -f2), completed $(echo "$lines_after" | cut -d' ' -f3); the finishing step completed $(echo "$lines_after" | cut -d' ' -f5); the set-up record at $record $written"
+    else
+        while [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
+        if [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ]; then seen_at_bound; fail "the application's start wrote no set-up record at $record within 180 s"; fi
+    fi
     sleep 5
     ( bounded 30 'quitting the application' osascript -e "quit app id \"$IDENTIFIER\"" > /dev/null 2>&1 ) || true
     until=$(( $(date +%s) + 60 ))
     while pgrep -f "$APP/Contents/MacOS/" > /dev/null && [ "$(date +%s)" -lt "$until" ]; do sleep 1; done
     pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true
-    say "the application $version opened from $APP, its first start's set-up written to $record, and quit"
+    if [ "$beside" = --beside-formula ]; then say "the application $version opened from $APP, its first start's set-up ended, and quit"
+    else say "the application $version opened from $APP, its first start's set-up written to $record, and quit"; fi
     ;;
 
 left-to-homebrew)
@@ -378,7 +433,13 @@ carried-uninstall)
     there=()
     for place in "${state_places[@]}"; do [ -e "$place" ] && there+=("$place"); done
     printf '%s\n' "${there[@]:-}" > "$OUT/cask-state-before-carried-uninstall.txt"
-    [ "${#there[@]}" -gt 0 ] || fail "none of the application's state under ~/Library was there before the carried jason uninstall, though the leg opened the application"
+    # Jason Desktop keeps Electron's own files under the data directory, so of these places only the preferences file may
+    # be there, which cfprefsd writes in its own time: what is there is said, and none there is not a fault.
+    say "before the carried jason uninstall, of the application's state under ~/Library: ${there[*]:-none}"
+    echo "ls -l ~/Library/Preferences/$IDENTIFIER.plist:"
+    ls -l "$HOME/Library/Preferences/$IDENTIFIER.plist" 2>&1 || true
+    echo "defaults read $IDENTIFIER:"
+    ( bounded 30 "defaults read $IDENTIFIER" defaults read "$IDENTIFIER" ) 2>&1 || true
     status=0
     ( bounded 120 'the carried jason uninstall' "$CARRIED" uninstall > "$OUT/cask-carried-uninstall.json" 2>"$OUT/cask-carried-uninstall.err" ) || status=$?
     cat "$OUT/cask-carried-uninstall.json"
@@ -448,15 +509,14 @@ beside-formula)
     ;;
 
 formula-named)
-    record="$DATA/desktop/machine-setup.json"
-    [ -f "$record" ] || fail "no set-up record at $record"
-    grep -qF 'brew uninstall --formula jason' "$record" || fail "set-up's report does not name brew uninstall --formula jason: $(cat "$record")"
+    # Beside the formula the set-up writes no record (open --beside-formula), so what the person is told is read from
+    # jason status, which a person or an agent runs.
     ( bounded 120 'the carried jason status' "$CARRIED" status > "$OUT/cask-status.json" 2>/dev/null ) || true
     python3 -c 'import json,sys
 checks = {c["name"]: c for c in json.load(open(sys.argv[1]))["checks"]}
 detail = (checks["path"].get("details") or {}).get("homebrew_formula") or ""
 sys.exit(0 if "brew uninstall --formula jason" in detail else 1)' "$OUT/cask-status.json" || fail "jason status's path check carries no homebrew_formula detail naming brew uninstall --formula jason: $(cat "$OUT/cask-status.json")"
-    say "set-up's report and jason status's path check name brew uninstall --formula jason"
+    say "jason status's path check names brew uninstall --formula jason"
     ;;
 
 formula-off)
