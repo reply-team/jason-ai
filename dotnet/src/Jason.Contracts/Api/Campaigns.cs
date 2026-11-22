@@ -30,8 +30,9 @@ public sealed record CampaignSummaryDto(
 /// <c>send_modes</c> is the campaign's own mode for its cold contacts and its warm ones, each null where it sets none;
 /// <c>send_modes_in_force</c> is the mode a send to each would go under now, with where it comes from: the campaign, the
 /// installation's preference, or the default, which is every message. <c>deep_review_due_at</c> is the next moment of the
-/// deep review's grid, read-only: written when the campaign goes live and moved by each deep review, and null while it has
-/// never been live; no request takes it.
+/// deep review's grid, read-only: written when the campaign goes live and moved by each deep review, and null until it next
+/// goes live where it has none, as for a campaign never started or one paused when the grid was added; no request takes
+/// it. Only an active campaign is ever reviewed at that moment.
 /// </summary>
 public sealed record CampaignDto(
     string Id,

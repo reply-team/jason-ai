@@ -46,8 +46,9 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
-        // The next moment of the deep review's grid, where the campaign has one: it has been live.
-        if (campaign.DeepReviewDueAt is { } deep)
+        // The next moment of the deep review's grid, only while the campaign is active: a paused or archived campaign keeps the
+        // moment it had, and nothing runs at it.
+        if (campaign.Status == CampaignStatus.Active && campaign.DeepReviewDueAt is { } deep)
         {
             lines.Add(Line("Deep review:", RenderText.Moment(deep)));
         }

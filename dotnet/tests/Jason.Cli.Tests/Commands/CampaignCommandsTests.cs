@@ -866,6 +866,23 @@ public class CampaignCommandsTests
     }
 
     /// <summary>
+    /// A paused or archived campaign keeps the grid moment it had, and nothing runs at it, so its view names no deep review.
+    /// </summary>
+    [Theory]
+    [InlineData(CampaignStatus.Paused)]
+    [InlineData(CampaignStatus.Archived)]
+    public async Task Human_mode_names_no_deep_review_for_a_campaign_that_is_not_active(CampaignStatus status)
+    {
+        var campaign = JsonSerializer.Serialize(
+            new CampaignDto("cmp_A", "LatAm", status, "prj_A", "default", new JsonObject(), [], null, null, Moment, Moment, null, DeepReviewDueAt: Moment.AddDays(1)),
+            JasonJson.Options);
+        using var cli = new CliRun(campaign);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", "get", "cmp_A", "--human"));
+        Assert.DoesNotContain("Deep review:", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The campaign's folder is said beside its project, so a person who stands in a folder named by when a campaign was
     /// made and the end of its id finds which campaign it is; one with no folder recorded says none.
     /// </summary>

@@ -175,7 +175,7 @@ public static class CampaignCommands
         };
         var reviewSeconds = new Option<int?>("--review-seconds")
         {
-            Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
+            Description = "How often this campaign is given a quick look, in seconds, counted from its last review; the deep review keeps the installation's own grid. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
         };
         var audienceThreshold = new Option<int?>("--audience-threshold")
         {
