@@ -20,8 +20,8 @@ public class RuntimeTimeZoneTests
     /// <summary>Nine digits, a run of three repeated, as the other settings' tests plant: no field of a log line carries it by chance.</summary>
     private const string Planted = "Zone/731731731";
 
-    private const string Refusal = "Runtime:TimeZone must be an IANA time zone id such as Asia/Tokyo, or left out for the system's own zone; "
-        + "the value written is 14 characters long and is not one this system knows.";
+    private const string Refusal = "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 14 characters long and is not one this system knows by that spelling.";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -51,11 +51,20 @@ public class RuntimeTimeZoneTests
         Assert.True(new RuntimeOptionsValidator().Validate(null, new RuntimeOptions { TimeZone = zone }).Succeeded);
     }
 
-    /// <summary>An id no system knows is refused, and so is a Windows id, a vocabulary of one system's own.</summary>
+    /// <summary>
+    /// An id no system knows is refused, and so is a Windows id, a vocabulary of one system's own, and an IANA id in another
+    /// case than the zone's own: Windows and macOS find <c>asia/tokyo</c> where Linux does not, so it is refused on all three.
+    /// </summary>
     [Theory]
     [InlineData(Planted, Refusal)]
-    [InlineData("Tokyo Standard Time", "Runtime:TimeZone must be an IANA time zone id such as Asia/Tokyo, or left out for the system's own zone; "
-        + "the value written is 19 characters long and is not one this system knows.")]
+    [InlineData("asia/tokyo", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 10 characters long and is not one this system knows by that spelling.")]
+    [InlineData("ASIA/TOKYO", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 10 characters long and is not one this system knows by that spelling.")]
+    [InlineData("utc", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 3 characters long and is not one this system knows by that spelling.")]
+    [InlineData("Tokyo Standard Time", "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+        + "the value written is 19 characters long and is not one this system knows by that spelling.")]
     public void An_unknown_or_a_windows_id_is_refused_by_its_length(string zone, string expected)
     {
         var result = new RuntimeOptionsValidator().Validate(null, new RuntimeOptions { TimeZone = zone });
@@ -183,6 +192,20 @@ public class RuntimeTimeZoneTests
         Assert.False(
             AppContext.TryGetSwitch("System.Globalization.Invariant", out var invariant) && invariant,
             "The test process runs with invariant globalization.");
+    }
+
+    /// <summary>The day is named by the zone's own id, and both spellings of UTC name one day, <c>UTC</c>.</summary>
+    [Theory]
+    [InlineData("Asia/Tokyo", "Asia/Tokyo")]
+    [InlineData(" Asia/Tokyo ", "Asia/Tokyo")]
+    [InlineData("UTC", "UTC")]
+    [InlineData("Etc/UTC", "UTC")]
+    public void The_day_is_named_by_the_zone_s_own_id(string written, string named)
+    {
+        var day = new InstallationDay(TimeProvider.System, TestOptions.RuntimeSettings(new TestOptionsMonitor<RuntimeOptions>(new RuntimeOptions { TimeZone = written })))
+            .Of(new DateTime(2026, 10, 6, 16, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(named, day.TimeZone);
     }
 
     /// <summary>The names a refused setting may print as typed: the section's and the setting's own.</summary>

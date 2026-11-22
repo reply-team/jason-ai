@@ -77,8 +77,8 @@ public sealed class RuntimeOptionsValidator : IValidateOptions<RuntimeOptions>
         if (!string.IsNullOrWhiteSpace(options.TimeZone) && InstallationDay.ZoneOf(options.TimeZone) is null)
         {
             failures.Add(
-                "Runtime:TimeZone must be an IANA time zone id such as Asia/Tokyo, or left out for the system's own zone; "
-                + OptionRules.Written("value", options.TimeZone, "is not one this system knows"));
+                "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+                + OptionRules.Written("value", options.TimeZone, "is not one this system knows by that spelling"));
         }
 
         return OptionRules.Result(failures);

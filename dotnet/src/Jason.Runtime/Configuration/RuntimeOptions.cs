@@ -21,9 +21,11 @@ public sealed class RuntimeOptions
     /// <summary>
     /// The installation's time zone, as an IANA id: the zone the installation's day runs in, from one local midnight to
     /// the next, which is the day <c>Launches:MaxPerDay</c> counts and a lift of it covers. Left out, written as nothing or
-    /// as white space, it is the system's own zone, as the runtime's clock reads it. It is the installation's, not the
-    /// limit's, so it stands here rather than under <c>Launches</c>. Read through its seam, so an edit applies at the next
-    /// scan; an id the system does not know is refused at start and, on a live edit, keeps the last good settings.
+    /// as white space, it is the system's zone as the runtime read it when it started, so a machine whose zone changes
+    /// counts the old zone's day until the runtime starts again. It is the installation's, not the limit's, so it stands
+    /// here rather than under <c>Launches</c>. Read through its seam, so an edit applies at the next scan; an id the system
+    /// does not know, or one spelled otherwise than the zone spells it, is refused at start and, on a live edit, keeps the
+    /// last good settings. The day is named by the zone's own id, and both spellings of UTC by <c>UTC</c>.
     /// </summary>
     public string? TimeZone { get; set; }
 }

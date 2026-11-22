@@ -5,7 +5,7 @@ namespace Jason.Runtime.Configuration;
 
 /// <summary>
 /// The installation's day: from one midnight to the next in the installation's time zone, <c>Runtime:TimeZone</c> where
-/// the settings name one and the system's own zone, as the runtime's clock reads it, where they do not. The day
+/// the settings name one and the system's zone, as the runtime read it when it started, where they do not. The day
 /// <c>Launches:MaxPerDay</c> counts and a lift of it covers, so the count never starts holding work again at a UTC
 /// midnight that falls in the middle of the person's afternoon. A day of 23 or 25 hours, where daylight saving moves the
 /// clock, is counted from midnight to midnight as it is.
@@ -19,7 +19,7 @@ public sealed class InstallationDay(TimeProvider clock, LiveSettings<RuntimeOpti
         var configured = runtime.Current.TimeZone;
         if (!string.IsNullOrWhiteSpace(configured) && ZoneOf(configured) is { } named)
         {
-            return LocalDay.Of(utcNow, named, configured.Trim());
+            return LocalDay.Of(utcNow, named, NameOf(named));
         }
 
         var local = clock.LocalTimeZone;
@@ -29,6 +29,8 @@ public sealed class InstallationDay(TimeProvider clock, LiveSettings<RuntimeOpti
     /// <summary>
     /// The zone an id names, or null where it names none this system knows as an IANA zone: the rule a contact's zone is
     /// held to (<see cref="TimeZoneRules"/>), so a Windows id, which names a different vocabulary on every machine, is none.
+    /// The id is held to the zone's own spelling, ordinal: Windows and macOS find <c>asia/tokyo</c> where Linux does not, so
+    /// a spelling another system would refuse is refused on every system, and a day is named the same everywhere.
     /// </summary>
     public static TimeZoneInfo? ZoneOf(string id)
     {
@@ -39,7 +41,9 @@ public sealed class InstallationDay(TimeProvider clock, LiveSettings<RuntimeOpti
             return TimeZoneInfo.Utc;
         }
 
-        return TimeZoneInfo.TryFindSystemTimeZoneById(trimmed, out var zone) && zone.HasIanaId ? zone : null;
+        return TimeZoneInfo.TryFindSystemTimeZoneById(trimmed, out var zone) && zone.HasIanaId && string.Equals(zone.Id, trimmed, StringComparison.Ordinal)
+            ? zone
+            : null;
     }
 
     /// <summary>
