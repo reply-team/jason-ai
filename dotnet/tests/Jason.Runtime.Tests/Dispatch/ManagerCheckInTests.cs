@@ -350,6 +350,77 @@ public class ManagerCheckInTests
         Assert.Equal("dispatcher", entry.ActorId);
     }
 
+    /// <summary>
+    /// The entry is passed through to the item the check-in creates, stored on the row and read back by the read model,
+    /// and it adds nothing to the context nor to the line every work item writes.
+    /// </summary>
+    [Theory]
+    [InlineData("start")]
+    [InlineData("resume")]
+    [InlineData("quick_look")]
+    [InlineData("deep_review")]
+    [InlineData("reply")]
+    public async Task A_check_in_created_with_an_entry_carries_it_on_its_row_and_nowhere_else(string entry)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        await db.SaveChangesAsync(Ct);
+
+        var item = await ManagerCheckIn.CreateAsync(Service(db), db, campaign, cause: null, new ManagerOptions(), Ct, entry);
+
+        db.ChangeTracker.Clear();
+        var stored = await db.WorkItems.Include(w => w.Campaign).SingleAsync(w => w.PublicId == item.PublicId, Ct);
+        Assert.Equal(entry, stored.Entry);
+        Assert.Equal(entry, WorkItemMapper.ToDto(stored, Noon, null, includeSnapshots: false).Entry);
+        Assert.Equal(entry, WorkItemMapper.ToSummary(stored, Noon).Entry);
+        Assert.DoesNotContain(entry, stored.Context.ToJsonString(), StringComparison.Ordinal);
+
+        var line = await db.Journal.SingleAsync(e => e.Kind == JournalKinds.WorkItemCreated, Ct);
+        Assert.DoesNotContain("entry", line.New?.ToJsonString() ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(entry, line.New?.ToJsonString() ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>A check-in created with no entry carries none, which is how every caller creates one today.</summary>
+    [Fact]
+    public async Task A_check_in_created_with_no_entry_carries_none()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        await db.SaveChangesAsync(Ct);
+
+        var item = await ManagerCheckIn.CreateAsync(Service(db), db, campaign, cause: null, new ManagerOptions(), Ct);
+
+        db.ChangeTracker.Clear();
+        Assert.Null((await db.WorkItems.SingleAsync(w => w.PublicId == item.PublicId, Ct)).Entry);
+    }
+
+    /// <summary>
+    /// A name the table does not give the manager is a programming error, refused before anything is written: no item, no
+    /// line, and the review cadence's anchor where it stood.
+    /// </summary>
+    [Theory]
+    [InlineData("general")]
+    [InlineData("Start")]
+    [InlineData("start ")]
+    [InlineData("")]
+    public async Task A_check_in_refuses_an_entry_the_manager_does_not_have_and_writes_nothing(string entry)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        await db.SaveChangesAsync(Ct);
+
+        var refused = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => ManagerCheckIn.CreateAsync(Service(db), db, campaign, cause: null, new ManagerOptions(), Ct, entry));
+
+        Assert.Equal("entry", refused.ParamName);
+        Assert.Empty(await db.WorkItems.ToListAsync(Ct));
+        Assert.Empty(await db.Journal.Where(e => e.Kind == JournalKinds.WorkItemCreated).ToListAsync(Ct));
+        Assert.Null(campaign.ManagerReviewAnchor);
+    }
+
     private static WorkItemService Service(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);

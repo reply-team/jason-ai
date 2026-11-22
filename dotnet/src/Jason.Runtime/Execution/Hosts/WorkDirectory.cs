@@ -1,4 +1,6 @@
+using System.Text;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
 
@@ -14,14 +16,32 @@ namespace Jason.Runtime.Execution.Hosts;
 /// waits for a deployment. It is on the report so a test can prove a later read ran at all — a race test that never
 /// exercised the rescue would pass for the wrong reason. Nothing else reads it: the launcher does not log it.
 /// </param>
-public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null, bool Rescued = false)
+/// <param name="Entry">
+/// The entry the launch asked for, with the text of its file as the work directory's copy holds it — read from that copy,
+/// inside the read that copied it, so the text and the folder the host finds are the same bytes — and its size in bytes;
+/// null where no entry was asked for or no role's folder was read.
+/// </param>
+public sealed record WorkDirectoryReport(
+    string? RefusalCode,
+    string? Message,
+    RoleSkillDto? Skill = null,
+    bool Rescued = false,
+    WorkDirectoryEntry? Entry = null)
 {
     public static WorkDirectoryReport Ready { get; } = new(null, null);
 
     /// <summary>Ready, and carrying what the role was taught so the attempt can record it.</summary>
-    public static WorkDirectoryReport Taught(RoleSkillDto skill, bool rescued = false) => new(null, null, skill, rescued);
+    public static WorkDirectoryReport Taught(RoleSkillDto skill, bool rescued = false, WorkDirectoryEntry? entry = null) =>
+        new(null, null, skill, rescued, entry);
 
     public static WorkDirectoryReport Refused(string code, string message) => new(code, message);
+}
+
+/// <summary>An entry as the work directory's copy holds it: its text whole, null where the file is not there, and its bytes.</summary>
+public sealed record WorkDirectoryEntry(LaunchEntry Entry, long Bytes)
+{
+    /// <summary>An entry whose file the copy does not hold: named, with no text, and no bytes.</summary>
+    public static WorkDirectoryEntry Absent(string name) => new(new LaunchEntry(name, null), 0);
 }
 
 /// <summary>
@@ -49,6 +69,10 @@ public static class WorkDirectory
     /// Jason had before there were several.
     /// </param>
     /// <param name="allow">What the host allows through the work directory; none where it is null.</param>
+    /// <param name="entry">
+    /// The entry the item carries, by its name, whose file <c>entries/&lt;name&gt;.md</c> is read from the copy of the
+    /// role's folder; null where it carries none.
+    /// </param>
     public static WorkDirectoryReport Prepare(
         string workDir,
         IReadOnlyList<string> deny,
@@ -56,7 +80,8 @@ public static class WorkDirectory
         string roleSkillsRoot,
         int maxSkillBytes,
         IAgentHost? host = null,
-        IReadOnlyList<string>? allow = null)
+        IReadOnlyList<string>? allow = null,
+        string? entry = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workDir);
         ArgumentNullException.ThrowIfNull(deny);
@@ -75,7 +100,7 @@ public static class WorkDirectory
             facts = host.Facts;
         }
 
-        return Teach(AgentHosts.Under(workDir, facts.WorkSkills), role, roleSkillsRoot, maxSkillBytes);
+        return Teach(AgentHosts.Under(workDir, facts.WorkSkills), role, roleSkillsRoot, maxSkillBytes, entry);
     }
 
     /// <summary>
@@ -87,7 +112,7 @@ public static class WorkDirectory
     /// writing into this root has to apply the same two rules before it writes: a deployment that fails them
     /// turns a role with no skill — which runs — into a role whose every launch is refused.
     /// </remarks>
-    private static WorkDirectoryReport Teach(string skills, string? role, string roleSkillsRoot, int maxSkillBytes)
+    private static WorkDirectoryReport Teach(string skills, string? role, string roleSkillsRoot, int maxSkillBytes, string? entry)
     {
         if (string.IsNullOrWhiteSpace(role) || role != Path.GetFileName(role) || role is "." or "..")
         {
@@ -109,7 +134,7 @@ public static class WorkDirectory
 
             try
             {
-                return Deliver(skills, role, roleSkillsRoot, maxSkillBytes, rescued: read > 0);
+                return Deliver(skills, role, roleSkillsRoot, maxSkillBytes, entry, rescued: read > 0);
             }
             catch (RoleSkillTreeChanged changed)
             {
@@ -152,7 +177,7 @@ public static class WorkDirectory
     private const int ReadPauseMs = 15;
 
     /// <summary>One read of the role's tree, and the copy of exactly what that read found.</summary>
-    private static WorkDirectoryReport Deliver(string skills, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
+    private static WorkDirectoryReport Deliver(string skills, string role, string roleSkillsRoot, int maxSkillBytes, string? entry, bool rescued)
     {
         var source = Path.Combine(roleSkillsRoot, role);
         var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
@@ -173,7 +198,7 @@ public static class WorkDirectory
             // The brief travels in the envelope. A role that was never given a skill is not a failure of this
             // attempt — but it is recorded, because "was this role taught anything?" is a question about a
             // finished attempt that nothing else can answer afterwards.
-            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0), rescued);
+            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0), rescued, entry is null ? null : WorkDirectoryEntry.Absent(entry));
         }
 
         if (reading.Problem is { } problem)
@@ -200,6 +225,11 @@ public static class WorkDirectory
             }
         }
 
+        // The entry's text is read here, from the copy, before the tree is read again: the bytes the envelope carries are
+        // the bytes of the folder the host finds, and a read this bracket throws away throws the text away with it. The
+        // file is bounded as the whole tree is, by Roles:MaxSkillBytes, since it is a file of the tree.
+        var taughtEntry = entry is null ? null : ReadEntry(target, entry);
+
         // The copy reads by path, and a path resolves to whatever is there when it is used rather than to what
         // the walk saw. So a deployment that renamed a same-shaped tree into place mid-copy would be copied
         // without a single failure, and reported with the byte count of the tree that is no longer there.
@@ -214,7 +244,29 @@ public static class WorkDirectory
             throw new RoleSkillTreeChanged(source, new IOException("The tree read before the copy is not the tree that is there after it."));
         }
 
-        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes), rescued);
+        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes), rescued, taughtEntry);
+    }
+
+    /// <summary>
+    /// The entry's file in the copied role folder, whole, as UTF-8: nothing stripped, nothing parsed. Absent where the copy
+    /// holds no such file — and never some other text in its place.
+    /// </summary>
+    private static WorkDirectoryEntry ReadEntry(string copiedRole, string entry)
+    {
+        // An entry's name is the vocabulary's own spelling, so it is one file name and never a path.
+        if (entry.Length == 0 || entry != Path.GetFileName(entry) || entry is "." or "..")
+        {
+            return WorkDirectoryEntry.Absent(entry);
+        }
+
+        var file = Path.Combine(copiedRole, RoleEntries.RelativePath(entry));
+        if (!File.Exists(file))
+        {
+            return WorkDirectoryEntry.Absent(entry);
+        }
+
+        var bytes = File.ReadAllBytes(file);
+        return new WorkDirectoryEntry(new LaunchEntry(entry, Encoding.UTF8.GetString(bytes)), bytes.LongLength);
     }
 
     /// <summary>

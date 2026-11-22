@@ -435,5 +435,6 @@ public static class AttemptHandler
         work.MemoryFiles,
         work.Resumption,
         work.Agent?.Host,
-        work.Agent?.Allow);
+        work.Agent?.Allow,
+        item.Entry);
 }

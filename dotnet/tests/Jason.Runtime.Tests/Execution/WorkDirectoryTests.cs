@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Contracts.Hosts;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Execution;
@@ -316,6 +317,93 @@ public class WorkDirectoryTests : IDisposable
             File.ReadAllText(Path.Combine(named, ".claude", "settings.json")),
             File.ReadAllText(Path.Combine(WorkDir, ".claude", "settings.json")));
     }
+
+    /// <summary>
+    /// A role's <c>entries/</c> folder is copied with the rest of its tree, under the folder each host reads skills from,
+    /// and the entry the launch asked for is read from that copy: the text the report carries is the copy's bytes, whole.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void The_entries_folder_is_copied_and_the_entry_is_read_from_the_copy(AgentHostKind kind)
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk the runtime for the brief.\n");
+        var entries = Directory.CreateDirectory(Path.Combine(SkillsRoot, Role, "entries")).FullName;
+        File.WriteAllText(Path.Combine(entries, "start.md"), EntryText);
+        File.WriteAllText(Path.Combine(entries, "reply.md"), "Answer in the thread.");
+        var host = Hosts().Single(candidate => candidate.Kind == kind);
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, host, entry: "start");
+
+        Assert.Null(report.RefusalCode);
+        var copied = Path.Combine(AgentHosts.Under(WorkDir, host.Facts.WorkSkills), Role, "entries");
+        Assert.Equal(EntryText, File.ReadAllText(Path.Combine(copied, "start.md")));
+        Assert.Equal("Answer in the thread.", File.ReadAllText(Path.Combine(copied, "reply.md")));
+        Assert.Equal(new LaunchEntry("start", EntryText), report.Entry!.Entry);
+        Assert.Equal(new FileInfo(Path.Combine(copied, "start.md")).Length, report.Entry.Bytes);
+    }
+
+    /// <summary>The text is the file whole: a byte order mark, if the file has one, is part of it, and nothing is trimmed.</summary>
+    [Fact]
+    public void An_entry_is_read_whole_with_nothing_stripped()
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk.\n");
+        byte[] bytes = [0xEF, 0xBB, 0xBF, .. System.Text.Encoding.UTF8.GetBytes("  ---\nname: not front matter\n---\n  tail  \n\n")];
+        File.WriteAllBytes(Path.Combine(Directory.CreateDirectory(Path.Combine(SkillsRoot, Role, "entries")).FullName, "resume.md"), bytes);
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, entry: "resume");
+
+        Assert.Equal("﻿  ---\nname: not front matter\n---\n  tail  \n\n", report.Entry!.Entry.Text);
+        Assert.Equal(bytes.Length, report.Entry.Bytes);
+    }
+
+    /// <summary>An entry whose file the folder does not have is named with no text and no bytes, and the launch is ready.</summary>
+    [Fact]
+    public void An_entry_whose_file_is_absent_is_named_with_no_text()
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk.\n");
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, entry: "quick_look");
+
+        Assert.Null(report.RefusalCode);
+        Assert.Equal(new LaunchEntry("quick_look", null), report.Entry!.Entry);
+        Assert.Equal(0, report.Entry.Bytes);
+    }
+
+    /// <summary>
+    /// An entry is held to the bound the role's tree is held to, Roles:MaxSkillBytes over every file of the tree, and no
+    /// bound of its own: an entry that takes the tree past it refuses the launch as any other file would.
+    /// </summary>
+    [Fact]
+    public void An_entry_counts_toward_the_trees_bound_and_has_none_of_its_own()
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk.\n");
+        var entries = Directory.CreateDirectory(Path.Combine(SkillsRoot, Role, "entries")).FullName;
+        File.WriteAllText(Path.Combine(entries, "deep_review.md"), new string('x', 600));
+
+        var within = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024, entry: "deep_review");
+        Assert.Null(within.RefusalCode);
+        Assert.Equal(600, within.Entry!.Bytes);
+
+        File.WriteAllText(Path.Combine(entries, "deep_review.md"), new string('x', 1024));
+        var past = WorkDirectory.Prepare(Path.Combine(_root, "past"), [], Role, SkillsRoot, 1024, entry: "deep_review");
+        Assert.Equal(AttemptErrors.RoleSkillInvalid, past.RefusalCode);
+        Assert.Null(past.Entry);
+    }
+
+    /// <summary>A launch that asks for no entry reads none, even where the folder has entry files, which are copied all the same.</summary>
+    [Fact]
+    public void A_launch_that_asks_for_no_entry_reads_none()
+    {
+        Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk.\n");
+        File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(SkillsRoot, Role, "entries")).FullName, "start.md"), EntryText);
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
+
+        Assert.Null(report.Entry);
+        Assert.True(File.Exists(Path.Combine(WorkDir, ".claude", "skills", Role, "entries", "start.md")));
+    }
+
+    private const string EntryText = "# Start\n\nRead the brief first — then the campaign.\r\nAnd 日本.\n";
 
     private static IReadOnlyList<IAgentHost> Hosts()
     {

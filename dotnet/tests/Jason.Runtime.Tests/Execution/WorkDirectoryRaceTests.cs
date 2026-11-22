@@ -145,6 +145,60 @@ public class WorkDirectoryRaceTests : IDisposable
     }
 
     /// <summary>
+    /// The entry's text is read inside the read that copies the tree: a deployment that lands mid-copy is read again, and
+    /// the text the launch carries is the one in the folder the host finds — the new tree's, both of them — never the old
+    /// tree's text beside the new tree's folder.
+    /// </summary>
+    [Fact]
+    public void A_deployment_that_lands_mid_copy_never_yields_a_text_from_one_tree_and_a_folder_from_another()
+    {
+        Deploy(Live, "OLD");
+        Entry(Live, "OLD-ENTRY");
+        var staged = Path.Combine(_root, "staging", Role);
+        Deploy(staged, "NEW-BODY-AND-LONGER");
+        Entry(staged, "NEW-ENTRY-AND-LONGER");
+
+        WorkDirectory.BetweenReadAndCopy.Value = () =>
+        {
+            WorkDirectory.BetweenReadAndCopy.Value = null;
+            Swap(staged);
+        };
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, entry: "start");
+
+        Assert.True(report.Rescued, $"The launch was not rescued by a second read: {report.RefusalCode}: {report.Message}");
+        var copied = File.ReadAllText(Path.Combine(WorkDir, ".claude", "skills", Role, "entries", "start.md"));
+        Assert.Equal("NEW-ENTRY-AND-LONGER", copied);
+        Assert.Equal(copied, report.Entry!.Entry.Text);
+        Assert.Contains("NEW-BODY-AND-LONGER", File.ReadAllText(Taught), StringComparison.Ordinal);
+    }
+
+    /// <summary>And a launch that loses the race twice is refused with no entry text at all, rather than one from a tree it did not copy.</summary>
+    [Fact]
+    public void A_launch_that_loses_the_race_twice_carries_no_entry_text()
+    {
+        Deploy(Live, "OLD");
+        Entry(Live, "OLD-ENTRY");
+        var generation = 0;
+        WorkDirectory.BetweenReadAndCopy.Value = () =>
+        {
+            generation++;
+            var staged = Path.Combine(_root, $"staging-{generation}", Role);
+            Deploy(staged, new string('x', 32 * generation));
+            Entry(staged, new string('y', 16 * generation));
+            Swap(staged);
+        };
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, entry: "start");
+
+        Assert.Equal(AttemptErrors.RoleSkillUnreadable, report.RefusalCode);
+        Assert.Null(report.Entry);
+    }
+
+    private static void Entry(string directory, string text) =>
+        File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(directory, "entries")).FullName, "start.md"), text);
+
+    /// <summary>
     /// Nothing outside a test ever arms either of the product's test hooks: this one, or the plugin invoker's.
     /// </summary>
     /// <remarks>

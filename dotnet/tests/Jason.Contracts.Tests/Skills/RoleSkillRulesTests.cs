@@ -29,6 +29,27 @@ public class RoleSkillRulesTests : IDisposable
         return directory;
     }
 
+    /// <summary>
+    /// A role's <c>entries/</c> folder is part of the tree the shared walk reads: its files are among the files a launch
+    /// copies into the work directory and an installer deploys into the role skills root, and they count toward the cap.
+    /// </summary>
+    [Fact]
+    public void The_entries_folder_is_part_of_the_tree_both_the_launch_and_the_installer_copy()
+    {
+        var directory = Role("manager", "manager");
+        var entries = Directory.CreateDirectory(Path.Combine(directory, "entries")).FullName;
+        File.WriteAllText(Path.Combine(entries, "start.md"), "start here");
+        File.WriteAllText(Path.Combine(entries, "deep_review.md"), "look deeper");
+
+        var reading = RoleSkillRules.Read(directory, "manager", 1024 * 1024);
+
+        Assert.Null(reading.Problem);
+        Assert.Equal(
+            [RoleSkillRules.SkillFile, Path.Combine("entries", "deep_review.md"), Path.Combine("entries", "start.md")],
+            reading.Files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal));
+        Assert.Equal(reading.Files.Sum(file => new FileInfo(file).Length), reading.Bytes);
+    }
+
     [Fact]
     public void A_skill_that_names_itself_after_its_directory_is_deliverable() =>
         Assert.Null(RoleSkillRules.Read(Role("researcher", "researcher"), "researcher", 1024 * 1024).Problem);

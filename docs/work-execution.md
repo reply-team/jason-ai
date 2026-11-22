@@ -1019,7 +1019,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 5,
+  "envelope_version": 6,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -1059,7 +1059,8 @@ One JSON object is written to the child's standard input, which is then closed:
         "result_omitted": false
       }
     ]
-  }
+  },
+  "entry": { "name": "start", "text": "the role's entries/start.md, whole" }
 }
 ```
 
@@ -1122,6 +1123,17 @@ and the status are always there, and `workitem.get` reads a result left out. The
 hands out after a release is recorded on the wait as the one it resumed; an attempt that retries after
 it is told the same, because the wait it follows is still the last one.
 
+`entry` is the named way into its role's job the work item was created with, and null for every item that has none.
+Only the runtime writes one, from a fixed vocabulary per role in which only the manager has names today — `start`,
+`resume`, `quick_look`, `deep_review` and `reply` — and no request to `workitem.create` or `workitem.update` carries it.
+`name` is the item's entry; `text` is the file `entries/<name>.md` of the role's folder, whole, as UTF-8, read from the
+copy the launch made in the work directory inside the same read that copies the role's tree, so the text the envelope
+carries and the folder the host finds are the same bytes. Nothing in it is stripped or parsed, and the runtime composes
+no prompt of it. The file is a file of the role's tree, bounded with the rest of it by `Roles:MaxSkillBytes`, and it has
+no bound of its own. Where the folder has no such file, `text` is null and the attempt runs all the same: there is no
+fallback to some other text. The attempt's launch record names the entry beside `role_skill`, as `{name, bytes}`,
+`bytes` being 0 where the file was not there.
+
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
 child's standard input and composes no prompt from its parts, on every host. On a host that reads its
@@ -1133,9 +1145,9 @@ that stream, by its own framing, and nothing else is written: the host's section
 [execution-profiles.md](execution-profiles.md) §12 says which.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
-version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to
-version 5 — so a host written against an earlier version keeps working: it reads the fields it knows
-and ignores the rest.
+version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, `resumption` to
+version 5, and `entry` to version 6 — so a host written against an earlier version keeps working: it reads the fields
+it knows and ignores the rest.
 
 ### Finding the API
 
