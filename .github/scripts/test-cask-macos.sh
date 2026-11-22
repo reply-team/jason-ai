@@ -15,7 +15,8 @@
 #   render <zip> <version>         jasonproof/test's cask rendered again, at <version>, for <zip>
 #   install <version>              brew install --cask: the application in /Applications names Jason Desktop's identifier
 #                                  at <version>, the link in Homebrew's bin leads into it and answers --version before any
-#                                  open, Homebrew's record of the cask printed, the quarantine attribute recorded
+#                                  open, Homebrew's record of the cask printed, the quarantine attribute recorded, and the
+#                                  first-open confirmation answered as a person's click answers it (approved, below)
 #   open <version>                 the application opened as a person opens it, its first start's set-up waited for, its
 #                                  record written anew, and the application quit again (test-installation-macos.sh
 #                                  by-hand --placed holds that start in full, on a machine with no wrapper yet)
@@ -42,6 +43,8 @@
 #   reset                          whatever a failed step left of the cask or the formula taken off by Homebrew's own
 #                                  uninstall, said
 set -euo pipefail
+# The job's own stderr, kept as descriptor 3: what a bound says reaches the log even where the command's stderr is sent away.
+exec 3>&2
 
 OUT="${OUT:-$RUNNER_TEMP/installation}"
 mkdir -p "$OUT"
@@ -61,6 +64,67 @@ case "$step" in
 esac
 
 fail() { echo "::error title=Cask::$1"; exit 1; }
+
+# What a wait that reached its bound leaves to see, on stderr: every process of Jason's, the desktop's last log lines, the
+# last lines Gatekeeper and LaunchServices logged, and the screen, kept beside the listings. Each read is bounded itself.
+seen_at_bound() {
+    local shot
+    echo "the processes of Jason's:" >&3
+    { ps -axo pid,ppid,etime,command | grep -iE 'jason|brew' | grep -v grep || true; } >&3
+    echo "the desktop's last log lines:" >&3
+    tail -n 20 "$DATA"/logs/desktop-*.jsonl >&3 2>/dev/null || echo "  (none)" >&3
+    echo "the last lines of Gatekeeper and LaunchServices:" >&3
+    { perl -e 'alarm 30; exec @ARGV' log show --last 3m --style compact --predicate 'process == "syspolicyd" OR process == "CoreServicesUIAgent" OR process == "launchservicesd"' 2>/dev/null || true; } | tail -n 40 >&3
+    shot="$OUT/at-bound-$(date +%s).png"
+    if perl -e 'alarm 15; exec @ARGV' screencapture -x "$shot" 2>/dev/null; then echo "the screen at the bound: $shot, kept with the listings" >&3; else echo "the screen could not be captured" >&3; fi
+}
+
+# A command run to its end, or to its bound: at the bound what it waited for is named, seen_at_bound says what was there,
+# the command is ended and the shell exits 124, which no command here exits with itself. Its exit otherwise. Every brew command of the legs (the taps and audit step
+# aside, which runs before them under its own limit, and brew --prefix and brew --repository), every carried jason and
+# every open of the application here runs under one, so a hang fails the leg in minutes, never at the step's own limit.
+bounded() {
+    local seconds="$1" what="$2"; shift 2
+    "$@" &
+    local pid=$!
+    local until=$(( $(date +%s) + seconds ))
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "$until" ]; then
+            echo "::error title=Cask::$what did not end within $seconds s" >&3
+            seen_at_bound
+            # Its children first: a shell function run under the bound (trusted) holds brew as a child of its own.
+            pkill -TERM -P "$pid" 2>/dev/null || true; kill -TERM "$pid" 2>/dev/null || true; sleep 2
+            pkill -KILL -P "$pid" 2>/dev/null || true; kill -KILL "$pid" 2>/dev/null || true
+            exit 124
+        fi
+        sleep 0.5
+    done
+    wait "$pid"
+}
+
+# The first open of an application Homebrew placed: the quarantine attribute Homebrew writes says downloaded and not yet
+# approved, so macOS asks, once, whether to open it, and the open waits until a person answers. A runner has no person
+# (rc.4's proof: open did not end within 60 s, the application's process held, the attribute 0181;...;Homebrew Cask).
+# The proof answers as a person's click on Open does: the attribute is kept, its flags with the user-approved bit (0x0040)
+# added, both values said. Nothing else of the attribute, and no other file's, is changed.
+approved() {
+    local before flags rest after
+    before="$(xattr -p com.apple.quarantine "$APP" 2>/dev/null || true)"
+    if [ -z "$before" ]; then say "no quarantine attribute on $APP, so no first-open confirmation to answer"; return 0; fi
+    # What a person approves, Gatekeeper accepts first: a notarized Developer ID application at its final path.
+    local said status=0
+    said="$( ( bounded 120 "Gatekeeper's assessment of $APP" spctl --assess --type execute --verbose=4 "$APP" ) 2>&1)" || status=$?
+    echo "$said"
+    [ "$status" = 0 ] || fail "Gatekeeper refuses $APP, so no person's approval is answered for it: $said"
+    printf '%s\n' "$said" | grep -q 'source=Notarized Developer ID' || fail "Gatekeeper accepts $APP, but not as a notarized Developer ID application: $said"
+    say "Gatekeeper accepts $APP as a notarized Developer ID application before its first open"
+    flags="${before%%;*}"; rest="${before#*;}"
+    printf '%s' "$flags" | grep -qE '^[0-9a-fA-F]{4}$' || fail "the quarantine attribute on $APP is not of the form flags;...: $before"
+    after="$(printf '%04x' $(( 0x$flags | 0x0040 )));$rest"
+    xattr -w com.apple.quarantine "$after" "$APP" || fail "the quarantine attribute on $APP could not be written"
+    [ "$(xattr -p com.apple.quarantine "$APP")" = "$after" ] || fail "the quarantine attribute on $APP does not read $after after it was written"
+    say "the first-open confirmation answered as a person's Open does: the quarantine attribute on $APP was $before, is $after"
+}
 say() { echo "$1"; echo "- $1" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
 prefix() { brew --prefix; }
 link() { echo "$(prefix)/bin/jason"; }
@@ -169,7 +233,7 @@ install)
     version="$1"
     [ ! -e "$APP" ] || fail "an application is in place before the cask's install: $APP"
     status=0
-    trusted "$OUT/cask-install.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" || status=$?
+    ( bounded 120 'brew install --cask' trusted "$OUT/cask-install.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" ) || status=$?
     [ "$status" = 0 ] || fail "brew install --cask exited $status: $(tail -n 5 "$OUT/cask-install.txt" | tr '\n' ' ')"
     ignored "$OUT/cask-install.txt" "brew install --cask"
     trust="$(grep -iE 'trust' "$OUT/cask-install.txt" || true)"
@@ -180,7 +244,7 @@ install)
     [ -L "$(link)" ] || fail "no link at $(link) after the cask's install"
     resolved="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$(link)")"
     [ "$resolved" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$CARRIED")" ] || fail "$(link) leads to $resolved, not into $APP"
-    answered="$("$(link)" --version 2>&1 || true)"
+    answered="$( ( bounded 60 "$(link) --version" "$(link)" --version ) 2>&1 || true)"
     case "$answered" in *"$version"*) ;; *) fail "$(link) --version answered '$answered', not $version" ;; esac
     [ ! -e "$HOME/.local/bin/jason" ] || fail "a wrapper is in place before any open: $HOME/.local/bin/jason"
     say "$APP names $IDENTIFIER at $version; $(link) leads into it and answers '$answered' before any open"
@@ -193,6 +257,7 @@ install)
     for place in "$APP" "$CARRIED"; do
         say "the quarantine attribute on $place: $(xattr -p com.apple.quarantine "$place" 2>/dev/null || echo none)"
     done
+    approved
     ;;
 
 open)
@@ -201,12 +266,13 @@ open)
     [ "$(version_of "$APP")" = "$version" ] || fail "$APP is $(version_of "$APP"), not $version"
     before="$(stat -f %m "$record" 2>/dev/null || echo 0)"
     sleep 1
-    open "$APP" || fail "open $APP failed"
+    say "opening $APP; its quarantine attribute: $(xattr -p com.apple.quarantine "$APP" 2>/dev/null || echo none)"
+    ( bounded 60 "open $APP" open "$APP" ) || { pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true; fail "open $APP did not end within 60 s, or failed"; }
     until=$(( $(date +%s) + 180 ))
     while [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
-    [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -gt "$before" ] || fail "the application's start wrote no set-up record at $record within 180 s"
+    if [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ]; then seen_at_bound; fail "the application's start wrote no set-up record at $record within 180 s"; fi
     sleep 5
-    osascript -e "quit app id \"$IDENTIFIER\"" > /dev/null 2>&1 || true
+    ( bounded 30 'quitting the application' osascript -e "quit app id \"$IDENTIFIER\"" > /dev/null 2>&1 ) || true
     until=$(( $(date +%s) + 60 ))
     while pgrep -f "$APP/Contents/MacOS/" > /dev/null && [ "$(date +%s)" -lt "$until" ]; do sleep 1; done
     pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true
@@ -214,15 +280,15 @@ open)
     ;;
 
 left-to-homebrew)
-    "$CARRIED" uninstall --dry-run > "$OUT/cask-dry-run.json" 2>"$OUT/cask-dry-run.err" || fail "the carried jason uninstall --dry-run failed: $(cat "$OUT/cask-dry-run.err")"
+    ( bounded 120 'the carried jason uninstall --dry-run' "$CARRIED" uninstall --dry-run > "$OUT/cask-dry-run.json" 2>"$OUT/cask-dry-run.err" ) || fail "the carried jason uninstall --dry-run failed: $(cat "$OUT/cask-dry-run.err")"
     fate="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plan"]["desktop"]["application_fate"])' "$OUT/cask-dry-run.json")"
     [ "$fate" = left_to_homebrew ] || fail "the carried jason uninstall --dry-run says application_fate $fate, not left_to_homebrew"
     say "the carried jason uninstall --dry-run says the application is left to Homebrew"
     ;;
 
 start-runtime)
-    "$CARRIED" runtime start > "$OUT/cask-runtime-start.txt" 2>&1 || true
-    "$CARRIED" runtime status > "$OUT/cask-runtime-before.json" 2>/dev/null || fail "no runtime answers: $(cat "$OUT/cask-runtime-start.txt")"
+    ( bounded 120 'the carried jason runtime start' "$CARRIED" runtime start > "$OUT/cask-runtime-start.txt" 2>&1 ) || true
+    ( bounded 60 'the carried jason runtime status' "$CARRIED" runtime status > "$OUT/cask-runtime-before.json" 2>/dev/null ) || fail "no runtime answers: $(cat "$OUT/cask-runtime-start.txt")"
     say "a runtime started from $CARRIED answers: process $(field "$OUT/cask-runtime-before.json" pid), version $(field "$OUT/cask-runtime-before.json" runtime_version)"
     ;;
 
@@ -230,7 +296,7 @@ upgrade)
     version="$1"
     rm -f "$OUT/cask-upgrade.txt"
     status=0
-    brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade.txt" 2>&1 || status=$?
+    ( bounded 180 'brew upgrade --cask' brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade.txt" 2>&1 ) || status=$?
     cat "$OUT/cask-upgrade.txt"
     [ "$status" = 0 ] || fail "brew upgrade --cask exited $status"
     [ "$(version_of "$APP")" = "$version" ] || fail "$APP is $(version_of "$APP") after the upgrade, not $version"
@@ -243,7 +309,11 @@ upgrade)
     else fail "the old runtime's process $old_pid still runs after the upgrade, and no note says a start is owed"; fi
     kill -0 "$old_pid" 2>/dev/null && fail "the old runtime's process $old_pid still runs after the upgrade"
     sleep 10
-    if "$CARRIED" runtime status > "$OUT/cask-runtime-after.json" 2>/dev/null; then
+    # A runtime that does not answer is an answer; a status that does not end is not, and fails here.
+    st=0
+    ( bounded 60 'the carried jason runtime status' "$CARRIED" runtime status > "$OUT/cask-runtime-after.json" 2>/dev/null ) || st=$?
+    [ "$st" != 124 ] || fail "the carried jason runtime status after the upgrade did not end within 60 s"
+    if [ "$st" = 0 ]; then
         answered="$(field "$OUT/cask-runtime-after.json" runtime_version)"
         case "$answered" in "$version"|"$version+"*) ;; *) fail "the runtime answering after the upgrade is $answered, not $version" ;; esac
         say "the uninstall stanza stopped the old runtime ($stopped), and a runtime answers at $answered after the upgrade"
@@ -252,10 +322,15 @@ upgrade)
     else
         fail "after the upgrade no runtime answers and no note says a start is owed"
     fi
-    outdated="$(brew outdated --cask --greedy "$TEST_TAP/$TOKEN" 2>&1 || true)"
+    # brew outdated exits 0 when it names nothing; a bound reached, or a non-zero exit naming nothing, is a failure, never
+    # an answer that the cask is current.
+    status=0
+    ( bounded 120 'brew outdated --cask' brew outdated --cask --greedy "$TEST_TAP/$TOKEN" > "$OUT/cask-outdated.txt" 2>&1 ) || status=$?
+    outdated="$(cat "$OUT/cask-outdated.txt")"
     [ -z "$outdated" ] || fail "brew outdated --cask --greedy still names the cask: $outdated"
+    [ "$status" = 0 ] || fail "brew outdated --cask --greedy exited $status, or did not end within 120 s"
     again=0
-    brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade-again.txt" 2>&1 || again=$?
+    ( bounded 180 'a second brew upgrade --cask' brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade-again.txt" 2>&1 ) || again=$?
     cat "$OUT/cask-upgrade-again.txt"
     [ "$again" = 0 ] || fail "a second brew upgrade --cask exited $again"
     [ "$(version_of "$APP")" = "$version" ] || fail "a second upgrade changed the application to $(version_of "$APP")"
@@ -263,7 +338,7 @@ upgrade)
     ;;
 
 uninstall)
-    brew uninstall --cask "$TOKEN" 2>&1 | tee "$OUT/cask-uninstall.txt" || fail "brew uninstall --cask exited non-zero"
+    ( bounded 120 'brew uninstall --cask' brew uninstall --cask "$TOKEN" ) 2>&1 | tee "$OUT/cask-uninstall.txt" || fail "brew uninstall --cask exited non-zero, or did not end within 120 s"
     [ ! -e "$APP" ] || fail "$APP is still there after brew uninstall --cask"
     [ ! -L "$(link)" ] && [ ! -e "$(link)" ] || fail "$(link) is still there after brew uninstall --cask"
     [ ! -e "$(caskroom)" ] || fail "Homebrew's record $(caskroom) is still there after brew uninstall --cask"
@@ -293,7 +368,7 @@ carried-uninstall)
     printf '%s\n' "${there[@]:-}" > "$OUT/cask-state-before-carried-uninstall.txt"
     [ "${#there[@]}" -gt 0 ] || fail "none of the application's state under ~/Library was there before the carried jason uninstall, though the leg opened the application"
     status=0
-    "$CARRIED" uninstall > "$OUT/cask-carried-uninstall.json" 2>"$OUT/cask-carried-uninstall.err" || status=$?
+    ( bounded 120 'the carried jason uninstall' "$CARRIED" uninstall > "$OUT/cask-carried-uninstall.json" 2>"$OUT/cask-carried-uninstall.err" ) || status=$?
     cat "$OUT/cask-carried-uninstall.json"
     [ "$status" = 0 ] || fail "the carried jason uninstall exited $status: $(cat "$OUT/cask-carried-uninstall.err")"
     [ -d "$APP" ] || fail "the carried jason uninstall deleted the application Homebrew placed"
@@ -309,7 +384,7 @@ carried-uninstall)
 
 zap)
     status=0
-    brew uninstall --zap --cask "$TOKEN" > "$OUT/cask-zap.txt" 2>&1 || status=$?
+    ( bounded 120 'brew uninstall --zap --cask' brew uninstall --zap --cask "$TOKEN" > "$OUT/cask-zap.txt" 2>&1 ) || status=$?
     cat "$OUT/cask-zap.txt"
     [ "$status" = 0 ] || fail "brew uninstall --zap --cask exited $status"
     [ ! -e "$APP" ] || fail "$APP is still there after the zap"
@@ -342,7 +417,7 @@ class Jason < Formula
   end
 end
 EOF
-    trusted "$OUT/formula-install.txt" --formula "$TEST_TAP/$TOKEN" brew install --formula "$TEST_TAP/$TOKEN" || fail "the formula did not install"
+    ( bounded 120 'brew install --formula' trusted "$OUT/formula-install.txt" --formula "$TEST_TAP/$TOKEN" brew install --formula "$TEST_TAP/$TOKEN" ) || fail "the formula did not install, or did not within 120 s"
     [ -L "$(link)" ] || fail "the formula is not linked at $(link)"
     case "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$(link)")" in "$(prefix)/Cellar/$TOKEN/$version/"*) ;; *) fail "$(link) does not lead into the formula's keg" ;; esac
     say "the older formula $version is installed and linked at $(link)"
@@ -350,8 +425,9 @@ EOF
 
 beside-formula)
     status=0
-    trusted "$OUT/cask-beside-formula.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" || status=$?
+    ( bounded 120 'brew install --cask beside the formula' trusted "$OUT/cask-beside-formula.txt" --cask "$TEST_TAP/$TOKEN" brew install --cask "$TEST_TAP/$TOKEN" ) || status=$?
     [ "$status" = 0 ] || fail "brew install --cask beside the formula exited $status"
+    approved
     grep -qiE 'already a binary|skipping|not linking|conflict' "$OUT/cask-beside-formula.txt" || fail "Homebrew said nothing of the link it could not make beside the formula"
     case "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$(link)")" in "$(prefix)/Cellar/"*) ;; *) fail "$(link) no longer leads to the formula's keg" ;; esac
     say "beside the linked formula the cask installed, and Homebrew said it did not link the cask's jason: $(grep -iE 'already a binary|skipping|not linking|conflict' "$OUT/cask-beside-formula.txt" | head -n 1)"
@@ -361,7 +437,7 @@ formula-named)
     record="$DATA/desktop/machine-setup.json"
     [ -f "$record" ] || fail "no set-up record at $record"
     grep -qF 'brew uninstall --formula jason' "$record" || fail "set-up's report does not name brew uninstall --formula jason: $(cat "$record")"
-    "$CARRIED" status > "$OUT/cask-status.json" 2>/dev/null || true
+    ( bounded 120 'the carried jason status' "$CARRIED" status > "$OUT/cask-status.json" 2>/dev/null ) || true
     python3 -c 'import json,sys
 checks = {c["name"]: c for c in json.load(open(sys.argv[1]))["checks"]}
 detail = (checks["path"].get("details") or {}).get("homebrew_formula") or ""
@@ -370,16 +446,20 @@ sys.exit(0 if "brew uninstall --formula jason" in detail else 1)' "$OUT/cask-sta
     ;;
 
 formula-off)
-    "$CARRIED" runtime stop > /dev/null 2>&1 || true
-    brew uninstall --formula "$TOKEN" 2>&1 | tee "$OUT/formula-uninstall.txt" || fail "brew uninstall --formula jason failed"
+    ( bounded 120 'the carried jason runtime stop' "$CARRIED" runtime stop > /dev/null 2>&1 ) || true
+    ( bounded 120 'brew uninstall --formula' brew uninstall --formula "$TOKEN" ) 2>&1 | tee "$OUT/formula-uninstall.txt" || fail "brew uninstall --formula jason failed, or did not end within 120 s"
     if [ -L "$(link)" ]; then say "after brew uninstall --formula jason the cask's link is at $(link)"
     else say "after brew uninstall --formula jason the cask's link is still missing, as Homebrew skipped it at the install; not a fault: the wrapper Jason's set-up placed finds this jason"; fi
     ;;
 
 reset)
     for kind in --cask --formula; do
-        if brew list "$kind" "$TOKEN" > /dev/null 2>&1; then
-            if [ "$kind" = --cask ]; then brew uninstall --zap --force --cask "$TOKEN" || true; else brew uninstall --force --formula "$TOKEN" || true; fi
+        # brew list exits non-zero for a token not installed, which is an answer; its bound reached is not, and fails reset.
+        listed=0
+        ( bounded 60 "reset: brew list $kind" brew list "$kind" "$TOKEN" > /dev/null 2>&1 ) || listed=$?
+        [ "$listed" != 124 ] || fail "reset could not ask Homebrew whether $kind $TOKEN is installed: brew list did not end within 60 s"
+        if [ "$listed" = 0 ]; then
+            if [ "$kind" = --cask ]; then ( bounded 120 'reset: brew uninstall --zap --force --cask' brew uninstall --zap --force --cask "$TOKEN" ) || true; else ( bounded 120 'reset: brew uninstall --force --formula' brew uninstall --force --formula "$TOKEN" ) || true; fi
             say "reset: Homebrew's $kind $TOKEN, left by a step before, taken off by Homebrew's own uninstall"
         fi
     done
