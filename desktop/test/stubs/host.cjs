@@ -13,7 +13,9 @@
 //   { "unhooked": { "tool": "Bash", "input": {...} } } use a tool and say its result without asking any hook, as a hook
 //                                                    filtered out by a managed policy would let it; "prompt": true asks
 //                                                    the permission prompt tool first, as the default mode does for a
-//                                                    tool no rule allows, and its deny says the result refused
+//                                                    tool no rule allows, and its deny says the result refused;
+//                                                    "refused": "<text>" says that text as an error result, as Claude
+//                                                    Code refuses a tool a bare rule took out before any hook fires
 //   { "wait": "<file>" }                              start a process of its own, write that process's id to the file, and hang
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
@@ -244,7 +246,12 @@ async function claude(args, stdin) {
         } else if (step.unhooked !== undefined) {
             const id = `toolu_unhooked_${++n}`;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
-            const [content, error] = step.unhooked.prompt ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input) : ['ran', false];
+            const [content, error] =
+                typeof step.unhooked.refused === 'string'
+                    ? [step.unhooked.refused, true]
+                    : step.unhooked.prompt
+                      ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input)
+                      : ['ran', false];
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content} unhooked` }] } });
         }

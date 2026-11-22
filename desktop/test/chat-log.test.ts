@@ -294,23 +294,23 @@ test('a key source that stops nothing is logged by its word alone', (t) => {
     assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
 });
 
-test('a tool the hook never saw is logged by its turn\'s mode alone: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
+test('a tool the hook never saw is logged by its turn\'s mode and the tool\'s word of a closed table: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
     const removals: (() => void)[] = [];
     t.after(() => removals.forEach((remove) => remove()));
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
     const log = fileLogger(b.paths.logs);
     const logged = loggedTurns(log);
     logged.unchecked();
-    logged.hookFiltered('ask_first');
-    logged.hookFiltered('auto_edit');
+    logged.hookFiltered('ask_first', 'Read');
+    logged.hookFiltered('auto_edit', 'other');
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
     const said = lines0(text)
         .filter((line) => line.EventName === 'chat_turn_stopped' || line.EventName === 'chat_hook_filtered')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
     assert.deepEqual(said, [
         { '@l': 'Warning', EventName: 'chat_turn_stopped', Cause: 'unchecked_tool' },
-        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first' },
-        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first', Tool: 'Read' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit', Tool: 'other' },
     ]);
 });
 

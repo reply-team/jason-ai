@@ -666,9 +666,12 @@ applies to the turns a person starts by sending, from the next one on.
   and later turns run in Ask first until the desktop starts again. One a turn already stopped, by Stop or by a change of
   mode, still says on its way out is taken the same way, and that turn ends with no word of a mode. In Ask first and
   Auto-edit the turn runs on, the cards and the host's own rules deciding as before, and the chat says once per
-  conversation that Jason's refusals could not stand in front of them (`hookFilteredSentence`). **The limit:** the
-  refusals read what a command's text and a tool's input show; they are not a sandbox, and a program the agent writes
-  and runs acts with the person's account.
+  conversation that Jason's refusals could not stand in front of them (`hookFilteredSentence`). A tool the turn's mode
+  takes out (`claudeRemovedToolsOf`: PowerShell and Monitor outside Full access, Monitor in it), which a conversation
+  still names from a turn of another mode, Claude Code refuses as one it does not have before any hook fires: a result
+  of it that Claude Code marks an error ran nothing and is none of these, and one it does not mark so is. **The
+  limit:** the refusals read what a command's text and a tool's input show; they are not a sandbox, and a program the
+  agent writes and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
   byte for byte: `--permission-mode default`, no `acceptEdits` and no `defaultMode`, and the same hook from the floor of
@@ -730,7 +733,8 @@ applies to the turns a person starts by sending, from the next one on.
 - The log says each change of mode by its two modes (`chat_mode_changed`), the mode of each turn started and of each
   request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in the turn's mode), a
   Full access turn stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`), and, once in a turn of
-  Ask first or Auto-edit that ran on after one, its mode (`chat_hook_filtered`); never a conversation's id or title, a
+  Ask first or Auto-edit that ran on after one, its mode and the tool, by its name when it is one of Claude Code's own
+  and `other` for any other (`chat_hook_filtered`, `claudeToolWord`); never a conversation's id or title, a
   command, a path or a person's words.
 
 ## Models and effort

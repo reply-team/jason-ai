@@ -36,7 +36,7 @@ import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
-import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import { chatRules, claudeArguments, claudeLine, claudeRemovedToolsOf, claudeToolWord, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -266,10 +266,10 @@ export interface ChatOptions {
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw, or such a tool ran after a stop. */
     unchecked?(): void;
     /**
-     * Said once in a turn of Ask first or Auto-edit, by its mode, when a tool ran or was refused that its hook never saw:
-     * the turn runs on under its cards and the host's own rules.
+     * Said once in a turn of Ask first or Auto-edit, by its mode and the tool's word (`claudeToolWord`), when a tool ran or
+     * was refused that its hook never saw: the turn runs on under its cards and the host's own rules.
      */
-    hookFiltered?(mode: ChatMode): void;
+    hookFiltered?(mode: ChatMode, tool: string): void;
     /**
      * Said once as the chat is made where the desktop runs as root, and each time a turn finds Claude Code's bypass not
      * available where no earlier finding still holds: its cause, and the mode Claude Code named instead, a word of its
@@ -2194,9 +2194,14 @@ export class Chat {
                     // desktop, and the records keep their modes. A Full access turn ends there, said in its own sentence;
                     // one already stopped, by Stop or by a change of mode, ends as its stop ends it, its next turn saying
                     // why it runs in Ask first. A turn of Ask first or Auto-edit runs on, its cards and Claude Code's own
-                    // rules deciding as before; the log is told once in the turn, and the conversation once.
-                    if (!hooked || uses.get(line.id) === 'EndConversation') return;
+                    // rules deciding as before; the log is told once in the turn, and the conversation once. A tool this
+                    // start was given taken out (`claudeRemovedToolsOf`), which the conversation still names from a turn of
+                    // another mode, Claude Code refuses as one it does not have before any hook fires: an error result of
+                    // such a tool ran nothing, and is no tool the hook missed. One of its results that is no error did run.
+                    const tool = uses.get(line.id);
+                    if (!hooked || tool === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
+                    if (line.error === true && tool !== undefined && claudeRemovedToolsOf(running.mode).includes(tool)) return;
                     this.#bypassGone({ why: 'unguarded', named: null });
                     if (running.mode === 'full_access') {
                         this.#options.unchecked?.();
@@ -2209,7 +2214,7 @@ export class Chat {
                     }
                     if (!filteredLogged) {
                         filteredLogged = true;
-                        this.#options.hookFiltered?.(running.mode);
+                        this.#options.hookFiltered?.(running.mode, claudeToolWord(tool));
                     }
                     if (this.#toldFiltered.has(conversation.id)) return;
                     this.#toldFiltered.add(conversation.id);
