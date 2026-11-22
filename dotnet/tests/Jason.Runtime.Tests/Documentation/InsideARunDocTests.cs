@@ -79,7 +79,7 @@ public sealed partial class InsideARunDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"An approval, an answer, a preference, a campaign's send mode or its start sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
+            $"An approval, an answer, a preference, a campaign's send mode or its start, or a lift of the daily limits, sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
             page,
             StringComparison.Ordinal);
     }

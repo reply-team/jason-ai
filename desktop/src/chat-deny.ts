@@ -232,7 +232,7 @@ export const cliCommandTree: readonly string[] = [
     'campaign start', 'campaign summary', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
     'contact list', 'contact thread', 'contact threads', 'contact update', 'decision answer', 'decision get', 'decision list', 'decision raise',
     'doctor', 'events backfill', 'events signal', 'events sources', 'export', 'import', 'install', 'journal append', 'journal kinds', 'journal list',
-    'journal watch', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
+    'journal watch', 'launches lift', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
     'plugin reload', 'plugin revoke', 'preference list', 'preference set', 'preference unset', 'profile create', 'profile disable', 'profile enable',
     'profile get', 'profile list', 'profile set-default', 'profile unset-default', 'profile update', 'project create', 'project get', 'project link',
     'project list', 'project update', 'reply count', 'reply record', 'report get', 'report list', 'report submit', 'role add', 'role list',

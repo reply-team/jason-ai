@@ -106,6 +106,41 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The ceiling keeps the UTC day wherever the installation's day runs: under Asia/Tokyo, nine hours ahead of UTC all
+    /// year, a release decided the last moment before 00:00Z is already of the installation's day, and still counts for
+    /// nothing against the ceiling; one decided at 00:00Z exactly is today's. The zone is named by the setting and by the
+    /// clock both, so neither alone moves the ceiling's day.
+    /// </summary>
+    [Theory]
+    [InlineData("yesterday's last moment", false)]
+    [InlineData("today's first moment", true)]
+    public async Task Ceiling_KeepsTheUtcDayInTheInstallationsZone(string when, bool parks)
+    {
+        using var harness = ModeHarness();
+        harness.Sending.CurrentValue = new SendingOptions { AutomaticMaxPerDay = 1 };
+        harness.Clock.Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
+        harness.Runtime.CurrentValue = new RuntimeOptions { TimeZone = "Asia/Tokyo" };
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ReleasesAsync(db, reading.Campaign, 1, when == "today's first moment" ? Midnight : Midnight.AddTicks(-1));
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        await CriticPassAsync(db, reading, send.Id, send.ReviewHash);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == send.Id, Ct);
+        Assert.Equal(parks ? "daily_ceiling" : "automatic_mode", approval.Reason);
+        Assert.Equal(parks ? 0 : 1, claimed.Count);
+        if (parks)
+        {
+            Assert.Equal("2026-09-14T00:00:00Z", (string?)approval.Preview["daily_ceiling"]!["since"]);
+        }
+    }
+
+    /// <summary>
     /// The count is of the campaign's own releases, whatever became of each, and of nothing else: another campaign's releases,
     /// and this campaign's rows under any other reason — a person's approval of an earlier ceiling's park among them — leave
     /// the send released; this campaign's releases superseded at a retry or cancelled with their work still count.

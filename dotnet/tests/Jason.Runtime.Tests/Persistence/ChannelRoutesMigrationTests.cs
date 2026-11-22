@@ -79,7 +79,9 @@ public class ChannelRoutesMigrationTests
             shape.Except(before.Shape).Where(line => TableOf(line) == Table));
 
         // Later migrations' additions, which the migrator applies in the same run, are theirs; this one adds one table.
-        Assert.Equal([Table], Rows(after, "SELECT name FROM sqlite_master WHERE type = 'table'").Except(before.Tables));
+        // LaunchLimitLifts adds launch_limit_lifts, and LaunchLimitLiftsSchemaTests holds what it makes.
+        string[] addedLater = ["launch_limit_lifts"];
+        Assert.Equal([Table], Rows(after, "SELECT name FROM sqlite_master WHERE type = 'table'").Except(before.Tables).Except(addedLater));
         var definition = Assert.Single(Rows(after, $"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{Table}'"));
         foreach (var held in new[] { "AUTOINCREMENT", "CONSTRAINT \"ck_campaign_channel_routes_binding_json\" CHECK (binding_json IS NULL OR json_valid(binding_json))" })
         {

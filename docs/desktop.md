@@ -1124,8 +1124,8 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   Full access.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
-  preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
-  subscription), everything that changes the installation, follows it without end or carries it off the machine
+  preference, a campaign's send mode, clearing a block, resuming work, lifting today's launch limits, reviewing a send, a
+  report, rewinding a subscription), everything that changes the installation, follows it without end or carries it off the machine
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `install`, `ui`, `session`,
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,

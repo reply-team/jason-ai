@@ -99,6 +99,28 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// A person's lift of today's daily limits of launches, in an installation whose zone is Asia/Tokyo, nine hours ahead of
+    /// UTC with no daylight saving: the first lets go what the limits held and says until the next local midnight; a second
+    /// the same day says it was lifted already; a role is refused.
+    /// </summary>
+    [Fact]
+    public async Task Launches_lift_again_and_by_a_role()
+    {
+        var clock = new FixedClock(Nine) { Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: clock);
+        var ada = new { type = "human", id = "ada" };
+
+        var lifted = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "lifted", new { actor = ada, reason = "A launch day." }, Ct);
+        Assert.Equal(new LaunchesLiftDto(new DateTimeOffset(2026, 10, 16, 15, 0, 0, TimeSpan.Zero), "Asia/Tokyo", 0, AlreadyLifted: false), lifted);
+
+        var again = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "already-lifted", new { actor = ada }, Ct);
+        Assert.True(again.AlreadyLifted, "A second lift the same day did not say it was lifted already.");
+
+        var role = await api.RecordErrorAsync(Operations.LaunchesLift, "not-human", new { actor = new { type = "role", id = "manager" } }, HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("lift_not_human", role.Code);
+    }
+
+    /// <summary>
     /// What the blocks screen reads and writes: what is blocked now and what was, one block with the link a person clears
     /// it at, the work it holds, a person's clear, and the refusals a clear and a read can meet.
     /// </summary>
