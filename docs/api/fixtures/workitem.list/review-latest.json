@@ -39,7 +39,8 @@
         "finished_at": "2026-10-16T08:30:00.000Z",
         "campaign_name": "Autumn outreach",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       }
     ],
     "next_cursor": "ZmluaXNoZWR8MjAyNi0xMC0xNlQwODozMDowMC4wMDAwMDAwWnx3aV8wMUs3UU4wMDAwMDAwMDAwMDAwMDAwMDAwMg"

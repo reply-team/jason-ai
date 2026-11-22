@@ -42,7 +42,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": "Ines Duarte",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_2",
@@ -70,7 +71,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": "Omar Reyes",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_3",
@@ -98,7 +100,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": "Tomas Berg",
-        "running_since": "2026-10-16T09:00:00.000Z"
+        "running_since": "2026-10-16T09:00:00.000Z",
+        "entry": null
       },
       {
         "id": "wi_4",
@@ -126,7 +129,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       }
     ],
     "next_cursor": null

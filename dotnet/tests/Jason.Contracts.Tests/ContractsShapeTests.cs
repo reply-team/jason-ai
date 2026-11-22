@@ -472,6 +472,8 @@ public class ContractsShapeTests
             StringComparison.Ordinal);
     }
 
+    private const string StartText = "# Start\n\nRead the brief first.\n";
+
     [Fact]
     [Critical(Family.W7, "the envelope the child reads on stdin")]
     public void The_launch_envelope_round_trips_in_the_api_dialect()
@@ -503,11 +505,15 @@ public class ContractsShapeTests
                 [
                     new ResumedItem("wi_R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, DateTimeOffset.UnixEpoch, null, new JsonObject { ["found"] = 3 }, false),
                     new ResumedItem("wi_S", WorkItemKind.ProviderOp, null, "message.send", WorkItemStatus.Failed, DateTimeOffset.UnixEpoch, "provider_unavailable", null, true),
-                ]));
+                ]),
+            new LaunchEntry("start", StartText));
 
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
-        Assert.Contains("\"envelope_version\":5", json, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":6", json, StringComparison.Ordinal);
+
+        // The entry the item was created with, by its name and the text of its file, whole.
+        Assert.Contains("\"entry\":{\"name\":\"start\",\"text\":\"# Start\\n\\nRead the brief first.\\n\"}", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_id\":\"att_A\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":\"/work/wi_A/att_A\"", json, StringComparison.Ordinal);
@@ -551,6 +557,7 @@ public class ContractsShapeTests
         Assert.Equal(WaitReleaseReason.ChildrenEnded, back.Resumption!.WokeBecause);
         Assert.Equal(["wi_R", "wi_S"], back.Resumption.Items.Select(i => i.WorkItemId));
         Assert.Equal(3, (int?)back.Resumption.Items[0].Result!["found"]);
+        Assert.Equal(new LaunchEntry("start", StartText), back.Entry);
     }
 
     [Fact]
@@ -563,6 +570,63 @@ public class ContractsShapeTests
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
         Assert.Contains("\"resumption\":null", json, StringComparison.Ordinal);
+
+        // And an item created with no entry is told of none, by name: the member is there and null.
+        Assert.Contains("\"entry\":null", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_entry_whose_file_is_absent_is_named_with_no_text()
+    {
+        Assert.Equal(
+            "{\"name\":\"quick_look\",\"text\":null}",
+            JsonSerializer.Serialize(new LaunchEntry("quick_look", null), JasonJson.Options));
+    }
+
+    [Fact]
+    public void An_envelope_written_before_entries_existed_still_reads()
+    {
+        // Version 5, as this runtime wrote it before a work item could carry an entry.
+        const string version5 = """
+            {"envelope_version":5,"attempt_id":"att_A","attempt_number":1,"work_item_id":"wi_A","campaign_id":"cmp_A",
+             "contact_id":null,"kind":"ai_role","role":"manager","execution_profile":null,"context":{},
+             "result_format":null,"timeout_seconds":3600,"heartbeat_seconds":120,"lock_until":"1970-01-01T00:00:00.000Z",
+             "work_dir":"/work/wi_A/att_A","runtime":{"descriptor_file":"/run/runtime.json","api_version":"v1","cli_command":"jason"},
+             "role_memory":{"campaign_id":"cmp_A","role":"manager","project_id":"prj_A"},
+             "memory_files":{"client":null,"project":null,"campaign":null},"resumption":null}
+            """;
+
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(version5, JasonJson.Options)!;
+
+        Assert.Equal(5, envelope.EnvelopeVersion);
+        Assert.Null(envelope.Entry);
+    }
+
+    [Fact]
+    public void A_work_item_says_its_entry_and_says_null_where_it_has_none()
+    {
+        Assert.Contains("\"entry\":null", JsonSerializer.Serialize(NewWorkItemDto(null), JasonJson.Options), StringComparison.Ordinal);
+        Assert.Contains(
+            "\"entry\":\"deep_review\"",
+            JsonSerializer.Serialize(NewWorkItemDto(null) with { Entry = "deep_review" }, JasonJson.Options),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_launch_record_names_the_entry_and_its_bytes_beside_the_role_skill_and_omits_it_where_there_is_none()
+    {
+        var launch = new AttemptLaunchDto(["host"], "/work", 1, 0, RoleSkill: new RoleSkillDto(true, "manager", 900));
+
+        Assert.DoesNotContain("\"entry\"", JsonSerializer.Serialize(launch, JasonJson.Options), StringComparison.Ordinal);
+        Assert.Contains(
+            "\"role_skill\":{\"copied\":true,\"name\":\"manager\",\"bytes\":900},\"entry\":{\"name\":\"start\",\"bytes\":0}",
+            JsonSerializer.Serialize(launch with { Entry = new LaunchEntryRecordDto("start", 0) }, JasonJson.Options),
+            StringComparison.Ordinal);
+
+        var back = JsonSerializer.Deserialize<AttemptLaunchDto>(
+            JsonSerializer.Serialize(launch with { Entry = new LaunchEntryRecordDto("reply", 41) }, JasonJson.Options),
+            JasonJson.Options)!;
+        Assert.Equal(new LaunchEntryRecordDto("reply", 41), back.Entry);
     }
 
     [Fact]
