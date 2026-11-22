@@ -85,11 +85,19 @@ public sealed class ManagerOptions
     ];
 
     /// <summary>
-    /// How often an active campaign is reviewed when nothing has happened to it. Five hours by default: a
-    /// manager is a person running dailies, not a process watching a queue. A campaign may ask for its own pace
-    /// within the same bounds.
+    /// How often an active campaign is given a quick look when nothing has happened to it, counted from its last review
+    /// of any kind. Six hours by default: a manager is a person running dailies, not a process watching a queue. A
+    /// campaign may ask for its own pace within the same bounds.
     /// </summary>
-    public int ReviewSeconds { get; set; } = 18_000;
+    public int ReviewSeconds { get; set; } = 21_600;
+
+    /// <summary>
+    /// The interval of the deep review's grid: the first moment is this long after a campaign goes live, and every deep
+    /// review moves it on by whole intervals. A day by default. The installation's alone — no campaign carries its own —
+    /// and held to the bounds a campaign's quick pace is held to, so a scenario on a real machine can reach a deep review
+    /// in minutes rather than in a day.
+    /// </summary>
+    public int DeepReviewSeconds { get; set; } = 86_400;
 
     /// <summary>
     /// The budget of one check-in. A review reads a campaign and says what it thinks; the hour an

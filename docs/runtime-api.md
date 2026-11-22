@@ -226,7 +226,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.create`: Jason's campaign; the provider's campaign is a `provider_op` work item. Takes a caller's
   `idempotency_key`. A name is printed to people, so one holding a control character is refused, `validation_failed`
   with the detail `invalid` on `name`, here and by `campaign.update`.
-- `campaign.get`: Jason's campaign, read without calling a provider.
+- `campaign.get`: Jason's campaign, read without calling a provider. Every answer that carries a campaign whole says, in
+  `deep_review_due_at`, the next moment of its deep review's grid: written when it goes live and moved by each deep
+  review, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
+  at that moment ([the campaign manager](campaign-manager.md) §4).
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
 - `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started. From inside a

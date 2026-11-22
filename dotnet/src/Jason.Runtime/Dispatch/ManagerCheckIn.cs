@@ -128,6 +128,14 @@ public static class ManagerCheckIn
         // finished: a review whose host was missing, or whose answer was refused, must not stop the loop. The
         // next one comes round on time either way.
         campaign.ManagerReviewAnchor = item.CreatedAt;
+
+        // A deep review, and only a deep review, moves the grid: on by whole intervals to its first moment after this one,
+        // read from the interval in force now, so a runtime that was down for days owes one deep review and not one a day.
+        if (string.Equals(entry, ManagerEntryChoice.DeepReview, StringComparison.Ordinal))
+        {
+            campaign.DeepReviewDueAt = DeepReviewSchedule.Next(campaign.DeepReviewDueAt, options.DeepReviewSeconds, item.CreatedAt);
+        }
+
         return item;
     }
 

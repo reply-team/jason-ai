@@ -47,6 +47,7 @@ public partial class CampaignManagerDocTests
 
         var cadence = $"{ManagerOptions.MinimumReviewSeconds}..{ManagerOptions.MaximumReviewSeconds}";
         Assert.Contains($"`Manager:ReviewSeconds` | `{defaults.ReviewSeconds}` | {cadence}", page, StringComparison.Ordinal);
+        Assert.Contains($"`Manager:DeepReviewSeconds` | `{defaults.DeepReviewSeconds}` | {cadence}", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:TimeoutSeconds` | `{defaults.TimeoutSeconds}` | 30..86400", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxAttempts` | `{defaults.MaxAttempts}` | 1..10", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
@@ -64,6 +65,41 @@ public partial class CampaignManagerDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains("There is no `Manager:Enabled`", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two clocks' pace as the page says it, and what they cost a day, printed from the defaults: a quick look per
+    /// interval since the last review, a deep review per grid interval in place of the quick look that would have fallen on
+    /// it, so at the defaults a day is three quick looks and one deep review.
+    /// </summary>
+    [Fact]
+    public void The_page_states_the_two_clocks_and_what_a_day_of_them_costs()
+    {
+        var page = Flattened(Read());
+        var defaults = new ManagerOptions();
+
+        Assert.Equal(6, defaults.ReviewSeconds / 3_600);
+        Assert.Equal(0, defaults.DeepReviewSeconds % defaults.ReviewSeconds);
+        Assert.Contains("six hours by default", page, StringComparison.Ordinal);
+        Assert.Contains("a day by default", page, StringComparison.Ordinal);
+        Assert.Contains("after a resume it starts again", page, StringComparison.Ordinal);
+        Assert.Contains("a runtime that was down for three days runs one deep review, not three", page, StringComparison.Ordinal);
+        Assert.Contains("Where both clocks are due, the deep review runs instead of the quick look", page, StringComparison.Ordinal);
+        Assert.Contains("a deep review, even when the chronicle read a cause. It carries that cause in its brief as a triggered review would", page, StringComparison.Ordinal);
+        Assert.Contains("a day at the defaults is three quick looks and one deep review", page, StringComparison.Ordinal);
+
+        const int Day = 86_400;
+        var quick = (defaults.DeepReviewSeconds / defaults.ReviewSeconds) - 1;
+        Assert.Contains(
+            $"| the defaults, {defaults.ReviewSeconds} and {defaults.DeepReviewSeconds} | {quick} | 1 | {quick + 1} | {10 * (quick + 1)} |",
+            page,
+            StringComparison.Ordinal);
+        Assert.Equal(40, 10 * (quick + 1));
+        Assert.Contains("about forty launches a day", page, StringComparison.Ordinal);
+
+        var floor = ManagerOptions.MinimumReviewSeconds;
+        Assert.Contains($"| the quick look at the floor, {floor} | {(Day / floor) - 1} | 1 | {Day / floor} | {10 * Day / floor} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| the deep review at the floor, {floor} | 0 | {Day / floor} | {Day / floor} | {10 * Day / floor} |", page, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -187,7 +223,7 @@ public partial class CampaignManagerDocTests
     {
         var rows = EntryRows(Read());
 
-        Assert.Equal(5, rows.Count);
+        Assert.Equal(6, rows.Count);
         var named = rows
             .Select(row => Backticked(row.Situation))
             .OfType<string>()
@@ -213,7 +249,7 @@ public partial class CampaignManagerDocTests
         // And every name the function can give is a row's.
         var printedNames = rows.Select(row => Backticked(row.Entry)).OfType<string>().Order(StringComparer.Ordinal);
         Assert.Equal(
-            [ManagerEntryChoice.InboundReply, ManagerEntryChoice.QuickLook, ManagerEntryChoice.Resume, ManagerEntryChoice.Start],
+            [ManagerEntryChoice.DeepReview, ManagerEntryChoice.InboundReply, ManagerEntryChoice.QuickLook, ManagerEntryChoice.Resume, ManagerEntryChoice.Start],
             printedNames);
     }
 
@@ -236,10 +272,21 @@ public partial class CampaignManagerDocTests
     /// <summary>
     /// What a row's situation puts to the function. A row naming a kind is that kind, as the campaign's first such line
     /// where it says "first" and a later one where it says "later"; a row of "any other kind" is every default trigger no
-    /// other row names; a row of no cause is the cadence come round.
+    /// other row names; a row of no cause is the cadence come round; the row of the deep review due is every cause the
+    /// defaults hold and none, as a first start and a later one, with the quick look due and not. Every other row is read
+    /// with the deep review not due, as the page says.
     /// </summary>
     private static IEnumerable<ManagerEntryInputs> Situations(string situation, IReadOnlySet<string> named)
     {
+        if (situation.StartsWith("the deep review is due", StringComparison.Ordinal))
+        {
+            return
+                from read in ManagerOptions.Default.Select(kind => (string?)kind).Append(null)
+                from firstStart in new[] { true, false }
+                from quick in new[] { true, false }
+                select new ManagerEntryInputs(read, firstStart, quick, DeepReviewDue: true);
+        }
+
         if (situation.StartsWith("no cause", StringComparison.Ordinal))
         {
             Assert.Contains("is due", situation, StringComparison.Ordinal);

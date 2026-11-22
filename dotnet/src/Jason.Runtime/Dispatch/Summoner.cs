@@ -181,6 +181,7 @@ public sealed class Summoner(
                 campaign.ManagerEventWatermark,
                 campaign.ManagerReviewAnchor,
                 campaign.ManagerReviewSeconds,
+                campaign.DeepReviewDueAt,
             })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
@@ -210,14 +211,20 @@ public sealed class Summoner(
         var ours = await OursAsync(db, lines, ct).ConfigureAwait(false);
         var decision = ManagerTriggers.Read(lines, triggers, ours, before);
         decision = decision with { Cause = await NameDecisionAsync(db, decision.Cause, ct).ConfigureAwait(false) };
+        // The published decision, over kinds, identifiers and two columns: the deep review due runs, carrying any cause
+        // read; otherwise a cause runs as its own entry; otherwise the quick look, if it is due. The deep review is a review
+        // like the others, so it moves the quick anchor too: a day is three quick looks and one deep review.
+        var deep = DeepReviewSchedule.IsDue(read.DeepReviewDueAt, now);
         var due = decision.Cause is null
             && ReviewSchedule.IsDue(read.ManagerReviewAnchor, read.ManagerReviewSeconds, options.ReviewSeconds, now);
         var entry = ManagerEntryChoice.Choose(new ManagerEntryInputs(
             decision.Cause?.Kind,
             await IsFirstStartAsync(db, campaignId, decision.Cause, ct).ConfigureAwait(false),
-            due));
+            due,
+            deep));
+        var summon = decision.Cause is not null || due || deep;
 
-        if (decision.Cause is null && !due && decision.Watermark == before)
+        if (!summon && decision.Watermark == before)
         {
             // Nothing read and nothing due: the common answer, and it takes no transaction at all.
             return false;
@@ -234,7 +241,7 @@ public sealed class Summoner(
                 return false;
             }
 
-            if (decision.Cause is null && !due)
+            if (!summon)
             {
                 await transaction.CommitAsync(ct).ConfigureAwait(false);
                 return false;
@@ -265,7 +272,7 @@ public sealed class Summoner(
             return false;
         }
 
-        Summoned(logger, read.PublicId, decision.Cause is { } cause ? cause.Kind : "scheduled", null);
+        Summoned(logger, read.PublicId, deep ? ManagerEntryChoice.DeepReview : decision.Cause is { } cause ? cause.Kind : "scheduled", null);
         return true;
     }
 
