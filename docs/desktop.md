@@ -111,10 +111,13 @@ shows before anything is typed and what you send waits, while the window is open
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist.
 
 Under Search, Needs you, the Feed and Accounts the sidebar holds two sections, **Agents** above **Chats**, each a
-header with a small plus at its right. **Agents** lists the agents that are not archived, each with a dot for its state
-or amber while something waits on you, its name, the number waiting and its age, the newest first; an agent with no
-conversation yet has its row too, and opening it opens its Chat, as the Agents page does. Its header keeps the filter
-(All, Needs you, Live, Paused, Draft), and **All agents** under the rows opens the Agents page. **Chats** lists the
+header with a small plus at its right. **Agents** lists the agents that are not archived, each by the agent's name,
+with a dot for its state or amber while something waits on you, the number waiting and its age, the one active most
+recently first: by the later of its conversation's last turn and the agent's own last change, so an agent made anywhere,
+here, by an AI's turn or from the command line, comes on top. An agent with no conversation yet has its row too, and
+opening it opens its Chat, as the Agents page does. Its header keeps the filter (All, Needs you, Live, Paused, Draft):
+under All it shows the first ten, then **All agents**, which opens the Agents page; under any other entry it shows every
+agent the entry keeps. **Chats** lists the
 chats about no agent, the newest first, ten at a time with **Load more**, each its title and age. A conversation is in
 one section alone: a set-up chat that became an agent's conversation is in **Agents**, as that agent. Each row shows a
 **⋯** button on hover and on focus that opens the row's menu, as a right-click and Shift+F10 do. **Search** finds agents
@@ -127,7 +130,7 @@ should New agent 3 reach?", with Start's box, its menus, the AI card where no AI
 message goes in that agent's own conversation. A draft with no brief and no one in it offers no Start yet. A click that
 made no agent says why in the sidebar, "Jason is not running. Start it, then try again." or "Jason could not make the
 agent: …", with **Try again**, which repeats the same click, so a click makes one agent at most. The Dashboard's,
-Search's, the Dashboard's and Needs you's New GTM agent do the same. **New chat**, the plus over **Chats**, makes a chat about no agent directly, as Ctrl+N (⌘N) does, and such
+Search's and Needs you's New GTM agent do the same. **New chat**, the plus over **Chats**, makes a chat about no agent directly, as Ctrl+N (⌘N) does, and such
 a chat says so on a line at its top, "Chat · no agent", from before its first message; an agent's chat is named by the
 agent's header instead, and the Feed by its own.
 

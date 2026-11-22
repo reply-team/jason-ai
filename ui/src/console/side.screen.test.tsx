@@ -17,12 +17,11 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
-import { chats, conversations, feedId, feedUnseen, here } from './state';
+import { chats, clock, conversations, feedId, feedUnseen, here } from './state';
 
-// The sidebar: the button that makes an agent and the one under it that makes a chat, the rows in their order, the
-// number on Needs you,
-// More and what is under it, the conversations under Recent, and Settings in the foot. Read against the recorded
-// exchanges of the runtime's own tests.
+// The sidebar: the rows in their order, the number on Needs you, More and what is under it, the two sections AGENTS
+// and CHATS with the plus over each, and Settings in the foot. Read against the recorded exchanges of the runtime's own
+// tests.
 
 function renderConsole(desktop: StubDesktop = stubDesktop(), where: Mode = 'demo'): StubDesktop {
     mode.value = where;
@@ -524,6 +523,9 @@ describe('the sidebar’s look', () => {
         expect(rule('.jc-console .rdots')).toMatchObject({ position: 'absolute', opacity: '0' });
         expect(rule('.jc-console .rrow:hover .rdots')).toMatchObject({ opacity: '1' });
         expect(rule('.jc-console .rrow:focus-within .rdots')).toMatchObject({ opacity: '1' });
+        // A row with no age keeps the dots' room, so they never cover an amber count; a busy plus looks off.
+        expect(rule('.jc-console .recent-row .t:empty')).toMatchObject({ flex: 'none', width: '22px' });
+        expect(rule('.jc-console .rbtn[disabled]')).toMatchObject({ color: 'var(--faint)', cursor: 'default' });
     });
 
     it('leaves the caret of a filter inside the console as it was: no border, no fill', () => {
@@ -622,6 +624,23 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
 });
 
 describe('the sidebar where the window is narrow', () => {
+    it('keeps the drawer open for a row menu its three dots open, and Escape gives the focus back inside it', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = () => document.querySelector<HTMLElement>('.jc-console .side')!;
+        fireEvent.click(screen.getByRole('button', { name: 'Sidebar' }));
+        const dots = await waitFor(() => side().getByRole('button', { name: 'More for Spring' }));
+        fireEvent.click(dots);
+        const opened = await screen.findByRole('menu', { name: 'Spring' });
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(aside().contains(side().getByRole('button', { name: 'Spring' }))).toBe(true);
+        fireEvent.keyDown(opened, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Spring' })).toBeNull());
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(aside().contains(document.activeElement)).toBe(true);
+        expect(document.activeElement).toBe(side().getByRole('button', { name: 'More for Spring' }));
+    });
+
     it("is brought over the area by the strip's button and put away by a choice in it or a tap beside it", async () => {
         renderConsole(stubDesktop(), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
@@ -678,6 +697,20 @@ describe('the sidebar where the window is narrow', () => {
         } finally {
             window.matchMedia = original;
         }
+    });
+});
+
+describe('All agents under AGENTS', () => {
+    it('keeps the focus when the sidebar is painted again, in the Demo', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const all = () => within(sections().agents).getByRole('button', { name: 'All agents' });
+        await waitFor(() => all());
+        all().focus();
+        flush(() => {
+            clock.value += 60_000;
+        });
+        expect(document.activeElement).toBe(all());
     });
 });
 

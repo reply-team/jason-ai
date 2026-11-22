@@ -57,6 +57,11 @@ const names = () =>
     Array.from(listed().querySelectorAll<HTMLElement>('.recent-row')).map((each) =>
         each.querySelector('.rt')?.textContent?.trim(),
     );
+/** The names a section draws, in its order. */
+const groupNames = (group: 'Agents' | 'Chats') =>
+    Array.from(within(listed()).getByRole('group', { name: group }).querySelectorAll<HTMLElement>('.recent-row')).map(
+        (each) => each.querySelector('.rt')?.textContent?.trim(),
+    );
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 /** The thread of the chat the area shows. */
 const thread = () => shownPane()!.querySelector<HTMLElement>('.thread')!;
@@ -356,6 +361,9 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => screen.getByText('This chat is now the conversation of Autumn.'));
         expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2', title: 'Autumn' });
         await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Autumn' })).toBeTruthy());
+        await waitFor(() => expect(desktop.kept.get(id)?.campaignId).toBe('cmp_2'));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
         // From now on it is that campaign's conversation: the Campaigns list's Chat opens it, and no other.
         bringForward('Agents');
         const autumn = await waitFor(() => screen.getByText('Autumn', { selector: 'b' }).closest('tr')!);
@@ -363,6 +371,30 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(inFront()).toBe('Autumn'));
         expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_2')).toEqual([]);
         expect(Object.keys(chats.value)).toHaveLength(1);
+    });
+
+    it('moves a chat handed over to AGENTS at once, and lists it once there, before the list says so and after', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        const id = await send(desktop, 'Help me start a new campaign.');
+        await waitFor(() => expect(groupNames('Chats')).toEqual(['Help me start a new campaign.']));
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
+        // The hand-over reaches the chat while the desktop's list still has it about no agent.
+        flush(() => {
+            desktop.emit(id, { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2' }));
+        await waitFor(() => expect(calls(desktop, 'chat.list').length).toBeGreaterThan(1));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
+        // The list says so too; the row stays one.
+        desktop.kept.get(id)!.campaignId = 'cmp_2';
+        desktop.kept.get(id)!.title = 'Autumn';
+        flush(() => desktop.emit(id, { kind: 'renamed', title: 'Autumn' }));
+        await waitFor(() => expect(conversations.value.find((each) => each.id === id)?.campaignId).toBe('cmp_2'));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
     });
 
     it('offers the campaigns a set-up turn made to pick from, by name and as text, and attaches the one picked', async () => {

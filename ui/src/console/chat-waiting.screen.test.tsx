@@ -125,7 +125,8 @@ function renderConsole(
 async function openChat(title: 'Spring' | 'Summer'): Promise<HTMLElement> {
     // The sidebar is painted afresh as the desktop lists its conversations: the row is pressed until the chat is shown.
     await waitFor(() => {
-        fireEvent.click(sideRow(title));
+        // Summer's row shows its agent's name.
+        fireEvent.click(sideRow(title === 'Spring' ? 'Spring' : 'Summer referrals', 'agents'));
         expect(shown()).toBe(`chat:${title === 'Spring' ? spring : summer}`);
     });
     return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;

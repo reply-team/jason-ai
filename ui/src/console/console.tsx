@@ -724,8 +724,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         <aside
                             className={sideOpen ? 'side open' : 'side'}
                             onClickCapture={(event) => {
-                                if ((event.target as HTMLElement).closest('[data-action], a, button'))
-                                    setSideOpen(false);
+                                // A row's three dots open its menu over the drawer, as a right-click does: it stays open.
+                                const target = event.target as HTMLElement;
+                                if (target.closest('.rdots')) return;
+                                if (target.closest('[data-action], a, button')) setSideOpen(false);
                             }}
                         >
                             <Painted className="side-body" view={sideView} />

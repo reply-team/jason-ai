@@ -1075,7 +1075,8 @@ describe('the empty chat’s sentence about approval', () => {
         open('Spring');
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         expect(said('What should Jason do in Spring?')).not.toBeNull();
-        open('Summer');
+        // Summer's row shows its agent's name, Autumn.
+        open('Autumn');
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Summer?' }));
         expect(said('What should Jason do in Summer?')).toBeNull();
         // Spring's mode moves while it is out of sight; it is drawn from the new mode the moment it is back.

@@ -146,13 +146,20 @@ define('side.agent', ([id]) => {
     if (typeof id === 'string') openAgentRow(id);
 });
 
-/** The three dots on a row: its menu, under the dots, as the keys open it under the row. */
+/**
+ * The three dots on a row: its menu, under the dots, as the keys open it under the row, and the focus comes back to the
+ * dots when it closes. A click on the dots while their menu is open closes it.
+ */
 define('side.rowdots', ([id], element) => {
     if (typeof id !== 'string') return;
+    if (rowMenu.value?.id === id && rowMenu.value.dots === true) {
+        closeRowMenu();
+        return;
+    }
     const row = rowElement(id);
     const box = element.getBoundingClientRect();
     closeMenus();
-    rowMenu.value = { id, title: row?.getAttribute('aria-label') ?? '', x: box.left, y: box.bottom };
+    rowMenu.value = { id, title: row?.getAttribute('aria-label') ?? '', x: box.left, y: box.bottom, dots: true };
 });
 
 /**
@@ -172,6 +179,11 @@ define('side.rowmenu', ([id], element, event) => {
         x: pointer?.x ?? box.left + 12,
         y: pointer?.y ?? box.bottom,
     };
+});
+/** All agents, under AGENTS' rows: the Agents page, as its own control, so a repaint keeps the focus on it. */
+define('side.allAgents', () => {
+    closeMenus();
+    here().dock.show('campaigns');
 });
 define('side.show', ([panel]) => {
     closeMenus();

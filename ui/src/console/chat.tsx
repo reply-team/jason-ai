@@ -111,6 +111,7 @@ import {
     clock,
     conversations,
     conversationsFailure,
+    conversationsListed,
     feedId,
     here,
     inTab,
@@ -206,6 +207,7 @@ export async function reloadConversations(): Promise<void> {
     try {
         const listed = await here().desktop.chat.list();
         conversations.value = listed;
+        conversationsListed.value = true;
         conversationsFailure.value = null;
     } catch (error) {
         conversationsFailure.value = messageOf(error);

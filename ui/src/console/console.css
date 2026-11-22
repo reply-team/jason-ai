@@ -1210,7 +1210,7 @@ body,
     overflow: hidden;
     line-height: 1.45;
 }
-/* The sidebar's body: the brand and the button, the menu and Recent scrolling between them and the foot. */
+/* The sidebar's body: the brand, then the menu and the two sections, AGENTS and CHATS, scrolling above the foot. */
 .jc-console .side-body {
     display: flex;
     flex-direction: column;
@@ -2467,6 +2467,15 @@ body,
 .jc-console .rbtn[data-active='true'] {
     color: var(--accent);
 }
+/* A plus that cannot be pressed now, while an agent is being made or where the place cannot make one. */
+.jc-console .rbtn[disabled] {
+    color: var(--faint);
+    cursor: default;
+}
+.jc-console .rbtn[disabled]:hover {
+    background: none;
+    color: var(--faint);
+}
 .jc-console .recent .menu {
     left: auto;
     right: 10px;
@@ -2522,6 +2531,11 @@ body,
 }
 .jc-console .recent-row .t {
     margin-left: 0;
+}
+/* A row with no age, an agent with no conversation yet, keeps the room of its three dots, so they cover no count. */
+.jc-console .recent-row .t:empty {
+    flex: none;
+    width: 22px;
 }
 /* A conversation's count of what waits: amber, quieter than the red on Needs you. */
 .jc-console .recent-row .count {

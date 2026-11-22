@@ -231,11 +231,48 @@ describe('the two sections', () => {
         now,
     };
 
-    it('puts each agent in AGENTS once, by its conversation newest first, then the agents with none, in the order of the list of agents', () => {
-        const rows = agentRows(input);
-        expect(rows.map((each) => each.id)).toEqual(['conv_a', 'conv_h', 'cmp_p', 'cmp_d']);
-        expect(rows.map((each) => each.conversationId)).toEqual(['conv_a', 'conv_h', null, null]);
-        expect(rows.map((each) => each.title)).toEqual(['Alpha', 'Handed over', 'Pending', 'Drafty']);
+    it('puts each agent in AGENTS once, the one active most recently first, an agent with no conversation by its own last change', () => {
+        const rows = agentRows({
+            ...input,
+            conversations: input.conversations.map((each) =>
+                each.id === 'conv_a' ? { ...each, updatedAt: before(3000) } : { ...each, updatedAt: before(1000) },
+            ),
+            campaigns: [
+                { ...agents[0]!, created_at: before(9000), updated_at: before(9000) },
+                // Made outside the console a moment ago, with no conversation yet: on top.
+                { ...agents[1]!, created_at: before(500), updated_at: before(500) },
+                // Changed before any conversation moved, and made long ago: last.
+                { ...agents[2]!, created_at: before(9000), updated_at: before(5000) },
+            ],
+        });
+        expect(rows.map((each) => each.id)).toEqual(['cmp_p', 'conv_h', 'conv_a', 'cmp_d']);
+        expect(rows.map((each) => each.conversationId)).toEqual([null, 'conv_h', 'conv_a', null]);
+        expect(rows.map((each) => each.title)).toEqual(['Pending', 'Handed over', 'Alpha', 'Drafty']);
+    });
+
+    it('orders an agent by the later of its conversation’s activity and its own last change', () => {
+        const rows = agentRows({
+            ...input,
+            conversations: input.conversations.map((each) =>
+                each.id === 'conv_a' ? { ...each, updatedAt: before(3000) } : { ...each, updatedAt: before(1000) },
+            ),
+            // Alpha's conversation is older than Handed over's, but Alpha itself was changed since.
+            campaigns: [{ ...agents[0]!, updated_at: before(200) }, agents[1]!, agents[2]!],
+        });
+        expect(rows.map((each) => each.id).slice(0, 2)).toEqual(['conv_a', 'conv_h']);
+    });
+
+    it('takes a chat’s agent from the chat the console holds first, so a hand-over the list has not caught up with moves it to AGENTS once', () => {
+        const handed = {
+            ...input,
+            conversations: [conversation({ id: 'conv_x', title: 'Set-up' }), ...input.conversations],
+            campaigns: [...agents, { id: 'cmp_x', name: 'Handed', status: 'draft' }],
+            campaignOf: (id: string) => (id === 'conv_x' ? 'cmp_x' : undefined),
+        };
+        expect(chatRows(handed).map((each) => each.id)).not.toContain('conv_x');
+        expect(agentRows(handed).filter((each) => each.campaignId === 'cmp_x')).toEqual([
+            expect.objectContaining({ id: 'conv_x', conversationId: 'conv_x', title: 'Handed' }),
+        ]);
     });
 
     it('names each agent by its campaign, whatever title its conversation carries, and an agent not read by that title', () => {

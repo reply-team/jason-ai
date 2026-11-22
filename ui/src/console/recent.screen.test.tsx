@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
+import { currentDesktop, placeKind, setPlace } from '../platform/places';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -37,7 +38,10 @@ const aloneOf = (operation: string, id: string) =>
 async function renderConsole(
     seed: (desktop: StubDesktop) => void = () => undefined,
     agents:
-        'campaign.list/screen' | 'campaign.list/screen-empty' | 'campaign.list/screen-many' = 'campaign.list/screen',
+        | 'campaign.list/screen'
+        | 'campaign.list/screen-empty'
+        | 'campaign.list/screen-many'
+        | 'campaign.list/move-targets' = 'campaign.list/screen',
 ): Promise<StubDesktop> {
     const desktop = stubDesktop();
     seed(desktop);
@@ -45,8 +49,8 @@ async function renderConsole(
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')
-        .answer('campaign.list', agents)
-        .answer(
+        .answerAnyRequest('campaign.list', agents)
+        .answerAnyRequest(
             'campaign.summary',
             agents === 'campaign.list/screen-many' ? 'campaign.summary/many' : 'campaign.summary/all',
         );
@@ -186,9 +190,66 @@ describe('the two sections', () => {
             await waitFor(() => expect(screen.queryByRole('menu', { name })).toBeNull());
         }
     });
+
+    it('gives the focus back to the three dots after Escape, Tab or an act that leaves the row in place', async () => {
+        await renderConsole(seedAgents);
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const dots = () => side().getByRole('button', { name: 'More for Spring' });
+        for (const leave of ['Escape', 'Tab'] as const) {
+            fireEvent.click(dots());
+            const menu = await screen.findByRole('menu', { name: 'Spring' });
+            fireEvent.keyDown(menu, { key: leave });
+            await waitFor(() => expect(screen.queryByRole('menu', { name: 'Spring' })).toBeNull());
+            expect(document.activeElement).toBe(dots());
+        }
+        // Pause opens its dialog over the area; closing it without pausing leaves the row where it was.
+        fireEvent.click(dots());
+        const menu = await screen.findByRole('menu', { name: 'Spring' });
+        fireEvent.click(within(menu).getByRole('menuitem', { name: 'Pause' }));
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(document.activeElement).toBe(dots());
+    });
+
+    it('gives the focus back to the row after a menu a right-click or the keys opened', async () => {
+        await renderConsole(seedAgents);
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        fireEvent.contextMenu(row('Spring'));
+        fireEvent.keyDown(await screen.findByRole('menu', { name: 'Spring' }), { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Spring' })).toBeNull());
+        expect(document.activeElement).toBe(row('Spring'));
+        row('Spring').focus();
+        fireEvent.keyDown(row('Spring'), { key: 'F10', shiftKey: true });
+        fireEvent.keyDown(await screen.findByRole('menu', { name: 'Spring' }), { key: 'Tab' });
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Spring' })).toBeNull());
+        expect(document.activeElement).toBe(row('Spring'));
+    });
+
+    it('closes the menu its three dots opened by a second press on them', async () => {
+        await renderConsole(seedAgents);
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const dots = () => side().getByRole('button', { name: 'More for Spring' });
+        fireEvent.click(dots());
+        await screen.findByRole('menu', { name: 'Spring' });
+        fireEvent.mouseDown(dots());
+        fireEvent.click(dots());
+        await waitFor(() => expect(screen.queryByRole('menu', { name: 'Spring' })).toBeNull());
+        expect(dots().getAttribute('aria-expanded')).toBe('false');
+    });
 });
 
 describe('the order and the first ten', () => {
+    it('puts an agent made outside the console, with no conversation yet, at the top of AGENTS', async () => {
+        // Spring webinar (cmp_1) and Nordic pilot (cmp_2) have conversations older than either agent's last change; Q4
+        // follow-ups (cmp_3), changed last and made by no click of the console, has none.
+        await renderConsole((desktop) => {
+            desktop.keep({ id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '2026-09-01T00:00:00.000Z' });
+            desktop.keep({ id: 'conv_2', campaignId: 'cmp_2', title: 'Nordic', updatedAt: '2026-09-02T00:00:00.000Z' });
+        }, 'campaign.list/move-targets');
+        await waitFor(() => expect(titles()).toEqual(['Q4 follow-ups', 'Nordic pilot', 'Spring webinar']));
+    });
+
     it('puts the agent active most recently first, and moves an agent up when its chat moves', async () => {
         const desktop = await renderConsole(seedAgents);
         await waitFor(() => expect(titles()).toEqual(['Spring', 'Autumn', 'Summer referrals']));
@@ -430,6 +491,16 @@ describe('paging', () => {
         expect(more()).toBeNull();
         expect(within(agentsList()).queryByRole('button', { name: 'Load more' })).toBeNull();
     });
+
+    it('keeps the chats Load more uncovered when the filter of AGENTS changes', async () => {
+        await renderConsole(seedMany);
+        await waitFor(() => expect(rowsOf(chatsList())).toHaveLength(10));
+        fireEvent.click(within(chatsList()).getByRole('button', { name: 'Load more' }));
+        expect(rowsOf(chatsList())).toHaveLength(20);
+        choose('Live');
+        choose('All');
+        expect(rowsOf(chatsList())).toHaveLength(20);
+    });
 });
 
 describe('the empty texts', () => {
@@ -438,6 +509,44 @@ describe('the empty texts', () => {
         await waitFor(() => expect(side().getByText('No chats yet: the plus starts one.')).toBeTruthy());
         await waitFor(() => expect(side().getByText('No agents yet: the plus makes one.')).toBeTruthy());
         expect(side().queryByText('No agents match.')).toBeNull();
+        // The line stands inside the section, which has no All agents while it holds none.
+        expect(within(agentsList()).getByText('No agents yet: the plus makes one.')).toBeTruthy();
+        expect(within(chatsList()).getByText('No chats yet: the plus starts one.')).toBeTruthy();
+        expect(side().queryByRole('button', { name: 'All agents' })).toBeNull();
+    });
+
+    it('names no plus that cannot be pressed', async () => {
+        await renderConsole(() => undefined, 'campaign.list/screen-empty');
+        await waitFor(() => expect(within(chatsList()).getByText('No chats yet: the plus starts one.')).toBeTruthy());
+        // The same sections, drawn where the page has no desktop: neither plus can be pressed.
+        const kind = placeKind();
+        const desktop = currentDesktop();
+        try {
+            setPlace('none');
+            flush(() => {
+                clock.value += 1;
+            });
+            await waitFor(() => expect(within(agentsList()).getByText('No agents yet.')).toBeTruthy());
+            await waitFor(() => expect(within(chatsList()).getByText('No chats yet.')).toBeTruthy());
+            expect(side().queryByText(/the plus/)).toBeNull();
+        } finally {
+            setPlace(kind, desktop);
+        }
+    });
+
+    it('says no chat is there only once the desktop has listed its conversations', async () => {
+        let list: () => void = () => undefined;
+        await renderConsole((desktop) => {
+            const listed = desktop.chat.list.bind(desktop.chat);
+            desktop.chat.list = () =>
+                new Promise((done) => {
+                    list = () => done(listed());
+                });
+        }, 'campaign.list/screen-empty');
+        await waitFor(() => expect(within(agentsList()).getByText('No agents yet: the plus makes one.')).toBeTruthy());
+        expect(side().queryByText('No chats yet: the plus starts one.')).toBeNull();
+        flush(() => list());
+        await waitFor(() => expect(within(chatsList()).getByText('No chats yet: the plus starts one.')).toBeTruthy());
     });
 
     it('says No agents match. when the filter hides every agent', async () => {
