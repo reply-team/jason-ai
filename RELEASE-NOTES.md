@@ -95,6 +95,15 @@ tab are gone. A web interface of your own keeps its door: the runtime serves you
   role skills, so `jason status` read Not ready, failing `role_skills`. On every system, a start of Jason Desktop where
   `jason status` finds no record of the role skills' deployment now deploys them from the package it carries, however
   they went, so `jason status` no longer fails `role_skills`.
+- **A new chat with an agent names it as it is called now.** Its opening question, "Who should <agent> reach?", and the
+  empty chat's line take the agent's name from the console's list of agents, so a renamed agent's chat no longer asks
+  with the name the conversation was made with.
+- **Every agent's row in the console's list shows its time.** The row's time is the later of its conversation's last
+  activity and the agent's own last change, the moment the list is sorted by; an agent made from the command line, which
+  has no conversation, showed none.
+- **A plan card draws its answer as formatted text while it is live.** A Plan only answer's card showed a fenced block
+  as raw backticks until the conversation was read again; it now goes through the same view as every answer, so a fence
+  is a code block from the start.
 
 ## Upgrading from 0.49.2
 
