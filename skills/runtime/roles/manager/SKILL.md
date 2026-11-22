@@ -93,8 +93,9 @@ jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary failed
 ```
 
 **A person's line.** Each person of the campaign has a line in it: the touches that reach them — a `message.send`, a
-`social_invitation.send` or a `campaign.enroll` about them that succeeded — and nothing else; an answer to their reply
-is no touch. Three touches, the first message and two follow-ups, is the line where nothing better was thought out for
+`social_invitation.send` or a `campaign.enroll` about them that succeeded, or that ended not knowing whether it went
+(an `ambiguous` attempt) — and nothing else; an answer to their reply is no touch, and nor is a letter the provider held
+that a `message.cancel` which succeeded took back. Three touches, the first message and two follow-ups, is the line where nothing better was thought out for
 the person. Each is written when it is due, one at a time, and the line is never planned ahead as a whole. The roles
 may plan another number, or other channels, or other days between them, where the campaign's plan or what is known of
 the person says why, and never more than `Lines:MaxTouches`, the ceiling the settings hold: at it the claim refuses the
@@ -104,7 +105,9 @@ so that the line can go on: the ceiling is the person's setting, and no line is 
 ended with a reason, which its `contacts_finished` line keeps. A row of `campaign list-contacts` says how many touches
 the person has had in the campaign, `touches`, and when the last was, `last_touch_at`. A line is `paused` once the person replied: the runtime
 holds their touches from the scan that read the reply, takes back a letter the provider still holds for later, and the
-line waits for you to end it or continue it. It is `finished` once it was ended: no touch reaches them in this campaign,
+line waits for you to end it or continue it. Where the person is still `enrolled` after a reply, the runtime did not
+pause the line, because a letter of the campaign went to them after the reply; the `inbound_reply` entry says what you
+decide then. It is `finished` once it was ended: no touch reaches them in this campaign,
 while their conversation goes on, until the line is reopened, which only the person's yes does.
 
 **A campaign linked to a provider's sequence gets no letters of Jason's own.** Where the campaign's context says it is
@@ -356,7 +359,9 @@ jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4M
 
 Where the person answered yes, reopen it, naming the question with `--decision`; on any other answer, leave it ended.
 The runtime does not read the answer's words: it checks that the question is this campaign's, answered by a named
-person, and names the `contacts_finished` line among its references, and it reopens only the people that line ended.
+person, and names the `contacts_finished` line among its references, and it reopens only the people that line ended
+whose line it was the latest to end: a yes reopens the end it was asked about, and a line ended again later needs a
+question of its own.
 Whether the answer is yes is yours to read, so you reopen on a yes alone, and an answer in words that is not plainly a
 yes leaves the line ended, which your line says:
 
@@ -366,7 +371,8 @@ jason campaign reopen-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB
 
 Where the person's session already reopened the line on their yes, the reopen answers `not_finished` for them, and
 nothing is left to do. Their touches before the end still count toward the ceiling: a reopened line goes on from where
-it stood.
+it stood. So do not ask to reopen a line whose `touches` already reach `Lines:MaxTouches`: its next touch would be
+refused `touch_ceiling_reached`, and the line would end again, so the question would change nothing.
 
 ## When a provider event woke you
 
@@ -567,7 +573,7 @@ The manager's own boundary is this, and nothing outside it:
   item for a first batch and for the next, and the next touch of a person whose line says it is due;
 - **cancel work** the campaign no longer needs, with a reason;
 - **end a person's line** in this campaign, with a reason — their touches spent and the window after the last passed,
-  the ceiling reached, or their reply answered by its end — and **continue a line** that was held for a reply that does not end it:
+  the ceiling reached, or their reply answered by its end — and **continue a line** that was paused for a reply that does not end it:
   `jason campaign finish-contacts` and `jason campaign continue-contacts`, as the entries say;
 - **ask for a specialist** by creating an `ai_role` item for that role — the researcher, for a question of
   fact about an account or a person; the analyst, to judge an audience; the planner, to form the next one;

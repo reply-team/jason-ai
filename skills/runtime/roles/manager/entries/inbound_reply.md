@@ -132,8 +132,8 @@ to it and say so in your note; otherwise raise the responder. Say in your note w
 
 ## The person's line after a reply
 
-**The runtime has already held the line.** In the scan that read the reply, a person who was an enrolled member of this
-campaign became `paused`: their touches wait at the claim, a letter queued for a later moment or parked for an approval
+**The runtime has usually paused the line already.** In the scan that read the reply, a person who was an enrolled
+member of this campaign became `paused`: their touches wait at the claim, a letter queued for a later moment or parked for an approval
 included, and a letter the provider still holds for later has its `message.cancel` queued by the runtime. Create no
 take-back of your own beside it. The hold cancels nothing else and never stops the campaign: a reply in their thread, the
 read, the responder and an `optout.record` go on. What becomes of the line is yours, and you end it or continue it: the
@@ -148,7 +148,7 @@ reply's verdict says which. Read the latest `reply_classified` line for the thre
   `back_at`: give it that later `not_before`, or cancel it, with a reason, and the deep review creates the next touch
   once the day has come. Where none is queued, their next touch is the deep review's, once it is due, counting the
   touches they have had.
-- **`not_now`** — a person, who asked for later: leave the line held until the day its `back_at` gives, and say so in
+- **`not_now`** — a person, who asked for later: leave the line paused until the day its `back_at` gives, and say so in
   your note; the first review on or after that day continues it as an out-of-office notice is continued.
 - **A failed delivery** — nature `bounce`: end the line, with the bounce as the reason, unless the line goes on another
   channel of theirs, which you name in your line.
@@ -160,14 +160,21 @@ jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --not-before 2026-09-25T09:0
 ```
 
 Ending the line cancels the person's open touches in this campaign in the same act, so cancel none of them yourself
-first. **Where no verdict stands yet**, the responder has not run: leave the line held, which keeps every touch from
+first. **Where no verdict stands yet**, the responder has not run: leave the line paused, which keeps every touch from
 going, and mark it in `replies` as waiting on the verdict. The next review of any kind reads the verdict and ends or
-continues the line; the deep review accounts for every held person. An item already `processing` is past stopping: say
+continues the line; the deep review accounts for every paused person. An item already `processing` is past stopping: say
 so in your line with its id.
+
+**Where the person is still `enrolled` after the reply, the runtime did not pause the line**, because a letter of this
+campaign went to them at or after the reply's moment, and the runtime takes that for its own move. Nothing waits for
+you then: no verb pauses a member, so "leave the line paused" is not open to you, and every touch queued for them goes
+when it is due. Decide at this review. End the line where the verdict says so; for `not_now`, or where no verdict stands
+yet, give every touch still queued for them a later `not_before`, or cancel it, each with a reason, and say so in your
+note, naming the touches.
 
 **Where the thread's last message is Jason's own, the hold was for nothing.** On a provider without events, the read
 can show that what moved the thread was a letter of this campaign's — a follow-up the provider sent later than Jason
-recorded — and nothing the person wrote. The runtime held the person for it all the same, and nobody else continues
+recorded — and nothing the person wrote. The runtime paused the person for it all the same, and nobody else continues
 them. Continue the line, plan again what the hold took back — a letter the provider held for later, whose take-back the
 runtime queued, is created again for its moment — and say so in your note, naming the thread and the letter:
 

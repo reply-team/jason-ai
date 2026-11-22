@@ -44,7 +44,7 @@ public partial class RoleSkillTests
         const string Pointer = "Where `trigger` is `inbound_reply_observed`, its section is the `inbound_reply` entry: read the file `entries/inbound_reply.md` beside your skill, its \"When a reply woke you\" and \"A reply no responder judged\", before step 1.";
         Assert.Contains(Pointer, Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains(Pointer, FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
-        Assert.Contains("replies, and the lines they held, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill)", FlattenedEntry("manager", "resume"), StringComparison.Ordinal);
+        Assert.Contains("replies, and the lines they paused, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill)", FlattenedEntry("manager", "resume"), StringComparison.Ordinal);
 
         var reply = FlattenedEntry("manager", "inbound_reply");
         Assert.Contains("## When a reply woke you", reply, StringComparison.Ordinal);
@@ -99,6 +99,8 @@ public partial class RoleSkillTests
         Assert.Contains("never more than `Lines:MaxTouches`, the ceiling the settings hold: at it the claim refuses the next touch, `touch_ceiling_reached`", head, StringComparison.Ordinal);
         Assert.Contains("`touches`, and when the last was, `last_touch_at`", head, StringComparison.Ordinal);
         Assert.Contains("A line is `paused` once the person replied", head, StringComparison.Ordinal);
+        Assert.Contains("that succeeded, or that ended not knowing whether it went (an `ambiguous` attempt) — and nothing else", head, StringComparison.Ordinal);
+        Assert.Contains("nor is a letter the provider held that a `message.cancel` which succeeded took back", head, StringComparison.Ordinal);
         Assert.Contains("It is `finished` once it was ended", head, StringComparison.Ordinal);
         Assert.Contains("**You never plan past the ceiling, and you never touch a setting.**", head, StringComparison.Ordinal);
         Assert.Contains("A day's limit is lifted only on the person's word, `jason launches lift` run on their word, by them or by their own session, never by you", head, StringComparison.Ordinal);
@@ -113,6 +115,8 @@ public partial class RoleSkillTests
         var head = Flattened("manager");
 
         Assert.Contains("**A line is reopened only on the person's yes.** You never reopen an ended line on your own reading", head, StringComparison.Ordinal);
+        Assert.Contains("a yes reopens the end it was asked about, and a line ended again later needs a question of its own", head, StringComparison.Ordinal);
+        Assert.Contains("So do not ask to reopen a line whose `touches` already reach `Lines:MaxTouches`", head, StringComparison.Ordinal);
         var reopen = Assert.Single(
             SkillPack.PrintedCommands(SkillPack.Find("manager").File),
             line => line.StartsWith("jason campaign reopen-contacts ", StringComparison.Ordinal));
@@ -289,12 +293,13 @@ public partial class RoleSkillTests
 
         Assert.Contains("The quick look is short. It reads the counts, acts only on what is off, and accounts for no person one by one", quick, StringComparison.Ordinal);
         Assert.Contains("do not create a person's next touch, end a line whose touches are spent, or widen, at a quick look", quick, StringComparison.Ordinal);
+        Assert.Contains("A touch refused `touch_ceiling_reached` is the exception: it is a failure, and its line is ended where you meet it, with the ceiling as the reason", quick, StringComparison.Ordinal);
         Assert.Contains("**Nothing off is a good quick look.**", quick, StringComparison.Ordinal);
         Assert.DoesNotContain(SkillPack.PrintedCommands(EntryFile("manager", "quick_look")), line => line.Contains("list-contacts", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The deep review accounts for every person, the held and the ended among them; works in an order to a ceiling of
+    /// The deep review accounts for every person, the paused and the ended among them; works in an order to a ceiling of
     /// twenty people; creates each next touch one at a time when due; and ends a line by the verb that ends it.
     /// </summary>
     [Fact]
@@ -303,7 +308,7 @@ public partial class RoleSkillTests
         var deep = FlattenedEntry("manager", "deep_review");
 
         Assert.Contains("Every person who is not `working`, `waiting` or `out` is yours to account for at this review", deep, StringComparison.Ordinal);
-        Assert.Contains("- **`paused`.** They replied and the runtime held their line.", deep, StringComparison.Ordinal);
+        Assert.Contains("- **`paused`.** They replied and the runtime paused their line.", deep, StringComparison.Ordinal);
         Assert.Contains("- **`finished`.** Their line in this campaign ended", deep, StringComparison.Ordinal);
         Assert.Contains("**A review has fifteen minutes and one attempt, so it works in an order and to a ceiling.**", deep, StringComparison.Ordinal);
         Assert.Contains("Handle at most twenty people at one review across steps 2 to 4.", deep, StringComparison.Ordinal);
@@ -321,19 +326,25 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// After a reply the runtime has held the person's line, and the manager ends it or continues it by the verdict: a
-    /// person's own reply ends it, an out-of-office notice continues it, and no verdict yet leaves it held.
+    /// After a reply the runtime has usually paused the person's line, and the manager ends it or continues it by the
+    /// verdict: a person's own reply ends it, an out-of-office notice continues it, and no verdict yet leaves it paused.
+    /// Where the person is still enrolled after the reply, the runtime took a letter of the campaign for its own move and
+    /// paused nothing, so the manager decides at that review: no verb pauses a member, and the touches queued would go.
     /// </summary>
     [Fact]
     public void The_reply_entry_ends_or_continues_the_line_and_an_out_of_office_continues_it()
     {
         var reply = FlattenedEntry("manager", "inbound_reply");
 
-        Assert.Contains("**The runtime has already held the line.**", reply, StringComparison.Ordinal);
+        Assert.Contains("**The runtime has usually paused the line already.**", reply, StringComparison.Ordinal);
         Assert.Contains("What becomes of the line is yours, and you end it or continue it: the reply's verdict says which.", reply, StringComparison.Ordinal);
         Assert.Contains("- **A person wrote for themselves, or asked to stop** — nature `person` or `opt_out`: end their line in this campaign.", reply, StringComparison.Ordinal);
         Assert.Contains("- **A notice a machine sent** — `out_of_office` or `auto_reply`, nature `automatic`: the line goes on. Continue it", reply, StringComparison.Ordinal);
-        Assert.Contains("**Where no verdict stands yet**, the responder has not run: leave the line held", reply, StringComparison.Ordinal);
+        Assert.Contains("**Where no verdict stands yet**, the responder has not run: leave the line paused", reply, StringComparison.Ordinal);
+        Assert.Contains("**Where the person is still `enrolled` after the reply, the runtime did not pause the line**, because a letter of this campaign went to them at or after the reply's moment", reply, StringComparison.Ordinal);
+        Assert.Contains("no verb pauses a member, so \"leave the line paused\" is not open to you, and every touch queued for them goes when it is due. Decide at this review.", reply, StringComparison.Ordinal);
+        Assert.Contains("give every touch still queued for them a later `not_before`, or cancel it, each with a reason", reply, StringComparison.Ordinal);
+        Assert.Contains("Where the person is still `enrolled` after a reply, the runtime did not pause the line", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("Create no take-back of your own beside it.", reply, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(EntryFile("manager", "inbound_reply"));
@@ -343,11 +354,11 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// On a provider without events, a thread can move for a follow-up the provider sent later than recorded, and the
-    /// runtime holds the person for it: the reply entry is the one place that continues them, plans again what the hold
+    /// runtime pauses the person for it: the reply entry is the one place that continues them, plans again what the hold
     /// took back, and says so in the note.
     /// </summary>
     [Fact]
-    public void The_reply_entry_continues_a_line_held_for_a_move_that_was_jason_s_own()
+    public void The_reply_entry_continues_a_line_paused_for_a_move_that_was_jason_s_own()
     {
         var reply = FlattenedEntry("manager", "inbound_reply");
 
@@ -446,7 +457,7 @@ public partial class RoleSkillTests
     {
         var head = Flattened("manager");
 
-        Assert.Contains("The runtime does not read the answer's words: it checks that the question is this campaign's, answered by a named person, and names the `contacts_finished` line among its references, and it reopens only the people that line ended. Whether the answer is yes is yours to read, so you reopen on a yes alone", head, StringComparison.Ordinal);
+        Assert.Contains("The runtime does not read the answer's words: it checks that the question is this campaign's, answered by a named person, and names the `contacts_finished` line among its references, and it reopens only the people that line ended whose line it was the latest to end: a yes reopens the end it was asked about, and a line ended again later needs a question of its own. Whether the answer is yes is yours to read, so you reopen on a yes alone", head, StringComparison.Ordinal);
         Assert.Contains("Where the person's session already reopened the line on their yes, the reopen answers `not_finished` for them, and nothing is left to do.", head, StringComparison.Ordinal);
         var raise = Assert.Single(
             SkillPack.PrintedCommands(SkillPack.Find("manager").File),

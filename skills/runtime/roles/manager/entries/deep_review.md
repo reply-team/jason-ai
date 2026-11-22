@@ -45,13 +45,13 @@ jason rolenote set --role manager --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --no
 nothing, so do the most urgent first and write as you go:
 
 1. What woke you, where the brief names a cause: its section of your skill.
-2. People whose line is held for a reply: end it or continue it, as the `inbound_reply` entry says.
+2. People whose line is paused for a reply: end it or continue it, as the `inbound_reply` entry says.
 3. Touches that are due: the people whose last touch is oldest first.
 4. Lines that are over.
 5. The batch in flight and the next, and telling the person.
 
 Handle at most twenty people at one review across steps 2 to 4. Who was not reached is said in your line, by count, and
-is the next review's first: people handled at this one have work, a held line settled or an ended line, and drop out of
+is the next review's first: people handled at this one have work, a paused line settled or an ended line, and drop out of
 what is owed by themselves, so the next deep review goes on where this one stopped rather than starting over. Send a
 heartbeat between people.
 
@@ -81,7 +81,7 @@ one of these, and nothing else:
   touches remain: create the next one at this review, as "Each person's line" below says.
 - **`idle`, with the line over.** Their touches are spent and the window after the last one has passed with no reply:
   their line in this campaign has ended, and you end it as that section says.
-- **`paused`.** They replied and the runtime held their line. Where the verdict stands, end or continue the line, as the
+- **`paused`.** They replied and the runtime paused their line. Where the verdict stands, end or continue the line, as the
   `inbound_reply` entry says; where a `not_now` named a later day, the line waits for it, and that is the reason; where
   no verdict stands yet, it waits for the responder, and that is the reason too.
 - **`finished`.** Their line in this campaign ended, by its touches, a reply or a failure, and its `contacts_finished`
@@ -107,7 +107,7 @@ how far apart is in the context in their own words, and the plan follows it. Whe
 touch goes three days after the first and the third four days after the second.
 
 **The next touch is yours, one at a time, at a review.** For a person whose last touch is older than the line's days,
-who has not replied and whose line is neither held nor over, create the next touch at this review: never earlier, and
+who has not replied and whose line is neither paused nor over, create the next touch at this review: never earlier, and
 never the whole line at once. A touch created only once it is due is never waiting when a reply comes; a line queued
 ahead would make every reply a race against letters already waiting. You write no message yourself.
 

@@ -124,7 +124,7 @@ has happened since the last. Where the campaign's plan, its context or what is k
 may give a line another number of touches or other days between them, and never more than `Lines:MaxTouches`, the
 ceiling the settings hold, which no role raises and none asks to have raised. How many and how far apart, where the
 person said so at the set-up, is in the context in their own words. The first letters are the pilot's; the follow-ups
-and the end of each line are the manager's, at its deep reviews.
+are the manager's, at its deep reviews, and so is the end of each line.
 
 **Who decides what.** Anything that changes who the campaign reaches, what it says or how much it spends belongs
 to the person who owns it, unless the campaign's context already allows it, and so does anything you are not sure
@@ -309,8 +309,8 @@ at a time as each step says:
    you ask nobody, and set no mode. Under an automatic mode the runtime adds one critic for each send by itself.
 
 Your pilot ends with the sends. A reply that arrives meanwhile is the manager's and the responder's, never yours. The
-follow-ups, the end of each line, the analyst's reading of the first batch and the turn after it are the manager's, at
-its deep reviews: each follow-up is a send from the copywriter's template, written for one person by a personalizer
+follow-ups, the analyst's reading of the first batch and the turn after it are the manager's, at its deep reviews, and
+so is the end of each line: each follow-up is a send from the copywriter's template, written for one person by a personalizer
 only where the manager decides so; and the turn goes back to the person there, as your judgement says it must.
 
 **A later batch** is the same chain without the line, which the first batch's copywriter already wrote: its first run

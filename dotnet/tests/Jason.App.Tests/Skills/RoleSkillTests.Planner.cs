@@ -271,7 +271,7 @@ public partial class RoleSkillTests
         // The pilot ends with the sends: no hold for the replies and no analyst of the planner's own. The follow-ups, the
         // analyst's reading and the turn are the manager's deep reviews', and a follow-up is the copywriter's template.
         Assert.Contains("Your pilot ends with the sends.", skill, StringComparison.Ordinal);
-        Assert.Contains("The follow-ups, the end of each line, the analyst's reading of the first batch and the turn after it are the manager's, at its deep reviews", skill, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups, the analyst's reading of the first batch and the turn after it are the manager's, at its deep reviews, and so is the end of each line", skill, StringComparison.Ordinal);
         Assert.Contains("each follow-up is a send from the copywriter's template, written for one person by a personalizer only where the manager decides so", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
