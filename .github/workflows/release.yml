@@ -1577,7 +1577,7 @@ jobs:
     name: The cask on osx-arm64
     needs: [version, macos]
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     permissions:
       contents: read
     env:
@@ -1639,13 +1639,15 @@ jobs:
           bash .github/scripts/test-cask-macos.sh taps "$FEED" "$VERSION"
           bash .github/scripts/test-cask-macos.sh audit
 
-      # Each leg is bounded at 15 minutes, and every brew command and every open inside it at one or two: a hang fails the
-      # leg in minutes with what was running, the desktop's log, Gatekeeper's lines and the screen, never at the job's limit.
+      # Every brew command and every open inside a leg is bounded at one to three minutes: a hang fails the leg in minutes
+      # with what was running, the desktop's log, Gatekeeper's lines and the screen. A leg's limit, 30 minutes, is above the
+      # sum of its bounds (the upgrade's, the longest, about 26), and the job's, 150, above its legs', so a slow run fails at
+      # a bound with its report, never at a step's or the job's limit.
       # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
       # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
       - name: Install with the cask, uninstall it, and zap it
         if: ${{ !cancelled() }}
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           LEG: "Install with the cask, uninstall it, and zap it"
@@ -1669,7 +1671,7 @@ jobs:
       # without --force.
       - name: The carried uninstall leaves the application to Homebrew, and the zap it names takes it
         if: ${{ !cancelled() }}
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           LEG: "The carried uninstall leaves the application to Homebrew, and the zap it names takes it"
@@ -1689,7 +1691,7 @@ jobs:
       # upgrade: the uninstall stanza stops the runtime, leaving the note that a start is owed.
       - name: Upgrade the cask from the previous release
         if: ${{ !cancelled() }}
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           LEG: "Upgrade the cask from the previous release"
@@ -1714,7 +1716,7 @@ jobs:
       # name brew uninstall --formula jason, and once it is off the missing link is said, not counted a fault.
       - name: Install the cask beside the older formula
         if: ${{ !cancelled() }}
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         env:
           LEG: "Install the cask beside the older formula"

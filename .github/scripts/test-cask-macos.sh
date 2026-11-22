@@ -80,8 +80,9 @@ seen_at_bound() {
 }
 
 # A command run to its end, or to its bound: at the bound what it waited for is named, seen_at_bound says what was there,
-# the command is ended and the step fails. Its exit otherwise. Every brew command and every start of the application
-# here runs under one, so a hang fails the leg in minutes, never at the step's own limit.
+# the command is ended and the step fails. Its exit otherwise. Every brew command of the legs (the taps and audit step
+# aside, which runs before them under its own limit, and brew --prefix and brew --repository), every carried jason and
+# every open of the application here runs under one, so a hang fails the leg in minutes, never at the step's own limit.
 bounded() {
     local seconds="$1" what="$2"; shift 2
     "$@" &
@@ -110,6 +111,13 @@ approved() {
     local before flags rest after
     before="$(xattr -p com.apple.quarantine "$APP" 2>/dev/null || true)"
     if [ -z "$before" ]; then say "no quarantine attribute on $APP, so no first-open confirmation to answer"; return 0; fi
+    # What a person approves, Gatekeeper accepts first: a notarized Developer ID application at its final path.
+    local said status=0
+    said="$( ( bounded 120 "Gatekeeper's assessment of $APP" spctl --assess --type execute --verbose=4 "$APP" ) 2>&1)" || status=$?
+    echo "$said"
+    [ "$status" = 0 ] || fail "Gatekeeper refuses $APP, so no person's approval is answered for it: $said"
+    printf '%s\n' "$said" | grep -q 'source=Notarized Developer ID' || fail "Gatekeeper accepts $APP, but not as a notarized Developer ID application: $said"
+    say "Gatekeeper accepts $APP as a notarized Developer ID application before its first open"
     flags="${before%%;*}"; rest="${before#*;}"
     printf '%s' "$flags" | grep -qE '^[0-9a-fA-F]{4}$' || fail "the quarantine attribute on $APP is not of the form flags;...: $before"
     after="$(printf '%04x' $(( 0x$flags | 0x0040 )));$rest"
@@ -236,7 +244,7 @@ install)
     [ -L "$(link)" ] || fail "no link at $(link) after the cask's install"
     resolved="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$(link)")"
     [ "$resolved" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$CARRIED")" ] || fail "$(link) leads to $resolved, not into $APP"
-    answered="$("$(link)" --version 2>&1 || true)"
+    answered="$( ( bounded 60 "$(link) --version" "$(link)" --version ) 2>&1 || true)"
     case "$answered" in *"$version"*) ;; *) fail "$(link) --version answered '$answered', not $version" ;; esac
     [ ! -e "$HOME/.local/bin/jason" ] || fail "a wrapper is in place before any open: $HOME/.local/bin/jason"
     say "$APP names $IDENTIFIER at $version; $(link) leads into it and answers '$answered' before any open"
@@ -259,7 +267,7 @@ open)
     before="$(stat -f %m "$record" 2>/dev/null || echo 0)"
     sleep 1
     say "opening $APP; its quarantine attribute: $(xattr -p com.apple.quarantine "$APP" 2>/dev/null || echo none)"
-    ( bounded 60 "open $APP" open "$APP" ) || fail "open $APP did not end within 60 s, or failed"
+    ( bounded 60 "open $APP" open "$APP" ) || { pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true; fail "open $APP did not end within 60 s, or failed"; }
     until=$(( $(date +%s) + 180 ))
     while [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ] && [ "$(date +%s)" -lt "$until" ]; do sleep 2; done
     if [ "$(stat -f %m "$record" 2>/dev/null || echo 0)" -le "$before" ]; then seen_at_bound; fail "the application's start wrote no set-up record at $record within 180 s"; fi
@@ -310,8 +318,13 @@ upgrade)
     else
         fail "after the upgrade no runtime answers and no note says a start is owed"
     fi
-    outdated="$( ( bounded 120 'brew outdated --cask' brew outdated --cask --greedy "$TEST_TAP/$TOKEN" ) 2>&1 || true)"
+    # brew outdated exits 0 when it names nothing; a bound reached, or a non-zero exit naming nothing, is a failure, never
+    # an answer that the cask is current.
+    status=0
+    ( bounded 120 'brew outdated --cask' brew outdated --cask --greedy "$TEST_TAP/$TOKEN" > "$OUT/cask-outdated.txt" 2>&1 ) || status=$?
+    outdated="$(cat "$OUT/cask-outdated.txt")"
     [ -z "$outdated" ] || fail "brew outdated --cask --greedy still names the cask: $outdated"
+    [ "$status" = 0 ] || fail "brew outdated --cask --greedy exited $status, or did not end within 120 s"
     again=0
     ( bounded 180 'a second brew upgrade --cask' brew upgrade --cask "$TEST_TAP/$TOKEN" > "$OUT/cask-upgrade-again.txt" 2>&1 ) || again=$?
     cat "$OUT/cask-upgrade-again.txt"
@@ -437,7 +450,7 @@ formula-off)
 
 reset)
     for kind in --cask --formula; do
-        if brew list "$kind" "$TOKEN" > /dev/null 2>&1; then
+        if ( bounded 60 "reset: brew list $kind" brew list "$kind" "$TOKEN" > /dev/null 2>&1 ); then
             if [ "$kind" = --cask ]; then ( bounded 120 'reset: brew uninstall --zap --force --cask' brew uninstall --zap --force --cask "$TOKEN" ) || true; else ( bounded 120 'reset: brew uninstall --force --formula' brew uninstall --force --formula "$TOKEN" ) || true; fi
             say "reset: Homebrew's $kind $TOKEN, left by a step before, taken off by Homebrew's own uninstall"
         fi
