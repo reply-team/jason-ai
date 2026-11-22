@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 /// <summary>
@@ -352,7 +354,7 @@ public partial class RoleSkillTests
 
         Assert.Contains("**The runtime has usually paused the line already.**", reply, StringComparison.Ordinal);
         Assert.Contains("What becomes of the line is yours, and you end it or continue it: the reply's verdict says which.", reply, StringComparison.Ordinal);
-        Assert.Contains("- **A person wrote for themselves, or asked to stop** — nature `person` or `opt_out`: end their line in this campaign.", reply, StringComparison.Ordinal);
+        Assert.Contains("- **A person wrote for themselves, or asked to stop** — nature `person`, other than `not_now`, or `opt_out`: end their line in this campaign.", reply, StringComparison.Ordinal);
         Assert.Contains("- **A notice a machine sent** — `out_of_office` or `auto_reply`, nature `automatic`: the line goes on. Continue it", reply, StringComparison.Ordinal);
         Assert.Contains("**Where no verdict stands yet**, the responder has not run: leave the line paused", reply, StringComparison.Ordinal);
         Assert.Contains("**Where the person is still `enrolled` after the reply, the runtime did not pause the line**, because a letter of this campaign went to them at or after the reply's moment", reply, StringComparison.Ordinal);
@@ -364,6 +366,25 @@ public partial class RoleSkillTests
         var printed = SkillPack.PrintedCommands(EntryFile("manager", "inbound_reply"));
         Assert.Contains(printed, line => line.StartsWith("jason campaign finish-contacts ", StringComparison.Ordinal));
         Assert.Contains(printed, line => line.StartsWith("jason campaign continue-contacts ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A `not_now` verdict has nature `person` too, so the bullet that ends a person's own line names it as the one it
+    /// leaves out: an agent that applies the first bullet it matches never ends the line of a person who asked to hear
+    /// again later, whose line waits paused for the day its `back_at` gives, as the deep review's `paused` row says.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a person who asked to hear later has their line ended by the first bullet they match")]
+    public void A_not_now_reply_is_never_ended_by_the_bullet_that_ends_a_person_s_own_line()
+    {
+        var reply = FlattenedEntry("manager", "inbound_reply");
+
+        Assert.Contains("nature `person`, other than `not_now`, or `opt_out`: end their line in this campaign.", reply, StringComparison.Ordinal);
+        Assert.DoesNotContain("nature `person` or `opt_out`", reply, StringComparison.Ordinal);
+        var ends = reply.IndexOf("- **A person wrote for themselves, or asked to stop**", StringComparison.Ordinal);
+        var later = reply.IndexOf("- **`not_now`** — a person, who asked for later: leave the line paused until the day its `back_at` gives, and say so in your note;", StringComparison.Ordinal);
+        Assert.True(ends >= 0 && later > ends);
+        Assert.Contains("where a `not_now` named a later day, the line waits for it, and that is the reason;", FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
     }
 
     /// <summary>
