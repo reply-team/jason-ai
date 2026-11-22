@@ -3,10 +3,13 @@
 # published, the Linux one first running the critical tier at the tag and then building the desktop's Linux packages,
 # the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the Windows one, in a
 # job of its own that runs no test either, signing its executable through Artifact Signing, and one job that archives
-# the plugins' packages from the tag's tree; three proof jobs that install, update and uninstall the signed packages on
+# the plugins' packages from the tag's tree; one job that writes the apt repository's index from the Linux deb, signs it
+# and reads it back as a machine's apt does; three proof jobs that install, update and uninstall the signed packages on
 # Windows, an Apple silicon Mac and an Intel Mac; then the release job — the only one that may write to this repository — assembles the manifest and the
-# checksums and publishes the release at once, with its notes and its assets. The job after it, which asked the Homebrew
-# tap to bump its formula, is switched off. The release pull request into main, and its run on every platform, come
+# checksums and publishes the release at once, with its notes and its assets. A job beside the proofs installs, upgrades
+# and takes off Homebrew's cask on an Apple silicon Mac, from taps made inside it, and the publication waits for nothing
+# of it. The job after the release, which would ask the Homebrew tap to bump its cask once that proof passed, is switched
+# off. The release pull request into main, and its run on every platform, come
 # before the tag: the tag is that pull request's head, the release is published from it, and the pull request is merged
 # into main only once the publication is checked, so main, whose README and pages GitHub shows, never describes a
 # release that is not out, and a release run that fails leaves main as it was. A hotfix's tag is its merge into main
@@ -18,10 +21,10 @@
 # publishes nothing there. Either way the tap is asked nothing.
 #
 # Every job that holds a secret or may write runs in the environment `signing`, which admits only release tags and
-# release branches: the macOS and Windows jobs, which sign, the release job, which publishes, and the tap's job, which
-# holds the tap's token. Every job declares the least permissions it needs, and the workflow's default stays read:
-# contents: read for every job that checks the tree out, an OIDC token for the Windows job alone, contents: write for
-# the release job alone, and nothing at all for the tap's job.
+# release branches: the macOS and Windows jobs, which sign, the apt index's job, which signs, the release job, which
+# publishes, and the tap's job, which holds the tap's token. Every job declares the least permissions it needs, and the
+# workflow's default stays read: contents: read for every job that checks the tree out, an OIDC token for the Windows job
+# alone, contents: write for the release job alone, and nothing at all for the tap's job.
 #
 # The button (workflow_dispatch) makes a draft of the release in reply-team/jason-ai and stops there: nothing is
 # tagged, nothing is published and the tap is not asked. The draft is for reading and is deleted afterwards, so the
@@ -812,6 +815,60 @@ jobs:
           path: artifacts/release/jason-skills.zip
           if-no-files-found: error
 
+  # The apt repository's index. On a system with apt, the desktop's deb adds Jason's own apt repository, and that
+  # repository is a release's own files: the deb and, beside it, Packages, Release, InRelease and Release.gpg, which a
+  # machine reads through the address's /apt/ path, leading to the latest release's downloads. So every release carries
+  # all four, written here from the deb the Linux leg built and signed with the repository's signing subkey, then read
+  # back as a machine's apt reads them, against the repository's own public key, install/jason-desktop-archive-keyring.gpg:
+  # gpgv's verdict on both signatures, the deb's size and hashes against Packages, Packages' against Release, apt-get
+  # update from a copy of the files with no complaint. The scripts say each check. Before the writer signs, in the same
+  # step, the key and its signing subkey are held to their expiry: each unrevoked and more than 90 days from it, or the
+  # index is not signed, since an index signed by a key that expires leaves every machine that reads it without updates
+  # from that day on. This job is the one place that check runs: it blocks the assets that are signed, and nothing else. The release
+  # job needs this job, so a release whose deb has no index, or one a machine's apt would refuse, publishes nothing, as a
+  # missing platform publishes nothing: from the first release whose deb adds the repository, a release without its index
+  # leaves every such machine's apt update with an error.
+  #
+  # The subkey is APT_SIGNING_KEY, in the signing environment, which only release tags and release branches may run in,
+  # and only the writer's step is handed it. The key that certifies it is kept offline. The job may write nothing: its
+  # token reads the repository for the checkout alone, it builds and tests nothing, and the four files go on as an
+  # artifact named so that the release job's download of jason-* brings them beside the deb. A pull request has no
+  # signing environment, so ci.yml's desktop job writes and reads back the same files with a key of its run's own.
+  apt-index:
+    name: The apt repository's index
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-desktop-linux-x64
+          path: artifacts/apt
+
+      - name: Write the apt repository's index, signed with the release's key
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          bash .github/scripts/check-apt-key.sh install/jason-desktop-archive-keyring.gpg
+          bash .github/scripts/write-apt-index.sh artifacts/apt
+
+      - name: Read the index back as a machine's apt does
+        run: bash .github/scripts/check-apt-index.sh artifacts/apt install/jason-desktop-archive-keyring.gpg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-apt-index
+          path: |
+            artifacts/apt/Packages
+            artifacts/apt/Release
+            artifacts/apt/InRelease
+            artifacts/apt/Release.gpg
+          if-no-files-found: error
+
   # Jason as one installation, proven on what this release publishes before the release job may publish it, as ci.yml's
   # union jobs prove it on a test build: the signed packages the platform's job uploaded, installed by the install scripts
   # as this release publishes them, unchanged; uninstalled by each door, every leg compared with a listing taken before
@@ -825,10 +882,20 @@ jobs:
   # and every leg between a begin and an end, so a leg's failure stops no leg after it and the held step fails the job
   # with the list.
   #
+  # TWO PINS, two worlds a person updates from, each named in the job's own fetch step and held by ReleaseWorkflowTests.
+  # The previous release, v0.48.7, is a release of the world before one installation: its legs begin with a command-line
+  # Jason and Jason Desktop installed apart and reach this release through that release's own update and the move. The
+  # one-installation release, v0.49.0, is a release of the world after, Jason Desktop installed alone with the jason it
+  # carries: its leg begins with no window open, and its carried jason update apply hands this release to its own Jason
+  # Desktop's updater, which installs it, and the rest to this release's carried jason update apply --finish. That leg runs
+  # here alone, where the release is signed: its updater installs only an update signed as the release is, which ci.yml's
+  # test builds never are. Neither pin is ever read as the latest published release.
+  #
   # THE UPDATER, END TO END, is a named place in both platform jobs, for the unit that has jason update apply hand an
   # update to Jason Desktop: a next build at this version and one, signed as this one is, served on the loopback feed and
   # applied by jason update apply with no window, and again with a window open, which refuses. Until it lands, each job's
-  # summary says that this is not proven here.
+  # summary says what of this is not proven here: this release's own handing, with no window and with one open; the
+  # one-installation release's handing this release to its Jason Desktop, with no window, is.
   proof-windows:
     name: The proof on win-x64
     needs: [version, windows, skills]
@@ -841,6 +908,7 @@ jobs:
       OUT: ${{ github.workspace }}\installation
       FEED: ${{ github.workspace }}\feed
       PREVIOUS: ${{ github.workspace }}\previous
+      ONE_INSTALLATION: ${{ github.workspace }}\one-installation
     steps:
       - uses: actions/checkout@v7
 
@@ -1033,6 +1101,74 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
+      # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
+      - name: Fetch the one-installation release this one updates from
+        id: one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          ONE_INSTALLATION_RELEASE: v0.49.0
+        run: |
+          $release = "v$($env:VERSION -replace '-.*$', '')"
+          $tag = $env:ONE_INSTALLATION_RELEASE
+          if ($tag -ceq $release) { throw "the one-installation release named, $tag, is the one this tree builds: there is no earlier release of one installation to update from here" }
+          New-Item -ItemType Directory -Force -Path $env:ONE_INSTALLATION | Out-Null
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          # The setup is what that release's install.ps1 installs, checking it against the same checksums.txt itself.
+          $verified = @('jason-desktop-windows-x64-setup.exe')
+          $unverifiable = @('install.ps1', 'manifest.json')
+          foreach ($name in @('checksums.txt') + $verified + $unverifiable) {
+            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:ONE_INSTALLATION $name) -UseBasicParsing -TimeoutSec 600
+          }
+          $listed = @{}
+          foreach ($line in Get-Content (Join-Path $env:ONE_INSTALLATION 'checksums.txt')) {
+            $hash, $name = $line -split '  ', 2
+            if ($name) { $listed[$name] = $hash }
+          }
+          foreach ($name in $verified) {
+            if (-not $listed.ContainsKey($name)) { throw "$name has no line in $tag's checksums.txt" }
+            if ((Get-FileHash -LiteralPath (Join-Path $env:ONE_INSTALLATION $name) -Algorithm SHA256).Hash -ne $listed[$name]) { throw "$name does not match $tag's checksums.txt" }
+            Write-Host "$name matches $tag's checksums.txt"
+          }
+          foreach ($name in $unverifiable) {
+            if ($listed.ContainsKey($name)) { throw "$name is now listed in $tag's checksums.txt: it belongs with the verified files" }
+            $said = "$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            Write-Host $said
+            "- $said" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+          Write-Host "the one-installation release this one updates from is $tag"
+          "- the one-installation release this one updates from is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      # The path a person with Jason Desktop of one installation takes, on the release's signed packages: that release
+      # installed by its own install.ps1, no window open, its carried jason update apply pinned to this release, from the
+      # feed served on this machine. It hands the update to its own Jason Desktop, whose updater checks this release's
+      # setup is the release publisher's and runs it, then runs this release's carried jason update apply --finish; the
+      # leg holds that it said so, and ended complete. Then the uninstall from a new terminal, compared with the machine
+      # before.
+      - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          LEG: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the one-installation release this one updates from=${{ steps.one-installation.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step FromOneInstallation -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -OneInstallation $env:ONE_INSTALLATION
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-one-installation-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       - name: Read the module path Windows PowerShell rebuilds from an empty one
         if: ${{ !cancelled() }}
         timeout-minutes: 20
@@ -1057,10 +1193,18 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: pwsh
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
+          $ended = Join-Path $env:OUT 'legs-ended.txt'
+          $handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'cancelled') { 'is not proven here: its leg was cancelled' } else { 'is not proven here: its leg was not run' }
           @(
             '### What this job does not prove',
-            '- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here.',
+            "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.",
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this release: it reads only the published releases; this job runs this release''s installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -1086,6 +1230,7 @@ jobs:
       OUT: ${{ github.workspace }}/installation
       FEED: ${{ github.workspace }}/feed
       PREVIOUS: ${{ github.workspace }}/previous
+      ONE_INSTALLATION: ${{ github.workspace }}/one-installation
     steps:
       - uses: actions/checkout@v7
 
@@ -1248,6 +1393,73 @@ jobs:
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
+      # The one-installation release, named, the second pin (TWO PINS above): v0.49.0, a release of the world after, which
+      # installs Jason Desktop alone, is the one this release updates from as a person's Jason of one installation does.
+      # Never read as the latest published release: that moves under a proof that ran, and once this release is
+      # published it is this release, with nothing to update from. Its files come from its public downloads. No token:
+      # the repository's releases are public.
+      - name: Fetch the one-installation release this one updates from
+        id: one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          ONE_INSTALLATION_RELEASE: v0.49.0
+        run: |
+          release="v${VERSION%%-*}"
+          tag="$ONE_INSTALLATION_RELEASE"
+          [ "$tag" != "$release" ] || { echo "::error::the one-installation release named, $tag, is the one this tree builds: there is no earlier release of one installation to update from here"; exit 1; }
+          mkdir -p "$ONE_INSTALLATION"
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          # The application's archive is what that release's install.sh installs, checking it against the same
+          # checksums.txt itself.
+          verified="jason-desktop-macos-arm64.zip"
+          unverifiable="install.sh manifest.json"
+          for name in checksums.txt $verified $unverifiable; do
+            curl -fsSL --max-time 600 -o "$ONE_INSTALLATION/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          listed() { awk -v n="$1" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$ONE_INSTALLATION/checksums.txt"; }
+          for name in $verified; do
+            line="$(listed "$name")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$ONE_INSTALLATION" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$name matches $tag's checksums.txt"
+          done
+          for name in $unverifiable; do
+            [ -z "$(listed "$name")" ] || { echo "::error::$name is now listed in $tag's checksums.txt: it belongs with the verified files"; exit 1; }
+            said="$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            echo "$said"
+            echo "- $said" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "the one-installation release this one updates from is $tag"
+          echo "- the one-installation release this one updates from is $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      # The path a person with Jason Desktop of one installation takes, on the release's signed and notarized packages:
+      # that release installed by its own install.sh, no window open, its carried jason update apply pinned to this
+      # release, from the feed served on this machine. It hands the update to its own Jason Desktop, whose updater installs
+      # it (Squirrel, which takes only an update signed by the application's own team, then ShipIt), then runs this
+      # release's carried jason update apply --finish; the leg holds that it said so, and ended complete. Then Gatekeeper's
+      # word on the application where the update left it, and the uninstall from a new terminal, compared with the machine
+      # before.
+      - name: Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason
+        id: from-one-installation
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the one-installation release this one updates from=${{ steps.one-installation.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh from-one-installation "$ONE_INSTALLATION" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh assess
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-one-installation-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
       - name: The machine after every uninstall is the machine before
         if: ${{ !cancelled() }}
         timeout-minutes: 20
@@ -1258,10 +1470,20 @@ jobs:
         timeout-minutes: 20
         if: always()
         shell: bash
+        env:
+          ONE_INSTALLATION_LEG: ${{ steps.from-one-installation.outcome }}
+          ONE_INSTALLATION_LEG_NAME: "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason"
         run: |
+          # The one-installation release's handing is said proven only where its leg's step succeeded having run to its end:
+          # a leg its begin does not run ends its step green too, and never reaches its end. A step the run's cancelling
+          # stopped says so.
+          if [ "$ONE_INSTALLATION_LEG" = success ] && grep -qxF -- "$ONE_INSTALLATION_LEG_NAME" "$OUT/legs-ended.txt" 2>/dev/null; then handed="is proven here, by its leg"
+          elif [ "$ONE_INSTALLATION_LEG" = failure ]; then handed="is not proven here: its leg failed"
+          elif [ "$ONE_INSTALLATION_LEG" = cancelled ]; then handed="is not proven here: its leg was cancelled"
+          else handed="is not proven here: its leg was not run"; fi
           {
             echo '### What this job does not prove'
-            echo "- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here."
+            echo "- This release's own updater, end to end: no next build is made, so this release's command line handing an update to its Jason Desktop, with no window and with one open, is not proven here; the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed."
             echo "- The 0.48 Jason Desktop's own updater on a Mac reaching this release: it reads only the published releases, and this release ships without that proof."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- Each account of a shared Mac: the runner has one account."
@@ -1346,18 +1568,201 @@ jobs:
           path: installation
           if-no-files-found: ignore
 
+  # Homebrew's cask, on the signed and notarized zip the macOS job uploaded: rendered from .github/cask/jason.rb.template
+  # into taps made inside this job, never the real tap, it is audited as the real tap renders it, installed, opened,
+  # uninstalled, zapped, left to Homebrew by the carried uninstall, upgraded from the previous release's zip, and met
+  # beside the older formula. The publication waits for nothing of it: the tap's job needs it, so a red proof of the cask
+  # holds the cask's bump and never a release of Jason. It runs at a tag and in a dry run, as the other proof jobs do.
+  proof-macos-cask:
+    name: The cask on osx-arm64
+    needs: [version, macos]
+    runs-on: macos-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OUT: ${{ github.workspace }}/installation
+      FEED: ${{ github.workspace }}/feed
+      PREVIOUS: ${{ github.workspace }}/previous
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        id: download
+        with:
+          name: jason-desktop-osx-x64
+          path: feed
+
+      # The previous release's application zip, for the upgrade, and the older formula's command line, for the leg beside
+      # it, each held to its own release's checksums.txt.
+      - name: Fetch the previous release and the older formula's command line
+        id: previous
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        env:
+          CASK_PREVIOUS_RELEASE: v0.49.1
+          FORMULA_RELEASE: v0.48.7
+        run: |
+          release="v${VERSION%%-*}"
+          [ "$CASK_PREVIOUS_RELEASE" != "$release" ] || { echo "::error::the previous release named, $CASK_PREVIOUS_RELEASE, is the one this tree builds"; exit 1; }
+          for pair in "$CASK_PREVIOUS_RELEASE jason-desktop-macos-arm64.zip" "$FORMULA_RELEASE jason-osx-arm64.tar.gz"; do
+            set -- $pair
+            tag="$1"; name="$2"; folder="$PREVIOUS/$tag"
+            mkdir -p "$folder"
+            for file in checksums.txt "$name"; do
+              curl -fsSL --max-time 600 -o "$folder/$file" "https://github.com/reply-team/jason-ai/releases/download/$tag/$file"
+            done
+            line="$(awk -v n="$name" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$folder/checksums.txt")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$folder" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$tag's $name matches its checksums.txt"
+          done
+
+      - name: The machine before anything is installed
+        id: before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills"
+          bash .github/scripts/test-installation-macos.sh listing before
+
+      - name: Make the test taps and audit the cask as the real tap renders it
+        id: taps
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          bash .github/scripts/test-cask-macos.sh taps "$FEED" "$VERSION"
+          bash .github/scripts/test-cask-macos.sh audit
+
+      # Every single wait inside a leg is bounded at 5 minutes or less: a hang fails with what was running, the desktop's
+      # log, Gatekeeper's lines and the screen, long before a leg's limit of 30 minutes or the job's of 150.
+      # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
+      # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
+      - name: Install with the cask, uninstall it, and zap it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Install with the cask, uninstall it, and zap it"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-installation-macos.sh by-hand --placed "$VERSION"
+          bash .github/scripts/test-cask-macos.sh left-to-homebrew
+          bash .github/scripts/test-cask-macos.sh uninstall
+          bash .github/scripts/test-installation-macos.sh listing after-cask-uninstall
+          bash .github/scripts/test-cask-macos.sh uninstall-left
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-cask-zap
+          bash .github/scripts/test-installation-macos.sh compare after-cask-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L3b: the carried jason uninstall leaves the application Homebrew placed to it, and the zap it names then succeeds
+      # without --force.
+      - name: The carried uninstall leaves the application to Homebrew, and the zap it names takes it
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "The carried uninstall leaves the application to Homebrew, and the zap it names takes it"
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh install "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh carried-uninstall
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-carried-uninstall-zap
+          bash .github/scripts/test-installation-macos.sh compare after-carried-uninstall-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L2: the previous release's application from the cask, a runtime running, then the cask at this version and brew
+      # upgrade: the uninstall stanza stops the runtime, leaving the note that a start is owed.
+      - name: Upgrade the cask from the previous release
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Upgrade the cask from the previous release"
+          CASK_PREVIOUS_RELEASE: v0.49.1
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "Fetch the previous release and the older formula's command line=${{ steps.previous.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          previous="${CASK_PREVIOUS_RELEASE#v}"
+          bash .github/scripts/test-cask-macos.sh render "$PREVIOUS/$CASK_PREVIOUS_RELEASE/jason-desktop-macos-arm64.zip" "$previous"
+          bash .github/scripts/test-cask-macos.sh install "$previous"
+          bash .github/scripts/test-cask-macos.sh open "$previous"
+          bash .github/scripts/test-cask-macos.sh start-runtime
+          bash .github/scripts/test-cask-macos.sh render "$FEED/jason-desktop-macos-arm64.zip" "$VERSION"
+          bash .github/scripts/test-cask-macos.sh upgrade "$VERSION"
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-cask-upgrade-zap
+          bash .github/scripts/test-installation-macos.sh compare after-cask-upgrade-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # L5: the older formula installed and linked, then the cask: Homebrew skips the cask's link, set-up and jason status
+      # name brew uninstall --formula jason, and once it is off the missing link is said, not counted a fault.
+      - name: Install the cask beside the older formula
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          LEG: "Install the cask beside the older formula"
+          FORMULA_RELEASE: v0.48.7
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Make the test taps and audit the cask as the real tap renders it=${{ steps.taps.outcome }}" "Fetch the previous release and the older formula's command line=${{ steps.previous.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-cask-macos.sh formula "$PREVIOUS/$FORMULA_RELEASE/jason-osx-arm64.tar.gz" "${FORMULA_RELEASE#v}"
+          bash .github/scripts/test-cask-macos.sh beside-formula
+          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh formula-named
+          bash .github/scripts/test-cask-macos.sh formula-off
+          bash .github/scripts/test-cask-macos.sh zap
+          bash .github/scripts/test-installation-macos.sh listing after-formula-zap
+          bash .github/scripts/test-installation-macos.sh compare after-formula-zap before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      - name: The machine after every uninstall is the machine before
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          bash .github/scripts/test-cask-macos.sh reset
+          bash .github/scripts/test-installation-macos.sh held
+
+      - name: Keep the listings
+        timeout-minutes: 20
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-macos-cask-listings
+          path: installation
+          if-no-files-found: ignore
+
   release:
     name: Assemble and publish
-    needs: [version, build, macos, windows, plugin, ui, skills, proof-windows, proof-macos, proof-macos-intel]
+    needs: [version, build, macos, windows, plugin, ui, skills, apt-index, proof-windows, proof-macos, proof-macos-intel]
     runs-on: ubuntu-latest
     # The only job that may write to this repository, and what it writes is the release. It builds and runs nothing
     # that was built, so a test on a matrix runner cannot publish anything, and nothing is published when a platform's
-    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures, and the three
-    # proof jobs installed, updated and uninstalled the packages, before this job starts. It writes with this run's own
-    # token, handed to the one step that publishes, and only outside a dry run in reply-team/jason-ai; anywhere else it assembles the release and says that it publishes nothing there. No action
-    # runs here but the checkout and the artifacts' download and upload: an action is handed the token whatever it is
-    # for, so any other would publish as surely as that step does, and would hold to the same two conditions. It runs in
-    # the signing environment, which only release tags and release branches may run in.
+    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures, the apt index's job
+    # read the index back as a machine's apt does, and the three proof jobs installed, updated and uninstalled the
+    # packages, before this job starts. It writes with this run's own token, handed to the one step that publishes, and
+    # only outside a dry run in reply-team/jason-ai; anywhere else it assembles the release and says that it publishes
+    # nothing there. No action runs here but the checkout and the artifacts' download and upload: an action is handed
+    # the token whatever it is for, so any other would publish as surely as that step does, and would hold to the same
+    # two conditions. It runs in the signing environment, which only release tags and release branches may run in.
     environment: signing
     permissions:
       contents: write
@@ -1387,7 +1792,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
-          # and checksums.txt, which lists the plugins', the UI's, the skills' and the desktop's files after the archives;
+          # and checksums.txt, which lists the plugins', the UI's, the skills' and the desktop's files after the archives,
+          # and then the apt repository's index;
           # the manifest names the plugins' under its plugins and none of the desktop's, which update themselves from
           # their own feeds, latest.yml, latest-mac.yml and latest-linux.yml. A platform or a package missing from the
           # download, or an archive that no longer hashes to what its fragment says, stops the release here. The notes are
@@ -1396,7 +1802,7 @@ jobs:
           # needs and hands over to the new executable, so an older build goes through it first. The floor moves only
           # when an applier change raises it. Each plugin's entry is the tag's digest list of that package, whose last
           # line is the package this release publishes, so nothing is built or hashed here to say which package that is.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip,jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml,jason-desktop-macos-arm64.dmg,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,jason-desktop-macos-x64.dmg,jason-desktop-macos-x64.zip,jason-desktop-macos-x64.zip.blockmap,latest-mac.yml,jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage,latest-linux.yml -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -Plugins jason-plugin-reply.zip,jason-plugin-journal-forwarder.zip,jason-plugin-ntfy.zip,jason-plugin-slack.zip,jason-plugin-telegram.zip,jason-ui.zip,jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml,jason-desktop-macos-arm64.dmg,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,jason-desktop-macos-x64.dmg,jason-desktop-macos-x64.zip,jason-desktop-macos-x64.zip.blockmap,latest-mac.yml,jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage,latest-linux.yml,Packages,Release,InRelease,Release.gpg -ReleaseNotesUrl "https://get.jasonharness.ai/releases/tag/v$env:VERSION" -MinUpgradeFrom 0.19.0 -PluginDigests plugins/reply.digests,plugins/journal-forwarder.digests,plugins/ntfy.digests,plugins/slack.digests,plugins/telegram.digests
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -1508,20 +1914,21 @@ jobs:
           }
 
           # gh names an asset by its file name. The archives, the feed, the packages of reply, journal-forwarder, ntfy,
-          # slack and telegram, the UI's and the skills', and the desktop's installer, Mac and Linux packages, blockmaps and
-          # update feeds were assembled under artifacts/release; the install scripts are the tag's own, so a one-liner pinned to
-          # this release runs the script it was published with.
-          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip', 'artifacts/release/jason-skills.zip') + @('artifacts/release/jason-desktop-windows-x64-setup.exe', 'artifacts/release/jason-desktop-windows-x64-setup.exe.blockmap', 'artifacts/release/latest.yml', 'artifacts/release/jason-desktop-macos-arm64.dmg', 'artifacts/release/jason-desktop-macos-arm64.zip', 'artifacts/release/jason-desktop-macos-arm64.zip.blockmap', 'artifacts/release/jason-desktop-macos-x64.dmg', 'artifacts/release/jason-desktop-macos-x64.zip', 'artifacts/release/jason-desktop-macos-x64.zip.blockmap', 'artifacts/release/latest-mac.yml', 'artifacts/release/jason-desktop-linux-x64.deb', 'artifacts/release/jason-desktop-linux-x64.AppImage', 'artifacts/release/latest-linux.yml')
+          # slack and telegram, the UI's and the skills', the desktop's installer, Mac and Linux packages, blockmaps and
+          # update feeds, and the apt repository's index were assembled under artifacts/release; the install scripts are
+          # the tag's own, so a one-liner pinned to this release runs the script it was published with.
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1') + @('artifacts/release/jason-plugin-reply.zip', 'artifacts/release/jason-plugin-journal-forwarder.zip', 'artifacts/release/jason-plugin-ntfy.zip', 'artifacts/release/jason-plugin-slack.zip', 'artifacts/release/jason-plugin-telegram.zip', 'artifacts/release/jason-ui.zip', 'artifacts/release/jason-skills.zip') + @('artifacts/release/jason-desktop-windows-x64-setup.exe', 'artifacts/release/jason-desktop-windows-x64-setup.exe.blockmap', 'artifacts/release/latest.yml', 'artifacts/release/jason-desktop-macos-arm64.dmg', 'artifacts/release/jason-desktop-macos-arm64.zip', 'artifacts/release/jason-desktop-macos-arm64.zip.blockmap', 'artifacts/release/jason-desktop-macos-x64.dmg', 'artifacts/release/jason-desktop-macos-x64.zip', 'artifacts/release/jason-desktop-macos-x64.zip.blockmap', 'artifacts/release/latest-mac.yml', 'artifacts/release/jason-desktop-linux-x64.deb', 'artifacts/release/jason-desktop-linux-x64.AppImage', 'artifacts/release/latest-linux.yml') + @('artifacts/release/Packages', 'artifacts/release/Release', 'artifacts/release/InRelease', 'artifacts/release/Release.gpg')
           gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
-  # Switched off: the formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so the
-  # formula stays at the last 0.48 release it carries; this job comes back, bumping a cask, with the release that
-  # carries one. The last clause of its condition is what switches it off.
+  # Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the
+  # last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository
+  # holds it at the release's tag, is the tap's to run. The last clause of its condition is what switches it off.
   #
-  # Asks the tap to bump its formula once a tag's release is published: after the release job succeeded, never after it
-  # failed or was skipped. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
+  # Asks the tap to bump its cask once a tag's release is published and the cask's own proof passed: after the release
+  # job and proof-macos-cask succeeded, never after either failed or was skipped, so a red proof of the cask holds the
+  # cask's bump and never the release. A 2xx proves only that a bump run was queued; the bump checks, tests and pushes in the tap, and
   # changes nothing when the address still answers the previous release or when this one is a candidate or an older
   # line's fix, since it reads the latest release. The tap's six-hour schedule catches whatever this misses. A job of its
   # own, so that "Re-run failed jobs" after a refusal runs this job alone, with the secret as it is then, and never the
@@ -1531,7 +1938,7 @@ jobs:
   # branches may run in.
   tap:
     name: Tell the tap
-    needs: release
+    needs: [release, proof-macos-cask]
     if: ${{ github.event_name == 'push' && github.repository == 'reply-team/jason-ai' && false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

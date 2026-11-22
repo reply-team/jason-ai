@@ -20,10 +20,21 @@ const scope: UninstallScope = {
     output: '/tmp/jason-uninstall-2026-11-17T12-00-00-000Z.json',
 };
 
-test('the item is offered on macOS alone, under its own name', () => {
+test('on Linux the item is offered too, and its dialog names what goes last: the deb’s package through the system, or the AppImage file', () => {
+    const base = { dataDirectory: '/home/a/.jason', harnessRoot: '/home/a/Jason', output: '/tmp/out.json' };
+    const deb = uninstallQuestion({ ...base, application: '/opt/Jason', form: 'deb' });
+    assert.equal(deb.message, 'Uninstall Jason from this computer?');
+    assert.ok(deb.detail.includes('Jason itself, the package jason-desktop, taken off by your system first: it asks for an administrator’s password'), deb.detail);
+    const appImage = uninstallQuestion({ ...base, application: '/home/a/Applications/jason-desktop-linux-x64.AppImage', form: 'appimage' });
+    assert.equal(appImage.message, 'Uninstall Jason from this computer?');
+    assert.ok(appImage.detail.includes('Jason itself, /home/a/Applications/jason-desktop-linux-x64.AppImage, last'), appImage.detail);
+    assert.equal(uninstallQuestion({ ...base, application: '/Applications/Jason.app' }).message, 'Uninstall Jason from this Mac?');
+});
+
+test('the item is offered on macOS and Linux, under its own name', () => {
     assert.equal(uninstallOffered('darwin'), true);
     assert.equal(uninstallOffered('win32'), false);
-    assert.equal(uninstallOffered('linux'), false);
+    assert.equal(uninstallOffered('linux'), true);
     assert.equal(uninstallLabel, 'Uninstall Jason…');
 });
 

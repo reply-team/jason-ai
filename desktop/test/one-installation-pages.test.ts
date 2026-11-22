@@ -1,6 +1,6 @@
 // The pages say what the Command Line item is on each system, and what a start does when an update holds the lock, in
-// the terms the desktop's own code decides them by: on macOS and Windows the item is the machine set-up's status
-// (`commandIsSetup`), with its Put Back act; on Linux it is the PATH command; and `install_in_progress` and
+// the terms the desktop's own code decides them by: on macOS, Windows and Linux the item is the machine set-up's status
+// (`commandIsSetup`), with its Put Back act; and `install_in_progress` and
 // `update_in_progress` leave the set-up for later (`laterCodes`), never a failure.
 
 import assert from 'node:assert/strict';
@@ -27,21 +27,21 @@ function bullet(start: string): string {
     return desktop.slice(from, to < 0 ? undefined : to);
 }
 
-test('the item is the set-up on macOS and Windows and the PATH command on Linux', () => {
+test('the item is the set-up on macOS, Windows and Linux', () => {
     assert.equal(commandIsSetup('darwin'), true);
     assert.equal(commandIsSetup('win32'), true);
-    assert.equal(commandIsSetup('linux'), false);
+    assert.equal(commandIsSetup('linux'), true);
 
-    const setup = bullet('- **Command Line**, on macOS and Windows,');
+    const setup = bullet('- **Command Line**, on macOS, Windows and Linux,');
     assert.ok(setup.includes('shows what the machine set-up placed'), setup);
     assert.ok(setup.includes(putBackLabel.replace('…', '')), setup);
-    const path = bullet('- **Command Line**, on Linux,');
-    assert.ok(path.includes('places a `jason` that your terminal finds'), path);
-    assert.ok(!path.includes(putBackLabel.replace('…', '')), path);
+    assert.ok(!desktop.includes('- **Command Line**, on Linux,'), 'the page still has a Linux Command Line item of its own');
 });
 
-test('the README and the desktop page say the first start sets the machine up on macOS and Windows', () => {
-    assert.ok(readme.includes('on macOS and Windows the first start of each version puts `jason` there and gives Claude Code and Codex Jason\'s skills, each where it is found, and the Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there'));
+test('the README and the desktop page say the first start sets the machine up on macOS, Windows and Linux', () => {
+    assert.ok(readme.includes('The first start of each version runs the carried `jason install`, which puts `jason` in your terminal and gives Claude Code and Codex Jason\'s skills, each where it is found, and `jason update apply --finish`, which brings the plugins, the skills and the UI up to its version; the Command Line item of its menu says what that placed and puts it back.'));
+    assert.ok(!readme.includes('on Linux that item puts a command there'), 'the README still gives Linux a Command Line item of its own');
+    assert.ok(desktop.includes('on macOS, Windows and Linux the first start of each version puts `jason` where a new terminal finds it'));
     assert.ok(desktop.includes('installed by hand: the application\'s first start of each version then puts `jason` in your terminal'));
     assert.ok(desktop.includes('## The command line, and the login items'));
 });

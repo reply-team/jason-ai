@@ -32,9 +32,30 @@ public static class RuntimeStopCommand
         if (exit == ExitCodes.Success)
         {
             Installation.StartOwed.Remove(env.Paths);
+            if (StartsAtLogon(env))
+            {
+                env.Error.WriteLine(UntilTheNextLogon);
+            }
         }
 
         return exit;
+    }
+
+    /// <summary>What a stop a person or an agent asks for says on stderr where the runtime is registered to start at logon.</summary>
+    internal const string UntilTheNextLogon =
+        "It stays stopped until the next logon, which starts it again; `jason runtime autostart disable` stops that.";
+
+    /// <summary>Whether this account has the runtime registered to start at logon, as <c>runtime autostart status</c> reads it; no where that cannot be read.</summary>
+    private static bool StartsAtLogon(CliEnvironment env)
+    {
+        try
+        {
+            return RuntimeAutostartCommands.Registrar(env).Read().Registered;
+        }
+        catch (Autostart.AutostartException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -105,11 +126,11 @@ public static class RuntimeStopCommand
         var look = reader.Look();
         if (look.Descriptor is not { } descriptor)
         {
-            env.Out.WriteLine(CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
+            CliErrors.Print(env.Out, human, ExitCodes.RuntimeUnavailable, CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
             return ExitCodes.RuntimeUnavailable;
         }
 
-        var (exitCode, response) = await OperationRunner.SendAsync(env, Operations.SystemShutdown, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        var (exitCode, response) = await OperationRunner.SendAsync(env, Operations.SystemShutdown, RequestBody.Empty(), human, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
             return exitCode;
@@ -118,7 +139,7 @@ public static class RuntimeStopCommand
         if (!response.IsSuccess)
         {
             answered?.Invoke(false);
-            env.Out.WriteLine(OperationRunner.ErrorText(response));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -141,7 +162,7 @@ public static class RuntimeStopCommand
             return ExitCodes.Success;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             CliErrors.ShutdownTimeout,
             $"The runtime acknowledged the shutdown but had not exited after {Seconds(waited)} s.",
             retryable: true));

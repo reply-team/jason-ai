@@ -115,7 +115,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     r.b.env.STUB_CAMPAIGN_FOLDER = folder;
     const made = await r.chat.create('cmp_01ABC');
     assert.match(made.id, /^conv_[0-9A-HJKMNP-TV-Z]{26}$/);
-    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' });
+    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false, mode: 'full_access', ownFolder: true });
     assert.equal((await r.chat.create('cmp_01ABC')).id, made.id, 'a campaign has one conversation');
     // The page's own campaignId on a known conversation is not read: the record decides.
     await r.turn(made.id, 'How is it doing?', { host: 'claude', campaignId: 'cmp_99OTHER' });
@@ -123,7 +123,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     assert.deepEqual(r.jason(), ['campaign get cmp_01ABC', 'campaign get cmp_01ABC', 'project get prj_01STUB', 'runtime status']);
     assert.equal(flagValue(host?.args ?? [], '--add-dir'), folder);
     const [head, , words] = (host?.stdin ?? '').split('\n');
-    assert.match(head ?? '', /^Jason, not the person, wrote this first paragraph\. This conversation is about the campaign cmp_01ABC\. Its name, .* is "Spring"\. Its folder is ".*spring"\.$/);
+    assert.match(head ?? '', /^Jason, not the person, wrote this first paragraph\. This conversation is about the campaign cmp_01ABC\. Its name, .* is "Spring"\. Its folder is ".*spring"\. This turn runs in Full access: [^\n]*$/);
     assert.equal(words, 'How is it doing?');
     assert.ok(!(host?.stdin ?? '').includes('cmp_99OTHER'));
     assert.deepEqual(listed(r), [], 'a campaign\'s conversation reads no campaign list');
@@ -148,6 +148,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
     const r = rig(t);
     plan(r, [{ say: 'Here it is.' }, { use: { tool: 'Read', input: { file_path: '/x/notes.md' } } }, { ask: { tool: 'Bash', input: { command: 'git status' } } }]);
     const chat = await r.chat.create();
+    // In Ask first, where the command is a card the person answers.
+    await r.chat.setMode(chat.id, 'ask_first');
     const done = r.until(chat.id, (event) => event.kind === 'done');
     const card = r.until(chat.id, (event) => event.kind === 'permission');
     await r.chat.send(chat.id, 'Show me <b>everything</b>', { host: 'claude' });
@@ -169,6 +171,8 @@ test('what the page drew is kept, and a conversation reopens with it after a res
         { kind: 'text', text: 'heard' },
         { kind: 'text', text: 'Here it is.' },
         { kind: 'step', text: 'Read a file', detail: '/x/notes.md' },
+        // The stub says what the turn's hook let run: the hook rides Ask first as well.
+        { kind: 'text', text: 'tool ran' },
         { kind: 'step', text: 'Ran a command', detail: 'git status' },
         { kind: 'permission', title: asked.title, detail: asked.detail, answer: 'deny' },
         { kind: 'text', text: 'decision deny' },
@@ -422,8 +426,8 @@ test('two set-up turns that ran at the same time hand over neither, and both off
         assert.deepEqual(said.at(-2), { kind: 'pick', campaignIds: [made] }, chat.id);
     }
     const picked = await r.chat.attach(first.id, made);
-    assert.deepEqual([picked.campaignId, picked.title], [made, 'Spring']);
-    assert.deepEqual(r.events.get(first.id)?.at(-1), { kind: 'attached', campaignId: made, title: 'Spring' });
+    assert.deepEqual([picked.campaignId, picked.title], [made, 'Mine']);
+    assert.deepEqual(r.events.get(first.id)?.at(-1), { kind: 'attached', campaignId: made, title: 'Mine' });
     await assert.rejects(r.chat.attach(second.id, made), { message: 'That agent has its conversation already. Open it from the agent.' });
     await assert.rejects(r.chat.attach(first.id, 'cmp_OTHER'), /already about an agent/);
 });

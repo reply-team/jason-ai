@@ -51,6 +51,23 @@ public sealed class SetupSessionTests : IDisposable
 
     // ---- What it opens ----
 
+    /// <summary>On Windows with Windows Terminal there, the setup session opens in it, by the same rule as an item.</summary>
+    [Fact]
+    public async Task Setup_on_windows_opens_in_windows_terminal_where_it_is_there()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        DeploySkill(AgentHostKind.ClaudeCode);
+        var wt = _run.WithWindowsTerminal();
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--setup"));
+
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", _setup.RoleSkillsDirectory, "--", claude], launch.Argv.Take(8));
+        Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: true), "--add-dir", _setup.PluginsDirectory], launch.Fallback!.Argv);
+        Assert.Equal(_run.WindowsVariables, launch.Variables);
+        Assert.Equal("Windows Terminal", (string?)Answer()["terminal"]);
+    }
+
     /// <summary>
     /// Asked nothing but the preference, it opens the host the preference names at the role skills folder, the brief its one
     /// first word and the plugins folder after it, by the host's flag.

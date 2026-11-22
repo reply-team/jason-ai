@@ -15,7 +15,9 @@
  * read as a folder.
  */
 
-import { isAbsolute, posix } from 'node:path';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, posix } from 'node:path';
+import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
 
 export type LinuxPackage = { form: 'deb' } | { form: 'appimage'; file: string } | { form: 'folder' };
@@ -26,6 +28,36 @@ export function linuxPackage(env: Readonly<Record<string, string | undefined>>, 
     const file = env['APPIMAGE'];
     if (file && isAbsolute(file) && !file.includes('\0')) return { form: 'appimage', file };
     return { form: 'folder' };
+}
+
+/**
+ * electron-updater as this form uses it: the deb's turned off, since the package is the system's and the system's updater
+ * offers its new versions (Software Updater, apt), installed when the person says so, so its item says updates come through the
+ * package (`updates.ts`, `menuItemOf`); every other form's as electron-updater makes it.
+ */
+export function updaterOf<T extends { isUpdaterActive(): boolean }>(form: LinuxPackage | null, updater: T): T {
+    if (form?.form !== 'deb') return updater;
+    return new Proxy(updater, { get: (target, key, receiver) => (key === 'isUpdaterActive' ? () => false : Reflect.get(target, key, receiver)) });
+}
+
+/**
+ * An AppImage's start records where its file is, `<data>/desktop/appimage.json`, `{"file":"<full path>"}`, beside the copies
+ * of what it carries, so the jason a copy is knows the application it belongs to wherever the person keeps it: the
+ * command line's update hands over to that file, its move reuses it, and its uninstall removes it. Written whole, beside
+ * the record and renamed onto it, and only where it names another file.
+ */
+export function recordAppImage(desktop: string, file: string): void {
+    const record = join(desktop, 'appimage.json');
+    let held: unknown = null;
+    try {
+        held = JSON.parse(readFileSync(record, 'utf8'));
+    } catch {
+        held = null;
+    }
+    if (typeof held === 'object' && held !== null && (held as { file?: unknown }).file === file) return;
+    const written = `${record}.${process.pid}.tmp`;
+    writeFileSync(written, `${JSON.stringify({ file })}\n`);
+    renameSync(written, record);
 }
 
 /** What the session starts to open this application: the AppImage file itself, else the executable. */
@@ -49,20 +81,48 @@ export function mountOf(form: LinuxPackage | null, env: Readonly<Record<string, 
     return form?.form === 'appimage' && appdir && posix.isAbsolute(appdir) ? appdir : undefined;
 }
 
+/**
+ * The environment a start of this application hands the jason it carries, and so the runtime that jason starts: the
+ * person's PATH, and no folder of an AppImage's mount on any list (`withoutMount`). Every start builds what it hands a
+ * child from this, the window's, the set-up's, a window-less update's and the uninstall's alike.
+ */
+export function childEnvironment(form: LinuxPackage | null, env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+    return withoutMount(withPath(env, pathOf(env)), mountOf(form, env));
+}
+
+/** Which Linux package this application runs as, from its resources' `package-type`; null off Linux. */
+export function packageFormOf(platform: NodeJS.Platform, resourcesPath: string, env: Readonly<Record<string, string | undefined>>): LinuxPackage | null {
+    if (platform !== 'linux') return null;
+    let packageType: string | null;
+    try {
+        packageType = readFileSync(join(resourcesPath, 'package-type'), 'utf8');
+    } catch {
+        packageType = null;
+    }
+    return linuxPackage(env, packageType);
+}
+
 /** The lists the pinned app-builder-lib's AppRun puts the mount's folders on (`appImageUtil.js`, `generateAppRunScript`). */
 const mountLists = ['PATH', 'LD_LIBRARY_PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR'] as const;
+
+/** Pure: whether a folder is one the AppImage runtime mounts an AppImage in, `<temporary folder>/.mount_<name>`, or inside one. */
+export function inAppImageMount(entry: string): boolean {
+    return /(^|\/)\.mount_[^/]*(\/|$)/.test(entry);
+}
 
 /**
  * Pure: the environment every child is given, with no folder of the AppImage's mount on any list the AppRun put it on.
  * The mount lasts only while the application runs, and a runtime it starts outlasts it: the PATH a unit records, the
- * PATH the chat and the Connect cards' programs search, and the libraries a child loads are the person's own. A list
- * left empty is dropped. With no mount the environment is returned as it is.
+ * PATH the chat and the Connect cards' programs search, and the libraries a child loads are the person's own. Nor any
+ * folder of an earlier start's mount (`inAppImageMount`), which a start an earlier one's update restarted inherits on
+ * these lists: it vanished with that start, and a folder of its name in the shared temporary folder could be anyone's. A
+ * list left empty is dropped. With no mount the environment is returned as it is.
  */
 export function withoutMount<T extends Readonly<Record<string, string | undefined>>>(env: T, mount: string | undefined): T {
     if (mount === undefined) return env;
     const trimmed = (entry: string): string => (entry.endsWith('/') && entry.length > 1 ? trimmed(entry.slice(0, -1)) : entry);
     const root = trimmed(mount);
-    const under = (entry: string) => trimmed(entry) === root || entry.startsWith(`${root}/`);
+    const under = (entry: string) => trimmed(entry) === root || entry.startsWith(`${root}/`) || inAppImageMount(entry);
     const next: Record<string, string | undefined> = { ...env };
     for (const name of mountLists) {
         const value = next[name];

@@ -46,6 +46,29 @@ public class ConfinedProviderCliTests
     }
 
     /// <summary>
+    /// A chat turn of the desktop, in every mode, sets <c>JASON_CHAT_TURN</c>: under it, as under <c>JASON_CONFINED</c>, a
+    /// path starts nothing, and the check names the chat's variable.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Separators))]
+    public async Task In_a_chat_turn_a_path_starts_nothing_and_the_check_says_why(bool alternate)
+    {
+        using var dir = new TempPaths();
+        using var programs = new TestPrograms();
+        var program = programs.AddProgram("acme-sdr");
+        var value = alternate ? program.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : program;
+
+        var turn = await StatusAsync(dir, value, programs.Root, new Dictionary<string, string> { [Confinement.ChatTurnVariable] = "1" });
+
+        Assert.Empty(turn.Runner.Requested);
+        Assert.Equal(CheckState.Unknown, turn.Check.State);
+        Assert.Equal(
+            $"This environment cannot run a program named by a path, so '{value} --version' was not run: {Confinement.ChatTurnVariable} is set. "
+                + "Name a program on the search path, or run it in a terminal.",
+            turn.Check.Fact);
+    }
+
+    /// <summary>
     /// A search path entry that is not fully qualified names a folder relative to wherever the CLI runs, so it is skipped
     /// with the variable and without it: the name is not found there, nothing is run, and the check says the same both
     /// ways. The plain entry is a folder made in the current folder and named by its name alone, so the program stands
@@ -273,7 +296,7 @@ public class ConfinedProviderCliTests
 
         var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
         Assert.Contains(
-            $"With {Confinement.Variable} set, only a bare name is run, found in a fully qualified entry of PATH; a path is not run.",
+            $"With {Confinement.Variable} or {Confinement.ChatTurnVariable} set, only a bare name is run, found in a fully qualified entry of PATH; a path is not run.",
             text,
             StringComparison.Ordinal);
     }

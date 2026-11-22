@@ -27,7 +27,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { checkFailureOf, checkWords, debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, packageMovedTo, pressItem, previousRelease, requestUnderWayRefusal, restartForPackage, restartOnce, restartQuestion, runtimeRefusal, updateKeyWords, updateNotice, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -611,7 +611,7 @@ test('a start that failed says where the replaced version is only after an updat
     const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
     for (const platform of ['win32', 'darwin', 'linux'] as const) {
         assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
-        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
 });
@@ -707,6 +707,96 @@ test('the menu offers one step at a time, and in a build that is not installed n
     assert.deepEqual(menuItemOf({ step: 'idle' }, false, true), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
 });
 
+test('where the package updates itself, the item says so, and once the system installed a new version under the running window it offers the restart', () => {
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false), { label: 'Updates Come Through the Package', enabled: false, act: null });
+    // Pressable: an item that names the restart and does nothing leaves the person to find Quit and the menu themselves. It
+    // names the runtime, which it stops, as the install's item does.
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, false, '0.49.2'), { label: 'Restart Jason and Its Runtime to Finish the Update to 0.49.2', enabled: true, act: 'restart' });
+    assert.deepEqual(menuItemOf({ step: 'idle' }, true, true, '0.49.2'), { label: 'Check for Updates…', enabled: true, act: 'check' }, 'electron-updater’s own steps stand where it installs');
+});
+
+test('the deb’s restart stops the runtime the old build runs before Jason starts again, and leaves Jason as it is when that runtime does not stop', async () => {
+    // Without the stop the new start finds the old build's runtime up and uses it, and the installation stays a version
+    // behind its own package until a person restarts the runtime by hand.
+    const run = async (outcome: StopOutcome) => {
+        const calls: string[] = [];
+        await restartForPackage({
+            stopRuntime: async () => {
+                calls.push('stop');
+                return outcome;
+            },
+            relaunch: () => calls.push('relaunch'),
+            refused: (why) => calls.push(`refused: ${why}`),
+        });
+        return calls;
+    };
+    assert.deepEqual(await run({ kind: 'stopped' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'none' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'another' }), ['stop', 'relaunch']);
+    assert.deepEqual(await run({ kind: 'failed', exit: 1 }), [
+        'stop',
+        'refused: Jason was not restarted, because the runtime this application carries did not stop (jason runtime stop exited 1). Jason was left as it was. Stop the runtime with jason runtime stop. Then choose Restart Jason and Its Runtime to Finish the Update again.',
+    ]);
+    const unanswered = await run({ kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' });
+    assert.equal(unanswered.length, 2);
+    assert.match(unanswered[1]!, /^refused: Jason was not restarted, because .+\. Jason was left as it was\. .+ Then choose Restart Jason and Its Runtime to Finish the Update again\.$/);
+});
+
+test('the deb has moved when its version.json names another version than the window runs, and nothing else has', () => {
+    // The one comparison the window's watch makes once a minute: wrong, the notice and the item never come, or come for
+    // the version already running.
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.2'), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', '0.49.1'), null, 'the version running');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.1', null), null, 'a version.json that could not be read');
+    assert.equal(packageMovedTo({ form: 'deb' }, null, '0.49.2'), null, 'a window that knows no version of its own');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.1', '0.49.2'), null, 'an AppImage updates itself');
+    assert.equal(packageMovedTo(null, '0.49.1', '0.49.2'), null, 'off Linux');
+});
+
+test('the deb has moved too when the system updated it while no window was open and the runtime this application started still runs the older build', () => {
+    // The start that finds it offers the same restart as a window open at the update: without it the window says nothing
+    // the deb can do, and the runtime runs the older build until a person restarts it by hand.
+    const older = { version: '0.49.1', ours: true };
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', older), '0.49.2');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2-rc.1', ours: true }), '0.49.2', 'a candidate before its release');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.3', older), '0.49.3', 'the package moved again under the window: its version');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.1', ours: false }), null, "another installation's runtime, which a restart of this one does not bring up");
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.2+14315ba2', ours: true }), null, 'the same build');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: '0.49.3', ours: true }), null, 'a newer runtime, which a restart from this build would start older');
+    assert.equal(packageMovedTo({ form: 'deb' }, '0.49.2', '0.49.2', { version: null, ours: true }), null, 'no runtime answered');
+    assert.equal(packageMovedTo({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '0.49.2', '0.49.2', older), null, 'an AppImage updates itself');
+});
+
+test('the deb’s restart runs once at a time: a second press while one is under way does nothing, and a refused one lets the next go', async () => {
+    // A click on the notice and then the item, or two clicks, would stop the runtime twice and relaunch twice, the second
+    // stop racing the first into a refusal while Jason in fact restarts.
+    const calls: string[] = [];
+    let outcome: StopOutcome = { kind: 'failed', exit: 1 };
+    let release: () => void = () => undefined;
+    const press = restartOnce({
+        stopRuntime: () => new Promise<StopOutcome>((resolve) => {
+            calls.push('stop');
+            release = () => resolve(outcome);
+        }),
+        relaunch: () => calls.push('relaunch'),
+        refused: () => calls.push('refused'),
+    });
+    const first = press();
+    await press();
+    release();
+    await first;
+    assert.deepEqual(calls, ['stop', 'refused']);
+    outcome = { kind: 'stopped' };
+    const again = press();
+    release();
+    await again;
+    await press();
+    assert.deepEqual(calls, ['stop', 'refused', 'stop', 'relaunch'], 'refused, the next press goes; relaunched, none does');
+    // The key's question names what the restart ends, as the install's does.
+    assert.equal(restartQuestion('0.49.2').message, 'Restart Jason and its runtime to finish the update to Jason 0.49.2?');
+    assert.equal(restartQuestion('0.49.2').cancelId, 1);
+});
+
 test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {
     const asked: ReturnType<typeof installQuestion>[] = [];
     const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
@@ -718,13 +808,17 @@ test('the item’s key asks before it installs, which stops the runtime, and ins
     const { updates, timers } = updaterOn(scratch(t), updater);
     updates.start();
     await timers.fire();
-    // Checking and downloading act at once, by the key or by a click.
+    // Checking and downloading act at once, by the key or by a click; the download's end asks the install's question
+    // once, and Not Now leaves the download waiting under the item.
     await pressItem(updates, 'check', true, answer(0));
-    await pressItem(updates, 'download', true, answer(0));
+    assert.equal(asked.length, 0, 'a check asks nothing');
+    await pressItem(updates, 'download', true, answer(1));
     assert.deepEqual(updater.calls, ['check', 'check', 'download']);
     assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    assert.equal(asked.length, 1, 'the download’s end asks once');
+    asked.length = 0;
     await pressItem(updates, null, true, answer(0));
-    assert.equal(asked.length, 0, 'nothing but the install asks');
+    assert.equal(asked.length, 0, 'nothing but the install and the download’s end asks');
     // The key at the install asks, naming the version and what installing it stops; its default does nothing.
     await pressItem(updates, 'install', true, answer(1));
     const [question] = asked;
@@ -751,9 +845,181 @@ test('the item’s key asks before it installs, which stops the runtime, and ins
     other.updates.start();
     await other.timers.fire();
     await pressItem(other.updates, 'download', false, answer(1));
+    assert.equal(asked.length, 3, 'the download’s end asks, clicked as well');
     await pressItem(other.updates, 'install', false, answer(1));
-    assert.equal(asked.length, 2, 'a click asks nothing');
+    assert.equal(asked.length, 3, 'a click on the install asks nothing');
     assert.equal(installs(clicked), 1);
+});
+
+// The person asked for the download, so its end asks once whether to install now: the same question the key asks, whose
+// default is Not Now. Not Now leaves the download waiting under Restart Jason and Its Runtime to Install, as it waited
+// before; nothing installs at quit. A look the desktop makes by itself downloads nothing and asks nothing.
+test('the end of a download the person asked for asks once to install now; Not Now leaves the item, yes installs', async (t) => {
+    const asked: ReturnType<typeof installQuestion>[] = [];
+    const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return button;
+    };
+    const installs = (updater: { calls: string[] }) => updater.calls.filter((call) => call === 'quitAndInstall').length;
+    const later = fakeUpdater({ latest: '0.35.0' });
+    const one = updaterOn(scratch(t), later);
+    one.updates.start();
+    await one.timers.fire();
+    assert.deepEqual(later.calls, ['check'], 'the cadence downloads nothing');
+    assert.equal(asked.length, 0, 'the cadence asks nothing');
+    await pressItem(one.updates, 'download', false, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0')], 'asked once, the install’s own question');
+    assert.equal(installs(later), 0, 'Not Now installs nothing');
+    assert.deepEqual(one.updates.current, { step: 'downloaded', version: '0.35.0' });
+    assert.equal(menuItemOf(one.updates.current, true, true).label, 'Restart Jason and Its Runtime to Install 0.35.0');
+    assert.equal(later.set.some(([name, value]) => name === 'autoInstallOnAppQuit' && value === true), false, 'nothing installs at quit');
+    // The item's own press is the only way on: a click installs, asking nothing more.
+    await pressItem(one.updates, 'install', false, answer(1));
+    assert.equal(asked.length, 1);
+    assert.equal(installs(later), 1);
+
+    // Yes installs at once.
+    asked.length = 0;
+    const now = fakeUpdater({ latest: '0.35.0' });
+    const two = updaterOn(scratch(t), now);
+    two.updates.start();
+    await two.timers.fire();
+    await pressItem(two.updates, 'download', false, answer(0));
+    assert.equal(asked.length, 1);
+    assert.equal(installs(now), 1);
+
+    // A download that fails goes back to the offer and asks nothing.
+    asked.length = 0;
+    let failing = false;
+    const broken = fakeUpdater({ latest: '0.35.0', fails: () => failing });
+    const three = updaterOn(scratch(t), broken);
+    three.updates.start();
+    await three.timers.fire();
+    failing = true;
+    await pressItem(three.updates, 'download', false, answer(0));
+    assert.deepEqual(three.updates.current, { step: 'offered', version: '0.35.0' });
+    assert.equal(asked.length, 0);
+    assert.equal(installs(broken), 0);
+});
+
+// A Download pressed after the step moved on, a terminal's request having downloaded the update meanwhile, makes no
+// download of its own and asks nothing.
+test('a Download pressed after the update was already downloaded asks nothing and installs nothing', async (t) => {
+    const asked: unknown[] = [];
+    const ask = async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return 0;
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    // Downloaded by another word, a terminal's request say, while the menu still showed Download.
+    await updates.download();
+    assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    await pressItem(updates, 'download', false, ask);
+    await pressItem(updates, 'download', true, ask);
+    assert.equal(asked.length, 0);
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+});
+
+// While the install question is open, the key pressed again raises no second box, at the download's end and at the
+// install alike; once it is answered, the next press asks again.
+test('one install question at a time: a press while the box is open asks nothing', async (t) => {
+    let opened = 0;
+    let answer: (button: number) => void = () => undefined;
+    const ask = () => {
+        opened += 1;
+        return new Promise<number>((resolve) => {
+            answer = resolve;
+        });
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    const download = pressItem(updates, 'download', true, ask);
+    for (let turn = 0; turn < 4; turn++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(opened, 1, 'the download’s end asks');
+    await pressItem(updates, 'install', true, ask);
+    assert.equal(opened, 1, 'the key again while the box is open: no second box');
+    answer(1);
+    await download;
+    const install = pressItem(updates, 'install', true, ask);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(opened, 2, 'answered, the next press asks again');
+    await pressItem(updates, 'install', true, ask);
+    assert.equal(opened, 2);
+    answer(1);
+    await install;
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+});
+
+// After Not Now on a download the key brought, the key on the install item asks the question again: Not Now is for
+// now only, and the key, which shows no label, always asks before it installs.
+test('after Not Now on a download the key brought, the key asks again at the install, and installs on yes', async (t) => {
+    const asked: ReturnType<typeof installQuestion>[] = [];
+    const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return button;
+    };
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates } = updaterOn(scratch(t), updater);
+    await updates.check();
+    await pressItem(updates, 'download', true, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0')]);
+    await pressItem(updates, 'install', true, answer(1));
+    assert.deepEqual(asked, [installQuestion('0.35.0'), installQuestion('0.35.0')], 'asked again');
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 0);
+    await pressItem(updates, 'install', true, answer(0));
+    assert.equal(asked.length, 3);
+    assert.equal(updater.calls.filter((call) => call === 'quitAndInstall').length, 1);
+});
+
+// The mark's life: a version the desktop knows of and has not installed, from the look that found it until the install,
+// kept through a later look while it is still offered; none once a look finds nothing newer, and none for a version the
+// person went back from.
+test('the version known and not installed lasts from the look that found it to the install', async (t) => {
+    const updater = fakeUpdater();
+    const { updates, timers } = updaterOn(scratch(t), updater);
+    updates.start();
+    assert.equal(updates.known, null);
+    await timers.fire();
+    assert.equal(updates.known, null, 'nothing newer, nothing known');
+    updater.latest = '0.35.0';
+    await timers.fire();
+    assert.equal(updates.known, '0.35.0', 'found by a look on the cadence');
+    // A look while it is offered keeps it while it runs.
+    const looking = updates.check();
+    assert.deepEqual(updates.current, { step: 'checking' });
+    assert.equal(updates.known, '0.35.0', 'kept while a look runs');
+    await looking;
+    await updates.download();
+    assert.equal(updates.known, '0.35.0', 'downloaded');
+    // A look that finds nothing newer clears it.
+    const gone = fakeUpdater({ latest: '0.35.0' });
+    const other = updaterOn(scratch(t), gone);
+    await other.updates.check();
+    assert.equal(other.updates.known, '0.35.0');
+    gone.latest = '0.34.0';
+    await other.updates.check();
+    assert.equal(other.updates.known, null);
+    // A version the person went back from is not known as one to install.
+    const back = scratch(t);
+    writeRollback(back.rollback, { rejected: ['0.35.0'] });
+    const held = updaterOn(back, fakeUpdater({ latest: '0.35.0' }));
+    await held.updates.check(true);
+    assert.equal(held.updates.known, null);
+    // An install the installer refused keeps it known: the item offers the install again.
+    const refusing = updaterOn(scratch(t), fakeUpdater({ latest: '0.35.0', installFails: true }));
+    await refusing.updates.check();
+    await refusing.updates.download();
+    await refusing.updates.install();
+    assert.equal(refusing.updates.known, '0.35.0');
+    // A terminal's request for an older version than the one running is downloaded, and not marked.
+    const older = updaterOn(scratch(t), fakeUpdater({ latest: '0.33.0' }));
+    const outcome = await older.updates.take({ to: '0.33.0', feed: null }, { install: false }, () => undefined);
+    assert.equal(outcome.state, 'refused');
+    assert.deepEqual(older.updates.current, { step: 'downloaded', version: '0.33.0' });
+    assert.equal(older.updates.known, null);
 });
 
 test('the update item’s key is named only where the item can act', () => {
@@ -860,15 +1126,25 @@ test('on Linux the starting page names the kept AppImage file, or the previous r
             ruled,
         ].join(' '),
     );
+    // A release before 0.49.1 carries no key for Jason's apt source, which its install keeps: the source goes first, or every
+    // apt update reports it. Catches a way back that leaves the system's updates failing.
     assert.equal(
-        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', 'linux'),
+        keptNotice('The runtime did not start.', { release: previousRelease('0.34.0'), file: debFile, version: '0.34.0' }, '/opt/Jason', 'linux'),
         [
             'The runtime did not start.',
             'If this version is the cause, the version of Jason it was updated from is published at https://get.jasonharness.ai/releases/tag/v0.34.0.',
-            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            'To go back, quit Jason, download jason-desktop-linux-x64.deb from that page, and in the folder it is in run sudo rm /etc/apt/sources.list.d/jason-desktop.sources, since that release carries no key for Jason\'s apt source, then sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
             ruled,
         ].join(' '),
     );
+    for (const version of ['0.49.1', '0.49.2-rc.1', '0.50.0']) {
+        assert.ok(
+            keptNotice('The runtime did not start.', { release: previousRelease(version), file: debFile, version }, '/opt/Jason', 'linux').includes(
+                'and in the folder it is in run sudo apt install ./jason-desktop-linux-x64.deb: nothing does it for you.',
+            ),
+            version,
+        );
+    }
 });
 
 test('the updater’s log lines, read back, carry versions, steps and counts, never an error’s text or a URL', async (t) => {

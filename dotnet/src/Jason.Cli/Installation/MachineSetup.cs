@@ -87,6 +87,14 @@ public sealed record InstallRetired(string Executable, string? Aside, IReadOnlyL
 /// <param name="Done">What this run did, one sentence each.</param>
 /// <param name="Left">What it left, and why, one sentence each.</param>
 /// <param name="Problems">What it set out to do and did not; the run exits 1 when there is any.</param>
+/// <param name="Logon">
+/// What became of the runtime's start at logon (<see cref="MachineSetup.LogonStates"/>): <c>registered</c> by this run,
+/// <c>already</c> registered naming this jason, <c>off</c> where the person turned it off, <c>left</c> where a registration
+/// names another program or data directory, or where the start was turned on once already and is gone now,
+/// <c>no_installation</c> where the data directory holds none yet, <c>refused</c> where the system would not register it,
+/// and <c>unsupported</c> where this environment names no registrar. Never a problem: a start at logon that
+/// could not be made is said in <paramref name="Left"/> and never fails the run.
+/// </param>
 public sealed record InstallReport(
     string Version,
     string Executable,
@@ -97,7 +105,8 @@ public sealed record InstallReport(
     string Runtime,
     IReadOnlyList<string> Done,
     IReadOnlyList<string> Left,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    string? Logon = null)
 {
     /// <summary>Whether everything it set out to do is done.</summary>
     public bool Completed => Problems.Count == 0;
@@ -121,6 +130,16 @@ public sealed record InstallReport(
 /// <b>Without <c>--roles</c> it writes nothing under the data directory</b>, so a person's first start of the application
 /// still finds a data directory that holds nothing and opens on the Demo. Only retiring an install that already has data — a
 /// runtime to stop, a logon registration to make again — touches it, and that data was there before.
+/// </para>
+/// <para>
+/// <b>It registers the runtime's start at logon</b>, the one place that does by default: where the data directory already
+/// holds an installation, or with <c>--roles</c>, which writes there anyway. Jason Desktop, which runs it with no flags at
+/// its first start, runs it once more right after it brings Live up on a new installation; the report's <c>logon</c> says
+/// <c>no_installation</c> until then. A start the person turned off with <c>jason runtime autostart disable</c> is left off.
+/// An installation set up before this default is turned on once, by the first set-up of a version that has it, and
+/// <c>autostart/default.json</c> records that, so no later set-up turns it on again.
+/// It starts nothing now: on Windows and Linux the next logon starts the runtime, and on macOS the LaunchAgent is written
+/// and not loaded, so its <c>RunAtLoad</c> starts nothing before the next login either.
 /// </para>
 /// </remarks>
 public static class MachineSetup
@@ -158,13 +177,22 @@ public static class MachineSetup
         InstallRetired? retired = null;
         IReadOnlyList<InstallSkillsOutcome> skills = [];
         InstallSkillsOutcome? roles = null;
+        string? logon = null;
+
+        // Read before anything of this run can write there: whether the data directory held an installation.
+        var hadInstallation = File.Exists(env.Paths.DatabaseFile);
 
         // Each step in its own guard, so a failure of any kind no step expected ends in the one document like any other
         // problem, with every step before it reported.
         await run.Step("Looking for a command-line install", async () =>
         {
             old = run.FindCommandLineInstall();
-            if (old is null)
+            if (old is null && run.FormulaRuntime() is { } keg)
+            {
+                // A runtime started from Homebrew's older formula is stopped as a retired install's is, its keg untouched.
+                (runtime, _) = await run.StopOldRuntimeAsync(keg, cancellationToken).ConfigureAwait(false);
+            }
+            else if (old is null)
             {
                 runtime = run.RuntimeOutside();
             }
@@ -179,13 +207,20 @@ public static class MachineSetup
                 // Held from the moment it is found until the stop has given its answer: a stop that throws past this line
                 // leaves nothing of the install to be written over, retired or registered again.
                 holding = true;
-                (runtime, holding) = await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
+                (runtime, holding) = run.FormulaRuntime() is { } beside
+                    ? await run.StopOldRuntimeAsync(beside, cancellationToken).ConfigureAwait(false)
+                    : await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
 
         await run.Step("Placing the terminal command", () =>
         {
-            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand(old, holding) : run.MacCommand(old, holding);
+            command = places.Platform switch
+            {
+                SetupSystem.Windows => run.WindowsCommand(old, holding),
+                SetupSystem.Linux when SetupPlaces.CarriedByDeb(carried.Executable) => run.PackageCommand(),
+                _ => run.MacCommand(old, holding),
+            };
             return Task.CompletedTask;
         }).ConfigureAwait(false);
 
@@ -199,6 +234,36 @@ public static class MachineSetup
             }).ConfigureAwait(false);
         }
 
+        // A logon start registered in Homebrew's formula's time names the formula's link, or its keg: while the formula is
+        // linked it would start that older Jason at every logon, so it moves to this jason, as a retired install's does.
+        if (places.Platform is not SetupSystem.Windows)
+        {
+            await run.Step("Taking the logon start over from Homebrew's formula", () =>
+            {
+                run.RepointFormula();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        // An AppImage's copy is per version: a logon start registered from another version's copy moves to this one, as the
+        // application's own start moves it, since a terminal's update finishes here before the application starts again.
+        if (places.Platform is SetupSystem.Linux && !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            await run.Step("Taking the logon start over from another version's copy", () =>
+            {
+                run.RepointCopy();
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        // The runtime's start at logon, once a retired install's registration has been moved: registered where it is wanted
+        // and nothing stands against it, and never a problem.
+        await run.Step("Registering the start at logon", () =>
+        {
+            logon = run.StartAtLogon(hadInstallation);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
         // Read back once more, as a new terminal reads its PATH, now that what this run retires is gone: the entry or the
         // wrapper being there is not yet that terminal finding this jason, where another file comes first.
         if (command is { Placed: true } placed)
@@ -210,6 +275,12 @@ public static class MachineSetup
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
         }
+
+        await run.Step("Looking for Homebrew's formula", () =>
+        {
+            run.FormulaBeside(command?.Finds);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
 
         await run.Step("Deploying the harness skills", async () => skills = await run.HarnessSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         if (options.Roles)
@@ -224,7 +295,19 @@ public static class MachineSetup
             CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
         }
 
-        return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
+        return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems, logon);
+    }
+
+    /// <summary>The words the <c>logon</c> member takes.</summary>
+    public static class LogonStates
+    {
+        public const string Registered = "registered";
+        public const string Already = "already";
+        public const string Off = "off";
+        public const string Left = "left";
+        public const string NoInstallation = "no_installation";
+        public const string Refused = "refused";
+        public const string Unsupported = "unsupported";
     }
 
     /// <summary>The words the <c>runtime</c> member takes.</summary>
@@ -255,6 +338,9 @@ public static class MachineSetup
         /// wrapper on macOS, with the profile lines in place or the folder on a terminal's PATH already.
         /// </summary>
         public bool CommandPlaced { get; private set; }
+
+        /// <summary>Whether the terminal command is the wrapper this run wrote at <c>~/.local/bin/jason</c>: on macOS, and from an AppImage's copy.</summary>
+        private bool WroteWrapper { get; set; }
 
         /// <summary>
         /// One step, any failure it did not expect said as a problem rather than thrown past the report: an argument, a JSON
@@ -316,6 +402,48 @@ public static class MachineSetup
 
         /// <summary>The command-line install to retire, by the rule <see cref="CommandLineInstalls.Find"/> keeps for install and uninstall alike.</summary>
         public string? FindCommandLineInstall() => CommandLineInstalls.Find(env, places, options.Retire, Problems);
+
+        /// <summary>Homebrew's older formula, linked beside this jason, as this run first read it.</summary>
+        private HomebrewFormula? Formula { get; set; }
+
+        /// <summary>
+        /// The image a runtime on this data directory runs from, where it is Homebrew's older formula linked beside this jason
+        /// (its keg, or its link): stopped by the rule a retired install's runtime is, its keg's files never touched.
+        /// </summary>
+        public string? FormulaRuntime()
+        {
+            Formula = HomebrewFormula.Linked(env);
+            if (Formula is not { } formula
+                || DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is not { InstalledImage: { } image })
+            {
+                return null;
+            }
+
+            var full = Path.GetFullPath(image);
+            return string.Equals(full, Path.GetFullPath(formula.Owner.Executable), PathCase) || string.Equals(full, Path.GetFullPath(formula.Link), PathCase)
+                ? full
+                : null;
+        }
+
+        /// <summary>
+        /// Homebrew's older formula linked beside this jason: a problem naming it and what takes it off, unless a new terminal
+        /// finds it first, which <see cref="Finds"/> has said already. It is left as it is.
+        /// </summary>
+        public void FormulaBeside(string? finds)
+        {
+            if ((Formula ?? HomebrewFormula.Linked(env)) is not { } formula)
+            {
+                return;
+            }
+
+            var found = finds is null ? null : new FileInfo(finds).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? finds;
+            if (found is not null && string.Equals(Path.GetFullPath(found), Path.GetFullPath(formula.Owner.Executable), PathCase))
+            {
+                return;
+            }
+
+            Problems.Add(formula.Problem());
+        }
 
         /// <summary>What runs on this data directory, where nothing is retired: said, and left as it is.</summary>
         public string RuntimeOutside() =>
@@ -501,7 +629,8 @@ public static class MachineSetup
         // --- the terminal command ----------------------------------------------------------------------------
 
         /// <summary>
-        /// macOS: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape, then, where the PATH a terminal has
+        /// macOS, and an AppImage's copy on Linux: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape,
+        /// then, where the PATH a terminal has
         /// does not name <c>~/.local/bin</c> (<see cref="TerminalPath"/>, judged by <c>install.sh</c>'s own test), its two lines
         /// in each profile it writes them into, where that profile does not hold the line already. The wrapper goes over an
         /// older wrapper of the application's, an older command-line install's executable, or a link to an application's jason;
@@ -615,6 +744,7 @@ public static class MachineSetup
             }
 
             CommandPlaced = wrapperPlaced && linesPlaced;
+            WroteWrapper = true;
 
             // 0.48's application placed a jason-desktop wrapper beside a command-line jason; taken back as the Windows command
             // files are, once this jason answers, and only where it is the application's shape.
@@ -635,6 +765,54 @@ public static class MachineSetup
             }
 
             return new InstallCommandOutcome(target, CommandPlaced, target, changed, added, takenBack);
+        }
+
+        /// <summary>
+        /// Linux, the deb: the terminal command is the package's own, <see cref="SetupPlaces.SystemCommand"/>
+        /// (<c>/usr/bin/jason</c>), a link to the jason it carries for every account, so nothing is written here and no
+        /// profile line: it is read back as running this jason. Where it does, what the application wrote into
+        /// <c>~/.local/bin</c> before 0.49.1, the wrapper at <c>jason</c> or at <c>jason-desktop</c>, is taken back, only
+        /// where it is the application's shape: Ubuntu's profile puts that folder first on the PATH, so the old wrapper
+        /// would answer before the package's command.
+        /// </summary>
+        public InstallCommandOutcome PackageCommand()
+        {
+            var system = places.SystemCommand;
+            CommandPlaced = NewTerminal.Runs(system, carried.Executable);
+            if (CommandPlaced)
+            {
+                Done.Add($"{system}, the package's, runs {carried.Executable}.");
+            }
+            else
+            {
+                Problems.Add($"{system}, which Jason Desktop's package links to the jason it carries, is not there or runs another file, so a new terminal may not find this jason. Installing the package again puts it back: sudo apt install --reinstall jason-desktop.");
+            }
+
+            var takenBack = new List<string>();
+            foreach (var file in CommandPlaced ? new[] { Path.Combine(places.LocalBin, "jason"), Path.Combine(places.LocalBin, "jason-desktop") } : [])
+            {
+                if (!IsWrapper(file))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    places.Delete(file);
+                    takenBack.Add(file);
+                }
+                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                {
+                    Problems.Add($"{file}, which Jason Desktop placed, could not be removed: {refused.Message}");
+                }
+            }
+
+            if (takenBack.Count > 0)
+            {
+                Done.Add($"Took back the command files Jason Desktop placed before its package put jason in the terminal: {string.Join(", ", takenBack)}.");
+            }
+
+            return new InstallCommandOutcome(system, CommandPlaced, system, false, [], takenBack);
         }
 
         /// <summary>
@@ -664,7 +842,9 @@ public static class MachineSetup
             try
             {
                 changed = places.AccountPathValue.Append(Bundle);
-                Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} was on this account's Path already.");
+                // Never "already": the installer's own run placed it moments before the install line's, and an earlier
+                // install may have; nothing on the Path says which, so the line says only that it is there.
+                Done.Add(changed ? $"Added {Bundle} to this account's Path." : $"{Bundle} is on this account's Path.");
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
@@ -721,7 +901,7 @@ public static class MachineSetup
         {
             var finds = Windows
                 ? NewTerminal.FindsOnWindows(places)
-                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: !PathEntry.OnPath(TerminalPath(), places.LocalBin));
+                : NewTerminal.FindsOnMac(TerminalPath(), places.LocalBin, inFront: WroteWrapper && !PathEntry.OnPath(TerminalPath(), places.LocalBin));
             if (NewTerminal.Runs(finds, carried.Executable))
             {
                 return (finds, true);
@@ -744,7 +924,7 @@ public static class MachineSetup
         public InstallRetired Retire(string old)
         {
             var reregistered = Reregister(old);
-            var replacedByWrapper = !Windows && string.Equals(old, Path.GetFullPath(Path.Combine(places.LocalBin, "jason")), StringComparison.Ordinal);
+            var replacedByWrapper = WroteWrapper && string.Equals(old, Path.GetFullPath(Path.Combine(places.LocalBin, "jason")), StringComparison.Ordinal);
             var (aside, removed) = new CommandLineRemoval(places, Left, Problems).Remove(old, replacedByWrapper);
             Done.Add(removed.Count > 0 || replacedByWrapper
                 ? $"Retired the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}."
@@ -753,10 +933,119 @@ public static class MachineSetup
         }
 
         /// <summary>
+        /// Linux, an AppImage's copy: the logon registration, where it names another version's copy in the same copies'
+        /// folder, registered again naming this jason, by the rule <see cref="Reregister"/> keeps.
+        /// </summary>
+        public void RepointCopy()
+        {
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            var bundles = Update.AppImageCopy.BundlesOf(carried.Executable);
+            if (!string.Equals(named, carried.Executable, StringComparison.Ordinal)
+                && string.Equals(Path.GetDirectoryName(Path.GetDirectoryName(named)), bundles, StringComparison.Ordinal))
+            {
+                Reregister(named);
+            }
+        }
+
+        /// <summary>
+        /// macOS and Linux, Homebrew's older formula linked beside this jason: the logon registration, where it names a
+        /// jason of the formula's under its prefix (<see cref="FormulasJason"/>), registered again naming this jason, by the
+        /// rule <see cref="Reregister"/> keeps, in one line that names the formula's version. One naming anything else is left;
+        /// once the formula is gone nothing here moves it, since the link it names is then the cask's, which leads to this
+        /// jason.
+        /// </summary>
+        public void RepointFormula()
+        {
+            if ((Formula ?? HomebrewFormula.Linked(env)) is not { } formula)
+            {
+                return;
+            }
+
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return;
+            }
+
+            AutostartState state;
+            try
+            {
+                state = registrar.Read();
+            }
+            catch (AutostartException)
+            {
+                return;
+            }
+
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return;
+            }
+
+            var named = Path.GetFullPath(state.Run[0]);
+            if (FormulasJason(formula, named) is { } version)
+            {
+                Reregister(named, $": it named Homebrew's formula jason {version} at {named}, which would have started that older Jason at every logon");
+            }
+        }
+
+        /// <summary>
+        /// The version of the formula's jason <paramref name="named"/> is, under the formula's prefix: its link
+        /// <c>&lt;prefix&gt;/bin/jason</c>, Homebrew's stable path <c>&lt;prefix&gt;/opt/jason/bin/jason</c>, or a keg's
+        /// <c>&lt;prefix&gt;/Cellar/jason/&lt;v&gt;/bin/jason</c>, the linked one or one an upgrade with cleanup off left;
+        /// null for anything else.
+        /// </summary>
+        private string? FormulasJason(HomebrewFormula formula, string named)
+        {
+            var prefix = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(formula.Link)));
+            if (prefix is null)
+            {
+                return null;
+            }
+
+            if (string.Equals(named, Path.GetFullPath(formula.Link), PathCase)
+                || string.Equals(named, Path.GetFullPath(formula.Owner.Executable), PathCase)
+                || string.Equals(named, Path.Combine(prefix, "opt", "jason", "bin", "jason"), PathCase))
+            {
+                return formula.Version;
+            }
+
+            var bin = Path.GetDirectoryName(named);
+            var keg = bin is null ? null : Path.GetDirectoryName(bin);
+            return string.Equals(Path.GetFileName(named), "jason", PathCase)
+                && bin is not null && string.Equals(Path.GetFileName(bin), "bin", PathCase)
+                && keg is not null && string.Equals(Path.GetDirectoryName(keg), Path.Combine(prefix, "Cellar", "jason"), PathCase)
+                ? Path.GetFileName(keg)
+                : null;
+        }
+
+        /// <summary>
         /// The logon registration, where it names the retired executable and this data directory, registered again naming
         /// this jason, the way <c>jason runtime autostart enable</c> run from it registers.
         /// </summary>
-        private bool Reregister(string old)
+        /// <param name="why">What the one line it says adds after the jason it names now, where the move has a reason to give.</param>
+        private bool Reregister(string old, string why = "")
         {
             var registrar = RuntimeAutostartCommands.Registrar(env);
             if (registrar.Platform is AutostartPlatform.Unsupported)
@@ -786,12 +1075,12 @@ public static class MachineSetup
                     // The agent is RunAtLoad: loading it now would start a runtime, which this never does. The file is moved,
                     // and launchd loads it at the next logon; nothing is unloaded either, since the runtime is already stopped.
                     registrar.Apply(registration with { Apply = [], Remove = [] });
-                    Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}; it takes effect at the next logon, and nothing was started.");
+                    Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}{why}; it takes effect at the next logon, and nothing was started.");
                     return true;
                 }
 
                 registrar.Apply(registration);
-                Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}.");
+                Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}{why}.");
                 return true;
             }
             catch (AutostartException refused)
@@ -799,6 +1088,178 @@ public static class MachineSetup
                 Problems.Add($"The logon registration names {old} and could not be registered again: {refused.Message}");
                 return false;
             }
+        }
+
+        // --- the start at logon -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The runtime's start at logon, registered naming this jason and this data directory where the installation is one
+        /// set-up registers for (<see cref="RegistersFor"/>), nothing is registered and the person has not turned it off;
+        /// everything else is left and said. A system that refuses is said too, and is never a problem.
+        /// </summary>
+        public string StartAtLogon(bool hadInstallation)
+        {
+            var registrar = RuntimeAutostartCommands.Registrar(env);
+            if (registrar.Platform is AutostartPlatform.Unsupported)
+            {
+                return LogonStates.Unsupported;
+            }
+
+            // A new installation's first start keeps its Demo: nothing is written in a data directory that holds none.
+            if (!options.Roles && !hadInstallation)
+            {
+                return LogonStates.NoInstallation;
+            }
+
+            if (LayoutStamp.Refusal(env.Paths, SkillsSource.BuildVersion(env)) is { } layout)
+            {
+                Left.Add($"The start at logon was not registered: {layout.Message}");
+                return LogonStates.Left;
+            }
+
+            try
+            {
+                if (AutostartOff.Stands(env.Paths, registrar))
+                {
+                    Left.Add("You turned the start at logon off with `jason runtime autostart disable`, so it was left off; `jason runtime autostart enable` turns it on.");
+                    return LogonStates.Off;
+                }
+
+                var state = registrar.Read();
+                if (state.Registered)
+                {
+                    if (!Registers(state))
+                    {
+                        return LeftStanding(state);
+                    }
+
+                    RecordTurnedOn();
+                    return LogonStates.Already;
+                }
+
+                // Turned on once per installation, whatever else says it is new: one the default turned on already, and
+                // that is not registered now, was taken off by other means and is left so, a desktop record that still
+                // says it found no installation included.
+                if (File.Exists(env.Paths.AutostartDefaultFile))
+                {
+                    Left.Add("The start at logon was turned on once already and is not registered now, so it was left off; `jason runtime autostart enable` registers it.");
+                    return LogonStates.Left;
+                }
+
+                Register(registrar, RegistersFor(hadInstallation));
+                RecordTurnedOn();
+                return LogonStates.Registered;
+            }
+            catch (AutostartException refused)
+            {
+                Left.Add($"The start at logon could not be registered: {Sentence(refused.Message)} `jason runtime autostart enable` tries again.");
+                return LogonStates.Refused;
+            }
+        }
+
+        /// <summary>
+        /// The record that the default has turned the start at logon on for this installation, so that no later set-up turns
+        /// it on again (<c>autostart/default.json</c>). One that cannot be written is said; the start stands either way.
+        /// </summary>
+        private void RecordTurnedOn()
+        {
+            if (File.Exists(env.Paths.AutostartDefaultFile))
+            {
+                return;
+            }
+
+            try
+            {
+                AutostartOff.WriteDefault(env.Paths, DateTimeOffset.UtcNow, carried.Version);
+            }
+            catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
+            {
+                Left.Add($"The record that the start at logon was turned on once could not be written at {env.Paths.AutostartDefaultFile} ({unwritten.GetType().Name}), so a later set-up may register it again.");
+            }
+        }
+
+        /// <summary>
+        /// Whether the installation is a new one, which set-up registers for: with <c>--roles</c> a data directory that held
+        /// no installation before this run, or one whose last set-up by Jason Desktop found none there
+        /// (<c>desktop/machine-setup.json</c> saying <c>no_installation</c>), which the desktop runs again once it has
+        /// brought Live up on it.
+        /// </summary>
+        private bool RegistersFor(bool hadInstallation) => (options.Roles && !hadInstallation) || DesktopFoundNone();
+
+        /// <summary>Whether Jason Desktop's record of its last set-up says it found no installation in this data directory.</summary>
+        private bool DesktopFoundNone()
+        {
+            var record = DesktopRemoval.SetupRecordUnder(env.Paths.Root);
+            try
+            {
+                if (!File.Exists(record) || new FileInfo(record).Length > 1024 * 1024)
+                {
+                    return false;
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(record));
+                return document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("report", out var report)
+                    && report.ValueKind == JsonValueKind.Object
+                    && report.TryGetProperty("logon", out var logon)
+                    && logon.ValueKind == JsonValueKind.String
+                    && logon.GetString() == LogonStates.NoInstallation;
+            }
+            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether a standing registration is this one: it names this jason, and this data directory or none, which an
+        /// earlier version registered for the default one.
+        /// </summary>
+        private bool Registers(AutostartState state)
+        {
+            if (state.Run.Count == 0 || !string.Equals(Path.GetFullPath(state.Run[0]), carried.Executable, PathCase))
+            {
+                return false;
+            }
+
+            var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run);
+            return named is null || string.Equals(Path.GetFullPath(named), env.Paths.Root, PathCase);
+        }
+
+        private string LeftStanding(AutostartState state)
+        {
+            var named = state.Run.Count == 0 ? "another program" : state.Run[0];
+            var data = RuntimeAutostartCommands.DataDirectoryIn(state.Run) is { } directory ? $" on {directory}" : string.Empty;
+            Left.Add($"The start at logon is registered, starting {named}{data}, so it was left as it is; `jason runtime autostart enable` from this jason registers this one instead.");
+            return LogonStates.Left;
+        }
+
+        /// <summary>
+        /// The registration <c>jason runtime autostart enable</c> run from this jason makes, carrying the terminal's search path
+        /// this run was told, and starting nothing: on macOS the LaunchAgent is written and not loaded, since loading it would
+        /// start a runtime (<c>RunAtLoad</c>), and this routine starts no process that outlives it.
+        /// </summary>
+        /// <summary>A tool's words as one sentence: a full stop added where they end without one of their own.</summary>
+        private static string Sentence(string said)
+        {
+            var trimmed = said.TrimEnd();
+            return trimmed.Length == 0 || trimmed[^1] is '.' or '!' or '?' ? trimmed : trimmed + ".";
+        }
+
+        private void Register(IAutostartRegistrar registrar, bool newInstallation)
+        {
+            var once = newInstallation ? string.Empty : " It was turned on once, for an installation set up before the runtime started at logon by default; `jason runtime autostart disable` turns it off for good.";
+            var told = string.IsNullOrEmpty(options.TerminalPath) ? env.SearchPath : options.TerminalPath;
+            var registration = RuntimeAutostartCommands.Registration(env with { InstallPath = carried.Executable, SearchPath = told }, registrar.Platform);
+            if (registrar.Platform is AutostartPlatform.MacOs)
+            {
+                registrar.Apply(registration with { Apply = [], Remove = [] });
+                Done.Add($"Registered the runtime to start at login, naming {carried.Executable}, with the LaunchAgent written and not loaded. Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.{once}");
+                return;
+            }
+
+            registrar.Apply(registration);
+            Done.Add($"Registered the runtime to start at logon, naming {carried.Executable}. Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`.{once}");
         }
 
         // --- the skills --------------------------------------------------------------------------------------
@@ -913,8 +1374,9 @@ public static class MachineSetup
             Left.AddRange(SkillsDeployer.LeftAloneSentences(report.LeftAlone));
             var leftAlone = report.LeftAlone.Select(skill => skill.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
+            // "are current", never "were": the installer's own run may have deployed them moments before this one.
             Done.Add(report.Written == 0
-                ? $"The skills in {root} were current."
+                ? $"The skills in {root} are current."
                 : string.Create(CultureInfo.InvariantCulture, $"Deployed the skills into {root}: {report.Written} file(s) written, {report.Unchanged} already in place."));
             return new InstallSkillsOutcome(root, hosts, report.Written, report.Unchanged, leftAlone);
         }
@@ -987,11 +1449,11 @@ public static class MachineSetup
         {
             try
             {
-                CreatedProfiles.Add(places.Home, profile);
+                CreatedProfiles.Add(places, profile);
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
             {
-                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places.Home)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
+                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
             }
         }
 

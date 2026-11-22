@@ -26,6 +26,12 @@ export const barMarks = {
     remove: ['M4 7h16', 'M10 4h4', 'M6 7l1 13h10l1-13', 'M10 11v5', 'M14 11v5'],
 } as const;
 
+/**
+ * A note's close control, a cross, as path data, so the thread (drawn by the painter) and the sidebar's notes (drawn in
+ * JSX) draw the same lines.
+ */
+export const closeMark = ['M6 6l12 12', 'M18 6L6 18'] as const;
+
 const lines = (paths: readonly string[]): Html => html`${paths.map((each) => html`<path d="${each}" />`)}`;
 
 // Copy code's marks: two sheets, the one in front whole and the one behind showing at its corner. Once copied the front
@@ -35,7 +41,7 @@ const sheets = html`<rect x="9" y="9" width="12" height="12" rx="2" /><path
     />`;
 
 // The console's line icons: paths on a 24-unit grid, stroked in the current colour. Needs you is a check in a circle,
-// Settings a cog and Recent's filter two sliders, as the console's look draws them.
+// Settings a cog, Agents' filter two sliders and a note's close control a cross, as the console's look draws them.
 const icons = {
     home: html`<path d="M3 11l9-7 9 7v9H3z" />`,
     att: html`<path d="M12 3v12M12 19v.5" /><circle cx="12" cy="12" r="10" />`,
@@ -68,6 +74,7 @@ const icons = {
     mail: html`<rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" />`,
     linkedin: html`<path d="M6 10v9M6 6v.01M11 19v-9M11 14a4 4 0 018 0v5" />`,
     check: html`<path d="M5 12l5 5 9-10" />`,
+    close: lines(closeMark),
     chev: html`<path d="M6 9l6 6 6-6" />`,
     more: html`<circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" />`,
     pulse: html`<path d="M3 12h4l3-8 4 16 3-8h4" />`,

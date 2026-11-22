@@ -29,7 +29,7 @@ public sealed partial class ProductAddressTests : IDisposable
     /// <c>.github/scripts/test-installation-macos.sh</c>, each naming the previous release by its tag in the pinned line
     /// the way-back leg runs.
     /// </summary>
-    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>|\$previousVersion|\$old)";
+    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>|\#\{version\}|\$previousVersion|\$old)";
 
     /// <summary>
     /// What the address answers, one row per shape. Each answers 302 with the same path under
@@ -38,7 +38,9 @@ public sealed partial class ProductAddressTests : IDisposable
     /// path under <c>/releases/</c> that names nothing further, and it is written with its slash: without it the
     /// address is not under <c>/releases/</c>, the redirect does not take it, and nothing behind it answers. A short path
     /// is the address's own, answered by <c>get/</c>: the install page, and a desktop download by system, with or without
-    /// the source a link names; the files those redirect to are held by <c>DownloadPathsTests</c>.
+    /// the source a link names; the files those redirect to are held by <c>DownloadPathsTests</c>. The apt repository is
+    /// the path <c>/apt/</c>, which the address redirects, file by file, to the latest release's downloads: the source
+    /// the deb writes names it with its slash, and a file under it is a release's asset.
     /// </summary>
     internal static readonly IReadOnlyList<(string Shape, Regex Pattern)> Shapes =
     [
@@ -48,6 +50,7 @@ public sealed partial class ProductAddressTests : IDisposable
         ("a release's page", ReleasePage()),
         ("the releases index", ReleasesIndex()),
         ("a short path", ShortPath()),
+        ("the apt repository", AptRepository()),
     ];
 
     /// <summary>
@@ -90,8 +93,8 @@ public sealed partial class ProductAddressTests : IDisposable
             "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; and install.sh's requirement is held against the application the latest release published, taken the same way and checked against that release's checksums.txt; both are CI's reads and no person's install, so neither is ever a request to the address operated for the product"),
         new(
             ".github/workflows/release.yml",
-            2,
-            "the installation proof takes the previous release's published files from GitHub directly, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
+            5,
+            "the installation proof takes the previous release's and the one-installation release's published files from GitHub directly, on each platform it proves, and the cask's proof the previous release's application and the older formula's command line, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));
@@ -218,6 +221,11 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("https://get.jasonharness.ai/install?ref=Bad_Ref", null)]
     [InlineData("https://get.jasonharness.ai/install?from=readme", null)]
     [InlineData("https://get.jasonharness.ai/stats", null)]
+    [InlineData("URIs: https://get.jasonharness.ai/apt/", "the apt repository")]
+    [InlineData("curl -sI https://get.jasonharness.ai/apt/InRelease", "the apt repository")]
+    [InlineData("https://get.jasonharness.ai/apt", null)]
+    [InlineData("https://get.jasonharness.ai/apt/dists/stable/InRelease", null)]
+    [InlineData("https://get.jasonharness.ai/apt/jason-desktop.deb", null)]
     public void The_address_detector_reads_the_shape_a_line_names(string line, string? shape)
     {
         var address = Assert.Single(Address().Matches(line)).Value.TrimEnd('.', ',', ';', ':', '!', '?');
@@ -475,6 +483,9 @@ public sealed partial class ProductAddressTests : IDisposable
 
     [GeneratedRegex(@"^https://get\.jasonharness\.ai/(?:install|desktop/(?:windows|mac|mac-intel|linux-deb|linux-appimage))(?:\?ref=[a-z0-9-]{1,40})?$")]
     private static partial Regex ShortPath();
+
+    [GeneratedRegex(@"^https://get\.jasonharness\.ai/apt/(?<asset>[^/?#]+)?$")]
+    private static partial Regex AptRepository();
 
     private sealed record Finding(string File, int Line, string What)
     {

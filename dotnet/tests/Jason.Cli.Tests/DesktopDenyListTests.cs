@@ -11,8 +11,9 @@ namespace Jason.Cli.Tests;
 
 /// <summary>
 /// The desktop's chat drives an agent host that may run <c>jason</c>, fenced by two files. In
-/// <c>desktop/chat-deny-list.txt</c>, the listed commands are refused by the host's tool fence and by the desktop, and a
-/// command naming a listed operation is refused by the desktop. <c>desktop/chat-allow-list.txt</c> names the verbs the
+/// <c>desktop/chat-deny-list.txt</c>, the listed commands are refused in Plan only by the host's tool fence and by the
+/// desktop, and a command naming a listed operation is refused by the desktop; in the other modes the turn's mode decides
+/// each (<c>modeFence</c>). <c>desktop/chat-allow-list.txt</c> names the verbs the
 /// host runs without asking, and any other jason command goes to the person's card. The deny list is held here to the
 /// CLI's own tables and to the Runtime API's names, and the allow list is written here from the CLI's command tree, so a
 /// verb that becomes a person's own word, a new verb, or a line taken out of either file is red in this class before an
@@ -142,6 +143,90 @@ public class DesktopDenyListTests
         Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// No verb of the plan list takes a request on standard input: none has an option that <see cref="RequestFile"/>
+    /// reads, the one reader of a request's file or of standard input. A redirect into a verb a Plan only turn runs is
+    /// then neither stored nor printed back, which is why the desktop's hook, which refuses the installation's settings
+    /// file and run file in every other mode, does not ride a Plan only turn.
+    /// </summary>
+    [Fact]
+    public void No_verb_of_the_plan_list_takes_a_request_on_standard_input()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var planned = File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-plan-list.txt"))
+            .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+
+        Assert.NotEmpty(planned);
+        Assert.Empty(planned.Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).ToList());
+    }
+
+    /// <summary>
+    /// The verbs the desktop names as reading a request's content from a file or from standard input
+    /// (<c>requestFileVerbs</c> in <c>desktop/src/chat-deny.ts</c>) are exactly the verbs of the CLI's command tree with an
+    /// option <see cref="RequestFile"/> reads. Below the floor of Full access no hook rides an Ask first or Auto-edit turn,
+    /// and the desktop gives the host no allow rule for a form of one of these verbs, so a redirect into it reaches the
+    /// permission tool: a verb that gains such an option is red here until the desktop names it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_names_every_verb_that_reads_a_request_s_file()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var expected = Verbs(root, []).Where(verb => LeafOf(root, verb).Options.Any(option => option is RequestFileOption)).Order(StringComparer.Ordinal).ToList();
+
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-deny.ts"));
+        var declaration = Regex.Match(source, @"^export const requestFileVerbs: readonly string\[\] = \[(?<body>[^\]]*)\];", RegexOptions.Multiline);
+        Assert.True(declaration.Success, "desktop/src/chat-deny.ts declares no requestFileVerbs.");
+        var declared = Regex.Matches(declaration.Groups["body"].Value, "'(?<verb>[^']*)'").Select(match => match.Groups["verb"].Value).Order(StringComparer.Ordinal).ToList();
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, declared);
+    }
+
+    /// <summary>
+    /// The CLI's command tree as the desktop holds it (<c>cliCommandTree</c> in <c>desktop/src/chat-deny.ts</c>): every verb
+    /// of the tree but a hidden one, each by its words after <c>jason</c>. Where the hook rides an Ask first or Auto-edit
+    /// turn, a jason whose words do not begin with one of them, or with a noun's help, is a card, so a word before the noun
+    /// that the parser takes (below) and a mode of the executable that is no verb never run unasked there. A verb added to
+    /// the CLI is red here until the desktop names it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_holds_the_cli_s_command_tree()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var expected = Verbs(root, []).Order(StringComparer.Ordinal).ToList();
+
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-deny.ts"));
+        var declaration = Regex.Match(source, @"^export const cliCommandTree: readonly string\[\] = \[(?<body>[^\]]*)\];", RegexOptions.Multiline);
+        Assert.True(declaration.Success, $"desktop/src/chat-deny.ts declares no cliCommandTree; the CLI's tree is {string.Join(", ", expected.Select(verb => $"'{verb}'"))}");
+        var declared = Regex.Matches(declaration.Groups["body"].Value, "'(?<verb>[^']*)'").Select(match => match.Groups["verb"].Value).Order(StringComparer.Ordinal).ToList();
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, declared);
+    }
+
+    /// <summary>
+    /// What the CLI's parser takes before the noun, which is why the desktop judges a jason by the tree it holds
+    /// (<c>cliCommandTree</c>) and not by the word in the noun's place: a first word that is the root command's own name,
+    /// alone or as a file's name in a folder, and a word in square brackets, a directive, are both taken, and the noun is
+    /// the word after them. The root is named for the executable that runs it, jason in a release and the test host here.
+    /// </summary>
+    [Fact]
+    public void The_cli_s_parser_takes_its_own_name_and_a_directive_before_the_noun()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+
+        Assert.Equal("uninstall", root.Parse([root.Name, "uninstall"]).CommandResult.Command.Name);
+        Assert.Equal("uninstall", root.Parse([Path.Combine("folder", root.Name), "uninstall"]).CommandResult.Command.Name);
+        Assert.Equal("uninstall", root.Parse(["[a]", "uninstall"]).CommandResult.Command.Name);
+    }
+
+    private static Command LeafOf(Command root, string verb) =>
+        verb.Split(' ').Aggregate(root, (command, word) => command.Subcommands.Single(sub => sub.Name == word));
+
     private static List<string> AllowList() =>
         File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt"))
             .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
@@ -184,10 +269,12 @@ public class DesktopDenyListTests
     }
 
     private const string DenyListHeader =
-        "# The jason commands the desktop's chat never runs, one per line.\n" +
+        "# The jason commands the desktop's chat never runs in Plan only, one per line.\n" +
         "#\n" +
-        "# The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by\n" +
-        "# the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.\n" +
+        "# In Plan only the listed commands are refused by the host's tool fence, and a command that names a listed operation is\n" +
+        "# refused by the desktop; there a person runs them, in the page or in a terminal. An operation is told from a command\n" +
+        "# by its dot. In Ask first, Auto-edit and Full access the turn's mode decides each instead (modeFence in\n" +
+        "# desktop/src/chat-deny.ts).\n" +
         "#\n" +
         "# The command lines below are written from ConfinedVerbs.Table by DesktopDenyListTests, the table the CLI refuses under\n" +
         "# JASON_CONFINED; a line taken out or added here by hand is red there until JASON_UPDATE_FIXTURES=1 writes the file\n" +
@@ -434,6 +521,20 @@ public class DesktopDenyListTests
         var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
 
         Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
+    /// The desktop spells the chat's variable once, in its permission model, and sets it in every host's environment by
+    /// that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_chat_turn_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const chatTurnVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(Confinement.ChatTurnVariable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>

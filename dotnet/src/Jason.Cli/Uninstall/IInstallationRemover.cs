@@ -207,6 +207,21 @@ public interface IInstallationRemover
     }
 
     /// <summary>
+    /// macOS: the job <paramref name="label"/> in this account's login domain, as <c>launchctl print gui/&lt;uid&gt;/&lt;label&gt;</c>
+    /// answers (<see cref="Jason.Cli.Autostart.LaunchdJobs.Read"/>). No such job on every other system.
+    /// </summary>
+    Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label) => Jason.Cli.Autostart.LaunchdJob.Absent;
+
+    /// <summary>
+    /// macOS: takes the job <paramref name="label"/> out of this account's login domain, <c>launchctl bootout
+    /// gui/&lt;uid&gt;/&lt;label&gt;</c> and then by its label, as a LaunchAgent's job is taken out
+    /// (<see cref="Jason.Cli.Autostart.LaunchdJobs.BootOut"/>). Nothing it is answered is an error; nothing elsewhere.
+    /// </summary>
+    void BootOutLaunchdJob(string label)
+    {
+    }
+
+    /// <summary>
     /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
     /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
     /// application's steps are done; where that run ends 3 it runs it once more for a person to see, and where the last run
@@ -214,6 +229,15 @@ public interface IInstallationRemover
     /// still there (<see cref="UninstallerHandOff"/>). Its id, or null where it could not be started.
     /// </summary>
     int? HandToUninstaller(string application, int waitFor, string logs) => null;
+
+    /// <summary>
+    /// Linux, the deb: <paramref name="package"/> purged by apt, with the one password a system package needs, asked as its
+    /// install asks it (<see cref="Update.MoveSystem.Asker"/>), waited for up to <paramref name="bound"/>;
+    /// <paramref name="progress"/> is told which, before either asks.
+    /// A remover that cannot ask answers that no password could be asked, so nothing is taken off.
+    /// </summary>
+    Task<Update.PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+        Task.FromResult(new Update.PackageRun(Asked: false, 127, string.Empty));
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -754,7 +778,7 @@ public static class InstallationRemovers
             var session = windows ? System.Diagnostics.Process.GetCurrentProcess().SessionId : 0;
             var wanted = FolderPaths.Real(executable);
             var found = new List<int>();
-            foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
+            foreach (var process in ProcessImages.Named(executable))
             {
                 using (process)
                 {
@@ -768,7 +792,7 @@ public static class InstallationRemovers
                         }
 
                         if (ImageOf(process) is { } image
-                            && string.Equals(FolderPaths.Real(image), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                            && string.Equals(FolderPaths.Real(ProcessImages.AtItsPath(image)), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }
@@ -850,6 +874,11 @@ public static class InstallationRemovers
             }
         }
 
+        public Task<Update.PackageRun> PurgePackageAsync(string package, TimeSpan bound, Action<string> progress, CancellationToken cancellationToken) =>
+            OperatingSystem.IsLinux()
+                ? Update.MoveSystem.PurgePackageAsync(package, bound, progress, cancellationToken)
+                : Task.FromResult(new Update.PackageRun(Asked: false, 127, string.Empty));
+
         public void DeletePreferences(string domain)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(domain);
@@ -882,6 +911,28 @@ public static class InstallationRemovers
             // the ... unload subcommand"), and would keep a later Open at Login from starting it; then by its label. Each
             // waited for ten seconds at most, and neither's answer read: a job that is not loaded is the ordinary case.
             Jason.Cli.Autostart.LaunchdJobs.TakeOut([[Jason.Cli.Autostart.LaunchdJobs.Launchctl, "unload", file]], label);
+        }
+
+        public Jason.Cli.Autostart.LaunchdJob ReadLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return Jason.Cli.Autostart.LaunchdJob.Absent;
+            }
+
+            return Jason.Cli.Installation.AccountDatabase.UserId() is { } account
+                ? Jason.Cli.Autostart.LaunchdJobs.Read(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label)
+                : new Jason.Cli.Autostart.LaunchdJob(Jason.Cli.Autostart.LaunchdJobState.Unread, Why: "this account's user id could not be read");
+        }
+
+        public void BootOutLaunchdJob(string label)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
+            if (OperatingSystem.IsMacOS() && Jason.Cli.Installation.AccountDatabase.UserId() is { } account)
+            {
+                Jason.Cli.Autostart.LaunchdJobs.BootOut(Jason.Cli.Autostart.LaunchdJobs.LoginDomain(account), label);
+            }
         }
 
         public void RemoveExtractedLibraries(string directory)

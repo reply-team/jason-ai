@@ -37,8 +37,9 @@ Claude Code's version is read with `claude --version` at each listing of the hos
 remembered: a Claude Code older than 2.1.257 (`src/host-version.ts`), or one whose version cannot be read, is listed on
 the Connect card and in the chat's host list with a sentence naming the version found, that floor and how to update it,
 cannot be chosen there, and has every chat turn sent to it refused before the host starts, a key provider's included.
-From 2.1.285 on (`noChromeFrom`) every turn also passes `--no-chrome`: Anthropic's changelog does not say which version
-added the flag, and 2.1.285 is the first whose entry names it, so below it the turn's settings alone keep the browser out.
+From 2.1.285 on (`noChromeFrom`) a turn that does not run in Full access also passes `--no-chrome`: Anthropic's
+changelog does not say which version added the flag, and 2.1.285 is the first whose entry names it, so below it that
+turn's settings alone keep the browser out.
 
 Codex's version is read with `codex --version` before each chat turn on it, never remembered: a Codex older than 0.122.0
 (`codexFloor`), the first whose `exec` takes `--ignore-user-config`, or one whose version cannot be read, has the turn
@@ -60,10 +61,11 @@ unchanged a listing opens nothing, a file gone lists nothing at once, and the lo
 changes, not at every listing. No host command is run to list them: `claude mcp list` connects to the servers, and
 `codex mcp list` can reach the network.
 
-On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
-sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
-Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
-set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`). One cmd line prints a random
+On Windows every read-only Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own
+choice of sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data
+directory. A Full access turn runs in no sandbox, so it names none and is not checked. Naming it proves nothing
+(OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not set up), so the first
+read-only Codex turn of each run of the desktop checks it (`codex-sandbox.ts`), in the turn's own folder. One cmd line prints a random
 marker, then a marker of each file's own only if `type` opens it, the file itself going to `nul`. The first file is a
 control, the system's hosts file under `SystemRoot`, which every Windows account may read and the desktop does not
 own: it opening in the sandbox shows that `type` and `nul` work there at all. Then the runtime's run file, which has an
@@ -85,33 +87,67 @@ config.toml plus `-c` while the turn leaves that file unread, since `codex sandb
 the desktop does not read the file to say what in it would differ. A set-up chat's naming run on Windows names no
 sandbox kind and gets no check: its shell tool is off, and it is held by the read-only sandbox and those settings alone.
 
-**Nothing of the person's own tools reaches a turn.** A Claude Code turn runs `--strict-mcp-config` with the turn's MCP
-file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true` and deny the browser's
-server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn, Plan only
-included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
-there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded, since a Codex turn asks no
-one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which config.toml does not hold: every
-Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
-is still read from `CODEX_HOME`.
+**In Full access a Claude Code turn on the person's own Claude Code sign-in uses the person's own Claude Code
+configuration, as a terminal does: their skills, hooks, MCP servers and rules; on a provider's key set in Jason, and in
+the other modes, it uses none of it.** A turn that runs in Full access passes no
+`--setting-sources`, `--strict-mcp-config` or `--no-chrome`, and its settings carry no server defences
+(`claudeArguments`, `hookedSettings`), so the person's own settings with their rules and hooks, their skills, the shell
+commands a skill carries included, their MCP servers, their claude.ai connectors and the browser integration work in
+the chat as in a terminal, with no block of reads outside the working folders. `--permission-mode` is named every time, so
+the person's `defaultMode` never decides the mode; their deny and ask rules keep working, an ask a card, and their hooks
+run beside the turn's, which still sees every tool the model asks for; a hook of the person's own that rewrites a
+tool's input is their configuration acting. Their hooks run in a Full access turn even where their `disableAllHooks`
+switches them off, since the turn's settings set it to `false` to keep Jason's check on; and an HTTP hook of theirs runs
+there only where their own `allowedHttpHookUrls` names its address, since the turn's list, merged with theirs, is never
+empty. A hook or a rule a Full access
+turn leaves in the person's Claude Code configuration acts in every later Full access turn and in their own terminal.
+The settings file of every turn the hook rides sets, as `env`, what the desktop decides of the turn's environment
+(`pinnedEnvironment`): PATH, the data directory, `JASON_CHAT_TURN`, the folder and background variables, the label for
+reply-cli, and empty values for what it withholds, a session's markers among them: every name `hostEnvironment` sets or
+withholds by name but the scrub and a provider's variables, which a row holds to what it does. Claude Code writes a settings file's `env` over the environment
+it was started with, and the turn's file outranks the person's and a project's. A PATH set under `env` in the person's
+Claude Code settings does not apply in the chat; the chat runs with the PATH Jason Desktop started with, Jason's own
+folder first. Nor does a value there of another of those variables. Every other turn keeps the sealed command
+line whole, the line following the mode the turn runs in (`turnMode`), never the one the chat shows: a turn on a
+provider's key in every mode, Full access included (`ClaudeTurn.keyed`, its settings keeping the server defences); Plan
+only, Ask first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
+browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
+the hook was found filtered out. That line is `--setting-sources project`, `--strict-mcp-config`
+with the turn's MCP file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true`, deny
+the browser's server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) and turn off a skill's shell
+commands (`disableSkillShellExecution: true`): `serverDefences`, in `claudeTurnSettings`, `planTurnSettings` and the
+hooked settings of Ask first and Auto-edit. In every mode the turn carries its own `--mcp-config`: the prompt tool, on a
+server named for that turn alone, `jason_desktop_` and a nonce (`newServerName`), so no server of the person's, the
+fixed name an earlier version used included, answers a card, and a tool of any server whose name begins
+`jason_desktop_` is refused to the agent (`isOwnTool`). A turn on a provider's key keeps the sealed line and runs with
+the desktop's own `CLAUDE_CONFIG_DIR` (`keyedFolder`), so the person's configuration does not load there either. Every Codex turn outside
+Full access, Plan only included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a
+provider or profile set there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded,
+since a Codex turn asks no one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which
+config.toml does not hold: every Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does.
+The page says the sentence under the composer while Codex is the chat's host outside Full access. Its sign-in is still
+read from `CODEX_HOME`. A Full access Codex turn reads the person's config.toml, as Codex in a terminal does, its MCP
+servers, providers and profiles with it; it still sets the cached search and `features.apps=false` for the run
+(`codexFullAccessSettings`). One on a provider's key reads the config.toml of the desktop's own `CODEX_HOME`
+(`keyedFolder`) in its place, so none of the person's, as a keyed Claude Code turn loads none of theirs.
 
-The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
-CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
-prints and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the
-CLI's own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`.
-A link the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it
-(https, a host name, no user, port or anything but printable ASCII) and hands it to the system browser through the
-navigation lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one
-account, writes it to the clipboard itself; the shared mailbox page is never copied, whatever the page asks. Nothing
-else of the desktop holds it. The page learns that a link was opened or copied, when it stops working and its pending
-entry; the CLI's output for these verbs is never logged, recorded or put into an error.
-A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process
-that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused;
-no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and `delete` passes `--yes` only after the yes. Two
-offers open only after a code that calls for them, each for the ask it answered and behind a box of its own: the
-account's shared mailbox page (`--allow-shared-page`) after `email_link.not_available`, with the CLI's warning that the
-address does not expire and lets its holder manage all of the user's mailboxes, and a forced delete (`--force`) after
-`linkedin.account_in_use`. A refusal is one sentence of the desktop's, chosen by the CLI's code; a code the desktop does
-not act on, known or not, is said by one sentence that carries it, and nothing of the CLI's own words is shown or logged.
+The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply CLI
+that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI prints
+and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
+own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link
+the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a
+host name, no user, port or anything but printable ASCII) and hands it to the system browser through the navigation
+lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one account,
+writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or
+copied, when it stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put
+into an error. A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the
+main process that names the account as the list does (a connect and a reconnect make a link and ask nothing), with
+Cancel focused; no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and
+`delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it, for the ask it
+answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A Reply that makes no
+one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing else. A refusal is
+one sentence of the desktop's, chosen by the CLI's code; a code the desktop does not act on, known or not, is said by
+one sentence that carries it, and nothing of the CLI's own words is shown or logged.
 
 ## Its own files
 
@@ -122,11 +158,23 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
   `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
-  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
-- `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own. `jason
+  uninstall` that keeps the data removes it, since it takes off what the set-up placed.
+- `<data>/desktop/chats/<conversation id>/`: a conversation's own working folder (`folder: 'own'` on its record), where
+  every turn of it runs, in every mode. It is made at the conversation's first turn. Removing the conversation moves it,
+  one rename, to `chat-full-ended/<conversation id>-<moment>/`, where the sweep removes it seven days later; so does a
+  start, for a folder no record names, but only when every record could be read: a record that cannot be read names no
+  folder, and then none moves. A folder that cannot be moved, one a terminal holds on Windows, stays where it is, nothing
+  in it removed, for a later start; on macOS and Linux a terminal open in it holds nothing, and the rename takes it along; nothing is moved out of a `chats` that is a link or a junction, and no turn starts in
+  one. Before each turn the desktop copies the recorded skills of the shared folder into it, removing whatever stands at
+  a name there, a link included, before it writes, and writes the instruction files there.
+- `<data>/desktop/chat/`: the shared working folder, where the turns of a conversation an earlier desktop made (no
+  `folder` on its record) still run; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
 - `<data>/desktop/conversations/`: the chat's conversations, one record each (see below).
+- `<data>/desktop/conversations-stamped`: written once every record carries the shape this desktop writes, which no
+  earlier desktop reads or writes (see below).
 - `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI
   key (see "Models and effort").
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
@@ -138,11 +186,13 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
   of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
   the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
-  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but on Linux, where a Claude
-  Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that prints it leaves it in the
-  transcript. Each folder keeps the
-  transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
-  provider.
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but in Full access, and on
+  Linux in every mode, where a Claude Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that
+  prints it leaves it in the transcript. No Full access turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, nor passes on one
+  the desktop inherited, since Claude Code starts in its default mode while it is set ("Permission mode forced to
+  default"): in Full access a key and the credentials the turn carries reach the commands the agent runs, as in a
+  terminal session. Each folder keeps the transcripts of its provider's turns, one Claude Code folder per provider since
+  a conversation keeps one session per provider.
 - How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
   key run through Claude Code (Anthropic, DeepSeek, Kimi, GLM, MiniMax), a retry or an end the host reports for a
   refused key ends the turn at once with one sentence naming the provider's card in Connect: a 401 or a failed
@@ -198,22 +248,40 @@ A campaign has one conversation, found when it is opened and made at the person'
 page asks for `create` then, never when it only draws the agent's Chat), and the chat may hold any number of set-up
 chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
 it is about, its title, the session each agent host named for it (and, beside it in `plain_sessions`, whether the last
-turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex outside Full access:
-only such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
+turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex in any mode: only
+such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
 markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
 its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
 and at the end of each turn. It is kept within 2 MB: each text of an entry is cut to 128 KB, keeping its end after a
 mark in the desktop's words, then the oldest entries are dropped and counted, and the newest entry always stays. An
 entry of a kind this desktop does not know, written by another version, is skipped and counted the same way. A file in
 the folder that is not a record is counted in the log and left as it was. On a Claude Code turn the desktop's file
-rules deny the agent a read or an edit of the folder; a Codex turn is held only by its own read-only sandbox, which the
-desktop does not narrow, so it may read the records.
+rules deny the agent a read or an edit of the folder; a Codex turn outside Full access is held only by its own
+read-only sandbox, which the desktop does not narrow, so it may read the records, and one in Full access by nothing,
+so it may write them.
 
-- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: which campaign the
-  conversation is about, its name quoted on one line, with every control, format and separator character dropped and
-  cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it as they are.
-  A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the desktop did not
-  make or keep is refused.
+Every record this desktop writes ends with `shape`, the shape of its records (`recordShape`). An earlier desktop writes
+a record again with only the fields it knows: it drops `shape`, `folder` and every `mode` but Plan only. The first
+start that finds records with no `shape` takes each as it is, one with no `mode` in Full access, writes it again with
+its shape and then writes `conversations-stamped`, only once every one of them was written again and only where the
+folder was listed and every file in it read: a start that could not write one, list the folder or read a file in it
+writes no file, at no later write either, so the next start is a first start again. With no record at all in a folder
+that was listed, the first record written writes that file first; a first start that found no folder writes it at the
+next start, which lists the folder the first made. A start that finds the file lost is a first start again. From then on a record with no `shape` is one an
+earlier desktop wrote last: it opens in Ask first, unless it is in Plan only, says why once when it is opened, and is
+then written again with its mode and its shape. A record with no `folder` whose `chats/<id>/` stands as a folder is
+that conversation's again, so its turns run there and its host's session is resumed there, or recapped when the host
+does not find it.
+
+- **The campaign comes from the record.** Every turn begins with a paragraph the desktop writes: the person, as
+  `human:<account>` by the name the operating system gives this account (`os.userInfo().username`, which the carried
+  `jason`'s `Environment.UserName` reads too), in backticks, with the single-quoted `--actor` a command gives where it
+  holds a space; a name of anything but letters, digits, dots, underscores, hyphens and spaces, longer than the
+  runtime's 100 units or with white space at either end is never given, and a sentence says to ask instead; then which
+  campaign the conversation is about, its name quoted on one line, with every control, format and separator character
+  dropped and cut at 120 characters, and its folder; or that it is about no campaign yet. The person's words follow it
+  as they are. A turn names its conversation and its host, never a campaign, and a turn sent to a conversation the
+  desktop did not make or keep is refused.
 - **A session per host.** A turn resumes the session its host named for the conversation; a session id begins with a
   letter or a digit, and a record's that does not is read as none. When that host has none, or its session is not
   found, another answers, or the resume fails before saying anything, the turn starts a fresh session given a recap, the
@@ -315,112 +383,277 @@ desktop does not narrow, so it may read the records.
 ## The chat's access modes
 
 Each conversation has a mode, chosen from the menu beside the composer (`chat.setMode`, `src/chat-modes.ts`). The mode
-applies to the turns a person starts by sending, from the next one on.
+applies to the turns a person starts by sending, from the next one on. Every start's first paragraph, the desktop's own,
+names the mode that start runs in and what the AI does in it, in the menu's words (`startSentences`,
+`src/chat-header.ts`; the words are `modeNames`, `modeSays` and `codexModeSays` in `src/chat-modes.ts`, held word for
+word to the page's by a test), and says that the mode may change between turns and that earlier turns' modes say
+nothing of this one. A start sealed from the person's own Claude Code configuration also says that it does not load it,
+and, where a Full access turn could follow in this run, that only a Full access turn on their own sign-in does.
 
-- **Ask first** is the mode of every new chat, and no setting changes that. Claude Code starts in its own default
-  mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
-- **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
+- **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
+  (below). Claude Code starts with `--permission-mode default`, named every time so that no `defaultMode` of a settings
+  file decides it (`permissionModes`); what the permission model does not settle is a card. From Claude Code's floor of
+  Full access on, the turn carries Full access's hook as well, which answers a refusal of the three kinds or nothing
+  (below), so a command an allow rule lets run with no card, one fed the settings file by a redirection say, is refused
+  before it runs; its settings block no read (`hookedSettings`), and the permission model judges it by what the hook
+  refuses (`ChatScope.hooked`):
+  - a read anywhere, by Read, Glob, Grep, a listing or the host's own read-only commands, runs with no card; a walk of
+    a folder that holds the data directory is refused by the hook with the walk's sentence (below), before the
+    permission model is asked about it;
+  - a change outside the chat's folders is one card, "Change a file outside the chat's folders", for Write and Edit
+    alike, an append among them, a `~` of the home folder taken as the file tools take it; inside them as before;
+  - every `jason` verb runs with no card but the forms of `askingCardedForms`: `uninstall`, `import`, `export`,
+    `update rollback` and `plugin grant` in every form, and a verb that changes the installation in a form that names
+    another source, place, ref or version, while its plain form, which takes the release's own, runs with no card:
+    `update apply` with `--version` or `--feed`; `plugin install` with `--feed` or `--replace`; `skills install` and
+    `skills update` with `--source`, `--feed`, `--root` or `--ref`; `ui install` with `--feed`; and `install` with
+    `--retire`. The program or the command a role will be run by is such a source too: `profile create` and
+    `profile update` keep a card with `--program`, `--cli-command` or `--file`. Each is a card, its words told in any
+    letter case and with anything between them (`holdsEntry`), its option anywhere among them, with its value after `=`
+    or `:` too, and in a compound; the help of one of them, a `--help` or `-h` before any `--`, runs;
+  - a `jason` whose words do not begin with a verb of `cliCommandTree`, the CLI's own tree held to
+    `CliApp.BuildRootCommand` by DesktopDenyListTests, or with a noun's help, is a card (`namesCliVerb`): a word before
+    the noun that the parser takes, the root's own name or a directive, and the executable's modes that are no verb
+    (`runtime run`, `plugin-host`, `toast-host`, `host-hook`, a link); Full access runs them, as it runs any program;
+  - jason's own `--help`, `-h` and `--version`, each alone, and any noun's or verb's help run with no card; any other
+    option before the verb is refused (`optionRefusal`);
+  - a pipeline or a sequence whose every part is such a `jason` or a program of `noCardFilters` (`jq`, `grep`, `head`,
+    `tail`, `wc`, `sort`, `uniq` with one file at most, `cut`, `tr`, `cat`, `ls`, `echo`), each with only the options of
+    its own table (`optionTables`: none that descends, reads a file it is told of on its input or by another file,
+    writes a file or starts a program; jq with `-r`, `-c`, `-e`, `-s`, `-j`, `-S`, `-M`, `-a`, `--arg` and `--argjson`
+    alone) and, in a command of more than one part, as a reader of standard input that names no file (`ls` aside), read
+    literally, a letter outside ASCII taken in a single-quoted body, with no directory change, no file named like one of
+    its programs in the turn's folder and nothing redirected into a file, runs with no card (`hookedNoCard`); anything
+    else is a card, as before.
+
+  Below the floor no hook rides the turn, and the host is given no allow rule for a form of a verb that
+  reads a request's content from a file or from standard input (`requestFileVerbs`, held to the CLI's command tree by
+  `DesktopDenyListTests`): each reaches the permission tool, which refuses a redirection from the installation's data
+  and runs its plain form with no card, as the host's rule would (`plainForm` in `src/chat-permission-model.ts`): one
+  `jason` command of the allow list, its input nothing, a here-document or one file in the turn's folders. Anything else
+  is a card, as before. Codex runs in its read-only sandbox with `JASON_CONFINED` set: it cannot ask before it
+  acts, so Ask first on Codex reads and proposes, and the menu says so (`codexModeSays` in the page).
+- **Plan only** reads and proposes and changes nothing. Claude Code is started with `--permission-mode plan`; on macOS
+  and Windows, where the turn carries `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (`scrub` in `src/chat-hosts.ts`), it starts in
+  its default mode instead, saying so on its standard error, and the rules below hold the turn just the same. Its settings
   add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
   rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
-  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
+  page. Every deny rule stays. It carries no hook: no verb of `chat-plan-list.txt` takes a request on standard input,
+  which the CLI's tests hold (`DesktopDenyListTests`), so a redirection into one is neither stored nor printed back;
+  every other command is refused already; and a redirection's target meets the host's own rules for the data directory
+  (`dataRules`), which every mode carries. That those rules hold a redirection's target, here and below the floor for a
+  command an allow rule runs with no card, is documented by the host's maker (Anthropic,
+  https://code.claude.com/docs/en/permissions, read 2026-11-20), not observed by us. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), as
+  Ask first and Auto-edit are, so it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
   the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
   fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
   Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
-- **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
-  confirmation, a message box the main process shows, with Cancel focused and Escape answering Cancel, each time Full
-  access is chosen while no standing choice stands. Its buttons are "Give full access this time" and "Always on this
-  computer"; Always writes the standing choice to `<data>/desktop/full-access.json`, one entry per host program
-  (`claude`), with the consent number (`fullAccessConsent`), the moment it was given and whether new chats start in Full
-  access (the box's checkbox, ignored with This time, as its label says). An entry whose consent number is not the
-  current one, lower or higher, is no choice. The file is among the known entries of `<data>/desktop/`, so the data rule
-  refuses a chat's read or change of it in every mode. The standing choice skips the box for every Claude Code chat; with
-  new chats, `chat.create` given a host that can take Full access opens the grant at once, and a host that cannot leaves
-  the chat in Ask first with no notice. No channel of the page gives it: `fullAccess.standing` reads it and
-  `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
-  2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
-  held in memory alone, for that conversation, and gone when the window closes or the chat is started fresh: a record
-  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
-- **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
-  program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
-  `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
-  `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in `allowedHttpHookUrls`, so no project file
-  can switch the hook off or filter it. The hook posts each tool use to the turn's loopback endpoint, behind the turn's
-  secret, and the desktop answers by one judgement (`fullAccessJudgement`), which the broker shares for the few calls
-  Claude Code still asks about under bypass:
-  - **refused** where the permission model refuses, or where a file being written shows what it refuses;
-  - **held**, a card titled "Full access asks about this one", wherever Ask first would have
-    shown a card because the model cannot rule the act out or the act would change what an agent loads: a `jason` that
-    is not the program of a plain `jason <verb>` (handed to `xargs`, inside an interpreter's one-liner or a list literal,
-    behind a variable or an expansion), `eval`, a script piped into a shell or an interpreter, a search variable, a
-    guarded name (a person's memory files in a campaign's or a project's folder, a folder's marker, a repository's
-    hooks, the files Claude Code reads MCP servers from), a `claude mcp` or `codex mcp` command, a local file named
-    jason, a `~` or a glob that could expand into the data directory, and every call of a tool of the person's own MCP
-    server; and, of what the host still asks about, a deletion;
-  - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
-    task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
-    the folders.
-- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what the AI loads, is
-  a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
-  deletion on a critical path, and a tool the hook never saw, are cards too. A held card offers no "Always", and an
-  earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
-- **What Ask first refuses is refused in Full access, with no card.** Every `reply` command is refused there but its exact
-  no-card forms.
-- **PowerShell is not a tool of the chat.** The judgement would still hold any PowerShell command that reached it, behind
-  a switch that is off (`powerShellRunsInFullAccess` in `src/chat-modes.ts`).
+- **Full access** is Claude Code's own bypass mode, and on Codex its run with no sandbox: the AI reads, runs commands
+  and changes files anywhere on this computer the account may, without asking, on Claude Code except the three kinds
+  Jason refuses (below), its settings blocking no read.
+  It is the mode of every new chat, the Feed's included (`feedDefaultMode`), and asks for no confirmation: a record with
+  no `mode` is in Full access, and choosing it from the menu clears the field. The `full-access.json` and
+  `full-access-taken-back` an earlier desktop wrote for a standing choice are removed at start, and no mode is read from
+  them. It is refused where it cannot apply: on a Claude Code older than 2.1.322 or whose version cannot be read, the
+  menu shows it disabled with the reason and the desktop refuses it. A turn of a chat in Full access that runs on a
+  Claude Code below that floor, comes from a browser tab, is sent while Full access is not offered, or meets a Claude
+  Code whose bypass mode is not available (below) runs in Ask first; the chat says why once a run for each of those
+  reasons, and the record keeps its mode. On Codex a Full access turn runs as itself, held to neither Claude Code's
+  floor nor its bypass (below). Each host's listing carries `runs`: for each
+  mode a turn on it does not run as itself, from the window and from a tab, the mode it runs in and the sentence why,
+  decided by the rule the turn itself runs by (`turnMode`), with Claude Code's version read at that listing. The page
+  draws that mode, the line under the composer and the menu's check, with the sentence under the composer, and never
+  draws from what it asked for; a host an earlier desktop listed hands no `runs`, and the page draws the chat's own mode.
+  A choice from the menu is of the chat's own mode, the one checked included, so Ask first chosen where Auto-edit runs
+  in it, on Codex, stays the chat's on Claude Code; the checked mode, being the one the running turn runs in, stops no
+  turn. The setup keeps the version its last listing read (`handedClaudeVersion`); a turn whose own read
+  finds Claude Code at the floor where that listing found it below or could not read it runs in Full access, asks the
+  page to read the hosts again (`setup.changed`) and says so once per conversation (`fullAccessCurrent`); a listing that
+  finds Claude Code across the floor from the last one, either way, asks the same (`setup.changed`), and so does a turn
+  that finds it below the floor where the listing found it at it.
+- **How Full access runs on Codex.** A Full access Codex turn runs `exec --json --sandbox danger-full-access
+  --skip-git-repo-check` with the person's config.toml, no `--ignore-user-config` and no Windows sandbox kind
+  (`codexArguments`). Codex in `exec` never asks, so it acts as the person with their files and network, and none of
+  what follows holds it: no hook, no card, no deny rule, no refusal of the permission model, and not the refusal of the
+  runtime's run file, the desktop's settings or the turn's own settings that every Claude Code turn keeps. It has no
+  version floor of Full access. Reading the person's config.toml, it reads their `shell_environment_policy`, so it
+  pins `JASON_DATA_DIR` and `JASON_CHAT_TURN` by `-c shell_environment_policy.set.<NAME>` (`codexPinnedVariables`): at
+  openai/codex 9f2b87495b, read and not seen, session flags merge over config.toml table by table, so `set` adds to the
+  person's, and `set` is applied after `inherit` and the excludes and before `include_only`, so a policy that keeps only
+  listed names still removes them. PATH is never pinned, since `set` would replace the person's whole PATH, so such a
+  policy can also take the bundle's folder off it. An administrator's `requirements.toml` that does not allow `danger-full-access` makes
+  Codex, at openai/codex 9f2b87495b (read, not seen), refuse to start: `codex exec` forces `approval_policy = "never"`
+  (exec/src/lib.rs), so building its configuration fails (core/src/config/mod.rs) with its words on standard error and
+  no event. A Full access Codex turn that ends so, before any line on standard output and with a failing exit, ends in
+  Codex's own words followed by `codexFullAccessRefused`, every time; the words are not read and nothing is
+  remembered. Only under an automatic reviewer (AutoReview) does Codex, at the same commit, fall back instead to the
+  sandbox the requirements allow and say so as a configuration warning, an `item.completed` of type `error` beginning
+  "Configured value for `permission_profile` is disallowed by requirements" (`sandbox_mode` in an earlier Codex;
+  core/src/config/mod.rs `apply_requirement_constrained_value`, exec/src/event_processor_with_jsonl_output.rs). The
+  desktop reads that line (`codexLine`, `sandbox_narrowed`), lets the turn go on, keeps the chat's mode and says once in
+  the conversation `codexFullAccessNarrowed`; every other warning is dropped, as before. No event names the sandbox a
+  turn ran in (`thread.started` carries the thread alone), so a narrowing Codex does not warn of goes unseen.
+- **How Full access runs on Claude Code.** Claude Code starts with `--permission-mode bypassPermissions`. Anthropic says a Bash rule
+  "isn't a security boundary around the program", so every deny rule is passed as in an Ask first turn the hook rides,
+  and the turn's settings, in a file under `<data>/desktop/turns/` beside its MCP file and removed with it
+  (`hookedSettings`), add a `PreToolUse`
+  HTTP hook on every tool with `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in
+  `allowedHttpHookUrls`, so no settings file of the person's or a project's can switch the hook off or filter it. The
+  hook posts each tool use to the turn's loopback endpoint, behind the turn's secret, and the desktop answers a refusal or nothing (`HookAnswer`), by one
+  judgement (`fullAccessJudgement`), the same in every mode the hook rides:
+  - **refused**, with no card, for three kinds alone, each by a sentence that says what is closed, that it is Jason's
+    own and not one of the person's files, and the `jason` verb that does the act where one does, never that it cannot:
+    the installation's settings files and run file, under
+    every layout (`settingsRefusal`); its data directory outside the turn's folder (`dataRefusal`), and in a demo run the
+    person's own installation (`personsRefusal`); and what Jason itself sets for the turn: its variables and its
+    permission tool, that is `JASON_CONFINED` and `JASON_CHAT_TURN` (`confinedRefusal`), `JASON_ATTEMPT_ID`
+    (`attemptRefusal`), with where the shell finds a program (`lookupRefusal`), and the tool that answers the chat's own
+    permission requests, which only the person answers (`ownToolRefusal`). Each is read in a command as written, over its
+    normalised forms and, where every word is literal, over the words the literal reading resolves; in a file tool's path
+    by every route a path can take, on Windows a path that names this computer as another computer would (`localhost`,
+    a loopback address or its own name) through a drive's share (`C$`) as that drive's path, and one in a device's or a
+    volume's namespace, or through another share of this computer, by the sentence that says Jason could not place where
+    it leads (`hookPlace`, `unplacedRefusal`); in the text a writer tool would put in a file; and in every string of an
+    MCP tool's input. A command is also read as the shell would lead it (`readKinds`): a relative path from the folder a
+    change of folder led to, a variable the reading knows (the home folder's and the profile's, the drive's, the folder
+    the shell is in, and a value the text gives one of its own, `assignedValues`, in PowerShell a quoted one or a
+    number, each beside the variable's own, `variableValues`), a `~` followed by the home's own account name, a POSIX
+    shell's tildes where they lead (`tildesOf`: `~` to the home folder and to a value the text gives HOME, `~+` to the
+    folders the shell may be in, `~-` and the folder stack's `~N` to those it has been in, and a value the text gives
+    OLDPWD, for a word and for a change of folder, `cd -` among them), and a pattern by every name it can match, a name
+    that begins with a dot only by a pattern that does too unless the text sets an option that says otherwise
+    (`patternKind`), for a read and a listing alike. **The
+    limit:** a variable the reading does not know, and a path a program builds while it runs, are not seen: such a
+    command runs in Full access. A command that names another link to a settings file or the run file, as a word or as a
+    redirect's source, is refused as that file, and in a demo run another link to the person's own settings file or run
+    file as the person's own (`linksPersonsOwn`). With no read blocked, a walk of a folder that holds the data directory
+    (the home folder, a drive's top, the data directory's parents) is the data's kind: a search of it by the Grep or
+    Glob tool (`walkKind`), a command that names such a folder or takes a word the shell builds from one (the profile's
+    drive and path, the system's drive and PowerShell's call for a folder of the account's are such folders), in any
+    form but the few known not to descend (`plainWalkForm`: a listing or a search with only its table's options and only
+    words it can read, a read of a file, a look at a path, a print, a folder change), a removal among them, and a form
+    known to descend, remove or copy a tree that takes a word that begins with a variable the reading does not know
+    (`treeForm`, `unfixedVariable`: a finder, a size, a tree, an archive, and a search, a listing, a copy or a removal
+    told to recurse, in PowerShell by `-Recurse`; a positional parameter in each of its spellings), are refused by the
+    sentence that says to name a narrower folder (`searchRefusal`, `walksRoot`); any other form given such a word runs
+    unless the text names such a folder. A command in any other form that runs in such a folder, or where a change led
+    that the walk did not follow, is refused by the sentence that says to run it in a narrower folder or name the folder
+    it should work on (`inRootRefusal`). So is a command that reads what no word of it shows
+    (`unseenReadRefusal`): a jq program that holds `env`, `$ENV`, `import`, `include` or `modulemeta`, takes its program
+    from a file or is given a word the shell builds (`jqRefusal`), and `sort`, `wc`, `du` or `find` told the files it
+    reads by `--files0-from` (`filesFromRefusal`). A plain listing of such a folder runs. A Glob pattern is read where
+    it can lead, its fixed folders climbed once for each `..` after them, and one whose brace group can name a place is
+    refused (`braceRefusal`). A judgement that fails refuses;
+  - **nothing** for everything else, the deny list's verbs, a jason that starts with an option, PowerShell and a
+    command Jason does not read literally among them: the host's own mode and rules decide it.
+- **What Claude Code still asks about in its bypass mode is a card.** It reaches the permission tool, which refuses the
+  three kinds first and makes anything else a card titled "Full access asks about this one" (`askedCard`), why
+  `host_asked`; it waits thirty minutes, then is not run and the turn goes on, and "Allow for this chat" works on it as
+  in Ask first. A card kept on a record from an earlier desktop may carry an older reason, which the page still says.
+- **PowerShell is Full access's.** A Full access turn keeps the PowerShell tool (`fullAccessRemovedTools` takes Monitor
+  alone out), and the hook reads its commands as it reads Bash's; every other mode takes both out.
+- **When the bypass is not available.** The turn runs in Ask first and each conversation is told why once in each hold
+  of the cause, by the cause that holds whatever a start found within it, in one shape, "Full access is not available
+  here: <why>" (`bypassSentence`), "Full access is not
+  available here right now: <why>" where the cause holds a minute, and "Full access is not available here until Jason
+  Desktop starts again: <why>" where a tool ran that the hook never saw. The record keeps Full access, and the box says
+  so with what the menu draws: "This turn runs in Ask first, and the menu shows the mode each next turn runs in; the chat
+  stays set to Full access." (`askFirstThisTurn`); a turn stopped for a tool the hook never saw ends in the same words
+  (`unguardedSentence`). The causes: the desktop runs as root (`getuid`), under which Claude Code refuses the mode;
+  Claude Code starts the turn in another mode, which its init line names first, so that start is stopped there, what of
+  the person's own configuration runs as a session starts having started with it, and the turn starts again at once in
+  Ask first's own shape: its settings, its sealed line, its environment, no PowerShell, every page asked about and the
+  host's rules over the chat's own names. Every start of a turn meets this, the fresh session after a resume Claude Code could not find included (`unlessNarrowed` in `Chat`), and each start's environment is built from
+  the mode it starts in as it starts, as its command line is. A resumed turn starts again in a fresh session given the
+  recap (`startAgain`), never in the session it resumed: the stopped start may already have written the message there,
+  which a resume would then hold twice; the record takes the fresh session's id. The word the init line names is read
+  from a closed table of Claude Code's modes
+  (`claudeModeWords`: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`; any other word is `another`), and once the
+  start has ended its standard error is matched against Claude Code's own words "Permission mode forced to default"
+  (`forcedDefault`), a closed match, nothing else of what it wrote being read: matched, the cause is `forced_default`,
+  "Claude Code said it forced its permission mode to default."; not, the sentence names the mode, "Claude Code did not
+  start in its bypass mode, and named its default mode instead.", and no setting is named. Claude Code refuses the mode
+  before it starts, in its restricted mode or under a policy, exiting with `bypassPermissions` in its error, so the turn
+  starts again at once in the same shape; or a tool ran that the hook never saw (below). A cause a turn found holds a
+  minute (`bypassHeldMs`), in memory: the Claude Code turns of a Full access chat in that minute run in Ask first and
+  ask for no bypass, so the host is not started twice on every turn while the cause stays; the menu draws Ask first and
+  is drawn again when the minute ends; and the first Full access turn after it asks for the bypass again, so a cause
+  that went away needs no restart of the desktop. Running as root, and a tool the hook never saw, hold until the
+  desktop starts again. The desktop's log says each cause that comes to hold, by its cause and the mode named, running
+  as root once as the desktop starts (`chat_bypass_unavailable`), so `jason logs --source desktop` tells the cases
+  apart. What a cause leads to, for the turn that found it and the turns after it, and for how long, is decided in one
+  place (`bypassLeadsTo` in `src/chat-modes.ts`).
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
-  person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
-  none reaches a turn.
-- **The AI's folder.** In Full access the AI works in a folder of its own. When Full access ends the desktop says
-  "Full access has ended. The folder the AI worked in is kept for seven days and then removed: <path>", with an Open
-  folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
+  person's own shell configuration (aliases, shell options), nor what an MCP server or connector of the person's own,
+  which a Full access turn loads, does with the input of one of its tools: that input is read as its strings are
+  (below). Nor are the shell commands a skill of the person's own carries in its `!` lines: Claude Code runs them itself,
+  outside the hook, in a Full access turn, whose settings leave them on.
+- **The AI's folder.** A Full access turn runs in the conversation's working folder, as its other turns do. The folder
+  an earlier desktop made for a Full access grant, under `<data>/desktop/chat-full/`, is moved to `chat-full-ended/` at
+  start; the conversation says where it is, with an Open folder button, when it is next opened, and the desktop removes
+  it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
-- **A denied verb in any letter case is refused, in every mode.** `jason Campaign Set-Send-Mode` is refused as
+- **A denied verb in any letter case is refused, in Plan only.** Outside Plan only no verb of the deny list is refused
+  (`modeFence`): the acts of a person's word (`personsWordForms`: five verbs, and `preference set` and `unset` of two
+  keys, `sender.identity` and `tone_of_voice`, each a host rule of its own) are allowed as the allow list's verbs are,
+  `reply record` (`cardedVerbs`) leaves the allow list, and every other one is the mode's: where the hook rides an Ask
+  first or Auto-edit turn it runs with no card but the forms of `askingCardedForms`, below the floor it is a card, and
+  Full access runs it. In Plan only `jason Campaign Set-Send-Mode` is refused as
   `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
   sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
   its lower-case spelling already was.
-- **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
-  their dots, the confining variable, the attempt's variable and the data directory's names are looked for a second time over a normalised text:
+- **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands and the operations by
+  their dots (in Plan only, the one mode that refuses them), Jason's own variables, the attempt's variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
-  `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused as their plain spelling is, in Ask
-  first too, and so is the content of a file being written in Full access. The same look reads through an empty `$''`
+  `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused in Plan only as their plain spelling
+  is, and a re-spelled variable or data directory in every mode, the content of a file being written in Full access
+  included. The same look reads through an empty `$''`
   or `$""` inside a word, a `$'\xNN'` string, a line continuation and a brace group (`{approve,}`; a word of more than
   64 expansions is refused, never judged on the first ones), and reads `\n`, `\t` and `\r` in a string as the space they print.
   What the plain spelling would not refuse stays a card in Ask first. An
   `env` that clears the environment (`-i`, `-`, `-u`, `--unset`) or `exec -c`, in a command part that runs a jason,
-  clears the confining variable without naming it, and is refused in every mode; an `env` elsewhere in a command list
-  is not.
+  clears Jason's own variables without naming them, and Jason alone sets those: a jason started without the chat's
+  environment may act on another installation than the one this window shows, so it is refused in every mode; an `env`
+  elsewhere in a command list is not.
 - **The chat's own names, by every route.** The chat's instructions, its `.claude`, `.agents` and `.codex` folders and its
-  `.mcp.json` directly in the chat folder are refused in every mode to a shell command as to the file tools, and the
-  host is denied edits of them (`chatRules`).
-- **The files and commands that add an MCP server are a card each time.** A write of `.mcp.json` anywhere else, or of
+  `.mcp.json` directly in the chat folder are refused to a shell command as to the file tools, and the host is denied
+  edits of them (`chatRules`), in every mode but Full access. In Full access the turn's folder is its own, a
+  conversation's own folder and the shared chat folder alike, and is put right again before the next turn: the
+  instructions are written afresh and the agent folders hold only what the desktop placed (below). Two conversations an
+  earlier desktop made share that folder, so while both run a turn, one may read a skill the other's turn rewrote; the
+  next turn of each starts from the desktop's files.
+- **The files and commands that add an MCP server are a card each time in Ask first and Auto-edit.** A write of
+  `.mcp.json` anywhere else, or of
   `.claude.json` anywhere (Claude Code keeps the user's and the local scopes' servers there), is a guarded name's card,
   and so is a command that runs `claude` or `codex` with the word `mcp` after it (`claude mcp add`, `codex mcp add`,
   through any folder or `npx` package name, and as the shell would read a re-spelled word). None is covered by "Allow
-  for this chat", and Full access holds each.
-- **A tool of the person's own MCP server is a card each time.** No such server reaches a turn in this version; the
-  fence stands anyway. A tool named `mcp__<server>__<tool>` of any server but the chat's own is judged before the
+  for this chat", and Full access runs each.
+- **A tool of the person's own MCP server runs in Full access, the one mode such servers reach (above).** The fence
+  stands in the other modes anyway. A tool named `mcp__<server>__<tool>` of any server but the chat's own (`isOwnTool`)
+  is judged before the
   command check, so an argument named `command` or `file_path` is never read as a shell command or a file tool's path:
   the card is "Use one of your own tools", its detail the server and the tool, then the input exactly as the host sent
   it (`JSON.stringify`), never cut. Before the card, an input whose detail would be longer than the card shows whole
   (4,000 characters) is refused, and so is one any of whose strings, at any depth and the keys of its objects among
-  them, is refused when read as a command's text: a deny-list verb or operation, plainly or re-spelled, `JASON_CONFINED`, `JASON_ATTEMPT_ID`,
+  them, is refused when read as a command's text: in Plan only a deny-list verb or operation, plainly or re-spelled; `JASON_CONFINED`, `JASON_CHAT_TURN`, `JASON_ATTEMPT_ID`,
   the data directory's variable or the data directory in any spelling, the settings file and the run file included.
-  "Allow for this chat" is never offered for it, Plan only refuses it, and Full access holds it on every call.
+  "Allow for this chat" is never offered for it, Plan only refuses it, and Full access runs it, refusing one whose input
+  names the three kinds.
 - **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,
   under `<data>/desktop/skills-records/`, which the chat neither reads nor writes: the record `jason skills install`
   writes of each deployment, put beside the skills only while the CLI runs and moved out after, and the Reply skills'
   files with their digests, recorded for the folders the Connect card copies in that call and no others. At the start
   before anything is deployed, and before every turn (`src/chat-agent-folder.ts`), the top is put right: `.claude/` and
   `.agents/` hold their `skills/` and in it only the files those records name with the bytes recorded; everything else
-  there is removed, a settings file and a record beside the skills included; `.codex/` and the memory files the desktop
-  does not write (`CLAUDE.local.md`, `AGENTS.override.md`) are removed. Nothing below the top is looked at in this
+  there is removed, a settings file and a record beside the skills included; `.codex/`, the memory files the desktop
+  does not write (`CLAUDE.local.md`, `AGENTS.override.md`) and a `.mcp.json` are removed. The person's own `.claude`
+  anywhere else, in their home folder or a folder of theirs, is never touched: that is where their own configuration
+  enters a turn that runs in Full access. Nothing below the top is looked at in this
   version: an agent folder or a memory file in a subfolder is not removed, and a host may read instructions from a
   folder it works in (in Ask first every write there is a card). A link is removed as a link, never walked, and a deploy
   never goes through one: `.claude`, `.agents` and their `skills` are each made a real folder before anything is
@@ -433,14 +666,26 @@ applies to the turns a person starts by sending, from the next one on.
   `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
-- **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first, and takes back the standing choice: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
-  input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
-  confirmation says so.
+- **When the hook did not run.** In Full access the first tool that runs without the hook having seen its use stops the
+  turn, that tool having already run, and the bypass is taken as not available (above): the record keeps Full access,
+  and later turns run in Ask first until the desktop starts again. One a turn already stopped, by Stop or by a change of
+  mode, still says on its way out is taken the same way, and that turn ends with no word of a mode. In Ask first and
+  Auto-edit the turn runs on, the cards and the host's own rules deciding as before, and the chat says once per
+  conversation that Jason's refusals could not stand in front of them (`hookFilteredSentence`). One case is not a tool
+  the hook missed: a tool the start's own mode takes out (`claudeRemovedToolsOf`: PowerShell and Monitor in Ask first
+  and Auto-edit, those and ExitPlanMode in Plan only, Monitor in Full access), which a conversation can still name from
+  a turn of another mode, is refused by Claude Code before any hook fires. A result of such a tool is taken as that
+  refusal only when Claude Code marks it an error and the start's own list of its tools, on its init line, was read and
+  does not name the tool; it is logged once in the turn (`chat_removed_tool_refused`). Any other result of it, or one
+  where no such list was read, is taken as a tool the hook missed, as above. On Claude Code 2.1.330 this was seen: a
+  conversation resumed in Ask first has no PowerShell in its init line's list, and its PowerShell use comes back marked
+  an error with no hook seen. **The limit:** the refusals read what a command's text and a tool's input show; they are
+  not a sandbox, and a program the agent writes and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
-  byte for byte: no `--permission-mode`, no `acceptEdits`, no `defaultMode` and no hook; the permission tool alone
-  decides, and the broker uses `autoEditJudgement` in place of `judge` for a turn started in it. That judgement returns
+  byte for byte: `--permission-mode default`, no `acceptEdits` and no `defaultMode`, and the same hook from the floor of
+  Full access on; the permission tool decides what the hook leaves, and the broker uses `autoEditJudgement` in place of
+  `judge` for a turn started in it. That judgement returns
   `judge`'s result unchanged unless `judge` says ask, the tool is `Bash`, and the literal reading (`readLiteral`, with
   `~` held) is a run of the six commands joined by `&&`, `;`, `||` or new lines, each named bare, with nothing piped in
   or redirected and no folder of its own; then it allows. Every option is read wherever it stands before `--`, since
@@ -458,7 +703,7 @@ applies to the turns a person starts by sending, from the next one on.
 
   Each operand must hold no `..` component, pass the spelling check Ask first applies (`judgeSpelling`), name no device
   on Windows (`con`, `nul`, `com1`, `lpt1` and the like, with any extension), and lie strictly inside
-  `<data>/desktop/chat` both as written and once links are followed (`located`), the folder itself excluded; the names
+  the folder the turn runs in, the conversation's own or `<data>/desktop/chat`, both as written and once links are followed (`located`), the folder itself excluded; the names
   an agent loads (`guardedPlace`, `namesLocalJason`) and every refusal over the resolved words stay as in Ask first.
   A link or a junction that leads nowhere, at the operand or at any folder above it in the chat folder, is a card: the
   scope's `entry` (`entryOf`, `src/chat-real-path.ts`) finds something there that the real path reader cannot follow,
@@ -471,18 +716,18 @@ applies to the turns a person starts by sending, from the next one on.
   folder, is a card when an operand names it or when the command runs that program and such a file is already there:
   where the search path holds the current folder the shell would run it in place of the system's.
   The chain rule: once a `mv` or a `cp` names or writes a path, no later operand of the same command line may lie
-  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
-  host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
-  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
-  no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
-  restart opens Ask first, Start fresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
-  first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
-  Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
-  Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a
+  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`) and on a
+  host that does not drive the chat; each host's listing carries `autoEdit`, the
+  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation and no switch;
+  it is kept on the conversation's record (`mode`), so a restart keeps it and Start fresh leaves it; a turn sent to
+  Codex runs in Ask first, read-only, the chat says so once a run, and the record keeps Auto-edit. The page draws the mode a turn on the host runs in, from its
+  `runs`, as it does for Full access. **The limits:** the conversations an earlier desktop made share the chat folder, so such a chat in
+  Auto-edit can remove a file another of them left there; a hard link already in the folder is not told by its path, so a
   command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
   link put into the folder by something else between the two is the same limit Ask first's Write has.
 - A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
-  Auto-edit, Full access, and the page gives the waiting message back as Stop does: no turn follows by itself. So
+  Auto-edit, Full access, and the page gives the waiting message back as Stop does, judging by the mode the turn runs
+  in as the desktop hands it (`choiceStops`), never by the mode the chat keeps: no turn follows by itself. So
   leaving Full access, or leaving Auto-edit for a narrower mode (Ask first or Plan only), stops the turn that runs in
   it, and a change to Plan only stops any running turn, so the menu never says a mode while the running turn could
   still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
@@ -495,9 +740,12 @@ applies to the turns a person starts by sending, from the next one on.
   - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
     turn. The Feed takes the modes as any chat does.
 - The log says each change of mode by its two modes (`chat_mode_changed`), the mode of each turn started and of each
-  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in Full access), a request the hook held (`chat_request_held`), and a turn
-  stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`); never a conversation's id or title, a
-  command, a path or a person's words.
+  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in the turn's mode), a
+  Full access turn stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`), and, once in a turn of
+  Ask first or Auto-edit that ran on after one, its mode and the tool (`chat_hook_filtered`), and once in a turn whose
+  host refused a tool its mode takes out, its mode and that tool (`chat_removed_tool_refused`); a tool by its name when
+  it is one of the tools the desktop's table names and `other` for any other (`claudeToolWord`); never a conversation's
+  id or title, a command, a path or a person's words.
 
 ## Models and effort
 
@@ -550,8 +798,12 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   `window.open` that leaves it goes to the system browser only when it is `https:`.
 - `contextIsolation` on, `nodeIntegration` off, `sandbox` on; no webview attached, and of the permissions a page asks
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
-- The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
-  of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- The preload exposes `window.jasonDesktop` and nothing else. Every call but one is answered only when it comes from the
+  top frame of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+  The one is `chat.pathOf`, a dropped file's path, which the preload answers itself, with no channel to the main process
+  and so with no check of the origin. That is safe because Electron reads a path only from a `File`, and a page holds a
+  `File` only when the person dropped it there or picked it: a page learns the path of no file it was not given. The
+  preload answers it only for a page served over `http:`, as the runtime's is, and with an empty path for any other.
 - On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
   of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
   window is dragged by that band and by the console's top strip, every control on them excepted. So that the window
@@ -749,7 +1001,7 @@ runtime, and an update goes on without a look. Once the files are in place, at e
 or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
 waited for (`customInstall`): `jason` on this account's Path, the skills for Claude Code and Codex where each is found, and an older
 command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
-done never fails the install. On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+done never fails the install. On macOS, Windows and Linux, Jason is one installation: the Jason Desktop application, which
 carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
 carried `jason uninstall` (`docs/release-and-update.md` §9), which takes off what Jason and Jason Desktop placed and
 leaves the data directory unless told otherwise and the harness root always. A person's uninstall from Installed apps
@@ -780,23 +1032,31 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
   Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
   desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
-  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the
+  without a key: Open Jason at Login, Command Line and Uninstall Jason…. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, and where a new terminal's PATH lacks that folder
-  it writes the installer's PATH lines into the shell profiles by the installer's own rule (`src/path-command.ts`,
-  `src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)). On macOS and Windows the
-  item is the machine set-up's report instead (`src/machine-setup.ts`), and `jason install` places the command.
+- The Command Line item is the machine set-up's report, as on macOS and Windows (`commandIsSetup` in
+  `src/machine-setup.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)): a start of a new version
+  runs the carried `jason install` with the login shell's PATH as `--terminal-path`, from the `jason` the deb carries or
+  from an AppImage's copy under `<data>/desktop/bundle/<version>/`, never from the mount, and runs none where there is no
+  copy. From the deb the terminal's `jason` is the package's own `/usr/bin/jason`, which the package's scripts write;
+  from an AppImage it is `jason install`'s wrapper in `~/.local/bin`, with the installer's PATH lines where a new
+  terminal's PATH lacks that folder. The login shell is asked from the PATH the start was handed less what an earlier
+  start added to its own (`handedPath` in `src/shell-path.ts`): a desktop an update or the mode switch starts inherits that
+  start's PATH, its usual places at the end and its AppImage mount in front, and a profile that keeps the PATH it is
+  given, as Arch's does, would otherwise print them back as a terminal's. `src/path-command.ts` remains only for a system
+  the set-up does not cover.
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
   at the bundles folder or the version's folder, stops the start and is named, to be removed by hand. Without a copy,
-  Start the Runtime at Logon and the Command Line's acts are not offered. A start at logon or a PATH command the person
-  set up from another version's copy is set up again from this one at each start, the same act as turning it on; one
+  the Command Line's acts are not offered. A start at logon the person set up from
+  another version's copy is set up again from this one at each start, the same act as turning it on, and the copy's own
+  `jason install` writes the wrapper anew; one
   never set up, or one that names a `jason` elsewhere, is left alone. The copies of other versions go after that, but
   the one an update kept to go back to, one something set up still names, and one the running runtime was started
   from. No folder of the mount reaches what the desktop starts: the PATH and the libraries it hands on are the
@@ -807,25 +1067,38 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
   quits (`src/sandbox.ts`). So the AppImage needs a system that lets it run its sandbox. It is built so that on Ubuntu
   24.04 and later, as shipped, it says so and names the deb, whose install brings an AppArmor profile that lets the
   program make the user namespaces its sandbox uses; neither package has yet been seen on such a machine.
-- Updates come to the AppImage and to the deb. An AppImage update keeps the AppImage file itself under
-  `<data>/desktop/rollback/<version>/`; a deb update keeps no copy, and if the new version does not start, the page names
-  the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`. Anywhere else the update item says
-  updates come through the package. When the installer stops before it finishes (a refused password, say), Jason stays
-  open and says so; that, the password dialog and an AppImage replacing itself are built so and not yet seen on a real
-  machine. The updater's cache is `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
-- Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which, once confirmed, takes
-  the steps `src/uninstall.ts` lists (its dialogs are `src/remove-placed.ts`), stopping the runtime first and going no
-  further when it does not stop, says what came of each and what to do by hand for one that failed, and offers to quit
-  Jason. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
-  the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders,
-  `~/.jason-demo` and `~/Jason-demo` (the data directory's and the harness root's own names with `-demo` after them),
-  only where each carries the mark the desktop wrote into it, `.jason-demo-folder`, once the demo's runtime is stopped. It then says what removes the
-  application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
-  that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-  `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take
-  off by hand what it placed. Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each
-  `<data>/desktop/bundle/<version>/jason` for an AppImage:
+- Updates come to the AppImage through electron-updater, which replaces the file where it is and keeps the AppImage
+  file itself under `<data>/desktop/rollback/<version>/`. Each start of an AppImage records its file in
+  `<data>/desktop/appimage.json` (`recordAppImage` in `src/linux-package.ts`), and so does an update that installs it
+  under a new name, so that the command line's update hands over to that file; a terminal's `--update-apply` request is
+  taken by an AppImage alone (`requestSupport` in `src/update-request.ts`). The deb's electron-updater is turned off
+  (`updaterOf`): the system updates the package from Jason's apt repository, so the update item says "Updates Come
+  Through the Package", and where the package's `version.json`, watched once a minute, names another version than the one
+  running, "Restart Jason and Its Runtime to Finish the Update to <version>", with one notice whose click does the same
+  (`menuItemOf` and `restartForPackage` in `src/updates.ts`): the old build's runtime stopped, as an update's install stops
+  it, then a relaunch, whose machine set-up finishes that update. A start that finds the runtime this application's own
+  `jason` started still running an older build, the system having updated the package while no window was open, offers
+  the same item and notice (`packageMovedTo`); neither ever restarts by itself, since a restart ends a running turn. On
+  the deb no sentence names Check for Updates: the versions-differ sentence names that item or `jason runtime restart`,
+  or the system's update where the runtime is newer. If a version the deb's updater recorded does
+  not start, the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`, after the
+  source's removal where that release is before 0.49.1 (`keptNotice`). An AppImage
+  replacing itself has been seen in virtual machines (Arch, GNOME and Hyprland), from its update item and from `jason
+  update apply`. The updater's cache is
+  `~/.cache/jason-desktop-updater`, or under `$XDG_CACHE_HOME` when that is set.
+- Uninstall Jason… in the Jason menu (and the tray's; `src/uninstall-door.ts`) is the one uninstall, as on macOS: it asks
+  first, with a box for the data directory, Cancel the default, and on the person's word starts the carried `jason
+  uninstall` on its own with `--wait-for` this process's id, and quits. For the deb the verb takes the package
+  `jason-desktop` off first, once the runtime has stopped, purged by apt through the system's own password dialog, and
+  removes nothing of the account's when that is refused; for an AppImage it removes its menu entry, its icons, the copies
+  of its `jason` and the AppImage file, last. Remove What Jason Placed… (`src/remove-placed.ts`) is offered on no system;
+  it leaves the installation and its data, and takes the runtime's start at logon off with `jason runtime autostart
+  disable`, which records the turn-off, so the start stays off until `jason runtime autostart enable`.
+  The system's own removal leaves the account's files, and what they start is made harmless: the autostart entry and
+  the AppImage's menu entry name the file they start as `TryExec=` (`autostartEntry` in `src/login-item.ts`), and the
+  runtime's systemd user unit carries `ConditionPathExists=`. When Jason will not start, take off by hand what it placed.
+  Its `jason` is `/opt/Jason/resources/bundle/jason` for the deb, and each `<data>/desktop/bundle/<version>/jason` for an
+  AppImage:
 
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this
      application's: stop it with `<that jason> runtime stop`. A runtime of any other `jason` stays.
@@ -839,6 +1112,8 @@ Jason quit. When Jason will not start, run `Contents/Resources/bundle/jason unin
      `export PATH="…/.local/bin:$PATH"` line under it out of `~/.profile`, `~/.bash_profile`, `~/.bash_login`,
      `~/.bashrc`, `~/.zprofile` and `~/.zshrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
+  6. Remove the application: `sudo apt purge jason-desktop` for the deb; for an AppImage the file, its menu entry
+     `~/.local/share/applications/jason-desktop.desktop` and its icons under `~/.local/share/icons/hicolor/`.
 
 ## Building and testing
 
@@ -877,8 +1152,9 @@ node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version 0.35.0-r
 JASON_VERSION=0.35.0-rc.1 npm run package -- --linux --x64   # dist/: the deb, the AppImage, latest-linux.yml
 ```
 
-The program is `jason-desktop-app`, so the deb's `/usr/bin` link never takes `jason-desktop`, the name the PATH command
-falls back to. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
+The program is `jason-desktop-app`, so the deb's `/usr/bin` link to it never takes `jason-desktop`, the name an earlier
+version's PATH command fell back to; the deb's own scripts (`installer/deb/`) add `/usr/bin/jason` and Jason's apt
+source, signed by the key the package carries, and take them back. The AppImage is packed on electron-builder's static AppImage runtime, which needs no libfuse2. The two
 forms are packed at once from one folder, and the deb writes `resources/package-type` into it, which makes
 electron-updater update a package as a deb, so the configuration starts the deb only once the AppImage is built.
 

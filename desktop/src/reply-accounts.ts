@@ -3,13 +3,13 @@
  * (`reply-cli-account.ts` holds that contract): its own sentences, what each refusal's code makes the card do, the main
  * process's confirmation boxes, and the check a link passes before the system opener is handed it.
  *
- * A connection link, a consent address and the shared page's address are the person's secrets: the main process hands
+ * A connection link and a consent address are the person's secrets: the main process hands
  * the link to the system opener and keeps nothing, and the page learns only that something was opened, when it expires
  * and its pending entry. Nothing of the CLI's words is read but its code, and every code the desktop does not act on is
  * shown by one sentence that carries it, so a code the CLI adds never breaks the card.
  */
 
-import { replyCliCodes as codes, replyCliSharedPageWarning, replyCliUsagePrefix, type ReplyCliChannel, type ReplyCliEnding } from './reply-cli-account.ts';
+import { replyCliCodes as codes, replyCliUsagePrefix, type ReplyCliChannel, type ReplyCliEnding } from './reply-cli-account.ts';
 
 /** How long one verb may take before it is stopped. */
 export const replyActLimitMs = 30_000;
@@ -33,7 +33,6 @@ export const replyAccountSentences = {
     busy: 'Another act on a Reply account is going; wait for it.',
     notConfirmed: 'Nothing was done.',
     notOffered: 'That is offered only once Reply has said it is needed.',
-    sharedPageOffer: 'This Reply does not make a link for one mailbox yet. Its shared mailbox page can be opened instead.',
     signedOut: 'The LinkedIn account is signed out of LinkedIn, so Reply did not do it: reconnect the account first.',
     inUse: 'Sequences use this LinkedIn account, so it was not deleted.',
     outcomeUnknown: 'Reply did not say how that ended; the list is read again to show where it stands.',
@@ -45,13 +44,11 @@ export const replyAccountSentences = {
     mailboxSeat: 'One more mailbox would need another paid seat in Reply.',
     linkedInLimit: 'This Reply account has reached the number of LinkedIn accounts its plan allows.',
     notInPlan: 'This Reply account’s plan or role does not include that.',
-    sharedPageOff: 'This Reply account’s plan does not include the shared mailbox page.',
     unreached: 'The Reply CLI did not answer in time, or could not be run; try again.',
     unreachedWrite: 'The Reply CLI did not answer in time, or could not be run; the list is read again to show whether it was done.',
     badLink: 'The Reply CLI answered a link the desktop does not open; the list is read again.',
     notOpened: 'The browser could not be asked to open the link; the list is read again.',
     notCopied: 'The link could not be put on the clipboard; the list is read again.',
-    sharedPageNotCopied: 'Reply’s shared mailbox page is never copied, since it does not expire: ask for it again without a copy to open it here.',
 } as const;
 
 /** Every code the desktop does not act on, known or not, in one sentence that carries it. */
@@ -76,8 +73,8 @@ export function linkedInNameProblem(value: unknown): string | null {
 /** The acts of the card, by the verb each is. */
 export type ReplyAct = 'connect' | 'reconnect' | 'pending' | 'limits' | 'pause' | 'resume' | 'unblock' | 'delete';
 
-/** What the card offers after a refusal: the shared page, a forced delete, or a reconnect. */
-export type ReplyOffer = 'shared_page' | 'force' | 'reconnect';
+/** What the card offers after a refusal: a forced delete, or a reconnect. */
+export type ReplyOffer = 'force' | 'reconnect';
 
 /**
  * An act that ended without its effect: the desktop's sentence, the CLI's code where it gave one, what the card may
@@ -98,7 +95,6 @@ const planLimits: Readonly<Record<string, string>> = {
     [codes.emailAccountNoFreeMailboxSlots]: replyAccountSentences.mailboxSeat,
     [codes.linkedInAccountLimitReached]: replyAccountSentences.linkedInLimit,
     [codes.accessFeatureUnavailable]: replyAccountSentences.notInPlan,
-    [codes.sharedPageNotEnabled]: replyAccountSentences.sharedPageOff,
 };
 
 /** The codes after which the card reads the list again and shows what is; it never repeats the act by itself. */
@@ -115,22 +111,18 @@ const rereads: Readonly<Record<string, string>> = {
 const writes: ReadonlySet<ReplyAct> = new Set(['connect', 'reconnect', 'limits', 'pause', 'resume', 'unblock', 'delete']);
 
 /**
- * What an act that did not end done comes to. The shared page is offered only after `email_link.not_available` on an
- * email link asked without it, and a forced delete only after `linkedin.account_in_use` on a LinkedIn delete asked
- * without it; neither is ever the first try.
+ * What an act that did not end done comes to. A forced delete is offered only after `linkedin.account_in_use` on a
+ * LinkedIn delete asked without it, and is never the first try.
  */
 export function refusalOf(
     ending: Exclude<ReplyCliEnding, { kind: 'done' }>,
-    act: { verb: ReplyAct; channel: ReplyCliChannel; write: boolean; sharedPage?: boolean; force?: boolean },
+    act: { verb: ReplyAct; channel: ReplyCliChannel; write: boolean; force?: boolean },
 ): ReplyRefusal {
     const write = act.write && writes.has(act.verb);
     if (ending.kind === 'unknown') return refusal(replyAccountSentences.outcomeUnknown, codes.outcomeUnknown, null, true);
     if (ending.kind === 'unreached') return write ? refusal(replyAccountSentences.unreachedWrite, null, null, true) : refusal(replyAccountSentences.unreached, null);
     const code = ending.code;
     if (code === null) return refusal(otherRefusal(null), null);
-    if (code === codes.emailLinkNotAvailable && act.channel === 'email' && (act.verb === 'connect' || act.verb === 'reconnect') && act.sharedPage !== true) {
-        return refusal(replyAccountSentences.sharedPageOffer, code, 'shared_page');
-    }
     // A reconnect's own refusal offers no second reconnect.
     if (code === codes.linkedInInvalidCookie) return refusal(replyAccountSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
     if (code === codes.linkedInAccountInUse && act.verb === 'delete' && act.channel === 'linkedin' && act.force !== true) {
@@ -212,16 +204,6 @@ const box = (type: ReplyBox['type'], message: string, detail: string, yes: strin
     cancelId: 1,
     noLink: true,
 });
-
-/** The box before the shared page is asked for: it carries the CLI's own warning. */
-export function sharedPageBox(): ReplyBox {
-    return box(
-        'warning',
-        'Open Reply’s shared mailbox page?',
-        `The Reply CLI warns that ${replyCliSharedPageWarning}. It opens in your browser, and the desktop keeps nothing of it.`,
-        'Open the page',
-    );
-}
 
 /** The box of an act on one account, naming it as the list does. */
 export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' | 'limits', account: NamedAccount, daily?: number): ReplyBox {

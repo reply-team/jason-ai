@@ -2,8 +2,11 @@ import { html, type Html } from './html';
 
 // The runtime's CSP allows no inline handler, so the console's markup names what a control does instead:
 // `data-action` for a click, `data-submit` on a form, `data-change` and `data-input` on a field, and `data-enter` on a
-// text box that sends with Enter, and `data-escape` on a text box that Escape closes. Each names an entry of one closed table of the console's own functions, and its
-// arguments travel in `data-args` as a JSON literal, parsed and never evaluated.
+// text box that sends with Enter, `data-escape` on a text box that Escape closes, `data-blur` on a field whose losing the
+// focus closes it, and `data-menu` on a control whose own
+// menu opens on a right-click, Shift+F10 or the menu key, which there alone the page takes from the system. Each names an
+// entry of one closed table of the console's own functions, and its arguments travel in `data-args` as a JSON literal,
+// parsed and never evaluated.
 
 /** A value an action takes: JSON, so that it survives the attribute it travels in. */
 export type Argument = string | number | boolean | null;
@@ -50,6 +53,18 @@ function closest(event: Event, attribute: string, root: HTMLElement): HTMLElemen
     return found && root.contains(found) ? found : null;
 }
 
+/** Where the pointer opened a control's menu by a right-click; null where the keyboard opened it. */
+export function menuPointer(event: Event): { x: number; y: number } | null {
+    return event instanceof MouseEvent && event.type === 'contextmenu' && event.button === 2
+        ? { x: event.clientX, y: event.clientY }
+        : null;
+}
+
+/** Whether the event is the system's own menu event that follows Shift+F10 or the menu key, not a right-click. */
+export function systemMenuAfterKey(event: Event): boolean {
+    return event.type === 'contextmenu' && menuPointer(event) === null;
+}
+
 /** One listener per kind of event, on the console's root, for every control inside it. The function it returns stops them. */
 export function listen(root: HTMLElement): () => void {
     const click = (event: Event) => {
@@ -70,8 +85,25 @@ export function listen(root: HTMLElement): () => void {
         const element = closest(event, 'data-input', root);
         if (element) run(element.dataset['input'], element, event);
     };
+    const contextmenu = (event: Event) => {
+        const element = closest(event, 'data-menu', root);
+        if (element && run(element.dataset['menu'], element, event)) event.preventDefault();
+    };
+    const focusout = (event: Event) => {
+        const element = closest(event, 'data-blur', root);
+        if (!element) return;
+        // The focus moving inside the element is no loss of it.
+        if (event instanceof FocusEvent && event.relatedTarget instanceof Node && element.contains(event.relatedTarget))
+            return;
+        run(element.dataset['blur'], element, event);
+    };
     const keydown = (event: Event) => {
         if (!(event instanceof KeyboardEvent) || event.isComposing) return;
+        if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+            const element = closest(event, 'data-menu', root);
+            if (element && run(element.dataset['menu'], element, event)) event.preventDefault();
+            return;
+        }
         if (event.key === 'Escape') {
             const element = closest(event, 'data-escape', root);
             if (element && run(element.dataset['escape'], element, event)) event.preventDefault();
@@ -87,6 +119,8 @@ export function listen(root: HTMLElement): () => void {
         ['change', change],
         ['input', input],
         ['keydown', keydown],
+        ['focusout', focusout],
+        ['contextmenu', contextmenu],
     ];
     for (const [kind, listener] of listeners) root.addEventListener(kind, listener);
     return () => {

@@ -288,10 +288,52 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question)).then((said) => {';
     assert.ok(press.includes(pressed));
     assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // The restart the deb's item offers once the system updated the package under the window is the desktop's own, not the
+    // updater's: the same press, behind the same guard, and the same relaunch the notice's click asks for. A click restarts
+    // at once; the key, which shows no label, asks first, as the install's key does: the restart stops the runtime, which
+    // ends a running turn.
+    const restart = "if (act === 'restart') {\n            const moved = this.deps.packageMoved?.() ?? null;\n            if (!byKey) this.deps.restart?.();\n            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());\n            return;\n        }";
+    assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(restart) && press.indexOf(restart) < press.indexOf(pressed), 'the restart behind the guard, before the updater');
+    assert.ok(main.includes('        restart: () => void restartIfOwed(),\n'));
+    // Once at a time, the item and the notice alike (`restartOnce`).
+    assert.ok(main.includes('const restartPackage = restartOnce(packageRestart);'));
+    // The notice is held for as long as the window runs: one nothing refers to is collected, and its click with it, so a
+    // click on it restarted nothing.
+    assert.ok(main.includes('    let packageNotice: Notification | null = null;\n'));
+    assert.ok(main.includes('packageNotice = new Notification({'));
+    assert.ok(main.includes("packageNotice.on('click', () => void restartIfOwed());"));
+    assert.equal(main.includes('const notice = new Notification('), false, 'no notice held by a local alone');
+    // The same offer, item and notice, from the window's watch and from a start that finds this application's runtime of an
+    // older build, which the system updated while no window was open; once, and never a restart of its own.
+    assert.ok(main.includes("const packageMoved = (): string | null => (form?.form === 'deb' ? packageMovedTo(form, version, bundleVersion(packaged), { version: runtimeVersion, ours: runtimeIsOurs }) : null);"));
+    assert.ok(main.includes("if (form?.form === 'deb') watchFile(join(packaged, 'version.json'), { interval: 60_000 }, offerPackageRestart);"));
+    const started = main.indexOf('if (started.versionsDiffer) runtimeIsOurs = ');
+    assert.ok(started > 0 && main.indexOf('        offerPackageRestart();\n', started) > started, 'offered once the start knows whose runtime it found');
+    assert.equal(main.split('offerPackageRestart()').length - 1, 1, 'offered at the start alone, besides the watch');
+    // A press reads the runtime again first, and restarts only where the restart is still owed: after `jason runtime restart`
+    // in a terminal the runtime is already this build's, and a restart would end a running turn for nothing. A re-pair with
+    // a runtime started anew reads it too, so the item goes. Catches the offer standing, and acting, once it is done.
+    const owed = main.slice(main.indexOf('const restartIfOwed = async () => {'), main.indexOf('};', main.indexOf('const restartIfOwed = async () => {')));
+    assert.ok(owed.includes("if (form?.form === 'deb') await readRuntimeAgain().catch(() => undefined);"), owed);
+    assert.ok(owed.includes('if (packageMoved() !== null) await restartPackage();'), owed);
+    assert.equal(main.split('restartPackage()').length - 1, 1, 'restarted only where still owed');
+    assert.equal(main.split('restartIfOwed()').length - 1, 2, 'by the item and the notice alone');
+    // A runtime that does not answer leaves the offer standing: a hung old build is the one the restart is for.
+    assert.ok(main.includes("runtimeVersion = runtimeVersionIn((await cli.run(['runtime', 'status'])).stdout) ?? runtimeVersion;"));
+    assert.ok(main.includes("paired: () => {\n            begin();\n            if (form?.form === 'deb') void readRuntimeAgain().catch(() => undefined);\n        },"));
+    // Its runtime stopped, the window goes quiet before the relaunch, as an update's install makes it.
+    assert.ok(main.includes('    const packageRestart = {\n        stopRuntime: stopCarriedRuntime,\n        relaunch: () => {\n            quitting = true;\n            repairer.stop();\n            modeDeps.relaunch();\n        },'));
     // What a check the person asked for found: asked from the menu, the tray or the key, whose menu closes or shows no
-    // label, it comes as a notification too, whose click shows the window; asked from Settings, the page's line alone says
-    // it. The sentence is in the item's answer either way (`updates.said`).
-    assert.ok(press.includes("if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.show());"));
+    // label, it comes as a notification too, whose click opens the window on Settings' Update section; asked from
+    // Settings, the page's line alone says it. The sentence is in the item's answer either way (`updates.said`).
+    assert.ok(press.includes("if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.send('navigate.update'));"));
+    // A look the desktop makes by itself raises no notification: the one update notice is the press's, after a check the
+    // person asked for (`said` is null for a look on the cadence).
+    assert.equal(desk.split('updateNotice(').length - 1, 1, 'the press alone');
+    assert.equal(main.includes('updateNotice('), false);
+    // The tray icon's own click is as it was: it shows the window, and on macOS, where a click opens the tray's menu,
+    // nothing more.
+    assert.ok(desk.includes("        this.tray.on('click', () => {\n            if (process.platform !== 'darwin') this.show();\n        });\n"));
     assert.equal(desk.split('this.notify(').length - 1, 2, 'the attention watcher and the update check');
     assert.ok(desk.includes("notify: (text) => this.notify(text, () => this.send('navigate.attention')),"), 'the attention notice opens What Needs You');
     const notify = desk.slice(desk.indexOf('    private notify('), desk.indexOf('\n    }\n', desk.indexOf('    private notify(')));
@@ -301,11 +343,16 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     // none in a demo run.
     const item = body('updateItem');
     assert.ok(item.includes('if (this.demo !== null) return null;'));
-    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);"));
+    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);"));
     assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
-    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer()), refused);"));
+    // The version the page marks: the one the updater knows of and has not installed, or the one the system installed
+    // under the deb's window until its restart; none in a demo run, which has no update item.
+    const newer = body('updateNewer');
+    assert.ok(newer.includes('if (this.demo !== null) return null;'), newer);
+    assert.ok(newer.includes('return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;'), newer);
     assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);"));
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
@@ -354,13 +401,14 @@ test('a press from the page acts only on the item it drew: the same label, enabl
     await pressItem(updater, actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), false, ask);
     assert.deepEqual(acts, ['install'], 'the current label presses once, as a click');
     // The page is answered the label and whether it is enabled, never the act.
-    assert.deepEqual(updateAnswerOf('0.48.5', offered, null), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true }, said: null });
-    assert.deepEqual(updateAnswerOf('0.48.5', null, null), { version: '0.48.5', item: null, said: null });
+    assert.deepEqual(updateAnswerOf('0.48.5', offered, null, '0.48.6'), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true }, said: null, newer: '0.48.6' });
+    assert.deepEqual(updateAnswerOf('0.48.5', null, null, null), { version: '0.48.5', item: null, said: null, newer: null });
     // What the person's last check found rides the same answer: no other member of the seam carries it.
-    assert.deepEqual(updateAnswerOf('0.48.5', offered, 'Version 0.48.6 is available.'), {
+    assert.deepEqual(updateAnswerOf('0.48.5', offered, 'Version 0.48.6 is available.', '0.48.6'), {
         version: '0.48.5',
         item: { label: 'Download Jason 0.48.6', enabled: true },
         said: 'Version 0.48.6 is available.',
+        newer: '0.48.6',
     });
 });
 
@@ -403,4 +451,7 @@ export type CommandsAreThePage = Holds<Equal<DesktopCommand, PageCommand>>;
 test('the desktop’s list of commands is the page’s DesktopCommand, member for member and in order', () => {
     assert.ok(existsSync(pageDeclaration), `the page’s declaration ${pageDeclaration} is not in this tree`);
     assert.deepEqual([...desktopCommands], declaredCommands(pageDeclaration));
+    // The update notice's click opens Settings on its Update section: a command of its own, which no key sends.
+    assert.ok(isDesktopCommand('navigate.update'));
+    assert.equal(bindings.some((binding) => 'command' in binding.does && binding.does.command === 'navigate.update'), false);
 });

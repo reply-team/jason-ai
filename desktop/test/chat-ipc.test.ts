@@ -21,6 +21,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             list: (...args) => (calls.push(['list', ...args]), []),
             open: (...args) => (calls.push(['open', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, mode: 'ask_first', entries: [], dropped: 0, chosen: null }),
             create: async (...args) => (calls.push(['create', ...args]), { id: 'conv_1', campaignId: null, title: 'New chat', updatedAt: '', running: false, mode: 'ask_first' }),
+            createAgent: async (...args) => (calls.push(['createAgent', ...args]), { conversation: { id: 'conv_3', campaignId: 'cmp_3', title: 'New agent 1', updatedAt: '', running: false, mode: 'full_access', madeAtClick: true }, campaign: { id: 'cmp_3', name: 'New agent 1' } }),
             remove: (...args) => void calls.push(['remove', ...args]),
             restart: (...args) => void calls.push(['restart', ...args]),
             attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' }),
@@ -29,8 +30,6 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             openEndedFolder: async (...args) => void calls.push(['openEndedFolder', ...args]),
             feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
             cardRefused: (...args) => (calls.push(['cardRefused', ...args]), null),
-            fullAccessStanding: (...args: unknown[]) => (calls.push(['fullAccessStanding', ...args]), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true }),
-            takeBackFullAccess: (...args: unknown[]) => (calls.push(['takeBackFullAccess', ...args]), null),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -38,13 +37,14 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its sixteen calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its fifteen calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
         'jason:chat.attach',
         'jason:chat.cardRefused',
         'jason:chat.create',
+        'jason:chat.createAgent',
         'jason:chat.feed',
         'jason:chat.list',
         'jason:chat.open',
@@ -55,8 +55,6 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
         'jason:chat.send',
         'jason:chat.setMode',
         'jason:chat.stop',
-        'jason:fullAccess.standing',
-        'jason:fullAccess.takeBack',
     ]);
     const page = { senderFrame: { url: `${origin}/ui/#/chat`, parent: null } };
     await listeners.get('jason:chat.send')?.(page, 'c1', 'hello', { host: 'claude' });
@@ -65,6 +63,7 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
     listeners.get('jason:chat.list')?.(page);
     listeners.get('jason:chat.open')?.(page, 'conv_1');
     await listeners.get('jason:chat.create')?.(page, 'cmp_1', 'claude');
+    await listeners.get('jason:chat.createAgent')?.(page, '0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10', 'cmp_PLANTED');
     listeners.get('jason:chat.remove')?.(page, 'conv_1');
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
@@ -73,15 +72,14 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
     await listeners.get('jason:chat.openFolder')?.(page, 'name-1');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.equal(await listeners.get('jason:chat.cardRefused')?.(page, 'conv_1', 'choice', 'schema'), null);
-    assert.deepEqual(listeners.get('jason:fullAccess.standing')?.(page, 'planted'), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
-    assert.equal(await listeners.get('jason:fullAccess.takeBack')?.(page, { always: true, newChats: true }), null);
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
         ['answer', 'c1', 'r1', { allow: true, always: false }],
         ['list'],
         ['open', 'conv_1'],
-        ['create', 'cmp_1', 'claude'],
+        ['create', 'cmp_1'],
+        ['createAgent', '0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10'],
         ['remove', 'conv_1'],
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
@@ -90,14 +88,12 @@ test('the chat registers its sixteen calls, and each reaches the chat from the r
         ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
         ['cardRefused', 'conv_1', 'choice', 'schema'],
-        ['fullAccessStanding'],
-        ['takeBackFullAccess'],
-    ], 'the standing choice\'s two calls pass nothing the page sends');
+    ], 'a chat is made for the campaign named alone, whatever else the page sends');
 });
 
-test('no channel of the page gives the standing choice of Full access: the page reads it and takes it back', () => {
+test('no channel of the page reads, gives or takes back a standing choice of Full access: there is none', () => {
     const { listeners } = registered();
-    assert.deepEqual([...listeners.keys()].filter((channel) => /fullaccess|standing/i.test(channel)).sort(), ['jason:fullAccess.standing', 'jason:fullAccess.takeBack']);
+    assert.deepEqual([...listeners.keys()].filter((channel) => /fullaccess|standing/i.test(channel)), []);
 });
 
 test('a chat call from another origin or a subframe never reaches the chat', () => {
@@ -107,7 +103,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 32);
+    assert.equal(refusals.length, 30);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 
@@ -120,11 +116,11 @@ test('a refusal reaches the page as the desktop\'s sentence alone, answered as a
         throw new TypeError('not a refusal');
     };
     const page = { senderFrame: { url: `${origin}/ui/`, parent: null } };
-    const members = ['send', 'open', 'create', 'remove', 'restart', 'attach', 'rename'] as const;
+    const members = ['send', 'open', 'create', 'createAgent', 'remove', 'restart', 'attach', 'rename'] as const;
     for (const member of members) {
         for (const [act, answers] of [[refusing, true], [failing, false]] as const) {
             const listeners = new Map<string, Listener>();
-            const chat = { send: act, stop: () => undefined, answer: () => undefined, list: () => [], open: act, create: act, remove: act, restart: act, attach: act, rename: act };
+            const chat = { send: act, stop: () => undefined, answer: () => undefined, list: () => [], open: act, create: act, createAgent: act, remove: act, restart: act, attach: act, rename: act };
             registerChat({ handle: (channel, listener) => void listeners.set(channel, listener) }, chat as never, () => origin, () => undefined);
             const asked = Promise.resolve(listeners.get(`jason:chat.${member}`)?.(page, 'conv_1', 'cmp_1'));
             if (answers) assert.deepEqual(await asked, { refused: sentence }, member);

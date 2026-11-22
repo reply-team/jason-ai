@@ -930,9 +930,10 @@ runs:
         JASON_VERSION="$VERSION" npm run package -- --linux --x64
 
     # Each Linux package read back. The deb's control fields name the package, the version as dpkg spells it and the
-    # architecture; unpacked, /opt/Jason is held to the configuration it was built from (its feed, its fuses, and
-    # package-type saying deb, which makes electron-updater's deb updater), and its menu entry starts the program without
-    # --no-sandbox; its AppArmor profile lets the program make user namespaces, and its after-install loads that profile.
+    # architecture; unpacked with its control files, it is held to the configuration it was built from (its feed, its
+    # fuses, package-type saying deb, which makes electron-updater's deb updater, its AppArmor profile, which lets the
+    # program make user namespaces, the tree's own maintainer scripts, the repository's key and the rule for automatic
+    # updates as a configuration file), and its menu entry starts the program without --no-sandbox.
     # The AppImage's runtime names no interpreter and no shared library, read from its program headers and its dynamic
     # section, so it needs no libfuse2; its contents, extracted
     # by that runtime, are held to the configuration the same way, with no package-type, which makes the AppImage updater.
@@ -973,12 +974,8 @@ runs:
         if dpkg-deb --field "$deb" Depends | grep -q libicu; then echo "::error title=Desktop::The deb depends on an ICU library by one name; it recommends it by alternatives."; exit 1; fi
         opened="$RUNNER_TEMP/jason-desktop-deb"
         rm -rf "$opened"
-        dpkg-deb --extract "$deb" "$opened"
-        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile."; exit 1; }
-        control="$RUNNER_TEMP/jason-desktop-deb-control"
-        rm -rf "$control"
-        dpkg-deb --control "$deb" "$control"
-        grep -q 'apparmor_parser --replace' "$control/postinst" || { echo "::error title=Desktop::The deb's after-install loads no AppArmor profile for its sandbox."; exit 1; }
+        dpkg-deb --raw-extract "$deb" "$opened"
+        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb is not what it was configured to be: its feed, its fuses, its updater, its AppArmor profile, its maintainer scripts, its key, or an apt configuration it must not carry."; exit 1; }
         carries "$opened/opt/Jason" deb
         entries=("$opened"/usr/share/applications/*.desktop)
         [ -f "${entries[0]}" ] || { echo "::error title=Desktop::The deb puts no entry in the applications menu."; exit 1; }
@@ -1001,7 +998,7 @@ runs:
     # and by its own runtime's extraction where it does not. Each start has a data directory and a harness root of its
     # own, holding a UI build of one page, since this release's UI is not published yet; it must log desktop_started and
     # window_loaded, its program must not run with --no-sandbox, and the runtime it leaves running must stop with the
-    # jason the package carries. The deb is removed after. The deb starts on the runner as shipped, its sandbox resting on
+    # jason the package carries. The deb is purged after, so a machine that goes on to install it again starts clean. The deb starts on the runner as shipped, its sandbox resting on
     # the AppArmor profile it installs; the AppImage, which carries none, starts once the runner allows any program user
     # namespaces, by the system's setting where the runner restricts them.
     - name: Start the desktop's Linux packages under a virtual display
@@ -1056,8 +1053,8 @@ runs:
         sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends "$dist/jason-desktop-linux-x64.deb"
         if [ -e /etc/apparmor.d/jason-desktop-app ]; then echo "The deb installed its AppArmor profile."; else echo "The deb installed no AppArmor profile: this runner's AppArmor reads none."; fi
         started deb "$RUNNER_TEMP/jason-desktop-deb-data" /opt/Jason/resources/bundle/jason /usr/bin/jason-desktop-app
-        sudo apt-get -o Acquire::Retries=5 remove -y jason-desktop
-        [ ! -e /opt/Jason/jason-desktop-app ] || { echo "::error title=Desktop::apt remove left /opt/Jason/jason-desktop-app."; exit 1; }
+        sudo apt-get -o Acquire::Retries=5 purge -y jason-desktop
+        [ ! -e /opt/Jason/jason-desktop-app ] || { echo "::error title=Desktop::apt purge left /opt/Jason/jason-desktop-app."; exit 1; }
 
         # The AppImage carries no profile, so it runs its sandbox only where the system lets any program make user
         # namespaces. Where this runner refuses them, this run allows them by the system's own setting, for this run

@@ -6,6 +6,7 @@
 
 import type { KeptEntry } from './chat-conversations.ts';
 import type { LineEntry } from './feed.ts';
+import { codexModeSays, modeNames, modeSays, type ChatMode } from './chat-modes.ts';
 
 /** The longest campaign name a header or a title carries, in characters. */
 export const nameLimit = 120;
@@ -77,9 +78,81 @@ export interface About {
     } | null;
 }
 
-/** The header: one paragraph in the desktop's words, the first of every turn's message. */
-export function header(about: About): string {
-    const lead = 'Jason, not the person, wrote this first paragraph.';
+/** The longest account name the header names the person by, in UTF-16 units: the runtime's `Actors.MaxIdLength`. */
+export const accountLimit = 100;
+
+/** The characters a name the header gives may hold: letters of any script, digits, dots, underscores, hyphens and spaces. */
+const nameCharacters = /^[\p{L}\p{N}._ -]+$/u;
+
+/** Whether an account's name can stand as the system gives it after `human:` (`personSentence`). */
+export function usableAccount(account: unknown): account is string {
+    return typeof account === 'string' && account.length > 0 && account.length <= accountLimit && account.trim() === account && nameCharacters.test(account);
+}
+
+/**
+ * The sentence that names the person a turn's words come from by the actor the carried `jason` writes a person's acts
+ * under: this account's name as the operating system gives it (`os.userInfo().username` here, `Environment.UserName`
+ * there), after `human:`, in backticks, since a dot is a character of a name and a bare actor at the end of a sentence
+ * would leave it unclear where the name ends. A name with a space is given as well as the command gives it, in single
+ * quotes, so a shell does not split it. A name of any other character, or one that cannot stand exactly as the system
+ * gives it (none, empty, longer than `accountLimit`, white space at either end), is never given or changed: the sentence
+ * says to ask, since a record that goes wrong silently is worse than one question.
+ */
+function personSentence(account: unknown): string {
+    if (!usableAccount(account)) {
+        return "Jason could not read the name of the person's account: ask them which name to act as before you run a command on their word, and where the name they give holds a character other than a letter, a digit, a dot, an underscore, a hyphen or a space, ask once for it written with those alone, and give one with a space in single quotes, as `--actor 'human:Ada Lovelace'`.";
+    }
+    const actor = `human:${account}`;
+    return account.includes(' ')
+        ? `The person you talk with acts as \`${actor}\`, which a command gives in single quotes: \`--actor '${actor}'\`.`
+        : `The person you talk with acts as \`${actor}\`.`;
+}
+
+/** What a start is: the mode its arguments run it in, its host, and whether it is sealed from the person's own configuration. */
+export interface TurnStart {
+    mode: ChatMode;
+    program: 'claude' | 'codex';
+    /** A Claude Code start given none of the person's own settings, servers or plugins (`claudeSealed`). */
+    sealed: boolean;
+    /**
+     * Whether a Full access turn could follow in this conversation in this run of the desktop: false where this start was
+     * narrowed from Full access, or where Full access is not available here now (not offered, held off, below the floor).
+     */
+    fullAccess: boolean;
+}
+
+/**
+ * What the header says of the start: the mode it runs in and what the AI does in it, in the menu's own words for the mode
+ * (`modeSays`, Codex's where they differ), every turn, since the person may change the mode between turns and the
+ * history says only the modes of earlier ones; and, for a sealed Claude Code start, that the person's own configuration
+ * is not loaded, and, where a Full access turn could follow, that only one on their own sign-in loads it.
+ */
+export function startSentences(start: TurnStart): string {
+    const says = (start.program === 'codex' ? codexModeSays[start.mode] : undefined) ?? modeSays[start.mode];
+    const parts = [
+        `This turn runs in ${modeNames[start.mode]}: in it the AI ${says.charAt(0).toLowerCase()}${says.slice(1)}`,
+        "The person may change the mode between turns, so earlier turns' modes say nothing of this one; each turn's first paragraph names its own.",
+    ];
+    if (start.program === 'claude' && start.sealed) {
+        const notLoaded = "This turn does not load the person's own Claude Code settings, MCP servers or plugins";
+        parts.push(start.fullAccess ? `${notLoaded}; only a Full access turn on the person's own sign-in does.` : `${notLoaded}.`);
+    }
+    return parts.join(' ');
+}
+
+/**
+ * The header: one paragraph in the desktop's words, the first of every turn's message. With `account`, the person is
+ * named right after Jason's own sentence (`personSentence`); a turn always gives it, null where the name could not be
+ * read, and a row about the rest of the header leaves it out, which says nothing of the person. With `start`, the
+ * paragraph ends with what the start is (`startSentences`); a turn always gives it.
+ */
+export function header(about: About, account?: string | null, start?: TurnStart): string {
+    const body = headerBody(about, account);
+    return start === undefined ? body : `${body} ${startSentences(start)}`;
+}
+
+function headerBody(about: About, account?: string | null): string {
+    const lead = ['Jason, not the person, wrote this first paragraph.', ...(account === undefined ? [] : [personSentence(account)])].join(' ');
     const campaign = about.campaign;
     if (about.main === true) {
         return `${lead} This conversation is the Feed, the person's main chat: it is about no campaign, and a campaign made in it keeps a conversation of its own.`;

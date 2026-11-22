@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -14,6 +14,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { resetRecent } from './recent';
 import { chats, conversations } from './state';
+import { sideRow } from '../test/side-rows';
 
 // A chat drawn out of sight is not drawn again for a word typed in the chat shown. A chat's panel asks for the model
 // and effort its next turn runs on (`onHost`) each time it is drawn, so the calls naming a chat count its draws.
@@ -49,10 +50,7 @@ async function renderConsole(): Promise<void> {
     await waitFor(() => expect(attention.loaded.value).toBe(true));
 }
 
-const recentRow = (name: string) =>
-    within(
-        within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', { name: 'Conversations' }),
-    ).getByRole('button', { name });
+const recentRow = (name: string) => sideRow(name);
 const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
 
 beforeEach(() => {
@@ -66,7 +64,7 @@ beforeEach(() => {
 describe('a chat out of sight', () => {
     it('is not drawn again while a person types in the chat shown', async () => {
         await renderConsole();
-        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        fireEvent.click(await waitFor(() => recentRow('Spring')));
         await waitFor(() => expect(shown()).toBe('chat:conv_a'));
         fireEvent.change(box(), { target: { value: 'Half a thought' } });
         fireEvent.click(recentRow('North list'));

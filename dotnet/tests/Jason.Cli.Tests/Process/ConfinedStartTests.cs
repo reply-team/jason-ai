@@ -21,6 +21,8 @@ public class ConfinedStartTests
 
         Assert.False(started.Item1.Environment.ContainsKey(Confinement.Variable), "A plain launch passed the variable on.");
         Assert.False(started.Item2.Environment.ContainsKey(Confinement.Variable), "The update's launch passed the variable on.");
+        Assert.False(started.Item1.Environment.ContainsKey(Confinement.ChatTurnVariable), "A plain launch passed the chat's variable on.");
+        Assert.False(started.Item2.Environment.ContainsKey(Confinement.ChatTurnVariable), "The update's launch passed the chat's variable on.");
     }
 
     [Fact]
@@ -30,19 +32,23 @@ public class ConfinedStartTests
         var started = Confined(() => RuntimeProcessControl.RunStart(dir.Paths, [Path.Combine(Path.GetTempPath(), "jason"), "update", "apply"]));
 
         Assert.False(started.Environment.ContainsKey(Confinement.Variable), "The command that starts a runtime passed the variable on.");
+        Assert.False(started.Environment.ContainsKey(Confinement.ChatTurnVariable), "The command that starts a runtime passed the chat's variable on.");
     }
 
     private static T Confined<T>(Func<T> start)
     {
         var original = Environment.GetEnvironmentVariable(Confinement.Variable);
+        var turn = Environment.GetEnvironmentVariable(Confinement.ChatTurnVariable);
         try
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, "1");
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, "1");
             return start();
         }
         finally
         {
             Environment.SetEnvironmentVariable(Confinement.Variable, original);
+            Environment.SetEnvironmentVariable(Confinement.ChatTurnVariable, turn);
         }
     }
 }

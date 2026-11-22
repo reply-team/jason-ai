@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 using static Jason.Runtime.Tests.Documentation.Workflows;
 
@@ -96,7 +97,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// The proof runs the install scripts as the release publishes them, unchanged, from the tag's own tree; on the Mac it
     /// asks Gatekeeper about the application where the script put it, after the plain install and after one from a
-    /// quarantined download; and every job ends on the comparison of each uninstall's listing with the machine before.
+    /// quarantined download, and about this release's application once the one-installation release's own updater has put
+    /// it in place; and every job ends on the comparison of each uninstall's listing with the machine before.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a proof that runs anything but the published scripts, or skips a compare, passes on what the release does not ship")]
@@ -105,16 +107,17 @@ public partial class ReleaseWorkflowTests
         var release = Read(Release);
         var windows = Job(release, "proof-windows");
         Assert.Contains("-Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script (Join-Path $env:GITHUB_WORKSPACE 'install\\install.ps1')", windows, StringComparison.Ordinal);
-        foreach (var step in new[] { "UninstallFromTerminal", "InstallOverPrevious", "UninstallFromInstalledApps", "FromPrevious", "Held" })
+        foreach (var step in new[] { "UninstallFromTerminal", "InstallOverPrevious", "UninstallFromInstalledApps", "FromPrevious", "FromOneInstallation", "Held" })
         {
             Assert.Contains($"-Step {step} ", windows, StringComparison.Ordinal);
         }
 
         var macos = Job(release, "proof-macos");
         Assert.Equal(2, CountOf(macos, "test-installation-macos.sh install \"$FEED\" \"$VERSION\" \"$GITHUB_WORKSPACE/install/install.sh\"") + CountOf(macos, "test-installation-macos.sh install \"$RUNNER_TEMP/feed-quarantined\" \"$VERSION\" \"$GITHUB_WORKSPACE/install/install.sh\""));
-        Assert.Equal(2, CountOf(macos, "test-installation-macos.sh assess"));
+        Assert.Equal(3, CountOf(macos, "test-installation-macos.sh assess"));
         Assert.True(macos.IndexOf("test-installation-macos.sh quarantine", StringComparison.Ordinal) < macos.IndexOf("test-installation-macos.sh install \"$RUNNER_TEMP/feed-quarantined\"", StringComparison.Ordinal));
-        foreach (var step in new[] { "refuse-while-open", "uninstall-terminal", "uninstall-menu", "from-previous", "held" })
+        Assert.True(macos.IndexOf("test-installation-macos.sh from-one-installation ", StringComparison.Ordinal) < macos.LastIndexOf("test-installation-macos.sh assess", StringComparison.Ordinal), "the Mac's proof does not ask Gatekeeper about the application the one-installation release's updater put in place");
+        foreach (var step in new[] { "refuse-while-open", "uninstall-terminal", "uninstall-menu", "from-previous", "from-one-installation", "held" })
         {
             Assert.Contains($"test-installation-macos.sh {step}", macos, StringComparison.Ordinal);
         }
@@ -139,9 +142,29 @@ public partial class ReleaseWorkflowTests
     /// is published that is a release of one installation, which installs Jason Desktop alone, and every such leg would
     /// fail on it, so the first fix after 0.49 could not be published, and CI's union jobs would fail on main and on the
     /// next release's pull request in the same way. When these legs are given a 0.49 release to start from, this value and
-    /// the legs change together.
+    /// the legs change together. A release of the world after is the other pin, <see cref="OneInstallationRelease"/>, with
+    /// a fetch and a leg of its own.
     /// </summary>
     private const string PreviousRelease = "v0.48.7";
+
+    /// <summary>
+    /// The one-installation release the release's proof jobs update from as well, named: a release of the world after,
+    /// where Jason Desktop is installed alone and carries the jason a terminal runs. There are two pins because a person
+    /// updates from either world: <see cref="PreviousRelease"/>'s legs begin with a command-line Jason and Jason Desktop
+    /// installed apart and reach this release through that release's own update and the move; this release's leg begins
+    /// with Jason Desktop alone, no window open, and reaches this release through its carried <c>jason update apply</c>,
+    /// which hands the update to its own Jason Desktop's updater and the rest to this release's carried jason. Only the
+    /// release's proof jobs run it: that updater installs an update signed as the release is, which a test build never is.
+    /// It is v0.49.0 or later and before the version this tree builds, and it is never read as the latest published
+    /// release, which moves under a proof that ran and, once this release is published, is this release itself.
+    /// </summary>
+    private const string OneInstallationRelease = "v0.49.0";
+
+    /// <summary>The name of the step each release proof job fetches <see cref="OneInstallationRelease"/> by.</summary>
+    private const string FetchOneInstallation = "Fetch the one-installation release this one updates from";
+
+    /// <summary>The leg of each release proof job that updates from <see cref="OneInstallationRelease"/>.</summary>
+    private const string FromOneInstallationLeg = "Update the one-installation release's Jason Desktop with its own jason update apply, finished by this release's jason";
 
     /// <summary>
     /// The legs and framing steps that are named otherwise in the release's proof job than in CI's union job, by the
@@ -193,6 +216,7 @@ public partial class ReleaseWorkflowTests
         ("union-macos", "Install this build by install.sh over the previous release's running command-line Jason", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "The previous release's Jason Desktop, its bundle replaced by this build's as its updater replaces it, sets the machine up at its first start", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "The previous release's Jason Desktop and its running command-line Jason, the bundle replaced by this build's as its updater replaces it, set up at its first start", "the release runs the legs it ran before; this one joins once it is green in CI"),
+        ("union-macos", "The previous release's running command-line Jason with no start at login, the bundle replaced by this build's, the start at login turned on once", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Open this build from its disk image, then eject it", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Say what the previous release's own uninstall leaves in launchd", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-macos", "Move again from the previous release, then go back to it as the update page says", "the release runs the legs it ran before; this one joins once it is green in CI"),
@@ -204,6 +228,10 @@ public partial class ReleaseWorkflowTests
     [
         ("proof-windows", "actions/download-artifact@v7", "the release proves the packages its platform's and the skills' jobs uploaded, where CI builds its own"),
         ("proof-macos", "actions/download-artifact@v7", "the release proves the packages its platform's and the skills' jobs uploaded, where CI builds its own"),
+        ("proof-windows", FetchOneInstallation, "the one-installation release's updater runs only a setup signed by the release's publisher, which CI's test build never is"),
+        ("proof-windows", FromOneInstallationLeg, "the one-installation release's updater runs only a setup signed by the release's publisher, which CI's test build never is"),
+        ("proof-macos", FetchOneInstallation, "Squirrel installs only an update signed by the running application's own team, a Developer ID, which CI's ad hoc build is not"),
+        ("proof-macos", FromOneInstallationLeg, "Squirrel installs only an update signed by the running application's own team, a Developer ID, which CI's ad hoc build is not"),
     ];
 
     /// <summary>The script steps a release proof job's legs run that its union job's do not, each with the reason.</summary>
@@ -327,7 +355,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Every job that updates from a previous release fetches the one <see cref="PreviousRelease"/> names, given to its
     /// fetch by name, and never reads which release is the latest published one: these legs begin in the world before one
-    /// installation, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against.
+    /// installation, and v0.48.7, a release of that world, is the 0.48 release these legs were last read against. The fetch
+    /// takes its tag from the pin and holds the files it verifies to that release's checksums.txt by their digests.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "a proof job that updates from the latest published release fails every previous-release leg once 0.49.0 is published, and blocks the first fix after it")]
@@ -344,7 +373,120 @@ public partial class ReleaseWorkflowTests
             Assert.DoesNotContain("releases/latest", run, StringComparison.Ordinal);
             Assert.Contains("PREVIOUS_RELEASE", run, StringComparison.Ordinal);
             Assert.Contains("https://github.com/reply-team/jason-ai/releases/download/$tag/", run, StringComparison.Ordinal);
+            AssertTheFetchHoldsItsFiles(run, name, "PREVIOUS_RELEASE", "PREVIOUS");
         }
+    }
+
+    /// <summary>
+    /// A fetch of a pinned release takes the release's tag from the pin's own variable, once, and holds each file it
+    /// verifies to that release's checksums.txt: a file with no line there fails, and so does one whose SHA-256 differs,
+    /// read by Get-FileHash on Windows and by shasum -a 256 -c on a Mac.
+    /// </summary>
+    private static void AssertTheFetchHoldsItsFiles(string run, string job, string pin, string folder)
+    {
+        if (job.EndsWith("-windows", StringComparison.Ordinal))
+        {
+            Assert.Single(Regex.Matches(run, @"(?m)^\$tag = "));
+            Assert.Contains($"\n$tag = $env:{pin}\n", run, StringComparison.Ordinal);
+            Assert.Contains("if (-not $listed.ContainsKey($name)) { throw \"$name has no line in $tag's checksums.txt\" }", run, StringComparison.Ordinal);
+            Assert.Contains($"if ((Get-FileHash -LiteralPath (Join-Path $env:{folder} $name) -Algorithm SHA256).Hash -ne $listed[$name]) {{ throw \"$name does not match $tag's checksums.txt\" }}", run, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Single(Regex.Matches(run, @"(?m)^tag="));
+            Assert.Contains($"\ntag=\"${pin}\"\n", run, StringComparison.Ordinal);
+            Assert.Contains("[ -n \"$line\" ] || { echo \"::error::$name has no line in $tag's checksums.txt\"; exit 1; }", run, StringComparison.Ordinal);
+            Assert.Contains($"(cd \"${folder}\" && printf '%s\\n' \"$line\" | shasum -a 256 -c - > /dev/null) || {{ echo \"::error::$name does not match $tag's checksums.txt\"; exit 1; }}", run, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Each release proof job updates from two named releases, each fetched by its own step: <see cref="PreviousRelease"/>, a
+    /// 0.48 release, and <see cref="OneInstallationRelease"/>, at or after v0.49.0 and before the version this tree builds,
+    /// given to its fetch by name and never read as the latest published. That fetch takes its tag from the pin, holds the
+    /// files the release's own install script installs to its checksums.txt by their digests and says the others
+    /// unverified; it comes before the one leg that needs it, which hands the folder it fetched to the step that updates from
+    /// it, and compares the uninstall after it with the machine before. The job's summary says that release's handing proven
+    /// only where the leg's step succeeded having run to its end, and otherwise that the leg failed, was cancelled or was not
+    /// run. CI's union jobs fetch no one-installation release (<see cref="ReleaseOnly"/> says why).
+    /// </summary>
+    [Fact]
+    [Critical(Family.B7, "a one-installation pin read as the latest published, or not before the version a release builds, fails the leg updating from it and blocks the release")]
+    public void Each_release_proof_job_updates_from_the_one_named_one_installation_release_as_well()
+    {
+        Assert.Matches(@"^v0\.48\.\d+$", PreviousRelease);
+        Assert.Matches(@"^v\d+\.\d+\.\d+$", OneInstallationRelease);
+        var pinned = Version.Parse(OneInstallationRelease[1..]);
+        var builds = Version.Parse(Regex.Match(Read(["dotnet", "Directory.Build.props"]), @"<VersionPrefix>(?<version>\d+\.\d+\.\d+)</VersionPrefix>").Groups["version"].Value);
+        Assert.True(pinned >= new Version(0, 49, 0), $"{OneInstallationRelease} is a release before one installation");
+        Assert.True(pinned < builds, $"{OneInstallationRelease} is not before {builds}, the version this tree builds");
+
+        var release = Mapping(Parse(Read(Release)), "jobs");
+        var releaseText = Read(Release).Replace("\r\n", "\n", StringComparison.Ordinal);
+        foreach (var (name, verified, unverifiable, step, compare, judged) in new[]
+        {
+            ("proof-windows", "$verified = @('jason-desktop-windows-x64-setup.exe')", "$unverifiable = @('install.ps1', 'manifest.json')",
+                "./.github/scripts/Test-InstallationWindows.ps1 -Step FromOneInstallation -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -OneInstallation $env:ONE_INSTALLATION",
+                "./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-one-installation-uninstall -Against before",
+                "$ended = Join-Path $env:OUT 'legs-ended.txt'\n"
+                    + "$handed = if ($env:ONE_INSTALLATION_LEG -ceq 'success' -and (Test-Path -LiteralPath $ended) -and @(Get-Content -LiteralPath $ended) -ccontains $env:ONE_INSTALLATION_LEG_NAME) { 'is proven here, by its leg' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'failure') { 'is not proven here: its leg failed' } elseif ($env:ONE_INSTALLATION_LEG -ceq 'cancelled') { 'is not proven here: its leg was cancelled' } else { 'is not proven here: its leg was not run' }\n"),
+            ("proof-macos", "verified=\"jason-desktop-macos-arm64.zip\"", "unverifiable=\"install.sh manifest.json\"",
+                "bash .github/scripts/test-installation-macos.sh from-one-installation \"$ONE_INSTALLATION\" \"$FEED\" \"$VERSION\"",
+                "bash .github/scripts/test-installation-macos.sh compare after-one-installation-uninstall before",
+                "if [ \"$ONE_INSTALLATION_LEG\" = success ] && grep -qxF -- \"$ONE_INSTALLATION_LEG_NAME\" \"$OUT/legs-ended.txt\" 2>/dev/null; then handed=\"is proven here, by its leg\"\n"
+                    + "elif [ \"$ONE_INSTALLATION_LEG\" = failure ]; then handed=\"is not proven here: its leg failed\"\n"
+                    + "elif [ \"$ONE_INSTALLATION_LEG\" = cancelled ]; then handed=\"is not proven here: its leg was cancelled\"\n"
+                    + "else handed=\"is not proven here: its leg was not run\"; fi\n"),
+        })
+        {
+            var job = Mapping(release, name);
+            Assert.EndsWith("one-installation", Scalar(Mapping(job, "env"), "ONE_INSTALLATION"), StringComparison.Ordinal);
+            var steps = JobSteps(job).ToList();
+            Assert.Single(steps, candidate => Scalar(candidate, "name") == "Fetch the previous release");
+            var fetch = Assert.Single(steps, candidate => Scalar(candidate, "name") == FetchOneInstallation);
+            Assert.Equal("one-installation", Scalar(fetch, "id"));
+            Assert.Equal("${{ !cancelled() }}", Scalar(fetch, "if"));
+            Assert.Equal(OneInstallationRelease, Scalar(Mapping(fetch, "env"), "ONE_INSTALLATION_RELEASE"));
+            var run = Scalar(fetch, "run")!;
+            Assert.DoesNotContain("releases/latest", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("PREVIOUS", run, StringComparison.Ordinal);
+            Assert.Contains("ONE_INSTALLATION_RELEASE", run, StringComparison.Ordinal);
+            Assert.Contains("https://github.com/reply-team/jason-ai/releases/download/$tag/", run, StringComparison.Ordinal);
+            Assert.Contains(verified, run, StringComparison.Ordinal);
+            Assert.Contains(unverifiable, run, StringComparison.Ordinal);
+            AssertTheFetchHoldsItsFiles(run, name, "ONE_INSTALLATION_RELEASE", "ONE_INSTALLATION");
+
+            // The comment over the fetch says the pin is never read as the latest published release.
+            var jobText = Job(releaseText, name);
+            var fetchAt = jobText.IndexOf($"\n      - name: {FetchOneInstallation}\n", StringComparison.Ordinal);
+            Assert.True(fetchAt > 0, $"{name} has no step '{FetchOneInstallation}' at a step's indentation");
+            var comment = jobText[(jobText.LastIndexOf("\n\n", fetchAt, StringComparison.Ordinal) + 2)..fetchAt];
+            Assert.Contains("# Never read as the latest published release", comment, StringComparison.Ordinal);
+
+            var needing = steps.Where(candidate => (Scalar(candidate, "run") ?? "").Contains($"{FetchOneInstallation}=${{{{ steps.one-installation.outcome }}}}", StringComparison.Ordinal)).ToList();
+            var leg = Assert.Single(needing);
+            Assert.Equal(FromOneInstallationLeg, Scalar(leg, "name"));
+            Assert.Equal("from-one-installation", Scalar(leg, "id"));
+            Assert.True(steps.IndexOf(fetch) < steps.IndexOf(leg), $"{name} runs '{FromOneInstallationLeg}' before it fetches what that leg needs");
+            var lines = Lines(leg);
+            Assert.Contains(step, lines);
+            Assert.Contains(compare, lines);
+            Assert.True(lines.IndexOf(step) < lines.IndexOf(compare), $"{name}: the leg compares before it updates");
+
+            // What the job does not prove says the one-installation release's handing proven only where the leg's step
+            // succeeded having run to its end, which a leg its begin did not run never reaches; failed where the step failed;
+            // and not run otherwise.
+            var summary = Assert.Single(steps, candidate => Scalar(candidate, "name") == "Say what this job does not prove");
+            Assert.Equal("always()", Scalar(summary, "if"));
+            Assert.Equal("${{ steps.from-one-installation.outcome }}", Scalar(Mapping(summary, "env"), "ONE_INSTALLATION_LEG"));
+            Assert.Equal(FromOneInstallationLeg, Scalar(Mapping(summary, "env"), "ONE_INSTALLATION_LEG_NAME"));
+            var says = Scalar(summary, "run")!;
+            Assert.Contains(judged, says, StringComparison.Ordinal);
+            Assert.Contains("the one-installation release's command line handing this release to its Jason Desktop, with no window, $handed.", says, StringComparison.Ordinal);
+            Assert.True(says.IndexOf(judged, StringComparison.Ordinal) < says.IndexOf("$handed.", StringComparison.Ordinal), $"{name}: the summary says the handing before it judges it");
+        }
+
+        Assert.DoesNotContain("ONE_INSTALLATION", Read(Ci), StringComparison.Ordinal);
     }
 
     /// <summary>A step's name, or what it uses where it has none.</summary>

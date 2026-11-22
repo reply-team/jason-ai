@@ -3,14 +3,14 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.49.1**.
+this pack ships with Jason **0.49.2**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
 **What they do not teach yet.** Of the nine, `jason skills install` and `jason skills update` are mentioned only
-by `operating-the-installation`, `jason status` only by it, `troubleshooting-jason` and `customising-jason`, and
-`jason logs` and `jason doctor` are taught by `troubleshooting-jason` only. `verified` in
+by `operating-the-installation`, `jason status` only by it, `troubleshooting-jason`, `customising-jason` and
+`managed-campaign-work`, and `jason logs` and `jason doctor` are taught by `troubleshooting-jason` only. `verified` in
 this repository means a named agent host read *that exact text* — its description and its body — while driving
 this runtime and the digest of what it read is recorded, so a verified text cannot gain the new verbs without
 being re-read by a host — which is why the ones verified before 0.2.0 still teach what this build did before those

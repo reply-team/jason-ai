@@ -10,11 +10,11 @@ export const standInCode = 'planted-code-Ab1_Cd2Ef3Gh4';
 const table = new Set([
     'mode.get',
     'theme.get',
-    'fullAccess.standing',
     'setup.status',
     'chat.list',
     'chat.open',
     'chat.create',
+    'chat.createAgent',
     'chat.send',
     'chat.stop',
     'chat.rename',
@@ -54,7 +54,6 @@ export function standInBridge(desktop: StubDesktop, port = 43210): StandIn {
     let known = true;
     desktop.chat.onEvent((id, event) => state.push({ channel: 'chat.event', args: [id, event] }));
     desktop.setup.onChanged(() => state.push({ channel: 'setup.changed', args: [] }));
-    desktop.fullAccess.onChanged((standing) => state.push({ channel: 'fullAccess.changed', args: [standing] }));
     state.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(String(input));
         if (url.host !== `127.0.0.1:${port}`) throw new Error('unreachable');

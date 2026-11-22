@@ -156,7 +156,8 @@ test('on Linux turning it on writes an XDG autostart entry that starts this appl
     assert.equal(item.supported, true);
     assert.equal(item.isOn(), false);
     await item.set(true);
-    assert.equal(readFileSync(file, 'utf8'), `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nExec="${appImage}" ${loginFlag}\n`);
+    // TryExec: once the file it names is gone (the system's own removal, the AppImage deleted), the session skips the entry.
+    assert.equal(readFileSync(file, 'utf8'), `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\nTryExec=${appImage}\nExec="${appImage}" ${loginFlag}\n`);
     assert.equal(item.isOn(), true);
     assert.deepEqual(readdirSync(dirname(file)), ['ai.jasonharness.desktop.desktop'], 'written by rename, no temporary left');
     await item.set(false);
@@ -175,11 +176,22 @@ test('on Linux the entry goes under $XDG_CONFIG_HOME when it names an absolute f
     assert.equal(autostartEntryFile('/home/a', { XDG_CONFIG_HOME: '' }), join('/home/a', '.config', 'autostart', 'ai.jasonharness.desktop.desktop'));
 });
 
-test('on Linux the Exec line quotes the launcher as the Desktop Entry Specification says, and a launcher it cannot spell is not offered', () => {
+test('on Linux the Exec and TryExec lines spell the launcher as the Desktop Entry Specification says, and a launcher it cannot spell is not offered', () => {
     assert.equal(autostartExec('/opt/Jason/jason-desktop-app'), `Exec="/opt/Jason/jason-desktop-app" ${loginFlag}`);
     // Inside quotes a double quote, a backtick, a dollar sign and a backslash take a backslash; the string escape then
     // doubles every backslash.
     assert.equal(autostartExec('/home/a/R&D "x" `y` $z \\w/Jason.AppImage'), `Exec="/home/a/R&D \\\\"x\\\\" \\\\\`y\\\\\` \\\\$z \\\\\\\\w/Jason.AppImage" ${loginFlag}`);
+    // TryExec is a string and is not quoted: only the string escape, a backslash doubled. Catches a session that reads a
+    // backslash's escape and looks for another file, or drops the line as an unreadable value.
+    assert.ok(autostartEntry('/home/a/R&D "x" `y` $z \\w/Jason.AppImage').includes('\nTryExec=/home/a/R&D "x" `y` $z \\\\w/Jason.AppImage\n'));
+    // The whole entry, as the uninstall's AppImage row (UninstallCarriedTests) plants it for a folder of the same name.
+    assert.equal(autostartEntry('/home/a/My "Apps" \\ $x/Jason.AppImage'), String.raw`[Desktop Entry]
+# Written by the Jason desktop application.
+Type=Application
+Name=Jason
+TryExec=/home/a/My "Apps" \\ $x/Jason.AppImage
+Exec="/home/a/My \\"Apps\\" \\\\ \\$x/Jason.AppImage" --opened-at-login
+`);
     assert.equal(autostartExec('/home/a/100%/Jason.AppImage'), null, 'a per-cent begins a field code');
     assert.equal(autostartExec('/home/a/new\nline/Jason.AppImage'), null);
     assert.equal(new LoginItem({ platform: 'linux', home: '/home/a', executable: '/home/a/100%/Jason.AppImage', electron: electronLogin(), pathRead, log: memoryLog(), env: {} }).supported, false);
@@ -228,19 +240,16 @@ function autostartCli(registered: () => boolean, exit = 0): Cli & { asked: strin
     };
 }
 
-test('Start the runtime at logon is read and set through jason runtime autostart, and the desktop writes nothing for it', async () => {
-    const cli = autostartCli(() => false);
+test('the runtime’s start at logon is read and taken off through jason runtime autostart, and the desktop writes nothing for it', async () => {
+    const cli = autostartCli(() => true);
     const log = memoryLog();
     const autostart = new RuntimeAutostart({ cli, log });
-    assert.equal(await autostart.registered(), false);
-    assert.equal(await autostart.set(true), true);
-    assert.equal(await autostart.set(false), false);
-    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);
-    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
-        ['autostart_set', { On: true, Exit: 0 }],
-        ['autostart_set', { On: false, Exit: 0 }],
-    ]);
-    assert.equal(verbOf(['runtime', 'autostart', 'enable']), 'runtime autostart', 'the log names the verb');
+    assert.equal(await autostart.registered(), true);
+    assert.equal(await autostart.disable(), false);
+    assert.deepEqual(cli.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'disable']]);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_disabled', { Exit: 0 }]]);
+    assert.equal(verbOf(['runtime', 'autostart', 'disable']), 'runtime autostart', 'the log names the verb');
+    assert.equal('set' in autostart, false, 'nothing turns it on from the desktop: the machine set-up registers it');
 });
 
 test('an autostart the CLI refused or did not answer is unknown, and logged by its exit alone', async () => {
@@ -248,14 +257,14 @@ test('an autostart the CLI refused or did not answer is unknown, and logged by i
     const refusing = autostartCli(() => true, 1);
     const autostart = new RuntimeAutostart({ cli: refusing, log });
     assert.equal(await autostart.registered(), null);
-    assert.equal(await autostart.set(true), null);
-    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_set', { On: true, Exit: 1 }]]);
-    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']], 'a set that said nothing is followed by a read');
+    assert.equal(await autostart.disable(), null);
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['autostart_disabled', { Exit: 1 }]]);
+    assert.deepEqual(refusing.asked, [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'disable'], ['runtime', 'autostart', 'status']], 'a disable that said nothing is followed by a read');
     const garbled: Cli = { run: async () => ({ exit: 0, stdout: 'not json', stderr: '' }) };
     assert.equal(await new RuntimeAutostart({ cli: garbled, log: memoryLog() }).registered(), null);
 });
 
-test('a set the CLI answered without saying what is registered is followed by a read of what is', async () => {
+test('a disable the CLI answered without saying what is registered is followed by a read of what is', async () => {
     const asked: string[][] = [];
     const cli: Cli = {
         async run(args) {
@@ -264,8 +273,8 @@ test('a set the CLI answered without saying what is registered is followed by a 
             return { exit: 0, stdout: 'done\n', stderr: '' };
         },
     };
-    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).set(true), true);
-    assert.deepEqual(asked, [['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'status']]);
+    assert.equal(await new RuntimeAutostart({ cli, log: memoryLog() }).disable(), true);
+    assert.deepEqual(asked, [['runtime', 'autostart', 'disable'], ['runtime', 'autostart', 'status']]);
 });
 
 test('the login items’ log lines, read back, carry the setting and the platform, never a path the CLI printed', async (t) => {
@@ -274,10 +283,10 @@ test('the login items’ log lines, read back, carry the setting and the platfor
     const log = fileLogger(logs);
     await new LoginItem({ platform: 'darwin', home: join(root, 'home'), executable: '/planted-exe/Jason', electron: electronLogin(), pathRead, log }).set(true);
     const autostart = new RuntimeAutostart({ cli: autostartCli(() => false), log });
-    await autostart.set(true);
+    await autostart.disable();
     const text = readdirSync(logs).map((name) => readFileSync(join(logs, name), 'utf8')).join('');
     assert.equal(text.includes('planted'), false, 'a path reached the log');
-    assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_set']);
+    assert.deepEqual(text.split(/\r?\n/).filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName), ['login_item_set', 'autostart_disabled']);
 });
 
 /** A CLI whose `runtime autostart status` names `executable` when registered, and whose enable registers its own jason. */

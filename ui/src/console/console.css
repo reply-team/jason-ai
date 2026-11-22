@@ -471,43 +471,8 @@
     font-size: 11px;
     line-height: 1.5;
 }
-.jc-console .newbtn {
-    margin: 2px 14px 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 10px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-.jc-console .newbtn:hover {
-    border-color: var(--accent-line);
-}
-.jc-console .newbtn[aria-current='true'] {
-    border-color: var(--accent-line);
-    background: var(--hover);
-}
 .jc-console .menuwrap {
     position: relative;
-}
-/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
-.jc-console .newrow {
-    display: flex;
-    gap: 8px;
-    margin: 2px 14px 8px;
-}
-.jc-console .newrow .newbtn {
-    margin: 0;
-    flex: 1;
-    min-width: 0;
-    font-weight: 500;
-    padding: 8px 10px;
-    border-radius: 10px;
 }
 .jc-console .caret {
     flex: none;
@@ -522,18 +487,6 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
-    color: var(--ink);
-}
-.jc-console .newrow .caret {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-.jc-console .newrow .caret:hover,
-.jc-console .newrow .caret[aria-expanded='true'] {
-    background: var(--panel);
-    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -557,11 +510,6 @@
     border-radius: 12px;
     padding: 4px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-.jc-console .menuwrap.create > .menu {
-    left: 14px;
-    right: 14px;
-    top: calc(100% - 6px);
 }
 .jc-console .menuitem {
     display: grid;
@@ -635,6 +583,13 @@
 .jc-console .item:hover {
     background: var(--hover);
     text-decoration: none;
+}
+/* The row whose menu is open (`row-menu.tsx`). */
+.jc-console .recent-row.menu-open {
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+.jc-console .recent-row.menu-open:not([aria-current='true']) {
+    background: var(--hover);
 }
 .jc-console .item svg {
     flex: 0 0 17px;
@@ -1255,7 +1210,7 @@ body,
     overflow: hidden;
     line-height: 1.45;
 }
-/* The sidebar's body: the brand and the button, the menu and Recent scrolling between them and the foot. */
+/* The sidebar's body: the brand, then the menu and the two sections, AGENTS and CHATS, scrolling above the foot. */
 .jc-console .side-body {
     display: flex;
     flex-direction: column;
@@ -1442,6 +1397,17 @@ body,
     gap: 6px;
     padding: 8px 16px 0;
 }
+/* Whose chat this is, on one standing line at the bar's start; the bar's buttons stay at its end. */
+.jc-console .chat-whose {
+    margin-right: auto;
+    align-self: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--mute);
+    font-size: 13px;
+}
 .jc-console .chat-bar .btn.ib {
     flex: none;
     width: 36px;
@@ -1479,6 +1445,33 @@ body,
     color: var(--mute);
     font-size: 13px;
     overflow-wrap: anywhere;
+}
+/* A note that closes: a notice or an aside of a chat, or the sidebar's word that a folder did not open. Its words, its
+   button where it has one, and its close control at the end of the line. */
+.jc-console .note.closable {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.jc-console .note.closable .note-said {
+    flex: 1;
+    min-width: 0;
+}
+.jc-console .note-close {
+    flex: none;
+    display: inline-flex;
+    padding: 2px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+}
+.jc-console .note-close:hover,
+.jc-console .note-close:focus-visible {
+    opacity: 1;
+    background: var(--hover);
 }
 .jc-console .chat-pick .ask-a {
     flex-wrap: wrap;
@@ -1649,6 +1642,12 @@ body,
 .jc-console .harness {
     height: 100%;
     overflow-y: auto;
+}
+/* A row's menu opens its dialog in a frame beside the shell, not in a pane: the frame scopes the palette's tokens, which
+   inherit through it, and draws no box. As a box of the panel's height it is a second item of the console's column, which
+   shrinks the shell to no height and fills the window with its own opaque background behind the dialog's layer. */
+.jc-console .harness.row-dialog {
+    display: contents;
 }
 /* The shell's grid is a sidebar column and a content column; with no sidebar the one child would sit in the sidebar's
    column, so the hosted page has the one column, as wide as the panel. */
@@ -2271,6 +2270,33 @@ body,
 .jc-console .mode-strip-refusal {
     font-weight: 600;
 }
+/* A plugin a route names held back: the refusal's weight, one line, its words cut where the strip ends. */
+.jc-console .mode-strip-unavailable {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--red);
+    -webkit-app-region: no-drag;
+}
+.jc-console .mode-strip-unavailable .mode-strip-said {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.jc-console .mode-strip-link {
+    flex: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
 /* The demo's sample being made: a quiet mark, gone once it is ready. */
 .jc-console .mode-preparing {
     flex: none;
@@ -2474,6 +2500,15 @@ body,
 .jc-console .rbtn[data-active='true'] {
     color: var(--accent);
 }
+/* A plus that cannot be pressed now, while an agent is being made or where the place cannot make one. */
+.jc-console .rbtn[disabled] {
+    color: var(--faint);
+    cursor: default;
+}
+.jc-console .rbtn[disabled]:hover {
+    background: none;
+    color: var(--faint);
+}
 .jc-console .recent .menu {
     left: auto;
     right: 10px;
@@ -2492,12 +2527,73 @@ body,
 .jc-console .menuitem[role='menuitemradio'] svg {
     grid-row: auto;
 }
-.jc-console .rsearch {
-    padding: 2px 6px 6px;
+/* A row of AGENTS or CHATS and its three dots, shown on hover and on focus, over the row's right end. */
+.jc-console .rrow {
+    position: relative;
 }
-.jc-console .rsearch .inp {
+.jc-console .rdots {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--hover);
+    color: var(--mute);
+    cursor: pointer;
+    opacity: 0;
+}
+.jc-console .rrow:hover .rdots,
+.jc-console .rrow:focus-within .rdots,
+.jc-console .rrow.menu-open .rdots {
+    opacity: 1;
+}
+.jc-console .rdots:hover {
+    color: var(--ink);
+}
+/* A row whose name is a field in place, with what was refused under it. */
+.jc-console .rrow.renaming {
+    padding: 2px 4px;
+}
+.jc-console .rrename {
     width: 100%;
     box-sizing: border-box;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+}
+.jc-console .rrename:focus {
+    outline: 2px solid var(--accent, var(--ink));
+    outline-offset: -1px;
+}
+.jc-console .rrename[aria-invalid='true'] {
+    border-color: var(--red);
+}
+/* The region a refusal of a row's rename is heard from: in the page, never on the screen. */
+.jc-console .rrename-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+.jc-console .rrename[aria-busy='true'] {
+    opacity: 0.7;
+    cursor: progress;
+}
+.jc-console .rrename-said {
+    margin: 4px 2px 2px;
+    font-size: 12px;
+    color: var(--red);
 }
 .jc-console .recent-row .rt {
     flex: 1;
@@ -2507,6 +2603,11 @@ body,
 }
 .jc-console .recent-row .t {
     margin-left: 0;
+}
+/* A row with no age, an agent with no conversation yet, keeps the room of its three dots, so they cover no count. */
+.jc-console .recent-row .t:empty {
+    flex: none;
+    width: 22px;
 }
 /* A conversation's count of what waits: amber, quieter than the red on Needs you. */
 .jc-console .recent-row .count {

@@ -286,7 +286,7 @@ internal static partial class StatusChecks
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
-            checks.Add(UpdateInFlight(unfinished));
+            checks.Add(UpdateInFlight(env, unfinished));
             checks.Add(Move(env));
             checks.Add(Layout(env));
 
@@ -482,9 +482,9 @@ internal static partial class StatusChecks
             : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
     }
 
-    private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
+    private static StatusCheck UpdateInFlight(CliEnvironment env, Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
-        null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        null => PackageUpdates(env) ?? new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
         _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
@@ -500,6 +500,70 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// Linux, the deb, whose updates come with the system's: where they cannot arrive, because Jason's apt source is gone
+    /// or turned off (a release upgrade of Ubuntu turns third-party sources off, with <c>Enabled: no</c>), and where the
+    /// system installed a version this installation was not set up for yet (the version Jason Desktop's start last set the
+    /// machine up for, <c>&lt;data&gt;/desktop/machine-setup.json</c>, is not the package's). Null elsewhere, and where neither
+    /// stands.
+    /// </summary>
+    /// <remarks>
+    /// Neither has a command for a repair. The second is finished by Jason Desktop's start, which runs <c>jason install</c> and
+    /// then <c>jason update apply --finish</c>, and only once both completed writes that record for its version; its Put Back
+    /// runs the same set-up again. The finishing step alone neither sets the machine up nor writes the record, so this check
+    /// would still fail after it, and no <c>jason</c> verb opens the application. A runtime the earlier build still runs is
+    /// left to the person, since a restart ends a running turn: the start offers the restart item, and <c>runtime_version</c>
+    /// names <c>jason runtime restart</c>.
+    /// </remarks>
+    private static StatusCheck? PackageUpdates(CliEnvironment env)
+    {
+        if (env.Setup is not { Platform: SetupSystem.Linux } places || CarriedExecutable.Of(env) is not { } carried || !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            return null;
+        }
+
+        string? setUpFor = null;
+        try
+        {
+            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordUnder(env.Paths.Root)));
+            setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+        {
+        }
+
+        if (setUpFor is not null && !string.Equals(setUpFor, carried.Version, StringComparison.Ordinal))
+        {
+            return new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason Desktop's package is {carried.Version}, and this installation was last set up for {setUpFor}: the update the system installed is not finished. Open Jason Desktop: its start sets this installation up for {carried.Version}, and where the runtime still runs the earlier build it offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} in its Jason menu, which restarts the runtime on it, as `jason runtime restart` does. In a window already open, its Jason menu offers Restart Jason and Its Runtime to Finish the Update to {carried.Version} where the package changed under it, and otherwise Put Back jason and the Skills under Command Line, which runs that set-up again.",
+                null);
+        }
+
+        string? text = null;
+        try
+        {
+            text = File.Exists(places.AptSource) ? File.ReadAllText(places.AptSource) : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        var on = text is not null
+            && text.Split('\n').Any(line => line.TrimStart().StartsWith("Types:", StringComparison.Ordinal))
+            && !text.Split('\n').Any(line => line.Trim().Equals("Enabled: no", StringComparison.OrdinalIgnoreCase));
+        return on
+            ? null
+            : new StatusCheck(
+                "update",
+                false,
+                CheckState.Failed,
+                $"Jason's apt source, {places.AptSource}, is {(text is null ? "not there" : "turned off")}, so no update of Jason Desktop arrives with the system's updates; a release upgrade of Ubuntu turns such sources off. Turn it on in Software & Updates, Other Software.",
+                null);
+    }
 
     /// <summary>
     /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more
@@ -699,7 +763,9 @@ internal static partial class StatusChecks
             return new StatusCheck(Name, false, CheckState.Unknown, "The runtime is older than this CLI and does not say how its sends go.", null);
         }
 
-        var fact = $"To a contact who has not answered: {ModeInWords(modes.Cold)}. To a contact who has: {ModeInWords(modes.Warm)}.";
+        // Said of the installation, in so many words: read bare, "to a contact who has not answered" was taken for one
+        // campaign's mode, where a campaign may set its own over it.
+        var fact = $"The installation's send modes, which every campaign follows unless it sets its own. To a contact who has not answered: {ModeInWords(modes.Cold)}. To a contact who has: {ModeInWords(modes.Warm)}.";
         return new StatusCheck(Name, false, CheckState.Ok, fact, null) with
         {
             Details = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1215,9 +1281,10 @@ internal static partial class StatusChecks
                 Repair.OnPath(env));
         }
 
-        // Linux keeps the check it had: more than one installation may stand there, and another jason by name is said, not
-        // failed.
-        if (OperatingSystem.IsLinux())
+        // On Linux a jason Jason Desktop does not carry keeps the check it had: a build of a checkout or a jason of the
+        // person's own may stand beside an installation, and another jason by name is said, not failed. Jason Desktop's own is
+        // the machine's one installation, as on macOS and Windows.
+        if (OperatingSystem.IsLinux() && CarriedExecutable.Of(env) is null)
         {
             var installed = env.InstallPath;
             if (installed is not null && !string.Equals(System.IO.Path.GetFullPath(installed), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
@@ -1228,22 +1295,32 @@ internal static partial class StatusChecks
             return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
         }
 
-        // macOS and Windows, where a machine holds one installation. The file answering here, as installed: a release's
-        // image, which every release has. Another file first by name is what a person and every agent typing jason runs, so
-        // this one's readiness says nothing of theirs; the application's wrapper running this image is this jason by name.
+        // macOS and Windows, where a machine holds one installation, and Jason Desktop's jason on Linux. The file answering
+        // here, as installed: a release's image, which every release has. Another file first by name is what a person and
+        // every agent typing jason runs, so this one's readiness says nothing of theirs; the application's wrapper running
+        // this image, or the deb's link to it, is this jason by name.
+        // Homebrew's older formula, linked beside the jason Jason Desktop carries: an older Jason, said as a detail while the
+        // check passes, and named with what takes it off where it is the file found first.
         var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        var formula = CarriedExecutable.Of(env) is not null ? Installation.HomebrewFormula.Linked(env) : null;
         if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
+            var kegFirst = formula is not null && IsThisFile(resolved, formula.Owner.Executable);
             return new StatusCheck(
                 "path",
                 true,
                 CheckState.Failed,
                 $"'jason' resolves to {resolved}, not to this jason ({running}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
-                + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}.",
+                + (kegFirst
+                    ? $"It is Homebrew's older formula: `jason runtime stop`, then `{Installation.HomebrewFormula.UninstallCommand}`, takes it off, or run this jason by its full path, {running}."
+                    : $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}."),
                 null);
         }
 
-        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+        return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null)
+        {
+            Details = formula is null ? null : new Dictionary<string, string> { [Installation.HomebrewFormula.DetailName] = formula.Sentence() },
+        };
     }
 
     /// <summary>
@@ -1767,16 +1844,17 @@ internal static partial class StatusChecks
             return new StatusCheck("provider_cli", false, CheckState.Unknown, $"This environment cannot run programs, so '{command}' was not run.", null);
         }
 
-        // A confined call runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
+        // A confined call, or a chat turn's, runs a bare name only: a path, which on Windows takes in a value naming a drive, names a file
         // anyone who can write there chose, so it is neither looked up nor started.
-        var confined = env.Confined();
+        var variable = env.FileHalfVariable();
+        var confined = variable is not null;
         if (confined && IsPath(providerCli))
         {
             return new StatusCheck(
                 "provider_cli",
                 false,
                 CheckState.Unknown,
-                $"This environment cannot run a program named by a path, so '{command}' was not run: {Confinement.Variable} is set. "
+                $"This environment cannot run a program named by a path, so '{command}' was not run: {variable} is set. "
                     + "Name a program on the search path, or run it in a terminal.",
                 null);
         }
@@ -2420,9 +2498,13 @@ internal static partial class StatusChecks
             return new StatusCheck("autostart", false, CheckState.Unknown, failure.Message, null);
         }
 
+        // A person's turn-off is said as theirs, still optional and still absent, with the line that takes it back: whether
+        // the runtime starts at logon is never a condition of being ready.
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "Registered at logon: the runtime starts by itself each time you sign in.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
+            : Jason.Cli.Autostart.AutostartOff.Stands(env.Paths, registrar)
+                ? new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", Repair.EnableAutostart)
+                : new StatusCheck("autostart", false, CheckState.Absent, "No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", Repair.EnableAutostart);
     }
 
     /// <summary>
@@ -2434,8 +2516,9 @@ internal static partial class StatusChecks
     /// A person's own choice is never a failure: notifications switched off, or a machine with no desktop by design.
     /// Windows' switches are read as they stand now where they can be (<see cref="IToastSetting"/>), and trusted one way:
     /// a switch off now is said as a fact of now, whether the last toast was shown or not, and after a failure, which is
-    /// never hidden and comes first; a switch not off now never promises that a toast reaches anybody, it only says that
-    /// the last one, which Windows did not show, was not shown then.
+    /// never hidden and comes first; a switch on now after a toast Windows did not show because a switch was off then
+    /// counts the toast as reaching the person again, and says, dated, that the last one was not shown and the next one
+    /// will tell.
     /// A runtime in session 0 is: a service or an SSH session runs there, but on a desktop it is most likely a runtime a
     /// 0.1.0 logon task left running, and for that one the fact names the acts in the order docs/release-and-update.md
     /// §8 gives them — the registration, the stop, a start — never the stop alone, which would leave the old task to
@@ -2474,6 +2557,7 @@ internal static partial class StatusChecks
         var reaching = new List<string>();
         var onAgain = new List<string>();
         var hidden = false;
+        string? switchedOn = null;
         DateTimeOffset? lastDelivered = null;
         foreach (var channel in on)
         {
@@ -2524,16 +2608,22 @@ internal static partial class StatusChecks
             else if (channel.Kind == ChannelKinds.Toast && switchNow == ToastSwitch.NotOff && outcome == ChannelResults.Silenced
                 && channel.Reason is SilencedReasons.DisabledForApplication or SilencedReasons.DisabledForUser or SilencedReasons.DisabledByGroupPolicy)
             {
-                asides.Add($"Windows' switches for Jason's notifications read as on now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
+                // The switch read fresh is on, and the last send's answer was off: the toast reaches the person again as far
+                // as anything here can tell, and what is said is what happened, dated, and that the next one will tell.
+                reaching.Add(channel.Channel);
+                switchedOn = $"Windows' switches for Jason's notifications read as on now, and none has been shown since they came on: the toast before they came on, at {When(channel.At)}, was not shown, because Windows had them switched off then; the next one will tell.";
             }
             else if (outcome == ChannelResults.Silenced)
             {
-                asides.Add(channel.Reason switch
+                // What Windows answered when the toast was last sent, dated: the switches could not be read now, or the
+                // answer was the manifest's, which no switch a person reads in Settings changes.
+                var answered = $"When the toast was last sent, at {When(channel.At)}, Windows answered that ";
+                asides.Add(answered + channel.Reason switch
                 {
-                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), " + TwoEntries,
-                    SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
-                    SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
-                    _ => "Windows has notifications switched off for every app.",
+                    SilencedReasons.DisabledForApplication => "Jason's notifications were switched off (Settings > System > Notifications > Jason), " + TwoEntries,
+                    SilencedReasons.DisabledByGroupPolicy => "a group policy on this machine switched Windows' notifications off; an administrator sets it.",
+                    SilencedReasons.DisabledByManifest => "this program's own manifest switched its notifications off.",
+                    _ => "notifications were switched off for every app.",
                 });
             }
             else
@@ -2570,6 +2660,18 @@ internal static partial class StatusChecks
         // this runtime started; either may have reached them before. The plural is defensive and unreachable today: only
         // the toast is ever written as off (ToastChannel.Off), and a plugin turned off is not a channel at all, so at most
         // one channel is on again.
+        // A toast counted again because its switch reads on now has a sentence of its own: where nothing delivered, it is
+        // the whole of what is said of the last one, and beside a delivery it follows that delivery.
+        if (switchedOn is not null && lastDelivered is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, string.Join(" ", [$"Notifications reach you by {string.Join(" and ", reaching)}; {switchedOn}", .. asides]), null);
+        }
+
+        if (switchedOn is not null)
+        {
+            asides.Insert(0, switchedOn);
+        }
+
         var last = lastDelivered is { } delivered
             ? $"the last one was delivered at {When(delivered)}."
             : notifications.LastNotificationId is null ? "nothing has needed one yet."

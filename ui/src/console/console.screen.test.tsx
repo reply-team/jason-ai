@@ -18,6 +18,7 @@ import { fixtures } from '../test/fixtures';
 import { fromFoot, layOutChats, scrollAs } from '../test/scroll';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
+import { chosenSection } from '../screens/settings/chosen';
 import { attention, forgetNeeds } from './needs';
 import { chats, clock, conversations, currentChat, here, lines, setup, setupBusy, streamState } from './state';
 
@@ -141,13 +142,25 @@ describe('the console', () => {
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
             expect(fake.calls.map((each) => each.operation).sort()).toEqual(
-                ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
+                [
+                    'approval.list',
+                    'campaign.list',
+                    'campaign.summary',
+                    'decision.list',
+                    'plugin.list',
+                    'route.list',
+                    'system.info',
+                ].sort(),
             );
         });
-        // What the empty chat promises holds whatever the send mode: what is written here waits for the person.
-        const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
-        expect(hero.querySelector('p')?.textContent).toBe(
-            'Nothing written here reaches a person without your approval.',
+        // What the empty chat says in Ask first is true of it: a message follows its campaign's send mode, and the AI
+        // approves on the person's word. A new chat starts in Full access, which says nothing of it.
+        chooseIn('Access mode', 'mode', 'ask_first');
+        const hero = () => screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
+        await waitFor(() =>
+            expect(hero().querySelector('p')?.textContent).toBe(
+                "A message written here follows its campaign's send mode; the AI approves when you tell it to.",
+            ),
         );
         // What waits is a page of its own, chosen from the sidebar.
         const needs = await openNeeds();
@@ -500,7 +513,7 @@ describe('the console', () => {
         expect([...document.querySelectorAll('.thread .m.ai')].map(label)).toEqual(['Jason', null, 'Jason']);
     });
 
-    it('shows the Windows check of Codex’s sandbox, whole and open, while the turn waits on it', async () => {
+    it('shows the Windows check of Codex’s sandbox, whole and open, while a read-only turn waits on it', async () => {
         const fake = pending(new FakeApi());
         const desktop = chatDesktop({
             ...setupFound,
@@ -511,6 +524,11 @@ describe('the console', () => {
         renderConsole(fake, desktop);
         await waitFor(() => menuButton('Model'));
         chooseIn('Model', 'host', 'codex');
+        // A Full access turn on Codex runs with no sandbox and so waits on no check: the turn is one in Ask first.
+        chooseIn('Access mode', 'mode', 'ask_first');
+        await waitFor(() =>
+            expect(menuButton('Access mode').getAttribute('aria-label')).toBe('Access mode: Ask first'),
+        );
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.find((each) => each.name === 'chat.send')).toBeTruthy());
@@ -1478,24 +1496,38 @@ describe('the console', () => {
             return waitFor(() => panel('Connect'));
         };
 
+        const where = (host: string) =>
+            `They work in the chat in Full access, and when you open Jason in ${host} from Open in.`;
+
         it('names them in one line under each host that has them: one, five, and the first five then how many more', async () => {
             const connect = await openConnect(
                 chatDesktop(withServers(['github'], ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'])),
             );
             expect(rowOf(connect, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: github. For now they work when you open Jason in Claude Code, from Open in.',
+                `Your MCP servers: github. ${where('Claude Code')}`,
             );
             expect(rowOf(connect, 'Codex').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: one, two, three, four, five and 3 more. For now they work when you open Jason in Codex, from Open in.',
+                `Your MCP servers: one, two, three, four, five and 3 more. ${where('Codex')}`,
             );
             cleanup();
             const five = await openConnect(
                 chatDesktop(withServers(['github', 'linear', 'sentry', 'notion', 'figma'], [])),
             );
             expect(rowOf(five, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
-                'Your MCP servers: github, linear, sentry, notion, figma. For now they work when you open Jason in Claude Code, from Open in.',
+                `Your MCP servers: github, linear, sentry, notion, figma. ${where('Claude Code')}`,
             );
             expect(rowOf(five, 'Codex').querySelector('.own-servers')).toBeNull();
+        });
+
+        it('says on each host where they work: in the chat in Full access, and from Open in', async () => {
+            const connect = await openConnect(chatDesktop(withServers(['github'], ['linear'])));
+            expect(rowOf(connect, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: github. They work in the chat in Full access, and when you open Jason in Claude Code from Open in.',
+            );
+            expect(rowOf(connect, 'Codex').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: linear. They work in the chat in Full access, and when you open Jason in Codex from Open in.',
+            );
+            expect(connect.textContent).not.toContain('For now');
         });
 
         it('says nothing at all for a host with none, a host not found, or another host', async () => {
@@ -1698,6 +1730,59 @@ describe('the console', () => {
         }
         expect(commandTarget('navigate.attention')).toBe('needs');
         expect(commandTarget('navigate.connect')).toBe('connect');
+    });
+
+    // The update notice's click: the window opens on Settings, at its Update section.
+    it('opens Settings at its Update section from the desktop’s command', async () => {
+        const settings = registry.list('screen').find((each) => each.id === 'settings')!;
+        expect(commandTarget('navigate.update')).toEqual(parseRoute(settings.href()));
+        chosenSection.value = 'appearance';
+        const { desktop } = renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        flush(() => desktop.command('navigate.update'));
+        await waitFor(() => expect(route.value.screen).toBe('settings'));
+        expect(chosenSection.value).toBe('update');
+        await waitFor(() => expect(document.querySelector('.settings')?.getAttribute('data-chosen')).toBe('update'));
+        await waitFor(() => expect(document.querySelector('[data-section="update"]')).not.toBeNull());
+        chosenSection.value = 'appearance';
+    });
+
+    // A version the desktop knows of and has not installed marks the sidebar's Settings row: one quiet dot, no count, from
+    // the moment the desktop knows of it until it is installed.
+    it('marks the sidebar’s Settings row while the desktop knows of a version it has not installed', async () => {
+        const desktop = chatDesktop();
+        const { desktop: shown } = renderConsole(pending(new FakeApi()), desktop);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        const foot = () => document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+        await waitFor(() => expect(foot()).not.toBeNull());
+        expect(foot().querySelector('.dot')).toBeNull();
+        flush(() =>
+            shown.updateMoved({
+                version: '0.48.5',
+                item: { label: 'Download Jason 0.48.6', enabled: true },
+                said: null,
+                newer: '0.48.6',
+            }),
+        );
+        const dot = await waitFor(() => {
+            const found = foot().querySelector<HTMLElement>('.dot.w');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(dot.getAttribute('aria-label')).toBe('Jason Desktop 0.48.6 is available');
+        expect(dot.getAttribute('role')).toBe('img');
+        expect(dot.getAttribute('title')).toBe('Jason Desktop 0.48.6 is available');
+        expect(dot.textContent).toBe('');
+        expect(words(foot()).trim()).toBe('Settings');
+        flush(() =>
+            shown.updateMoved({
+                version: '0.48.6',
+                item: { label: 'Check for Updates…', enabled: true },
+                said: null,
+                newer: null,
+            }),
+        );
+        await waitFor(() => expect(foot().querySelector('.dot')).toBeNull());
     });
 
     it('opens Performance from the desktop command, drawn from the runtime', async () => {

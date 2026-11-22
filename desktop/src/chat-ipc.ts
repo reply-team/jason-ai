@@ -1,11 +1,9 @@
 /**
  * The chat's calls from the page, each behind the origin check every call the page makes passes: a send, a stop, a
- * person's answer to a card, the conversations the desktop keeps (list, open, create, remove, start fresh, attach a
- * set-up chat to a campaign it made, rename one, and choose its mode, whose Full access the desktop confirms with the
- * person itself), the Feed with the journal lines the page hands it, a card the AI asked for that did not draw, by its kind
- * and why, for the log, and the standing choice of Full access, which the
- * page may read and take back and never give: only the person's answer to the desktop's own box gives it. Nothing the
- * page sends is trusted further than the chat checks it.
+ * person's answer to a card, the conversations the desktop keeps (list, open, create, make an agent at a click, remove, start fresh, attach a
+ * set-up chat to a campaign it made, rename one, and choose its mode), the Feed with the journal lines the page hands it,
+ * and a card the AI asked for that did not draw, by its kind and why, for the log. Nothing the page sends is trusted
+ * further than the chat checks it.
  *
  * A refusal is answered as a value, `{ refused }` with the desktop's sentence alone, and a call that did what it was
  * asked and has nothing to say answers null. A refusal thrown across the seam would reach the page wrapped: Electron
@@ -21,7 +19,7 @@ import { handle, type IpcRegistrar, type Refusal } from './ipc.ts';
 
 export type ChatCalls = Pick<
     Chat,
-    'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode' | 'openEndedFolder' | 'feed' | 'cardRefused' | 'fullAccessStanding' | 'takeBackFullAccess'
+    'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'createAgent' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode' | 'openEndedFolder' | 'feed' | 'cardRefused'
 >;
 
 /** What the page is answered with when the chat refused a call: `DesktopRefusal` on the page's side. */
@@ -46,7 +44,8 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.answer', origin, (chatId, requestId, decision) => chat.answer(chatId, requestId, decision), refused);
     handle(ipc, 'chat.list', origin, () => chat.list(), refused);
     handle(ipc, 'chat.open', origin, (chatId) => answered(() => chat.open(chatId)), refused);
-    handle(ipc, 'chat.create', origin, (campaignId, host) => answered(() => chat.create(campaignId, host)), refused);
+    handle(ipc, 'chat.create', origin, (campaignId) => answered(() => chat.create(campaignId)), refused);
+    handle(ipc, 'chat.createAgent', origin, (clickId) => answered(() => chat.createAgent(clickId)), refused);
     handle(ipc, 'chat.remove', origin, (chatId) => answered(() => chat.remove(chatId)), refused);
     handle(ipc, 'chat.restart', origin, (chatId) => answered(() => chat.restart(chatId)), refused);
     handle(ipc, 'chat.attach', origin, (chatId, campaignId) => answered(() => chat.attach(chatId, campaignId)), refused);
@@ -56,7 +55,4 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.feed', origin, (lines, options) => answered(() => chat.feed(lines, options)), refused);
     // A card the AI asked for did not draw: the chat holds what the page says to two closed lists before its log hears it.
     handle(ipc, 'chat.cardRefused', origin, (chatId, kind, failure) => answered(() => chat.cardRefused(chatId, kind, failure)), refused);
-    // The page reads the standing choice and takes it back; neither call takes an argument, so neither can give it.
-    handle(ipc, 'fullAccess.standing', origin, () => chat.fullAccessStanding(), refused);
-    handle(ipc, 'fullAccess.takeBack', origin, () => answered(() => chat.takeBackFullAccess()), refused);
 }

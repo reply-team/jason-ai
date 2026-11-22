@@ -9,12 +9,13 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import ts from 'typescript';
 import { fileCommandsOf, fileGrammars } from '../src/chat-auto-edit.ts';
-import { readFence } from '../src/chat-deny.ts';
+import { modeFence, readFence } from '../src/chat-deny.ts';
 import { readLiteral } from '../src/chat-literal.ts';
 import { autoEditJudgement, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { entryOf, realPathOf } from '../src/chat-real-path.ts';
 
-const fence = readFence(join(import.meta.dirname, '..'));
+/** The fence a real Auto-edit turn runs under: none of the deny list (`modeFence`). */
+const fence = modeFence(readFence(join(import.meta.dirname, '..')), 'auto_edit');
 
 /**
  * A scope on a platform's semantics, the real paths a map gives: a home folder with the default data directory, the chat
@@ -207,10 +208,11 @@ test('the data directory, its settings file and the standing choice are refused 
         refused(scope, `rm ${slashed(paths.join(scope.data, 'config', 'settings.json'))}`);
         refused(scope, `touch ${slashed(paths.join(scope.data, 'desktop', 'full-access.json'))}`);
         refused(scope, `mkdir -p notes && rm ${slashed(paths.join(scope.data, 'run', 'runtime.json'))}`);
-        refused(scope, 'touch a.md && jason approval approve apr_1');
+        refused(scope, 'touch a.md && jason --actor human:me approval approve apr_1');
         refused(scope, 'rm JASON_CONFINED');
-        refused(scope, 'jason plugin grant reply --http api.example.com');
-        refused(scope, 'jason plugin revoke reply --env REPLY_TOKEN');
+        refused(scope, 'rm JASON_CHAT_TURN');
+        carded(scope, 'jason plugin grant reply --http api.example.com');
+        carded(scope, 'jason plugin revoke reply --env REPLY_TOKEN');
     }
 });
 

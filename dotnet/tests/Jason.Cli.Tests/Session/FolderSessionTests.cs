@@ -272,6 +272,21 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(node, Path.GetFullPath((string)Answer()["program"]!));
     }
 
+    /// <summary>On Windows with Windows Terminal there, --shell opens Windows PowerShell in it, by the same rule as an item.</summary>
+    [Fact]
+    public async Task Shell_on_windows_opens_powershell_in_windows_terminal_where_it_is_there()
+    {
+        var shell = SystemPowerShell();
+        var wt = _run.WithWindowsTerminal();
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--shell"));
+
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([wt, "-w", "new", "new-tab", "-d", launch.WorkingDirectory, "--", shell], launch.Argv);
+        Assert.Equal([_run.ConsoleHost, "--", shell], launch.Fallback!.Argv);
+        Assert.Equal("Windows Terminal", (string?)Answer()["terminal"]);
+    }
+
     /// <summary>On Windows --shell is Windows PowerShell from the system directory, never the search path; no host is read.</summary>
     [Fact]
     public async Task Shell_on_windows_opens_powershell_from_the_system_directory()
@@ -1068,6 +1083,58 @@ public sealed class FolderSessionTests : IDisposable
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("unreachable");
         }
+    }
+
+    /// <summary>
+    /// Under <c>--human</c> a refusal is said once, its sentence on stdout; without it the envelope on stdout and the
+    /// sentence on stderr, as before.
+    /// </summary>
+    [Fact]
+    public async Task A_host_not_on_the_search_path_is_said_once_under_human()
+    {
+        _run.Programs.AddProgram("claude");
+        SystemPowerShell();
+
+        const string sentence = "codex's program 'codex' is not on this machine's search path, so nothing was started.";
+
+        await SaidOnceAsync(
+            ["session", "open", "--host", "codex"],
+            "{\"error\":{\"code\":\"host_not_found\",\"message\":\"codex\\u0027s program \\u0027codex\\u0027 is not on this machine\\u0027s search path, so nothing was started.\",\"retryable\":false}}",
+            sentence,
+            "Refused (host_not_found): " + sentence);
+    }
+
+    [Fact]
+    public async Task No_terminal_is_said_once_under_human()
+    {
+        _run.Programs.AddProgram("claude");
+        File.Delete(_run.ConsoleHost);
+
+        var sentence = "No terminal was found to start claude_code in, so nothing was started; in a terminal of your own, go to " + _root + ".";
+
+        await SaidOnceAsync(
+            ["session", "open"],
+            "{\"error\":{\"code\":\"terminal_not_found\",\"message\":\"" + sentence + "\",\"retryable\":false}}",
+            sentence,
+            "Refused (terminal_not_found): " + sentence);
+    }
+
+    private async Task SaidOnceAsync(string[] words, string envelope, string sentence, string said)
+    {
+        var plain = await _run.Cli(words);
+        var plainOut = _run.Output.ToString();
+        var plainError = _run.Error.ToString();
+        _run.Output.GetStringBuilder().Clear();
+        _run.Error.GetStringBuilder().Clear();
+        var human = await _run.Cli([.. words, "--human"]);
+
+        Assert.Equal(ExitCodes.ApiError, plain);
+        Assert.Equal(ExitCodes.ApiError, human);
+        Assert.Empty(_run.Terminals.Launches);
+        HumanErrorPins.Pin(envelope, plainOut);
+        HumanErrorPins.Pin(sentence, plainError);
+        HumanErrorPins.Pin(said, _run.Output.ToString());
+        Assert.Equal(string.Empty, _run.Error.ToString());
     }
 
     /// <summary>Windows PowerShell where the system keeps it, under the system directory the recorder names.</summary>

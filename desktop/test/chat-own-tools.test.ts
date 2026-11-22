@@ -1,15 +1,18 @@
 // The fence around the person's own tools: an MCP tool of a server other than the chat's own is a card of its own in Ask
-// first and held in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
-// never cut; the files and commands that add a server to an agent; and what every turn's command line and settings carry
-// so that no server, connector or browser of the person's reaches a turn.
+// first and runs in Full access, whatever its arguments are named, each of its strings read as a command's text is, and
+// never cut; the files and commands that add a server to an agent; what a turn's command line and settings carry in each
+// mode, so that a turn that runs in Full access loads the person's own Claude Code configuration as in a terminal and
+// every other turn loads none of it; and the chat's own permission tool, on a server named for each turn alone and
+// refused to the agent by the name's fixed prefix.
 
 import assert from 'node:assert/strict';
 import { join, posix } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
-import { chatRules, claudeArguments, claudeTurnSettings, codexArguments, codexWindowsSandbox, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { fullAccessJudgement, heldSentence, judge, personsToolTitle, serversTitle, type ChatScope } from '../src/chat-permission-model.ts';
-import { claudeFloor, codexFloor, codexFloorSentence, noChromeFrom, printedCodexVersion } from '../src/host-version.ts';
+import { chatRules, claudeArguments, claudeTurnSettings, codexArguments, codexWindowsSandbox, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
+import { fullAccessFloor } from '../src/chat-modes.ts';
+import { fullAccessJudgement, judge, personsToolTitle, serversTitle, type ChatScope } from '../src/chat-permission-model.ts';
+import { claudeFloor, codexFloor, codexFloorSentence, compareVersions, noChromeFrom, printedCodexVersion } from '../src/host-version.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const home = '/home/someone';
@@ -28,7 +31,7 @@ const scope: ChatScope = {
     deniedOperations: fence.operations,
     real: () => null,
 };
-const held = { outcome: 'held', message: heldSentence };
+const runs = { outcome: 'runs' };
 
 test('an MCP tool of a server other than the chat\'s own is a card of its own, even when an argument is named command', () => {
     assert.deepEqual(judge('mcp__s__run', { command: 'ls' }, scope), { verdict: 'ask', title: personsToolTitle, detail: 's · run\n{"command":"ls"}', remember: null });
@@ -41,30 +44,30 @@ test('an MCP tool of a server other than the chat\'s own is a card of its own, e
     assert.equal(personsToolTitle, 'Use one of your own tools');
 });
 
-test('in Full access an MCP tool of the person\'s is held, never run: its arguments are no shell words', () => {
-    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'jason campaign list' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__acme-crm__find_contact', { query: 'dentists' }, scope), held);
-    assert.deepEqual(fullAccessJudgement('mcp__claude-in-chrome__navigate', { url: 'https://example.com/' }, scope), held);
+test('in Full access an MCP tool of the person\'s runs, the hook answering nothing: its arguments are no shell words', () => {
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'jason campaign list' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__acme-crm__find_contact', { query: 'dentists' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('mcp__claude-in-chrome__navigate', { url: 'https://example.com/' }, scope), runs);
 });
 
-test('every string of an MCP tool\'s input, at any depth, is held to the text checks: a refusal with no card', () => {
-    const refusals: Record<string, unknown>[] = [
-        { query: 'jason approval approve x' },
-        { nested: { list: ['fine', { deeper: 'jason decision answer y --option a' }] } },
-        { query: 'jason approv\\al approve x' },
+test('every string of an MCP tool\'s input, at any depth, is held to the text checks: a refusal with no card in Ask first, and in Full access where it names the three kinds', () => {
+    const kinds: Record<string, unknown>[] = [
         { path: posix.join(data, 'run', 'x') },
         { path: '~/.jason/desktop/provider-keys/openai' },
         { text: 'echo $JASON_CONFINED' },
         { text: 'unset jason_confined' },
-        { call: 'system.shutdown' },
-        { [posix.join(data, 'config', 'settings.json')]: 'a key that names the data' },
+        { nested: { list: ['fine', { deeper: `cat ${posix.join(data, 'run', 'runtime.json')}` }] } },
     ];
-    for (const input of refusals) {
-        const judged = judge('mcp__s__run', input, scope);
-        assert.equal(judged.verdict, 'deny', JSON.stringify(input));
-        assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
-    }
+    const verbs: Record<string, unknown>[] = [
+        { query: 'jason approval approve x' },
+        { nested: { list: ['fine', { deeper: 'jason decision answer y --option a' }] } },
+        { query: 'jason approv\\al approve x' },
+        { call: 'system.shutdown' },
+    ];
+    for (const input of [...kinds, ...verbs]) assert.equal(judge('mcp__s__run', input, scope).verdict, 'deny', JSON.stringify(input));
+    for (const input of kinds) assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
+    for (const input of verbs) assert.deepEqual(fullAccessJudgement('mcp__s__run', input, scope), runs, JSON.stringify(input));
     assert.equal(judge('mcp__s__run', { query: 'jason approval list' }, scope).verdict, 'ask', 'a verb that is no person\'s act stays a card');
     assert.equal(judge('mcp__s__run', { path: posix.join(chat, 'notes.md') }, scope).verdict, 'ask', 'the chat folder is not the data');
 });
@@ -78,19 +81,20 @@ test('an MCP tool\'s input that spreads one command over several strings is judg
     ];
     for (const input of spread) {
         assert.equal(judge('mcp__s__run', input, scope).verdict, 'deny', JSON.stringify(input));
-        assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
+        assert.deepEqual(fullAccessJudgement('mcp__s__run', input, scope), runs, `Full access leaves a verb to the host's rules and the CLI: ${JSON.stringify(input)}`);
     }
+    assert.equal(fullAccessJudgement('mcp__s__run', { argv: ['cat', posix.join(data, 'run'), 'runtime.json'] }, scope).outcome, 'refused', 'the data, joined in order');
     // Joined in order, so the words a person reads in that order are the ones judged.
     assert.equal(judge('mcp__s__run', { argv: ['jason', 'approval', 'list'] }, scope).verdict, 'ask');
     assert.equal(judge('mcp__s__run', { argv: ['approve', 'approval', 'jason'] }, scope).verdict, 'ask');
 });
 
-test('an MCP tool\'s input longer than the card shows whole is refused, never cut', () => {
+test('an MCP tool\'s input longer than the card shows whole is refused in Ask first, never cut; Full access runs it', () => {
     const long = { text: 'a'.repeat(5000) };
     const judged = judge('mcp__s__run', long, scope);
     assert.equal(judged.verdict, 'deny');
     assert.match(judged.verdict === 'deny' ? judged.message : '', /longer than the card can show whole/);
-    assert.equal(fullAccessJudgement('mcp__s__run', long, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', long, scope), runs);
     const fits = judge('mcp__s__run', { text: 'a'.repeat(3900) }, scope);
     assert.equal(fits.verdict, 'ask');
     assert.ok(fits.verdict === 'ask' && !fits.detail.endsWith('…'), 'a detail that fits is shown whole');
@@ -100,23 +104,36 @@ test('the chat\'s own permission tool stays refused to the agent', () => {
     assert.equal(judge('mcp__jason_desktop__approve', { allow: true }, scope).verdict, 'deny');
 });
 
-test('.mcp.json is refused at the chat folder\'s top and a card elsewhere, held in Full access', () => {
+test('a tool of any server whose name begins with the fixed prefix is the chat\'s own, refused to the agent by the hook and the permission model: a turn\'s, and one of the old fixed name from the person\'s own scopes', () => {
+    const own = /carries the chat's own permission requests/;
+    for (const tool of ['mcp__jason_desktop__decide', 'mcp__jason_desktop__approve', 'mcp__jason_desktop_0123456789abcdef__decide', 'mcp__jason_desktop_fedcba9876543210__other']) {
+        const judged = judge(tool, { tool_name: 'Bash', input: { command: 'ls' } }, scope);
+        assert.match(judged.verdict === 'deny' ? judged.message : judged.verdict, own, tool);
+        const hooked = fullAccessJudgement(tool, { allow: true }, scope);
+        assert.match(hooked.outcome === 'refused' ? hooked.message : hooked.outcome, own, tool);
+    }
+    // A server whose name only starts the same way is another: the person's own, a card in Ask first, and it runs in Full access.
+    assert.equal(judge('mcp__jason_desktopx__run', { text: 'hi' }, scope).verdict === 'ask' && (judge('mcp__jason_desktopx__run', { text: 'hi' }, scope) as { title: string }).title, personsToolTitle);
+    assert.deepEqual(fullAccessJudgement('mcp__jason_desktopx__run', { text: 'hi' }, scope), runs);
+});
+
+test('.mcp.json is refused at the chat folder\'s top and a card elsewhere in Ask first; Full access runs it, a turn reading no server file of its folder', () => {
     const top = { file_path: posix.join(chat, '.mcp.json'), content: '{"mcpServers":{}}' };
     const judged = judge('Write', top, scope);
     assert.equal(judged.verdict, 'deny');
-    assert.equal(fullAccessJudgement('Write', top, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Write', top, scope), runs, 'the folder the turn runs in');
     assert.equal(judge('Bash', { command: 'echo {} > .mcp.json' }, scope).verdict, 'deny', 'a command too');
     for (const path of [posix.join(campaign, '.mcp.json'), posix.join(chat, 'sub', '.mcp.json'), posix.join(home, 'elsewhere', '.mcp.json')]) {
         const input = { file_path: path, content: '{}' };
         const card = judge('Write', input, scope);
         assert.equal(card.verdict, 'ask', path);
         assert.equal(card.verdict === 'ask' ? card.remember : 'x', null, path);
-        assert.deepEqual(fullAccessJudgement('Write', input, scope), held, path);
+        assert.deepEqual(fullAccessJudgement('Write', input, scope), runs, path);
     }
     assert.ok(chatRules('linux', chat).includes(`Edit(/${posix.join(chat, '.mcp.json')})`));
 });
 
-test('.claude.json is a card each time wherever it lies, held in Full access', () => {
+test('.claude.json is a card each time wherever it lies, and runs in Full access', () => {
     for (const path of [posix.join(home, '.claude.json'), posix.join(chat, '.claude.json'), posix.join(campaign, '.claude.json')]) {
         for (const [tool, input] of [
             ['Write', { file_path: path, content: '{}' }],
@@ -125,13 +142,13 @@ test('.claude.json is a card each time wherever it lies, held in Full access', (
             const card = judge(tool, input, scope);
             assert.equal(card.verdict, 'ask', `${tool} ${path}`);
             assert.equal(card.verdict === 'ask' ? card.remember : 'x', null);
-            assert.deepEqual(fullAccessJudgement(tool, input, scope), held, `${tool} ${path}`);
+            assert.deepEqual(fullAccessJudgement(tool, input, scope), runs, `${tool} ${path}`);
         }
     }
     assert.equal(judge('Read', { file_path: posix.join(chat, '.claude.json') }, scope).verdict, 'allow', 'a read in a working folder is not a write');
 });
 
-test('claude mcp and codex mcp are a card each time, never "always", and held in Full access', () => {
+test('claude mcp and codex mcp are a card each time, never "always", and run in Full access', () => {
     for (const command of [
         'claude mcp add crm -- node crm.js',
         'claude mcp list',
@@ -142,72 +159,107 @@ test('claude mcp and codex mcp are a card each time, never "always", and held in
         'claude m\\cp add crm -- node crm.js',
     ]) {
         assert.deepEqual(judge('Bash', { command }, scope), { verdict: 'ask', title: serversTitle, detail: command, remember: null }, command);
-        // A shell command's hold also says why (`reason`); what it is, held with the held sentence, is what matters here.
-        const full = fullAccessJudgement('Bash', { command }, scope);
-        assert.deepEqual({ outcome: full.outcome, message: full.outcome === 'runs' ? '' : full.message }, held, command);
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
     const plain = judge('Bash', { command: 'claude --version' }, scope);
     assert.equal(plain.verdict === 'ask' ? plain.title : '', 'Run a command', 'another word of claude is a command like any');
     assert.equal(judge('Bash', { command: 'grep -r mcp notes' }, scope).verdict === 'ask' && (judge('Bash', { command: 'grep -r mcp notes' }, scope) as { title: string }).title, 'Run a command');
 });
 
-const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: [] };
+const server = 'jason_desktop_0123456789abcdef';
+const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', server, addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: [] };
 const settingsFile = '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json';
+/** Claude Code at the chat's floor, below the floor of Full access, at it, and a current one. */
+const versions = [claudeFloor, '2.1.300', fullAccessFloor, '2.1.329'] as const;
+const after = (args: string[], flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
+const hookUrl = 'http://127.0.0.1:4100/hook';
 
-test('every Claude Code turn at or above the version that knows it carries --no-chrome, in each mode', () => {
-    for (const version of [noChromeFrom, '2.1.300', '3.0.0']) {
-        for (const mode of ['ask_first', 'plan_only', 'full_access'] as const) {
-            const args = claudeArguments({ ...base, mode, settingsFile, version });
-            assert.ok(args.includes('--no-chrome'), `${version} ${mode}`);
+test('every turn that does not run in Full access keeps the sealed line whole, in each mode, at 2.1.257, 2.1.300, 2.1.322 and current: project settings alone, the turn\'s MCP file alone, no browser from the version that knows the flag, and settings that keep the rest out', () => {
+    for (const version of versions) {
+        for (const mode of ['ask_first', 'auto_edit', 'plan_only'] as const) {
+            // Ask first and Auto-edit ride the hook from the floor of Full access on, their settings in the turn's own file.
+            const hooked = mode !== 'plan_only' && compareVersions(version, fullAccessFloor) >= 0;
+            const args = claudeArguments({ ...base, mode, ...(hooked ? { settingsFile } : {}), version });
+            assert.equal(after(args, '--setting-sources'), 'project', `${version} ${mode}`);
             assert.ok(args.includes('--strict-mcp-config'), `${version} ${mode}`);
+            assert.equal(args.includes('--no-chrome'), compareVersions(version, noChromeFrom) >= 0, `${version} ${mode}`);
+            assert.equal(after(args, '--settings'), hooked ? settingsFile : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings, `${version} ${mode}`);
+            assert.equal(after(args, '--mcp-config'), base.mcpConfig, `${version} ${mode}`);
+            assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, `${version} ${mode}`);
         }
     }
-    for (const version of [claudeFloor, '2.1.284']) {
-        for (const mode of ['ask_first', 'plan_only', 'full_access'] as const) {
-            assert.ok(!claudeArguments({ ...base, mode, settingsFile, version }).includes('--no-chrome'), `below: ${version} ${mode}`);
-        }
+    // Each of those settings carries the server defences: inline below the floor of Full access and in Plan only, in the
+    // file the hook rides at the floor and above. The inline ones block reads outside the working folders; the hooked ones
+    // do not, since the hook refuses the three kinds wherever a tool names them.
+    const inline = [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings)] as Record<string, unknown>[];
+    const hooked = [hookedSettings('ask_first', hookUrl, 'the-secret'), hookedSettings('auto_edit', hookUrl, 'the-secret')] as Record<string, unknown>[];
+    for (const each of [...inline, ...hooked]) {
+        for (const [key, value] of Object.entries(defences)) assert.deepEqual(each[key], value, key);
     }
+    for (const each of inline) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, true);
+    for (const each of hooked) assert.equal((each['permissions'] as { blockReadsOutsideWorkingDirectories?: unknown }).blockReadsOutsideWorkingDirectories, undefined);
     assert.equal(noChromeFrom, '2.1.285');
-});
-
-test('every Claude Code turn\'s settings turn the claude.ai connectors off and deny the browser\'s server, in each mode', () => {
-    const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
-    for (const settings of [JSON.parse(claudeTurnSettings), JSON.parse(planTurnSettings), fullAccessSettings('http://127.0.0.1:4100/hook', 'the-secret')]) {
-        assert.equal(settings.disableClaudeAiConnectors, defences.disableClaudeAiConnectors);
-        assert.deepEqual(settings.deniedMcpServers, defences.deniedMcpServers);
-    }
-});
-
-test('Claude Code 2.1.284 gets the settings keys alone, 2.1.285 the keys and --no-chrome', () => {
-    const defences = { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }] };
-    for (const [version, flag] of [['2.1.284', false], ['2.1.285', true]] as const) {
-        for (const mode of ['ask_first', 'plan_only'] as const) {
-            const args = claudeArguments({ ...base, mode, version });
-            const settings = JSON.parse(args[args.indexOf('--settings') + 1] ?? '{}') as Record<string, unknown>;
-            assert.equal(settings.disableClaudeAiConnectors, defences.disableClaudeAiConnectors, `${version} ${mode}`);
-            assert.deepEqual(settings.deniedMcpServers, defences.deniedMcpServers, `${version} ${mode}`);
-            assert.equal(args.includes('--no-chrome'), flag, `${version} ${mode}`);
+    // A turn on a provider's key keeps the sealed line in Full access too, at the floor of Full access and above, in its
+    // bypass, and its settings keep the server defences; its other modes are sealed as every other turn's.
+    for (const version of [fullAccessFloor, '2.1.329']) {
+        for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+            const args = claudeArguments({ ...base, mode, keyed: true, ...(mode === 'plan_only' ? {} : { settingsFile }), version });
+            assert.equal(after(args, '--setting-sources'), 'project', `keyed ${version} ${mode}`);
+            assert.ok(args.includes('--strict-mcp-config') && args.includes('--no-chrome'), `keyed ${version} ${mode}`);
+            if (mode === 'full_access') assert.equal(after(args, '--permission-mode'), 'bypassPermissions', `keyed ${version}`);
         }
-        // Full access's settings are a file of the turn's own, written from these, whatever the version.
-        const full = claudeArguments({ ...base, mode: 'full_access', settingsFile, version });
-        assert.equal(full[full.indexOf('--settings') + 1], settingsFile);
-        assert.equal(full.includes('--no-chrome'), flag, `${version} full_access`);
+    }
+    const keyed = hookedSettings('full_access', hookUrl, 'the-secret', { keyed: true }) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(defences)) assert.deepEqual(keyed[key], value, `keyed: ${key}`);
+    assert.equal('permissions' in keyed, false, 'keyed: Full access asks about no page');
+});
+
+test('a turn that runs in Full access, at the floor of Full access and above, loads the person\'s own configuration as in a terminal: none of --setting-sources, --strict-mcp-config and --no-chrome, and its hook in settings that carry none of the server defences', () => {
+    for (const version of [fullAccessFloor, '2.1.329']) {
+        const args = claudeArguments({ ...base, mode: 'full_access', settingsFile, version });
+        for (const flag of ['--setting-sources', '--strict-mcp-config', '--no-chrome']) assert.ok(!args.includes(flag), `${version}: ${flag}`);
+        assert.equal(after(args, '--permission-mode'), 'bypassPermissions', version);
+        assert.equal(after(args, '--settings'), settingsFile, version);
+        // The turn's own MCP file still names the prompt tool's server, beside the person's own servers.
+        assert.equal(after(args, '--mcp-config'), base.mcpConfig, version);
+        assert.equal(after(args, '--permission-prompt-tool'), `mcp__${server}__decide`, version);
+    }
+    const full = hookedSettings('full_access', hookUrl, 'the-secret') as Record<string, unknown>;
+    for (const key of Object.keys(defences)) assert.equal(key in full, false, key);
+    assert.equal('permissions' in full, false, 'no block of reads, and no rule that a page asks');
+    assert.equal(full['disableAllHooks'], false);
+    assert.deepEqual(full['allowedHttpHookUrls'], [hookUrl]);
+    assert.throws(() => claudeArguments({ ...base, mode: 'full_access', version: fullAccessFloor }), /settings file/, 'never without the file its hook rides in');
+});
+
+test('every turn\'s prompt tool is on a server named for that turn alone, the fixed prefix and a nonce, so a server of the old fixed name in the person\'s own scopes answers no card; a name of any other shape is refused', () => {
+    for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+        const args = claudeArguments({ ...base, mode, ...(mode === 'plan_only' ? {} : { settingsFile }), version: '2.1.329' });
+        assert.equal(after(args, '--permission-prompt-tool'), 'mcp__jason_desktop_0123456789abcdef__decide', mode);
+        assert.ok(!args.includes('mcp__jason_desktop__decide'), mode);
+    }
+    for (const named of ['jason_desktop', 'jason_desktop_', 'jason_desktop_0123', 'jason_desktop_0123456789ABCDEF', 'jason_desktop_0123456789abcdef0', 'other_0123456789abcdef', '--strict-mcp-config']) {
+        assert.throws(() => claudeArguments({ ...base, server: named, mode: 'ask_first', version: '2.1.329' }), /server/, named);
     }
 });
 
-test('every Codex turn leaves the person\'s config.toml unread, a resumed one too', () => {
+test('every Codex turn outside Full access leaves the person\'s config.toml unread, a resumed one too; a Full access turn reads it, as Codex in a terminal does', () => {
     for (const shape of [{}, { model: 'gpt-6.1-sol' }, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
-            const args = codexArguments({ ...shape, platform });
-            assert.ok(args.includes('--ignore-user-config'), JSON.stringify(shape));
-            const resume = args.indexOf('resume');
-            if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            for (const mode of [undefined, 'ask_first', 'plan_only', 'auto_edit'] as const) {
+                const args = codexArguments({ ...shape, platform, mode });
+                assert.ok(args.includes('--ignore-user-config'), `${mode} ${JSON.stringify(shape)}`);
+                const resume = args.indexOf('resume');
+                if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+            }
+            assert.ok(!codexArguments({ ...shape, platform, mode: 'full_access' }).includes('--ignore-user-config'), JSON.stringify(shape));
         }
     }
 });
 
-test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too', () => {
-    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
+test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too, in Full access as well', () => {
+    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }, { mode: 'full_access' as const }, { mode: 'full_access' as const, resume: 'thr-1' }]) {
         for (const platform of ['win32', 'darwin', 'linux'] as const) {
             const args = codexArguments({ ...shape, platform });
             const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));

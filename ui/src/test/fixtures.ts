@@ -199,6 +199,12 @@ import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
 import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.json';
+import campaignListNewAgent from '../../../docs/api/fixtures/campaign.list/new-agent.json';
+import campaignGetNewAgent from '../../../docs/api/fixtures/campaign.get/new-agent.json';
+import campaignGetNewAgentBrief from '../../../docs/api/fixtures/campaign.get/new-agent-brief.json';
+import campaignUpdateNewAgentRename from '../../../docs/api/fixtures/campaign.update/new-agent-rename.json';
+import campaignUpdateNewAgentNameTooLong from '../../../docs/api/fixtures/campaign.update/new-agent-name-too-long.json';
+import campaignSummaryNewAgent from '../../../docs/api/fixtures/campaign.summary/new-agent.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
 import campaignListScreen from '../../../docs/api/fixtures/campaign.list/screen.json';
@@ -371,6 +377,7 @@ import decisionGetCardNeedsQuestion from '../../../docs/api/fixtures/decision.ge
 // What the accounts card reads of the runtime: the official Reply package as it lists it, and the global route to it.
 import pluginListCardAccountsReply from '../../../docs/api/fixtures/plugin.list/card-accounts-reply.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
+import pluginListReplyUnavailable from '../../../docs/api/fixtures/plugin.list/reply-unavailable.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
 import replyCountPeriodNone from '../../../docs/api/fixtures/reply.count/period-none.json';
@@ -571,6 +578,7 @@ import approvalGetByWorkItem from '../../../docs/api/fixtures/approval.get/by-wo
 import approvalListArchiveAskedAndGiven from '../../../docs/api/fixtures/approval.list/archive-asked-and-given.json';
 import campaignArchiveArchiveSpring from '../../../docs/api/fixtures/campaign.archive/archive-spring.json';
 import campaignArchiveArchiveSpringAgain from '../../../docs/api/fixtures/campaign.archive/archive-spring-again.json';
+import campaignArchiveArchiveUnknown from '../../../docs/api/fixtures/campaign.archive/archive-unknown.json';
 import campaignGetArchiveSpring from '../../../docs/api/fixtures/campaign.get/archive-spring.json';
 import campaignGetArchiveSpringArchived from '../../../docs/api/fixtures/campaign.get/archive-spring-archived.json';
 import campaignListArchiveAfter from '../../../docs/api/fixtures/campaign.list/archive-after.json';
@@ -939,6 +947,8 @@ export const fixtures = {
     'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/making': campaignGetMaking satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/new-agent': campaignGetNewAgent satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/new-agent-brief': campaignGetNewAgentBrief satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/send-mode-override': campaignGetSendModeOverride satisfies Exchange<
         { campaign_id: string },
@@ -961,6 +971,14 @@ export const fixtures = {
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.update/new-agent-rename': campaignUpdateNewAgentRename satisfies Exchange<
+        { campaign_id: string; name: string },
+        Campaign
+    >,
+    'campaign.update/new-agent-name-too-long': campaignUpdateNewAgentNameTooLong satisfies Exchange<
+        { campaign_id: string; name: string },
+        ErrorEnvelope
+    >,
     'campaign.list/card-chips': campaignListCardChips satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/campaigns-for-picker': campaignListCampaignsForPicker satisfies Exchange<
         CampaignListRequest,
@@ -969,6 +987,7 @@ export const fixtures = {
     'campaign.list/first-page': campaignListFirstPage satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/for-picker': campaignListForPicker satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/inbox': campaignListInbox satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
+    'campaign.list/new-agent': campaignListNewAgent satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/include-archived': campaignListIncludeArchived satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -1097,6 +1116,10 @@ export const fixtures = {
     >,
     'campaign.summary/many': campaignSummaryMany satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/many-next': campaignSummaryManyNext satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/new-agent': campaignSummaryNewAgent satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
@@ -1432,6 +1455,7 @@ export const fixtures = {
     >,
     'plugin.list/card-accounts-reply': pluginListCardAccountsReply satisfies Exchange<object, object>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
+    'plugin.list/reply-unavailable': pluginListReplyUnavailable satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/period-none': replyCountPeriodNone satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
@@ -1643,6 +1667,10 @@ export const fixtures = {
     'campaign.archive/archive-spring-again': campaignArchiveArchiveSpringAgain satisfies Exchange<
         CampaignTransitionRequest,
         Campaign
+    >,
+    'campaign.archive/archive-unknown': campaignArchiveArchiveUnknown satisfies Exchange<
+        CampaignTransitionRequest,
+        ErrorEnvelope
     >,
     'campaign.get/archive-spring': campaignGetArchiveSpring satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/archive-spring-archived': campaignGetArchiveSpringArchived satisfies Exchange<

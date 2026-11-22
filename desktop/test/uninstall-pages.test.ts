@@ -33,7 +33,7 @@ function between(text: string, start: string, ends: string[]): string {
 
 /** The install page's two paragraphs under §7's "Jason Desktop", by their opening words. */
 const oneUninstallParagraph = 'On macOS and Windows the application goes';
-const linuxParagraph = 'On Linux the desktop is taken off its own way';
+const linuxParagraph = 'On Linux the one uninstall is the same:';
 
 const platforms: { platform: NodeJS.Platform; bullet: string }[] = [
     { platform: 'win32', bullet: '- **Windows.**' },
@@ -62,7 +62,7 @@ for (const { platform, bullet } of platforms) {
     });
 }
 
-test('the install page names Uninstall Jason… for macOS and Remove What Jason Placed… for Linux, as the code offers them', () => {
+test('the install page names Uninstall Jason… for macOS and for Linux, as the code offers it', () => {
     const oneUninstall = installPage(oneUninstallParagraph);
     assert.ok(uninstallOffered('darwin') && !removalOffered('darwin'));
     assert.ok(oneUninstall.includes(`${uninstallLabel}** in the Jason menu on macOS`), oneUninstall);
@@ -70,9 +70,9 @@ test('the install page names Uninstall Jason… for macOS and Remove What Jason 
     assert.ok(!oneUninstall.includes(removeLabel), oneUninstall);
 
     const linux = installPage(linuxParagraph);
-    assert.ok(removalOffered('linux') && !uninstallOffered('linux'));
-    assert.ok(linux.includes(`choose ${removeLabel} in the Jason menu first`), linux);
-    assert.ok(!linux.includes(uninstallLabel), linux);
+    assert.ok(uninstallOffered('linux') && !removalOffered('linux'));
+    assert.ok(linux.includes(`${uninstallLabel} in the Jason menu`), linux);
+    assert.ok(!linux.includes(removeLabel), linux);
 });
 
 test('no door is offered on Windows, where Installed apps is the one', () => {

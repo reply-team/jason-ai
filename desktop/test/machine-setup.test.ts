@@ -40,6 +40,7 @@ import {
 import { cliAt } from '../src/cli.ts';
 import { keepFirstStart, readMode } from '../src/mode.ts';
 import { desktopPaths, namedDataDirectory } from '../src/paths.ts';
+import { handedPath, loginPath, shellPath, withUsualPlaces } from '../src/shell-path.ts';
 import { isNewInstallation } from '../src/theme.ts';
 import { memoryLog } from './harness.ts';
 
@@ -106,13 +107,14 @@ function setupOn(data: string, cli: Cli, over: Partial<ConstructorParameters<typ
     return { setup, log };
 }
 
-test('the routine is the Command Line item on macOS and Windows alone; Linux keeps its PATH command, and a development build runs nothing', () => {
+test('the routine is the Command Line item on macOS, Windows and Linux, and a development build runs nothing', () => {
     assert.equal(commandIsSetup('darwin'), true);
     assert.equal(commandIsSetup('win32'), true);
-    assert.equal(commandIsSetup('linux'), false, 'Linux keeps today’s Command Line item and path-profile.ts');
+    assert.equal(commandIsSetup('linux'), true);
     assert.equal(setupOffered('darwin', true), true);
     assert.equal(setupOffered('win32', true), true);
-    assert.equal(setupOffered('linux', true), false);
+    assert.equal(setupOffered('linux', true), true);
+    assert.equal(setupOffered('linux', false), false);
     assert.equal(setupOffered('darwin', false), false, 'a development build’s jason is the checkout’s');
     assert.equal(setupOffered('win32', false), false);
 });
@@ -122,6 +124,73 @@ test('on macOS the routine is told the login shell’s own PATH, or the empty va
     assert.deepEqual(setupArguments('darwin', null), ['install', '--terminal-path', '']);
     assert.deepEqual(setupArguments('win32', null), ['install']);
     assert.deepEqual(setupArguments('win32', 'C:\\anything'), ['install'], 'Windows reads no --terminal-path');
+    assert.deepEqual(setupArguments('linux', '/usr/bin:/bin'), ['install', '--terminal-path', '/usr/bin:/bin'], 'Linux is told the login shell’s PATH as macOS is');
+    assert.deepEqual(setupArguments('linux', null), ['install', '--terminal-path', '']);
+});
+
+/** A login shell that runs `profile`, then prints its PATH as the desktop asks it to. */
+function loginShellIn(home: string, profile = ''): string {
+    const shell = join(home, 'login-shell');
+    writeFileSync(shell, `#!/bin/sh\n${profile}\nprintf '__JASON_PATH__%s__JASON_PATH_END__' "$PATH"\n`, { mode: 0o755 });
+    return shell;
+}
+
+/** `body` run with these variables in the process's environment, as a start of the desktop is handed them; then put back. */
+async function handed<T>(env: Record<string, string | undefined>, body: () => Promise<T>): Promise<T> {
+    const before = Object.fromEntries(Object.keys(env).map((name) => [name, process.env[name]]));
+    const put = (values: Record<string, string | undefined>) => {
+        for (const [name, value] of Object.entries(values)) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
+    };
+    put(env);
+    try {
+        return await body();
+    } finally {
+        put(before);
+    }
+}
+
+// The PATH of an Arch session's user manager, which a terminal GNOME opens starts from.
+const archSession = '/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl';
+
+test('THE TERMINAL’S PATH: a desktop started by an earlier one is handed that one’s PATH, and tells the routine the PATH a new terminal has, without what that one added', { skip: process.platform === 'win32' }, async () => {
+    const home = folder();
+    const data = join(home, '.jason');
+    const earlier = '/tmp/.mount_jason-COlmoo';
+    const mount = '/tmp/.mount_jason-gnldDa';
+    // As an earlier AppImage's update hands it on: that start's environment, whose PATH its AppRun began with its mount and
+    // it ended with the usual places for its children; this start's AppRun puts its own mount in front.
+    const path = `${mount}:${mount}/usr/sbin:${withUsualPlaces(`${earlier}:${earlier}/usr/sbin:${archSession}`, home, process.platform)}`;
+    assert.ok(path.split(':').includes(join(home, '.local', 'bin')), 'the earlier start added ~/.local/bin');
+    // A login shell whose profile adds nothing to a PATH that holds its folders, as Arch's /etc/profile does.
+    const shell = loginShellIn(home);
+    const cli = fakeCli(printed(report()));
+    const { setup } = setupOn(data, cli, { platform: 'linux', terminalPath: () => shellPath() });
+    await handed({ PATH: path, HOME: home, SHELL: shell, APPDIR: mount }, () => setup.atStart());
+    assert.deepEqual(cli.calls[0]?.args, ['install', '--terminal-path', archSession]);
+    // The PATH every program this start runs is given, as the window's run makes it: no mount, the earlier start's
+    // included, and the usual places once.
+    const programs = await handed({ PATH: path, HOME: home, SHELL: shell, APPDIR: mount }, () => loginPath(handedPath(path, mount, home, process.platform), home, shellPath()));
+    assert.equal(programs, withUsualPlaces(archSession, home, process.platform));
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
+    assert.ok(run.includes("const handed = handedPath(pathOf(process.env), process.env['APPDIR'], home, process.platform);"));
+    assert.ok(run.includes('const pathRead = loginPath(handed, home, shellRead);'));
+});
+
+test('THE TERMINAL’S PATH: ~/.local/bin that a person’s own profile puts last stays on the PATH the routine is told, so no profile line is written for it', { skip: process.platform === 'win32' }, async () => {
+    const home = folder();
+    const bin = join(home, '.local', 'bin');
+    // The session read the profile at sign-in, and the login shell reads it again.
+    const shell = loginShellIn(home, `case ":$PATH:" in *":${bin}:"*) ;; *) PATH="$PATH:${bin}" ;; esac`);
+    for (const path of [`${archSession}:${bin}`, `${withUsualPlaces(`${archSession}:${bin}`, home, process.platform)}`]) {
+        const cli = fakeCli(printed(report()));
+        const { setup } = setupOn(folder(), cli, { platform: 'linux', terminalPath: () => shellPath() });
+        await handed({ PATH: path, HOME: home, SHELL: shell, APPDIR: undefined }, () => setup.atStart());
+        assert.deepEqual(cli.calls[0]?.args, ['install', '--terminal-path', `${archSession}:${bin}`], path);
+    }
 });
 
 test('a first start runs the routine once, with the shell’s PATH and no --roles, and its record leaves the data directory new for the Demo', async () => {
@@ -1081,4 +1150,38 @@ test('the data directory a wrapper names is none where JASON_DATA_DIR is unset o
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     assert.equal(main.includes("process.env['JASON_DATA_DIR'] || null"), false);
     assert.equal(main.split('namedDataDirectory(process.env, home, process.platform)').length - 1, 2);
+});
+
+test('Live brought up on a new installation runs the routine once more, where the start’s run found no installation, and only then', async () => {
+    const data = join(folder(), '.jason');
+    const cli = fakeCli(printed(report({ logon: 'no_installation' })), printed(report({ logon: 'registered' })));
+    const { setup } = setupOn(data, cli);
+    await setup.atStart();
+    assert.equal(setup.state.state === 'reported' && setup.state.report.logon, 'no_installation');
+    await setup.afterLive();
+    await setup.afterLive();
+    assert.equal(cli.calls.filter((call) => call.args[0] === 'install').length, 2, 'once at the start, once after Live, and no more');
+    assert.equal(setup.state.state === 'reported' && setup.state.report.logon, 'registered');
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).report?.logon, 'registered', 'the record says what the later run did');
+});
+
+test('Live brought up runs nothing more where the start’s run registered, or left, the runtime’s start at logon', async () => {
+    for (const logon of ['registered', 'already', 'off', 'left', 'refused', 'unsupported', undefined]) {
+        const data = join(folder(), '.jason');
+        const cli = fakeCli(printed(report(logon === undefined ? {} : { logon })));
+        const { setup } = setupOn(data, cli);
+        await setup.atStart();
+        await setup.afterLive();
+        assert.equal(cli.calls.filter((call) => call.args[0] === 'install').length, 1, `logon ${logon}`);
+    }
+});
+
+test('the runtime’s start at logon is no item of the Jason menu or the tray, and Live’s bringing up runs the routine once more', () => {
+    const source = (name: string) => readFileSync(join(import.meta.dirname, '..', 'src', name), 'utf8');
+    const desk = source('desk.ts');
+    assert.equal(desk.includes('Start the Runtime at Logon'), false, 'the item is gone from the menu and the tray');
+    assert.equal(/readAutostart|autostartOn|deps.autostart/.test(desk), false, 'and so is its handler, and the read it drew from');
+    assert.ok(desk.includes("label: 'Open Jason at Login'"), 'the desktop’s own item stays');
+    assert.ok(source('main.ts').includes('        runtimeVersion = started.runtimeVersion;\n        // A new installation, brought up: the machine set-up once more'));
+    assert.ok(source('main.ts').includes('void machineSetup?.afterLive();'));
 });

@@ -41,14 +41,28 @@ internal static partial class Account
 
     /// <summary>
     /// Reply's two codes for a mailbox at a limit it counts on direct emails, by what a test plants on the mailbox: its daily
-    /// limit of direct emails, and the active contacts of the account's billing period. reply-cli has no word of its own for
-    /// either and prints both as <c>rate_limited</c> at 429, Reply's code and sentence carried and no wait named.
+    /// limit of direct emails, and the active contacts of the account's billing period, each with reply-cli's own sentence
+    /// for it. reply-cli prints both as <c>email.limit_reached</c> at 429, which limit under <c>details.limit</c>, Reply's
+    /// code and sentence carried. Copied from reply-cli 0.22.0, src/operations/direct-send.ts, <c>LIMITS.email</c>. Reply
+    /// sends a Retry-After with each, which reply-cli passes on as <c>retry_after</c>; this stand-in sends one only where a
+    /// test plants it on the mailbox (<see cref="RetryAfter"/>), so a test that plants none reads the block a refusal with
+    /// no wait makes.
     /// </summary>
-    private static readonly Dictionary<string, (string Code, string Detail)> MailboxLimits = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Code, string Detail, string Title)> MailboxLimits = new(StringComparer.Ordinal)
     {
-        ["daily"] = ("contact.dailyLimitReached", "The mailbox has sent as many direct emails today as its daily limit allows."),
-        ["active_contacts"] = ("contact.activeContactsLimitReached", "The account has emailed as many contacts this billing period as its plan allows."),
+        ["daily"] = (
+            "contact.dailyLimitReached", "The mailbox has sent as many direct emails today as its daily limit allows.",
+            "The mailbox reached its daily limit, so nothing was sent."),
+        ["active_contacts"] = (
+            "contact.activeContactsLimitReached", "The account has emailed as many contacts this billing period as its plan allows.",
+            "The account reached its active contacts limit for the billing period, so nothing was sent."),
     };
+
+    /// <summary>The seconds of the Retry-After Reply sends with a limit's refusal, where a test plants them on the mailbox.</summary>
+    private const string RetryAfter = "_retry_after";
+
+    /// <summary>What a test plants on a mailbox Reply says cannot send direct emails at all.</summary>
+    private const string SendingDisabled = "sending_disabled";
 
     /// <summary>What a test plants on a contact the account's blacklist holds.</summary>
     private const string Blacklisted = "_blacklisted";
@@ -464,7 +478,7 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// Reply's refusal of an email from a mailbox a test planted at a limit Reply counts, or null. An email Reply dispatches
+    /// Reply's refusal of an email from a mailbox a test planted at a limit Reply counts, or as one that cannot send, or null. An email Reply dispatches
     /// now under a key (<paramref name="recorded"/>) has its record made before the limits are counted, so the refusal names
     /// that record, failed under Reply's code, and keeps no key with it: the same request under the same key, once the limit
     /// has lifted, makes a record of its own. Any other email is refused before any record is made. A mailbox planted at a
@@ -477,14 +491,19 @@ internal static partial class Account
             return null;
         }
 
+        if (planted == SendingDisabled)
+        {
+            return CannotSend(ids);
+        }
+
         if (!MailboxLimits.TryGetValue(planted, out var limit))
         {
             return Refused(
-                "usage.limit", $"A mailbox is planted at its daily or active_contacts limit, never at '{planted}'.", exit: 2);
+                "usage.limit", $"A mailbox is planted at its daily or active_contacts limit, or as sending_disabled, never at '{planted}'.", exit: 2);
         }
 
-        var (code, detail) = limit;
-        JsonObject? details = null;
+        var (code, detail, title) = limit;
+        var details = new JsonObject { ["limit"] = planted };
         if (recorded)
         {
             var sends = Read(root, DirectSendsFile);
@@ -502,12 +521,26 @@ internal static partial class Account
                 ["failureCode"] = code,
             });
             Write(root, DirectSendsFile, sends);
-            details = new JsonObject { ["reference"] = reference, ["state"] = "failed" };
+            details["reference"] = reference;
+            details["state"] = "failed";
         }
 
-        return Refused(
-            "rate_limited", "Reply asked for this call to be made later.", status: 429, replyCode: code, detail: detail, ids: ids, details: details);
+        var wait = mailbox[RetryAfter] is JsonValue plantedWait && plantedWait.TryGetValue<int>(out var seconds) ? seconds : (int?)null;
+        return Refused("email.limit_reached", title, status: 429, replyCode: code, detail: detail, ids: ids, details: details, retryAfter: wait);
     }
+
+    /// <summary>
+    /// Reply's refusal of an email from a mailbox that cannot send direct emails at all, its daily limit 0 or its team's
+    /// plan sending nothing, at 403 under <c>contact.emailAccountSendingDisabled</c> and before any record is made, as
+    /// reply-cli 0.22.0 prints it (src/operations/direct-send.ts, <c>SENDING_REFUSALS.email</c>):
+    /// <c>email.sending_disabled</c>, its own sentence and hint, Reply's code and sentence carried, and no wait, since none
+    /// clears it.
+    /// </summary>
+    private static Ending CannotSend(JsonObject ids) =>
+        Refused(
+            "email.sending_disabled", "The mailbox or its team cannot send direct emails now, so nothing was sent.", status: 403,
+            replyCode: "contact.emailAccountSendingDisabled", detail: "The daily limit of this email account is 0, so it cannot send direct emails.",
+            ids: ids, hint: "Reply says the mailbox's daily limit is 0, or the team's plan does not send; no retry can help until that changes.");
 
     /// <summary>Whether any field of the text holds a double opening brace, which Reply reads as the start of a template variable.</summary>
     private static bool HoldsPlaceholder(JsonObject text) =>

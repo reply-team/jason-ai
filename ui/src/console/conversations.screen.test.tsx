@@ -54,9 +54,14 @@ const side = () => document.querySelector<HTMLElement>('.side')!;
 const listed = () => within(side()).getByRole('navigation', { name: 'Conversations' });
 /** What the sidebar's list says, in its order. */
 const names = () =>
-    within(listed())
-        .getAllByRole('button')
-        .map((each) => each.querySelector('.rt')?.textContent?.trim());
+    Array.from(listed().querySelectorAll<HTMLElement>('.recent-row')).map((each) =>
+        each.querySelector('.rt')?.textContent?.trim(),
+    );
+/** The names a section draws, in its order. */
+const groupNames = (group: 'Agents' | 'Chats') =>
+    Array.from(within(listed()).getByRole('group', { name: group }).querySelectorAll<HTMLElement>('.recent-row')).map(
+        (each) => each.querySelector('.rt')?.textContent?.trim(),
+    );
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 /** The thread of the chat the area shows. */
 const thread = () => shownPane()!.querySelector<HTMLElement>('.thread')!;
@@ -102,8 +107,9 @@ describe('the desktop’s conversations', () => {
         });
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000A2', title: hostile });
         renderConsole(desktop);
-        // The two kept ones, newest first; the set-up chat the window opens on is not listed until its first turn.
-        await waitFor(() => expect(names()).toEqual([hostile, 'Spring']));
+        // The two kept ones, the agent's under AGENTS above the chat under CHATS; the set-up chat the window opens on is
+        // not listed until its first turn.
+        await waitFor(() => expect(names()).toEqual(['Spring', hostile]));
         expect(Object.keys(chats.value)).toHaveLength(1);
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         await waitFor(() => screen.getByText('Claude Code stopped.'));
@@ -299,17 +305,21 @@ describe('the desktop’s conversations', () => {
     it('reads the list again when a turn ends, so what the desktop changed meanwhile is listed', async () => {
         const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', campaignId: 'cmp_1', title: 'Spring' });
-        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', campaignId: 'cmp_2', title: 'Autumn' });
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', title: 'Autumn' });
         renderConsole(desktop);
         await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const id = await send(desktop, 'How is it doing?', hero.closest<HTMLElement>('.chat-panel')!);
-        await waitFor(() => expect(names()).toEqual(['Spring', 'Autumn']));
-        // While the turn runs, the desktop renames Autumn after its campaign; the list says so once the turn ends.
+        const chatNames = () =>
+            Array.from(
+                within(listed()).getByRole('group', { name: 'Chats' }).querySelectorAll<HTMLElement>('.recent-row'),
+            ).map((each) => each.querySelector('.rt')?.textContent?.trim());
+        await waitFor(() => expect(chatNames()).toEqual(['Autumn']));
+        // While the turn runs, the desktop renames the chat Autumn; the list says so once the turn ends.
         desktop.kept.get('conv_01JDKEPT0000000000000000B2')!.title = 'Autumn outreach';
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
-        await waitFor(() => expect(names()).toEqual(['Spring', 'Autumn outreach']));
+        await waitFor(() => expect(chatNames()).toEqual(['Autumn outreach']));
     });
 
     it('shows a suggestion in the word the page uses for a campaign, and sends the word the runtime uses', async () => {
@@ -351,6 +361,9 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => screen.getByText('This chat is now the conversation of Autumn.'));
         expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2', title: 'Autumn' });
         await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Autumn' })).toBeTruthy());
+        await waitFor(() => expect(desktop.kept.get(id)?.campaignId).toBe('cmp_2'));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
         // From now on it is that campaign's conversation: the Campaigns list's Chat opens it, and no other.
         bringForward('Agents');
         const autumn = await waitFor(() => screen.getByText('Autumn', { selector: 'b' }).closest('tr')!);
@@ -358,6 +371,30 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(inFront()).toBe('Autumn'));
         expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_2')).toEqual([]);
         expect(Object.keys(chats.value)).toHaveLength(1);
+    });
+
+    it('moves a chat handed over to AGENTS at once, and lists it once there, before the list says so and after', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        const id = await send(desktop, 'Help me start a new campaign.');
+        await waitFor(() => expect(groupNames('Chats')).toEqual(['Help me start a new campaign.']));
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
+        // The hand-over reaches the chat while the desktop's list still has it about no agent.
+        flush(() => {
+            desktop.emit(id, { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2' }));
+        await waitFor(() => expect(calls(desktop, 'chat.list').length).toBeGreaterThan(1));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
+        // The list says so too; the row stays one.
+        desktop.kept.get(id)!.campaignId = 'cmp_2';
+        desktop.kept.get(id)!.title = 'Autumn';
+        flush(() => desktop.emit(id, { kind: 'renamed', title: 'Autumn' }));
+        await waitFor(() => expect(conversations.value.find((each) => each.id === id)?.campaignId).toBe('cmp_2'));
+        expect(groupNames('Chats')).toEqual([]);
+        expect(groupNames('Agents').filter((each) => each === 'Autumn')).toEqual(['Autumn']);
     });
 
     it('offers the campaigns a set-up turn made to pick from, by name and as text, and attaches the one picked', async () => {
@@ -393,8 +430,9 @@ describe('the desktop’s conversations', () => {
             desktop.emit(id, { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] });
             desktop.emit(id, { kind: 'done', error: null });
         });
-        await waitFor(() => screen.getByRole('button', { name: 'Spring' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Spring' }));
+        const pick = () => within(document.querySelector<HTMLElement>('.chat-pick')!);
+        await waitFor(() => pick().getByRole('button', { name: 'Spring' }));
+        fireEvent.click(pick().getByRole('button', { name: 'Spring' }));
         await waitFor(() => screen.getByText('That agent has its conversation already. Open it from the agent.'));
         expect(chats.value[id]?.campaignId).toBeNull();
         expect(within(document.querySelector<HTMLElement>('.chat-pick')!).getAllByRole('button')).toHaveLength(2);
@@ -435,6 +473,106 @@ describe('the desktop’s conversations', () => {
                 ['01JD0000000000000000000000-1788000000000'],
             ]),
         );
+    });
+
+    it('closes a notice by its control, and what a turn said as the next answer begins, while the line under the composer still says why', async () => {
+        const status = structuredClone(setupFound);
+        // A Full access chat's next turn runs in Ask first on this computer, and the line under the composer says why.
+        const why = 'Full access is held on this computer for a minute.';
+        status.hosts.find((each) => each.id === 'claude')!.runs.window.full_access = { mode: 'ask_first', why };
+        const { desktop } = renderConsole(chatDesktop(status));
+        const id = await send(desktop, 'Go');
+        flush(() => {
+            desktop.emit(id, { kind: 'notice', text: 'This turn runs in Ask first.' });
+            desktop.emit(id, { kind: 'text', text: 'Done.' });
+            desktop.emit(id, { kind: 'notice', text: 'A folder was left out of the chat.' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => screen.getByText('A folder was left out of the chat.'));
+        const note = (text: string) => screen.getByText(text).closest<HTMLElement>('.chat-note')!;
+        expect(within(note('This turn runs in Ask first.')).getByRole('button', { name: 'Close' })).toBeTruthy();
+        fireEvent.click(within(note('A folder was left out of the chat.')).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(screen.queryByText('A folder was left out of the chat.')).toBeNull());
+        expect(screen.getByText('This turn runs in Ask first.')).toBeTruthy();
+        // The next message is sent: the notice stays until its answer begins, and then goes.
+        await send(desktop, 'And now?');
+        expect(screen.getByText('This turn runs in Ask first.')).toBeTruthy();
+        flush(() => desktop.emit(id, { kind: 'text', text: 'Here.' }));
+        await waitFor(() => expect(screen.queryByText('This turn runs in Ask first.')).toBeNull());
+        expect(screen.getByRole('note', { name: 'Why the next turn runs in Ask first' }).textContent).toBe(why);
+    });
+
+    it('puts the path of each file dropped on the box in at the caret, quoted, says one it could not read, and goes nowhere', async () => {
+        const { desktop } = renderConsole();
+        const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }) as HTMLTextAreaElement);
+        fireEvent.change(box, { target: { value: 'add these lines to ' } });
+        box.setSelectionRange(19, 19);
+        const notes = new File(['x'], '1.txt');
+        const plan = new File(['y'], 'plan.md');
+        const desk = 'C:\\Users\\Ана Ли\\Desktop\\';
+        desktop.paths.set(notes, `${desk}1.txt`);
+        desktop.paths.set(plan, `${desk}plan.md`);
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        // The box takes the drop, so the window never goes to the file.
+        expect(fireEvent.dragOver(box, carrying(notes))).toBe(false);
+        expect(fireEvent.drop(box, carrying(notes, plan))).toBe(false);
+        const both = `add these lines to '${desk}1.txt' '${desk}plan.md' `;
+        await waitFor(() => expect(box.value).toBe(both));
+        expect(box.selectionStart).toBe(both.length);
+        expect(calls(desktop, 'chat.pathOf').map((each) => each.args)).toEqual([['1.txt'], ['plan.md']]);
+        expect(screen.queryByText(unread)).toBeNull();
+        // A file that is not on this computer puts nothing in, and the box says so, until a word is typed.
+        expect(fireEvent.drop(box, carrying(new File(['z'], 'made.txt')))).toBe(false);
+        await waitFor(() => screen.getByText(unread));
+        expect(box.value).toBe(both);
+        fireEvent.change(box, { target: { value: `${both}please` } });
+        await waitFor(() => expect(screen.queryByText(unread)).toBeNull());
+        // Words dragged from a page are the box's own to take.
+        expect(fireEvent.drop(box, { dataTransfer: { files: [], types: ['text/plain'] } })).toBe(true);
+    });
+
+    it('says what a drop could not read until the message goes, and never in another conversation drawn in its place', async () => {
+        const desktop = chatDesktop();
+        const one = 'conv_01JDKEPT0000000000000000D1';
+        const other = 'conv_01JDKEPT0000000000000000D2';
+        desktop.keep({ id: one, campaignId: 'cmp_1', title: 'Spring', entries: [{ kind: 'user', text: 'Hello' }] });
+        desktop.keep({ id: other, campaignId: 'cmp_2', title: 'Autumn', entries: [{ kind: 'user', text: 'Later' }] });
+        const { fake } = renderConsole(desktop);
+        const unread = "A dropped file's path could not be read here; type or paste it instead.";
+        const carrying = (...files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+        // Both chats are held by opening them from the sidebar, as a person does.
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Autumn' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Autumn' }));
+        await waitFor(() => screen.getByText('Later'));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => screen.getByText('Hello'));
+        const panel = () => document.querySelector<HTMLElement>(`[data-pane="chat:${one}"]`)!;
+        const box = within(panel()).getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: 'Read this' } });
+        fireEvent.drop(box, carrying(new File(['z'], 'made.txt')));
+        await waitFor(() => within(panel()).getByText(unread));
+        // The message goes with no word typed after the drop: what the box said of the drop goes with it.
+        fireEvent.click(within(panel()).getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        await waitFor(() => expect(within(panel()).queryByText(unread)).toBeNull());
+        // One panel, drawn with one chat and then given the other at the same place, as the console does where a
+        // pane's chat changes under it: the other conversation's box says nothing of this one's drop.
+        const view = render(
+            <ApiProvider api={fake}>
+                <ChatPanel chatId={other} headed />
+            </ApiProvider>,
+        );
+        const drawn = within(view.container).getByRole('textbox', { name: 'Your message' });
+        fireEvent.drop(drawn, carrying(new File(['z'], 'made.txt')));
+        await waitFor(() => within(view.container).getByText(unread));
+        view.rerender(
+            <ApiProvider api={fake}>
+                <ChatPanel chatId={one} headed />
+            </ApiProvider>,
+        );
+        await waitFor(() => within(view.container).getByText('Hello'));
+        expect(within(view.container).queryByText(unread)).toBeNull();
     });
 
     it('draws Rename, Start fresh and Remove as icons that keep their names and say what they do', async () => {
@@ -483,6 +621,34 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(calls(desktop, 'chat.remove').map((each) => each.args)).toEqual([[id]]));
         await waitFor(() => expect(chats.value[id]).toBeUndefined());
         await waitFor(() => expect(within(listed()).queryByRole('button', { name: 'Go' })).toBeNull());
+    });
+
+    it('asks before removing a conversation with a folder of its own, saying the folder is kept seven days and where, and what a terminal open in it does; one an earlier desktop made names no folder', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', title: 'Own folder', ownFolder: true });
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', title: 'Shared folder' });
+        renderConsole(desktop);
+        for (const [id, title, own] of [
+            ['conv_01JDKEPT0000000000000000B1', 'Own folder', true],
+            ['conv_01JDKEPT0000000000000000B2', 'Shared folder', false],
+        ] as const) {
+            await waitFor(() => within(listed()).getByRole('button', { name: title }));
+            fireEvent.click(within(listed()).getByRole('button', { name: title }));
+            await waitFor(() => expect(calls(desktop, 'chat.open').map((each) => each.args[0])).toContain(id));
+            const pane = shownPane()!;
+            await waitFor(() =>
+                expect(within(pane).getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', false),
+            );
+            fireEvent.click(within(pane).getByRole('button', { name: 'Remove' }));
+            const asking = within(pane).getByRole('alertdialog', { name: 'Remove this conversation?' });
+            expect(asking.textContent).toContain('the AI host keeps its own transcript of it');
+            if (own)
+                expect(asking.textContent).toContain(
+                    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. On Windows, a program that has it open keeps it where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.",
+                );
+            else expect(asking.textContent).not.toMatch(/folder|seven days|chat-full-ended/);
+            fireEvent.click(within(asking).getByRole('button', { name: 'Keep it' }));
+        }
     });
 
     it('keeps Start fresh and Remove from a turn that runs, and says a refusal in the desktop’s words', async () => {
@@ -650,8 +816,7 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => within(side()).getByText('That conversation is not one this desktop keeps.'));
         expect(screen.queryByRole('heading', { name: 'What should Jason do in Spring?' })).toBeNull();
         desktop.refuse.set('chat.create', "That is not an agent's id.");
-        fireEvent.click(within(side()).getByRole('button', { name: 'More to create' }));
-        fireEvent.click(within(side()).getByRole('menuitem', { name: /^New chat/ }));
+        fireEvent.click(within(side()).getByRole('button', { name: 'New chat' }));
         await waitFor(() => within(side()).getByText("That is not an agent's id."));
         expect(Object.keys(chats.value)).toEqual([id]);
     });
@@ -788,13 +953,14 @@ describe('the desktop’s conversations', () => {
             updatedAt: '2026-11-03T00:00:00.000Z',
         });
         renderConsole(desktop);
-        await waitFor(() => expect(names()).toEqual(['Summer', 'Autumn', 'Spring']));
+        // Each agent by its campaign's name: Summer's conversation stands for Summer referrals.
+        await waitFor(() => expect(names()).toEqual(['Summer referrals', 'Autumn', 'Spring']));
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const header = document.querySelector<HTMLElement>('.agent-head')!;
         fireEvent.click(within(header).getByRole('button', { name: "More for this agent's conversation" }));
         fireEvent.click(within(header).getByRole('menuitem', { name: 'Start conversation fresh' }));
-        await waitFor(() => expect(names()).toEqual(['Spring', 'Summer', 'Autumn']));
+        await waitFor(() => expect(names()).toEqual(['Spring', 'Summer referrals', 'Autumn']));
     });
 
     it('says a failed list once: the note is not drawn again as the chats change', async () => {

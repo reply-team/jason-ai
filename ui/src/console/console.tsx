@@ -18,6 +18,7 @@ import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
 import { NoDesktopPage } from './no-desktop';
 import { OpenIn } from './open-in';
+import { RowMenu } from './row-menu';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -41,16 +42,24 @@ import {
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
+import { readUnavailable, resetUnavailable, unavailableRead } from './unavailable';
 import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
 import { reloadWaiting } from './waiting';
 import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
-import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
+import { t } from '../platform/i18n';
+import { agentFailure, agentMaking, forgetAgentFailure, tryAgentAgain } from './new-agent';
+import { folderRefusal, readFileManager } from './open-folder';
+import { closeMark } from './icons';
+import { readUnlisted } from './recent';
+import { RowRenameSaid } from './row-rename-said';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
+import { chosenSection } from '../screens/settings/chosen';
+import { followUpdates } from '../screens/settings/update-state';
 import { closeMenus, sideView } from './side';
 import { StartPanel } from './start';
 import {
@@ -67,6 +76,7 @@ import {
     feedUnseen,
     here,
     keepLine,
+    sideAway,
     streamState,
     type Dock,
     type PanelName,
@@ -77,7 +87,7 @@ import {
 consoleShell.loaded = true;
 consoleShell.settingsSections = LiveSettingsSections;
 
-// The desktop's shell: a sidebar and one area. The sidebar's menu, its Recent and the palette are the only way about, and
+// The desktop's shell: a sidebar and one area. The sidebar's menu, its two sections (Agents, Chats) and the palette are the only way about, and
 // the area shows exactly one thing: Start, one chat, one of the panels the console draws itself from the Runtime API, or
 // one of the browser shell's screens. Nothing is closed, only chosen; every window opens on Start.
 
@@ -154,15 +164,20 @@ function DashboardPanel({ inSight }: { inSight: boolean }) {
 }
 
 /** Needs you, whose rows are read whole while it is drawn, so that an approval is approved only once it has been. */
-function NeedsPanel() {
+function NeedsPanel({ inSight }: { inSight: boolean }) {
     useEffect(() => needs.drawNeeds(), []);
+    // A note of what left is said only of what left in sight.
+    useEffect(() => {
+        needs.sightNeeds(inSight);
+        return () => needs.sightNeeds(false);
+    }, [inSight]);
     return <Painted className="painted" view={needs.needsView} />;
 }
 
 const panels: Readonly<Record<PanelName, (inSight: boolean) => ReactNode>> = {
     start: () => <StartPanel />,
     dashboard: (inSight) => <DashboardPanel inSight={inSight} />,
-    needs: () => <NeedsPanel />,
+    needs: (inSight) => <NeedsPanel inSight={inSight} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
     connect: () => (
@@ -250,6 +265,7 @@ const commands: Partial<Record<DesktopCommand, { panel: PanelName } | { screen: 
     'navigate.people': { screen: 'people' },
     'navigate.system': { screen: 'system' },
     'navigate.settings': { screen: 'settings' },
+    'navigate.update': { screen: 'settings' },
 };
 
 /** Where a desktop command goes: a panel's name, the registered screen's own route, or nothing. */
@@ -487,6 +503,15 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const [bound, setBound] = useState(false);
     // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
     const [sideOpen, setSideOpen] = useState(false);
+    // An act that shows something in the area from a menu over the drawer puts it away too.
+    useEffect(() => {
+        let first = true;
+        return effect(() => {
+            void sideAway.value;
+            if (first) first = false;
+            else setSideOpen(false);
+        });
+    }, []);
     // While it is over the area the page behind is out of reach, the sidebar takes the focus, Escape puts it away and gives
     // the focus back to its button, and a window that grows past the narrow edge leaves nothing of it standing.
     useEffect(() => {
@@ -543,21 +568,34 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             followHistory(to);
         });
         const made = onChatMade(chatMade);
+        // The desktop's update item, read for as long as the console is drawn: the sidebar's Settings row marks a version
+        // the desktop knows of and has not installed.
+        const updatesFollowed = followUpdates(desktop);
+        // The file manager's name, for the agent's Open folder, is the computer's: read once, as the console is drawn.
+        const fileManagerRead = readFileManager();
         // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
         const shadowed = effect(() => {
             void chats.value;
             void conversations.value;
             untracked(retireShadowed);
         });
+        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Agents.
+        const unlisted = readUnlisted(api);
         return () => {
+            updatesFollowed();
+            unlisted();
             shadowed();
+            fileManagerRead();
             made();
             followed();
             unbound();
         };
     }, [api, desktop, dock]);
     useEffect(() => {
-        const onFocus = () => connect.reloadOnFocus();
+        const onFocus = () => {
+            connect.reloadOnFocus();
+            void shell.reloadOnFocus(api);
+        };
         window.addEventListener('focus', onFocus);
         const onKey = (event: KeyboardEvent) => {
             if (event.key === 'Escape') closeMenus();
@@ -569,9 +607,14 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void campaigns.reload();
         void connect.reload();
         void reloadConversations();
+        // The plugins a route names that the runtime holds back, said in the mode strip (`unavailable.ts`).
+        resetUnavailable();
+        void readUnavailable(api);
         // The Feed's id comes with the desktop's first answer, which a link to the Feed waits for.
         const feedAsked = askFeed();
         let pending: ReturnType<typeof setTimeout> | null = null;
+        // Whether the stream has been open: its first open follows the read made above, a later one a gap in it.
+        let wasOpen = false;
         const journal =
             stream ??
             pageStream(
@@ -604,8 +647,6 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
         };
         const stops = [
-            // The standing choice of Full access, for the mode menu's take-back and the System screen.
-            followStanding(desktop),
             can('links.onOpen') ? desktop.links.onOpen(opened) : () => undefined,
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
@@ -629,6 +670,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             can('onCommand')
                 ? desktop.onCommand((command) => {
                       if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
+                      // The update notice's click: Settings, at its Update section.
+                      if (command === 'navigate.update') chosenSection.value = 'update';
                       const to = commandTarget(command);
                       if (typeof to === 'string') dock.show(to);
                       else if (to) dock.page(to);
@@ -642,10 +685,18 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     catchUpFeed();
                     readActsAgain(api);
                 }
+                // The stream open again after it closed may have missed a restart's load of the plugins, which a resume
+                // does not send; and a first open reads what the start could not.
+                if (state.status === 'open' && before.status !== 'open') {
+                    if (wasOpen || !unavailableRead()) void readUnavailable(api);
+                    wasOpen = true;
+                }
                 streamState.value = state;
             }),
             journal.onLine((line) => {
                 keepLine(line);
+                // A load of the plugins may have made one available again, or held one back.
+                if (line.kind === 'plugins_reloaded') void readUnavailable(api);
                 handLine(line);
                 // A person's act on an agent locks its chat's open choice at once, before any list is read again.
                 heardLine(line);
@@ -703,12 +754,15 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         <aside
                             className={sideOpen ? 'side open' : 'side'}
                             onClickCapture={(event) => {
-                                if ((event.target as HTMLElement).closest('[data-action], a, button'))
-                                    setSideOpen(false);
+                                // A row's three dots open its menu over the drawer, as a right-click does: it stays open.
+                                const target = event.target as HTMLElement;
+                                if (target.closest('.rdots')) return;
+                                if (target.closest('[data-action], a, button')) setSideOpen(false);
                             }}
                         >
                             <Painted className="side-body" view={sideView} />
                             <SideFailure />
+                            <RowRenameSaid />
                         </aside>
                         {sideOpen && (
                             <button
@@ -732,6 +786,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         </div>
                     </div>
                     <Palette system={desktop.platform} />
+                    <RowMenu />
                 </>
             )}
         </div>
@@ -744,10 +799,58 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
  */
 function SideFailure() {
     const failure = conversationsFailure.value;
-    return failure === null ? null : (
-        <div className="note am side-note" role="alert">
-            {failure}
-        </div>
+    const folder = folderRefusal.value;
+    const agent = agentFailure.value;
+    return (
+        <>
+            {failure !== null && (
+                <div className="note am side-note" role="alert">
+                    {failure}
+                </div>
+            )}
+            {/* A click on New GTM agent that made no agent: Try again sends the same click, so it makes one agent at most. */}
+            {agent !== null && (
+                <div className="note am side-note agent-failed" role="alert">
+                    <span className="note-said">{agent.said}</span>
+                    <span className="crow">
+                        <button className="btn sm" type="button" disabled={agentMaking.value} onClick={tryAgentAgain}>
+                            {t('agent.new.again')}
+                        </button>
+                        <button className="btn sm" type="button" onClick={forgetAgentFailure}>
+                            {t('agent.new.close')}
+                        </button>
+                    </span>
+                </div>
+            )}
+            {/* Why an agent's folder did not open in the file manager, until it is closed or opened again. */}
+            {folder !== null && (
+                <div className="note am side-note closable" role="alert">
+                    <span className="note-said">{folder}</span>
+                    <button
+                        type="button"
+                        className="note-close"
+                        aria-label="Close"
+                        title="Close"
+                        onClick={() => (folderRefusal.value = null)}
+                    >
+                        <svg
+                            width={14}
+                            height={14}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            {closeMark.map((each) => (
+                                <path key={each} d={each} />
+                            ))}
+                        </svg>
+                    </button>
+                </div>
+            )}
+        </>
     );
 }
 

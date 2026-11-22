@@ -22,7 +22,7 @@ import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { fileLogger, limitsFrom } from './log.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
-import { pathOf, withPath } from './programs.ts';
+import { childEnvironment, packageFormOf } from './linux-package.ts';
 import { carriedUninstallArgs, carriedUninstallExit, carriedUninstallOutcome, carriedUninstallText, carriedUninstallTimeoutMs, harnessRoot, stopRuntimeCode } from './uninstall.ts';
 import { windowTitle } from './window-title.ts';
 
@@ -40,7 +40,7 @@ function carried() {
     const paths = desktopPaths(dataDirectory(process.env, home));
     const log = fileLogger(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile)));
     const executable = join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
-    const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
+    const cli = loggedCli(cliAt(executable, childEnvironment(packageFormOf(process.platform, process.resourcesPath, process.env), process.env)), log);
     const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
     return { home, paths, log, executable, cli, own };
 }
@@ -51,7 +51,7 @@ export async function runStopRuntime(): Promise<number> {
     // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's. The person's is always
     // stopped with --start-owed, since this start is only ever made on an installer's behalf: the next start of the
     // application, Demo or Live, starts a runtime from the note (`docs/release-and-update.md` §9).
-    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
+    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: childEnvironment(packageFormOf(process.platform, process.resourcesPath, process.env), process.env) })));
 }
 
 /**

@@ -62,9 +62,9 @@ public static class UpdateCommands
         var command = new Command(
             "apply",
             "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. "
-            + "On macOS and Windows a command-line install updated to 0.49 or later is then moved into Jason Desktop: an application of that version or later already there is reused, none there is downloaded, checked against checksums.txt and the publisher's signature and installed, one older is left as it is; the application's own `jason install` retires the command-line install, and a runtime it stopped is started again from the application's jason. The move never fails the update: its lines follow the update's, each beginning 'move:', and the document's move member says where it stands (done, pending, failed, or not_applicable on Linux) and why; <data>/update/move.json keeps it, 'jason status' names a move that has not ended, and this command run again at the same version carries it on. "
+            + "On macOS, Windows and Linux a command-line install updated to 0.49 or later is then moved into Jason Desktop: an application of that version or later already there is reused, none there is downloaded, checked against checksums.txt (and on macOS and Windows against the publisher's signature) and installed, one older is left as it is; on Linux the application is the deb, installed by apt with an administrator's password asked once, where there is apt and no AppImage at ~/Applications/jason-desktop-linux-x64.AppImage, and that AppImage otherwise, and an older deb is installed over by apt as the system upgrades a package. The application's own `jason install` retires the command-line install, and a runtime it stopped is started again from the application's jason. The move never fails the update: its lines follow the update's, each beginning 'move:', and the document's move member says where it stands (done, pending, failed, or not_applicable on a system that is none of the three) and why; <data>/update/move.json keeps it, 'jason status' names a move that has not ended, and this command run again at the same version carries it on. "
             + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window, and this command still ends with one JSON document and its exit code: it starts the application with --update-apply --await-go, and once the update is downloaded drains the runtime, stops it, steps out of the application's folder (on Windows it moves its own file out and keeps running, on macOS a copy of it under the data directory goes on) and gives the Desktop its go last, then waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
-            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found; a cancel (Ctrl+C, a closed console) before the installer has the update ends with update_cancelled, the record put back and the runtime launched without a wait. One update of a data directory acts at a time, its lock kept from one part to the next: another beside it, or `jason install` beside it, is refused with update_in_progress, and while `jason install` holds it the update is refused with install_in_progress. Run elevated (an administrator's elevated terminal under User Account Control, another account than the session's, root) it is refused with update_elevated before anything is begun: run it from an ordinary terminal. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
+            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found; a cancel (Ctrl+C, a closed console) before the installer has the update ends with update_cancelled, the record put back and the runtime launched without a wait. One update of a data directory acts at a time, its lock kept from one part to the next: another beside it, or `jason install` beside it, is refused with update_in_progress, and while `jason install` holds it the update is refused with install_in_progress. Run elevated (an administrator's elevated terminal under User Account Control, another account than the session's, root) it is refused with update_elevated before anything is begun: run it from an ordinary terminal. On Linux the deb's jason is refused with update_managed_by_package_manager, naming apt's commands, since the system updates the package from Jason's apt repository; an AppImage's jason hands the update to Jason Desktop as above, and is refused with update_carried_by_desktop from a terminal with no display. Where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -128,6 +128,11 @@ public static class UpdateCommands
         // on what it began; neither replaces a file of the application's itself.
         if (CarriedExecutable.Of(env) is { } carried)
         {
+            if (!finish && RefusedAsThePackages(env, human, carried, "apply"))
+            {
+                return ExitCodes.ApiError;
+            }
+
             return await CarriedApplyAsync(env, carried, continuing: false, feed, version, drainSeconds, human, finish, cancellationToken).ConfigureAwait(false);
         }
 
@@ -142,8 +147,8 @@ public static class UpdateCommands
         }
 
         // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded.
-        if (RefusedAsRecordedCarried(env, "apply", completeToo: false)
-            || RefusedAsManaged(env, "apply"))
+        if (RefusedAsRecordedCarried(env, human, "apply", completeToo: false)
+            || RefusedAsManaged(env, human, "apply"))
         {
             return ExitCodes.ApiError;
         }
@@ -189,19 +194,19 @@ public static class UpdateCommands
         catch (UpdateException error)
         {
             // Whatever was done up to here is in the ledger, and the message says what to type next.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateFeedException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
             // What is on disk is not a ledger. `status` already answers this way; a verb that acts on the same
             // file should not answer differently, least of all with a bare line and no code.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -488,7 +493,7 @@ public static class UpdateCommands
                     PrintFinish(env, human, UpdateApplier.NothingInstalled(SemanticVersion.Current, env.Paths.Root));
                     return ExitCodes.Success;
                 case DataDirHolds.Unreadable:
-                    env.Out.WriteLine(CliErrors.Serialize(
+                    CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                         UpdateCodes.DataDirUnreadable,
                         $"The data directory at {env.Paths.Root} could not be listed, so whether an installation is there cannot be told: nothing was made and no release was read. Run jason update apply --finish again once it can be read.",
                         retryable: true));
@@ -600,7 +605,7 @@ public static class UpdateCommands
         // profile: refused before anything is read, staged or asked.
         if (env.Setup is { Elevated: true } elevated)
         {
-            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.Elevated, Elevated(elevated.Platform), retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.Elevated, Elevated(elevated.Platform), retryable: false));
             return ExitCodes.ApiError;
         }
 
@@ -636,7 +641,7 @@ public static class UpdateCommands
             }
             catch (UpdateException refused)
             {
-                env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, refused.Retryable));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(refused.Code, refused.Message, refused.Retryable));
                 return ExitCodes.ApiError;
             }
 
@@ -655,13 +660,24 @@ public static class UpdateCommands
 
         if (!handing.HasDesktop && inFlight is not { Step: >= UpdateStep.Swapped } && !(continuing && inFlight is not null))
         {
-            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "apply"), retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "apply"), retryable: false));
+            return ExitCodes.ApiError;
+        }
+
+        // On Linux the Desktop is started to take the update, and Electron needs a display and the session's bus for that
+        // even with no window: a terminal outside the desktop session (ssh, a service) has neither, and nothing is begun.
+        if (env.Setup?.Platform is SetupSystem.Linux && inFlight is null && !continuing && !HasDisplay(env))
+        {
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
+                UpdateCodes.CarriedByDesktop,
+                "No desktop session is running for this account to update Jason Desktop in: this terminal has no display. Use Jason Desktop's update item, or run `jason update apply` in a terminal of your desktop. Nothing was changed.",
+                retryable: false));
             return ExitCodes.ApiError;
         }
 
         if (unread is not null)
         {
-            env.Out.WriteLine(unread is UpdateLedgerException invalid
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, unread is UpdateLedgerException invalid
                 ? CliErrors.Serialize(invalid.Code, invalid.Message, retryable: false)
                 : CliErrors.Serialize(UpdateCodes.FileRefused, $"The update ledger at {paths.Ledger} could not be read: {unread.Message} Run `jason update apply` again once it can.", retryable: true));
             return ExitCodes.ApiError;
@@ -671,7 +687,7 @@ public static class UpdateCommands
         var wasLive = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is not null;
         try
         {
-            if (inFlight is not null && !carried.Is(inFlight.InstallPath))
+            if (inFlight is not null && !handing.Carries(inFlight))
             {
                 throw new UpdateException(
                     UpdateCodes.InProgress,
@@ -760,17 +776,17 @@ public static class UpdateCommands
                 env.Error.WriteLine(step);
             }
 
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateFeedException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -783,7 +799,7 @@ public static class UpdateCommands
         HandOverAsync(
             env,
             handing.Steps,
-            [handing.Carried.Executable, "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
+            [handing.FinisherOf(swapped.ToVersion), "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
             human,
             (why, cause) => NotFinished(env, swapped, why, cause),
             async waits =>
@@ -1015,7 +1031,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's, and, with update_carried_by_desktop, when that update moved a command-line install into Jason Desktop: it does not go back from 0.49, and its sentence says where that is described.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside, and on Linux an AppImage's jason does the same; on Linux the deb's jason refuses with update_managed_by_package_manager, printing how the previous release's package is installed again by hand. Refused too when the update recorded is another jason's, and, with update_carried_by_desktop, when that update moved a command-line install into Jason Desktop: it does not go back from 0.49, and its sentence says where that is described.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 
@@ -1052,26 +1068,26 @@ public static class UpdateCommands
         string? application = null;
         if (CarriedExecutable.Of(env) is { } carried)
         {
-            if (RefusedAsAnotherRecord(env, carried))
+            if (RefusedAsAnotherRecord(env, human, carried) || RefusedAsThePackages(env, human, carried, "rollback"))
             {
                 return ExitCodes.ApiError;
             }
 
             if (env.Setup is not { } places)
             {
-                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
                 return ExitCodes.ApiError;
             }
 
             application = CarriedUpdate.ApplicationFolderOf(carried.Executable, places.Platform);
             if (!File.Exists(CarriedUpdate.ApplicationOf(carried.Executable, places.Platform)))
             {
-                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
                 return ExitCodes.ApiError;
             }
         }
-        else if (RefusedAsRecordedCarried(env, "rollback", completeToo: true)
-            || RefusedAsManaged(env, "rollback"))
+        else if (RefusedAsRecordedCarried(env, human, "rollback", completeToo: true)
+            || RefusedAsManaged(env, human, "rollback"))
         {
             return ExitCodes.ApiError;
         }
@@ -1094,12 +1110,12 @@ public static class UpdateCommands
                 env.Error.WriteLine(step);
             }
 
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, error.Retryable));
             return ExitCodes.ApiError;
         }
         catch (UpdateLedgerException error)
         {
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }
@@ -1108,7 +1124,7 @@ public static class UpdateCommands
     /// Refuses, and says so, where a jason Jason Desktop carries is asked to roll back an update whose record names another
     /// file: a rollback acts on the file the record names, and that file is not this application's.
     /// </summary>
-    private static bool RefusedAsAnotherRecord(CliEnvironment env, CarriedExecutable carried)
+    private static bool RefusedAsAnotherRecord(CliEnvironment env, bool human, CarriedExecutable carried)
     {
         var path = new UpdatePaths(env.Paths).Ledger;
         UpdateLedger? ledger;
@@ -1121,7 +1137,7 @@ public static class UpdateCommands
             return false;
         }
 
-        if (ledger is null || string.IsNullOrWhiteSpace(ledger.InstallPath) || carried.Is(ledger.InstallPath))
+        if (ledger is null || string.IsNullOrWhiteSpace(ledger.InstallPath) || CarriedUpdate.CarriesOn(carried, env.Setup?.Platform, ledger))
         {
             return false;
         }
@@ -1130,7 +1146,7 @@ public static class UpdateCommands
         // the install back, so none is named.
         if (MovedFrom(env, ledger.InstallPath))
         {
-            env.Out.WriteLine(CliErrors.Serialize(
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
                 UpdateCodes.CarriedByDesktop,
                 "This Jason was moved from a command-line install into Jason Desktop, and a rollback here does not take it back from 0.49; nothing was changed. "
                 + $"Going back from 0.49 is described at {PublicRepository.GoingBackFrom049}",
@@ -1138,7 +1154,7 @@ public static class UpdateCommands
             return true;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} is of the jason at {ledger.InstallPath}, not of the one the Jason desktop application carries, "
             + $"at {carried.Executable}, so this jason does not roll it back: that jason does, with `{ledger.InstallPath} update rollback`.",
@@ -1175,7 +1191,7 @@ public static class UpdateCommands
     /// acts on any record. A record that cannot be read refuses nothing here: the verb reads it again and answers as it
     /// always has. The hand-over is not taken here: it is only for the carried file running as itself.
     /// </remarks>
-    private static bool RefusedAsRecordedCarried(CliEnvironment env, string verb, bool completeToo)
+    private static bool RefusedAsRecordedCarried(CliEnvironment env, bool human, string verb, bool completeToo)
     {
         var path = new UpdatePaths(env.Paths).Ledger;
         UpdateLedger? ledger;
@@ -1197,7 +1213,7 @@ public static class UpdateCommands
             return false;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} belongs to the jason the Jason desktop application carries, at "
             + $"{carried.Executable}, so `jason update {verb}` would change a file inside the application. "
@@ -1208,6 +1224,58 @@ public static class UpdateCommands
     }
 
     /// <summary>
+    /// Linux, the deb: the application and the jason it carries are one package of the system's, updated by the system as
+    /// every package from an apt repository is (Software Updater, or apt in a terminal, when the person says so), so
+    /// `jason update apply` and `rollback` replace nothing and say what to type; `--finish` still runs, as the application's
+    /// start runs it once apt has installed a new version.
+    /// </summary>
+    private static bool RefusedAsThePackages(CliEnvironment env, bool human, CarriedExecutable carried, string verb)
+    {
+        if (env.Setup?.Platform is not SetupSystem.Linux || !SetupPlaces.CarriedByDeb(carried.Executable))
+        {
+            return false;
+        }
+
+        // A release before 0.49.1 carries no key for Jason's apt source. Installed over this one it keeps the source, which
+        // the package's postrm takes off only on a removal, while dpkg takes the key with the newer package's files.
+        var lines = verb == "rollback"
+            ? new[]
+            {
+                $"sudo rm {env.Setup.AptSource}   (only for a release before 0.49.1)",
+                "jason runtime stop",
+                "sudo apt install --allow-downgrades ./jason-desktop-linux-x64.deb   (the previous release's, from its release page)",
+                "sudo apt-mark hold jason-desktop   (or the next update installs the newer one again; unhold to take updates)",
+                "jason runtime start",
+            }
+            : new[] { "jason runtime stop", "sudo apt update && sudo apt upgrade", "jason runtime start" };
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
+            UpdateCodes.ManagedByPackageManager,
+            $"This jason is the one Jason Desktop's package carries, at {carried.Executable}, and the package is the system's: Software Updater offers a new version "
+            + $"and installs it when you say so, as apt in a terminal does, so `jason update {verb}` would replace a file the package owns. "
+            + (verb == "rollback"
+                ? "apt keeps no previous version to go back to; the previous release's package is installed again by hand. "
+                  + "For a release before 0.49.1, whose package carries no key for Jason's apt source, that source is taken off first, or every `apt update` reports it:\n"
+                : "Its version is changed through apt, with the runtime stopped first and started after:\n")
+            + string.Join("\n", lines.Select(line => "  " + line)),
+            retryable: false));
+        return true;
+    }
+
+    /// <summary>The command that updates the deb's package at once, as `jason update check` names it there.</summary>
+    private const string AptUpgrade = "sudo apt update && sudo apt upgrade";
+
+    /// <summary>Whether this jason is the one Jason Desktop's deb carries, which the system updates.</summary>
+    private static bool CarriedByThePackage(CliEnvironment env) =>
+        env.Setup?.Platform is SetupSystem.Linux && CarriedExecutable.Of(env) is { } carried && SetupPlaces.CarriedByDeb(carried.Executable);
+
+    /// <summary>Whether this process has a display a Desktop it starts can use: Wayland's or X11's.</summary>
+    private static bool HasDisplay(CliEnvironment env) =>
+        !string.IsNullOrEmpty(Variable(env, "WAYLAND_DISPLAY")) || !string.IsNullOrEmpty(Variable(env, "DISPLAY"));
+
+    private static string? Variable(CliEnvironment env, string name) =>
+        env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
+
+    /// <summary>
     /// Refuses, and says so, where a package manager installed this Jason. The manager keeps its own record of the
     /// version and owns the file these verbs would replace, so they leave it alone and print what to type instead.
     /// </summary>
@@ -1216,14 +1284,14 @@ public static class UpdateCommands
     /// image every plugin host that runtime starts is launched from — under Homebrew it deletes the old keg — so the
     /// runtime is stopped before the manager's upgrade and started from the new image after it.
     /// </remarks>
-    private static bool RefusedAsManaged(CliEnvironment env, string verb)
+    private static bool RefusedAsManaged(CliEnvironment env, bool human, string verb)
     {
         if (PackageOwner.Of(env) is not { } owner)
         {
             return false;
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(
             UpdateCodes.ManagedByPackageManager,
             $"This Jason was installed by {owner.Manager}, which keeps its own record of the version, so `jason update {verb}` "
             + $"would replace a file the package manager owns. Its version is changed through {owner.Manager}, with the "
@@ -1265,7 +1333,7 @@ public static class UpdateCommands
         {
             // There is a file and it is not a ledger. Saying so is the whole answer: acting on half a document
             // is how a person is told an update reached a step it never began.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
 
@@ -1343,7 +1411,7 @@ public static class UpdateCommands
         {
             // The feed's own code, in the envelope every other failure uses. Offline is the one worth trying
             // again; a document that is not a manifest, or an address this build will not fetch, is not.
-            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
 
@@ -1363,7 +1431,7 @@ public static class UpdateCommands
             available,
             DateTimeOffset.UtcNow,
             manifest.ReleaseNotesUrl,
-            owner?.UpgradeCommand ?? (first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
+            owner?.UpgradeCommand ?? (CarriedByThePackage(env) ? AptUpgrade : first is { } through ? UpdateApplier.ApplyOf(through) : OwnUpgrade),
             first?.ToString(),
             PluginUpdates.Behind(manifest, available, env.Paths));
 

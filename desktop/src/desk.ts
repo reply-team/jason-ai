@@ -11,13 +11,13 @@ import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
 import { bindingsFor, itemKeys, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
-import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
+import { bringForward, type LoginItem } from './login-item.ts';
 import { putBackQuestion, putBackTold, setupMenuOf, type MachineSetup } from './machine-setup.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, pressItem, updateNotice, type MenuItem, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, restartQuestion, updateNotice, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -30,10 +30,12 @@ export interface DeskDeps {
     reload(): void;
     /** Open Jason at login: offered only by a packaged application, whose executable is the one to start. */
     login: LoginItem;
-    /** Start the runtime at logon, through the CLI; offered once the CLI has said what is registered. */
-    autostart: RuntimeAutostart | null;
     /** The updater, in an installed build; null in a development build. */
     updates: Updater | null;
+    /** The deb: the version the system installed under this window, where its version.json names another than runs; else null. */
+    packageMoved?(): string | null;
+    /** The desktop starting itself again, which the update item offers once the system updated the deb under this window. */
+    restart?(): void;
     /** Which previous version is kept while a copy of it is there (`keptLine`), shown under the update item. */
     kept(): string | null;
     /** On macOS, where the application is and whether its update can write there (`placeLine`), shown under the update item. */
@@ -57,7 +59,7 @@ export interface DeskDeps {
     /** Uninstall Jason…, on macOS, offered by an installed build only; null where it is not offered. */
     uninstall?: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'> | null;
     /**
-     * In a demo run, the way back (`demoMenu`), and nothing where the update, the start at logon, the jason command and
+     * In a demo run, the way back (`demoMenu`), and nothing where the update, the jason command and
      * Remove What Jason Placed would be; null in Live.
      */
     demo: DemoMenu | null;
@@ -91,7 +93,6 @@ export class Desk {
     private readonly deps: DeskDeps;
     private tray: Tray | null = null;
     private attention: Attention;
-    private autostartOn: boolean | null = null;
     private readonly removal: RemovalAct | null;
     private readonly watcher: AttentionWatcher;
     private readonly demo: DemoMenu | null;
@@ -159,15 +160,12 @@ export class Desk {
         this.renderMenu();
     }
 
-    /** Reads what the CLI says is registered to start at logon, and shows it in the menu. */
-    async readAutostart(): Promise<void> {
-        if (this.deps.autostart === null) return;
-        this.autostartOn = await this.deps.autostart.registered();
-        this.renderMenu();
-    }
-
+    /**
+     * Open Jason at Login, the desktop's own. The runtime's start at logon is no item of the menu's: the machine set-up
+     * registers it by default, and `jason runtime autostart disable` and `enable` in a terminal turn it off and on.
+     */
     private loginItems(): MenuItemConstructorOptions[] {
-        const { login, autostart } = this.deps;
+        const { login } = this.deps;
         const opens = login.supported && app.isPackaged;
         return [
             { type: 'separator' },
@@ -178,21 +176,6 @@ export class Desk {
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
-            ...(this.demo !== null
-                ? []
-                : [
-                      {
-                          label: 'Start the Runtime at Logon',
-                          type: 'checkbox' as const,
-                          enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
-                          checked: this.autostartOn === true,
-                          click: (item: Electron.MenuItem) =>
-                              void autostart?.set(item.checked).then((now) => {
-                                  this.autostartOn = now;
-                                  this.renderMenu();
-                              }),
-                      },
-                  ]),
         ];
     }
 
@@ -235,8 +218,18 @@ export class Desk {
     updateItem(): MenuItem | null {
         if (this.demo !== null) return null;
         const { updates } = this.deps;
-        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true, this.deps.packageMoved?.() ?? null);
         return { ...item, enabled: item.enabled && !this.removing() };
+    }
+
+    /**
+     * The version the page marks Settings with: the one the updater knows of and has not installed (`Updater.known`), or,
+     * for the deb, the one the system installed under the window until the restart that finishes it; null in a demo run,
+     * which has no update item, and where nothing is known.
+     */
+    updateNewer(): string | null {
+        if (this.demo !== null) return null;
+        return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;
     }
 
     /**
@@ -244,14 +237,20 @@ export class Desk {
      * Settings (`updates.press`, a click on the label the page drew, `actShown`), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
      * item is disabled, and a press does nothing either. What a check found is in the item's answer wherever it was
      * asked from; asked `from` the menu, the tray or the key, whose menu closes or shows no label, it comes as a
-     * notification too, whose click shows the window.
+     * notification too, whose click opens the window on Settings' Update section.
      */
     pressUpdate(act: MenuItem['act'], byKey: boolean, from: 'menu' | 'page'): void {
         if (this.removing()) return;
+        if (act === 'restart') {
+            const moved = this.deps.packageMoved?.() ?? null;
+            if (!byKey) this.deps.restart?.();
+            else if (moved !== null) void this.box(restartQuestion(moved)).then((chosen) => chosen === 0 && this.deps.restart?.());
+            return;
+        }
         const { updates } = this.deps;
         if (updates === null) return;
         void pressItem(updates, act, byKey, (question) => this.box(question)).then((said) => {
-            if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.show());
+            if (said !== null && from === 'menu') this.notify(updateNotice(said), () => this.send('navigate.update'));
         });
     }
 
@@ -383,7 +382,6 @@ export class Desk {
         } catch (error) {
             dialog.showErrorBox(windowTitle, error instanceof Error ? error.message : String(error));
         }
-        await this.readAutostart().catch(() => undefined);
         this.renderMenu();
     }
 

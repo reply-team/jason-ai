@@ -86,7 +86,10 @@ export function autostartExec(launcher: string): string | null {
 
 /** What starts the application when this person signs in to a Linux session: an XDG autostart entry. */
 export function autostartEntry(launcher: string): string {
-    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${autostartExec(launcher) ?? ''}\n`;
+    const exec = autostartExec(launcher);
+    // TryExec: a session skips the entry once the file it names is gone, as after the system's own removal of the package.
+    // It is a string, not quoted: of a launcher Exec can spell, only a backslash takes the string's escape.
+    return `[Desktop Entry]\n# Written by the Jason desktop application.\nType=Application\nName=Jason\n${exec === null ? '' : `TryExec=${launcher.replaceAll('\\', '\\\\')}\n`}${exec ?? ''}\n`;
 }
 
 /** Whether this start was the computer's, at the person's sign-in. */
@@ -316,12 +319,13 @@ export class RuntimeAutostart {
     }
 
     /**
-     * Registers or unregisters it, on the person's word; what the CLI says is there afterwards. An answer that does not
-     * say is followed by a read of what is registered, so the menu shows the system's state rather than an unknown.
+     * Takes it off, for Remove What Jason Placed: `jason runtime autostart disable`, which records the turn-off, so the
+     * start stays off until `jason runtime autostart enable`. What the CLI says is there afterwards; an answer that does
+     * not say is followed by a read of what is registered.
      */
-    async set(on: boolean): Promise<boolean | null> {
-        const result = await this.deps.cli.run(['runtime', 'autostart', on ? 'enable' : 'disable']);
-        this.deps.log.info('autostart_set', { On: on, Exit: result.exit });
+    async disable(): Promise<boolean | null> {
+        const result = await this.deps.cli.run(['runtime', 'autostart', 'disable']);
+        this.deps.log.info('autostart_disabled', { Exit: result.exit });
         const said = result.exit === 0 ? registeredIn(result.stdout) : null;
         return said ?? (await this.registered());
     }

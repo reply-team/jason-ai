@@ -28,7 +28,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// script refuses any other platform before it does anything else. <c>install.sh</c> has no such luck — the
 /// machine that runs this suite may have no <c>sh</c> at all, and the one Windows has is Git Bash, which the
 /// script refuses by name — so its rules here stay shape guards, and the ubuntu job is what runs it. What the two
-/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallNoticesTests"/>.
+/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallDesktopScriptTests"/>.
 /// </para>
 /// <para>
 /// The proof that a script installs a real archive and answers with the right version is the CI job that runs
@@ -72,15 +72,22 @@ public partial class InstallScriptTests
 
     /// <summary>
     /// Every download a script names is one a release publishes, and no other: a script that named another would be
-    /// offering a download that does not exist. <c>install.sh</c> installs the Linux archive and, on macOS, Jason Desktop's
-    /// zip for the machine's architecture, both of which a release publishes; <c>install.ps1</c> installs the Windows setup.
+    /// offering a download that does not exist. <c>install.sh</c> installs Jason Desktop: on macOS its zip for the machine's
+    /// architecture, on Linux its deb or its AppImage, all of which a release publishes; <c>install.ps1</c> installs the
+    /// Windows setup.
     /// Neither names another platform's archive but in the sentence that refuses a machine no release is built for.
     /// </summary>
     [Fact]
     public void The_downloads_a_script_names_are_ones_a_release_publishes()
     {
         var sh = Script("install.sh");
-        Assert.Equal(new HashSet<string>(StringComparer.Ordinal) { ReleaseAssets.For("linux-x64") }, AssetNames().Matches(sh).Select(match => match.Value).ToHashSet(StringComparer.Ordinal));
+        Assert.Empty(AssetNames().Matches(sh));
+        foreach (var (name, asset) in new[] { ("DEB_ASSET", "jason-desktop-linux-x64.deb"), ("APPIMAGE_ASSET", "jason-desktop-linux-x64.AppImage") })
+        {
+            Assert.Contains($"{name}=\"{asset}\"", Code("install.sh"), StringComparison.Ordinal);
+            Assert.Contains(asset, ReleaseAssets.Desktop);
+        }
+
         Assert.Contains("ASSET=\"jason-desktop-macos-$ARCH.zip\"", Code("install.sh"), StringComparison.Ordinal);
         foreach (var arch in new[] { "arm64", "x64" })
         {
@@ -101,16 +108,22 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// The digest is compared before the archive is opened — an archive that fails its checksum is never
-    /// unpacked, let alone installed. What can be read from the text is the order: the digest is computed
-    /// before the first unpack, on the lines that are code and not on a comment that happens to name both.
+    /// The digest is compared before a download is opened, run or installed — a file that fails its checksum is never
+    /// unpacked, run or handed to apt. What can be read from the text is the order: the digest is computed before the
+    /// first unpack (ditto on macOS), the first run of an AppImage, and the first install by apt, on the lines that are code
+    /// and not on a comment that happens to name both; <see cref="InstallDesktopScriptTests"/> runs each route.
     /// </summary>
     [Fact]
     [Critical(Family.I1, "install.sh verifies the checksum first")]
-    public void Install_sh_checks_the_digest_before_it_unpacks()
+    public void Install_sh_checks_the_digest_before_it_opens_runs_or_installs_a_download()
     {
         var code = Code("install.sh");
-        Assert.True(code.IndexOf("sha256", StringComparison.Ordinal) < code.IndexOf("tar -x", StringComparison.Ordinal), "The checksum is not computed before tar extracts.");
+        var digest = code.IndexOf("sha256sum", StringComparison.Ordinal);
+        foreach (var opened in new[] { "ditto -x", "--appimage-extract", "\"$APT_GET\" install" })
+        {
+            var at = code.IndexOf(opened, StringComparison.Ordinal);
+            Assert.True(digest >= 0 && at > digest, $"The checksum is not computed before {opened}.");
+        }
     }
 
     /// <summary>
@@ -173,52 +186,6 @@ public partial class InstallScriptTests
         Assert.Contains("BASE=\"$RELEASES_URL/latest/download\"", sh, StringComparison.Ordinal);
         Assert.Contains("\"$releasesUrl/download/v$Version\"", ps1, StringComparison.Ordinal);
         Assert.Contains("\"$releasesUrl/latest/download\"", ps1, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// PA9: the line in the profile is marked, and the profile is searched before it is appended to, so that a
-    /// second run adds nothing. What is searched for is the whole line the script wrote — the one naming the
-    /// install directory — and not the comment above it: that comment is an English sentence a person's own
-    /// profile could carry, pasted from somewhere or typed by hand, and keying the decision on it also meant
-    /// that a run with a different <c>--install-dir</c> found "the mark", wrote nothing, and left the directory
-    /// it had just installed into off the PATH.
-    /// </summary>
-    /// <remarks>
-    /// The order in the text is what can be read here; the ubuntu job runs the script three times and counts
-    /// the marks.
-    /// </remarks>
-    [Fact]
-    public void The_path_mark_is_matched_by_the_whole_line_the_script_wrote()
-    {
-        var code = Code("install.sh");
-        var looked = code.IndexOf("grep -qxF \"$LINE\"", StringComparison.Ordinal);
-        var written = code.IndexOf(">>", StringComparison.Ordinal);
-
-        Assert.Contains($"MARKER=\"{Marker}\"", code, StringComparison.Ordinal);
-        Assert.True(looked >= 0 && looked < written, "The profile is not searched for the line the script wrote before it is appended to.");
-        Assert.DoesNotContain("grep -qF \"$MARKER\"", code, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// And the repair <c>jason status</c> prints appends with the same <c>printf</c> the script appends with.
-    /// </summary>
-    /// <remarks>
-    /// Two spellings of "how a line goes into a profile" is how the verb that undoes an installer drifts away
-    /// from it, and a repair is not allowed to be a paraphrase of the script: it is the script's own format,
-    /// its own marker and its own line. The repair used to be the bare export line, which lasts one shell.
-    /// </remarks>
-    [Fact]
-    public void The_status_repair_appends_with_the_format_the_script_appends_with()
-    {
-        var format = Jason.Cli.Uninstall.PathEntry.AppendFormat;
-
-        Assert.Contains($"printf '{format}' \"$MARKER\" \"$LINE\"", Code("install.sh"), StringComparison.Ordinal);
-        var repair = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile");
-        var looked = repair.IndexOf("grep -qxF ", StringComparison.Ordinal);
-        var appended = repair.IndexOf($"printf '{format}' ", StringComparison.Ordinal);
-
-        // And, like the script, it looks for the whole line before it appends: typed twice, it adds nothing.
-        Assert.True(looked >= 0 && looked < appended, "The repair appends without looking for the line the script would have written.");
     }
 
     /// <summary>
@@ -339,7 +306,7 @@ public partial class InstallScriptTests
     /// <c>install.sh</c> says the two lines on where the files will be with <c>printf</c>, each text in single quotes so
     /// that its backticks are text rather than a command to substitute, the folder being <c>Jason</c> in the home as the
     /// runtime makes it. Read here because no Windows runs the script; Linux and macOS run what it prints, in
-    /// <see cref="InstallNoticesTests"/>.
+    /// <see cref="InstallDesktopScriptTests"/>.
     /// </summary>
     [Fact]
     public void Install_sh_prints_where_the_files_will_be_as_text()
@@ -349,33 +316,13 @@ public partial class InstallScriptTests
         Assert.Contains($"printf '{HarnessRootLines.Where("%s")}\\n' \"$ROOT_HOME/Jason\"", code, StringComparison.Ordinal);
 
         // The home loses every separator at its end, not one: `/home/marta//` is the runtime's `/home/marta` too.
-        Assert.Contains("ROOT_HOME=\"$HOME\"\nwhile [ \"${ROOT_HOME%/}\" != \"$ROOT_HOME\" ]; do\n    ROOT_HOME=\"${ROOT_HOME%/}\"\ndone\n", code, StringComparison.Ordinal);
+        Assert.Contains("    ROOT_HOME=\"$HOME\"\n    while [ \"${ROOT_HOME%/}\" != \"$ROOT_HOME\" ]; do\n        ROOT_HOME=\"${ROOT_HOME%/}\"\n    done\n", code, StringComparison.Ordinal);
         Assert.Contains($"printf '%s\\n' '{HarnessRootLines.DefaultProject}'", code, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Install_sh_sets_the_execute_bit() =>
         Assert.Contains("chmod", Script("install.sh"), StringComparison.Ordinal);
-
-    /// <summary>
-    /// The unpacked executable is asked for its version before it is renamed into place, so that nothing that
-    /// does not start is ever installed over something that did — a Linux without the ICU library the runtime
-    /// needs, say, where the program aborts before it prints anything. In the text: the last <c>--version</c>
-    /// before the executable's own rename into place comes after the executable's own unpack. Those two lines are
-    /// named whole: each script now also unpacks and renames its notice files, in functions above the steps.
-    /// </summary>
-    [Theory]
-    [InlineData("install.sh", "tar -xzf \"$TMP/$ASSET\" -C \"$TMP/unpacked\" jason", "mv -f \"$INSTALL_DIR/jason.installing.$$\" \"$TARGET\"")]
-    public void The_unpacked_executable_is_started_before_it_is_installed(string script, string unpack, string install)
-    {
-        var code = Code(script);
-        var unpacked = code.IndexOf(unpack, StringComparison.Ordinal);
-        var installed = code.IndexOf(install, unpacked, StringComparison.Ordinal);
-        Assert.True(unpacked >= 0 && installed > unpacked, $"{script} does not unpack and then install.");
-
-        var started = code.LastIndexOf("--version", installed, StringComparison.Ordinal);
-        Assert.True(started > unpacked, $"{script} does not run the unpacked executable before installing it.");
-    }
 
     /// <summary>
     /// And CI runs the published executable's own uninstall, from the file it removes, on every platform it
@@ -437,33 +384,6 @@ public partial class InstallScriptTests
         var waits = step.IndexOf(".WaitForExit(", StringComparison.Ordinal);
         var looks = step.LastIndexOf("Test-Path -LiteralPath $aside", StringComparison.Ordinal);
         Assert.True(waits > read.Index && waits < looks, $"The uninstall step does not wait for the cleanup's process between reading it ({read.Index}) and looking for the moved copy ({looks}); it waits at {waits}.");
-    }
-
-    /// <summary>
-    /// No artifact in CI but the three platform ones is named so that the install jobs' download takes it.
-    /// </summary>
-    /// <remarks>
-    /// They download <c>jason-*</c> and merge what they get into one directory. The update job's second version
-    /// was uploaded as <c>jason-&lt;rid&gt;-next</c>, carrying an archive with the same file name as the real
-    /// one; when it landed before an install job's download — which it did once the platform jobs grew a step —
-    /// its archive went over the real one beside the other artifact's fragment, and the feed refused itself.
-    /// </remarks>
-    [Fact]
-    public void Only_the_platform_artifacts_are_named_like_the_ones_the_install_jobs_download()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        Assert.Contains("pattern: jason-*", ci, StringComparison.Ordinal);
-
-        var named = ci.Split('\n')
-            .Select(line => line.Trim())
-            .Where(line => line.StartsWith("artifact:", StringComparison.Ordinal))
-            .Select(line => line["artifact:".Length..].Trim())
-            .ToList();
-
-        Assert.NotEmpty(named);
-        Assert.All(named, name => Assert.False(
-            name.StartsWith("jason-", StringComparison.Ordinal),
-            $"ci.yml uploads '{name}', which the install jobs' `jason-*` download would merge over a platform archive."));
     }
 
     /// <summary>
@@ -1214,6 +1134,7 @@ public partial class InstallScriptTests
     /// end, where a here-document on a later line would escape the reading, is refused as well.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_opens_no_here_document_inside_a_command_substitution()
     {
         var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
@@ -1233,6 +1154,7 @@ public partial class InstallScriptTests
     /// that starts it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_starts_every_application_with_a_terminals_PATH()
     {
         var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
@@ -1256,6 +1178,7 @@ public partial class InstallScriptTests
     /// temporary folder holds, and the one helper that opens it holds the process it then finds to run from that bundle.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_proof_script_opens_the_application_by_its_bundle_in_the_legs_of_a_persons_opening_alone()
     {
         var text = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1273,7 +1196,8 @@ public partial class InstallScriptTests
         }
         var byName = text.Split('\n').Where(line => !line.TrimStart().StartsWith('#') && Regex.IsMatch(line, @"\bopen\s+-[ab]\b")).ToList();
         wrong.AddRange(byName.Select(line => $"opens by name: {line.Trim()}"));
-        var opened = Regex.Matches(text, @"(?m)^\s*within \d+ ""open \$bundle"" open --stdout ""\$log"" --stderr ""\$log"" ""\$bundle"" ").Count;
+        // The one open, under its bound; the bound runs in a subshell of its own, so its failure is said rather than lost.
+        var opened = Regex.Matches(text, @"(?m)^\s*(?:\(\s*)?within \d+ ""open \$bundle"" open --stdout ""\$log"" --stderr ""\$log"" ""\$bundle""(?: \)| )").Count;
         if (opened != 1) wrong.Add($"open_app's one open by the bundle's path is found {opened} times");
         if (!text.Contains("\"$bundle/Contents/MacOS/Jason\"|\"$bundle/Contents/MacOS/Jason \"*) ;;", StringComparison.Ordinal)) wrong.Add("open_app does not hold the process it finds to run from the bundle it opened");
         Assert.True(wrong.Count == 0, string.Join("; ", wrong));
@@ -1286,6 +1210,7 @@ public partial class InstallScriptTests
     /// the step refuses. A step added to either script falls under it by default.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_proof_scripts_change_a_machine_on_a_GitHub_hosted_runner_alone()
     {
         var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1315,6 +1240,7 @@ public partial class InstallScriptTests
     /// failed only at its held step, and no leg was named for it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_leg_whose_own_compare_differs_is_recorded_failed_and_its_end_fails_its_step()
     {
         var root = RepositoryRoot();
@@ -1352,6 +1278,7 @@ public partial class InstallScriptTests
     /// saying the open's environment and opening.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_legs_hold_the_profiles_by_the_PATH_a_new_login_shell_answered_before_the_open()
     {
         var root = RepositoryRoot();
@@ -1491,6 +1418,7 @@ public partial class InstallScriptTests
     /// before it reads the machine, so the next leg runs.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1649,11 +1577,798 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The Windows leg that updates from the one-installation release holds what that release's own <c>jason update
+    /// apply</c> printed by two readers, run here as the proof runs them: taken from the script's own text into a
+    /// <c>pwsh</c> of the row's own that opens with the settings lines of the proof's prelude, and handed what the verb
+    /// said, its standard error and its document as <c>Invoke-Program</c> keeps them, with its exit code.
+    /// <c>Read-Document</c> takes the document; <c>Get-HandedFinishFault</c> says what the run lacks, its exit first, or
+    /// nothing (<see cref="HandOverCases"/>). The leg fails on what they say.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_reads_the_one_installation_release_s_update_as_the_proof_runs_its_readers()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's readers run in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var step = WindowsProofStep(script, "FromOneInstallation");
+        var read = step.IndexOf("$fault = Get-HandedFinishFault $update.Exit (Read-Document $update.Said) $fromVersion $Version\n", StringComparison.Ordinal);
+        var held = step.IndexOf("if ($fault) { Fail ", StringComparison.Ordinal);
+        Assert.True(read >= 0 && held > read, "the step FromOneInstallation does not fail on what the readers say of the update's exit and document");
+        Assert.DoesNotContain("$update.Exit -ne 0", step, StringComparison.Ordinal);
+        AssertTheFinishSaysWhatTheReadersRead();
+
+        using var tree = new TempTree();
+        var cases = HandOverCases(tree);
+        var listed = Path.Combine(tree.Root, "cases.json");
+        File.WriteAllText(listed, JsonSerializer.Serialize(cases.Select(item => new { name = item.Name, file = item.File, exit = item.Exit, from = item.From, to = item.To })));
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, HandOverHarness
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@CASES@", "'" + listed.Replace("'", "''", StringComparison.Ordinal) + "'", StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Read-Document(") + WindowsProofFunction(script, "Get-HandedFinishFault("), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split('\t', 2))
+            .ToDictionary(parts => parts[0], parts => parts.Length > 1 ? parts[1] : "(no tab)", StringComparer.Ordinal);
+        Assert.Equal(cases.Select(item => item.Name).Order(StringComparer.Ordinal), said.Keys.Order(StringComparer.Ordinal));
+        foreach (var item in cases)
+        {
+            Assert.True(said[item.Name] == item.Fault, $"{item.Name}: the Windows readers said '{said[item.Name]}', not '{item.Fault}'{output}");
+        }
+    }
+
+    /// <summary>
+    /// The macOS leg that updates from the one-installation release reads what that release's own <c>jason update apply</c>
+    /// printed, and how it ended, by one python3 reader, isolated, by the Windows readers' rule and in their words, and fails
+    /// on what it says; the reader is run on the same cases (<see cref="HandOverCases"/>), each the verb's document as the
+    /// leg keeps its standard output, and its exit status as the leg keeps it.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_reads_the_one_installation_release_s_update_by_the_Windows_proof_s_rule_and_words()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var step = MacProofStep(macos, "from-one-installation");
+        var reader = Regex.Match(step, @"handed_read=""\$\(python3 -I -c '(?<code>[^']*)' ""\$OUT/update-from-one-installation\.json"" ""\$old"" ""\$version"" ""\$status""\)"" \|\| fail """);
+        var ran = step.IndexOf(" > \"$OUT/update-from-one-installation.json\" 2> \"$OUT/update-from-one-installation.err\" || status=$?\n", StringComparison.Ordinal);
+        var held = step.IndexOf("[ -z \"$handed_read\" ] || fail ", StringComparison.Ordinal);
+        Assert.True(reader.Success, "the step from-one-installation does not read the update's document by one isolated python3 reader handed the version it went from, the version it went to and the verb's exit status");
+        Assert.True(ran >= 0 && reader.Index > ran && held > reader.Index, "the step from-one-installation does not fail on what its reader says of the update's exit status and document");
+        Assert.DoesNotContain("[ \"$status\" -eq 0 ] || fail ", step[ran..], StringComparison.Ordinal);
+        AssertTheFinishSaysWhatTheReadersRead();
+
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        Assert.SkipUnless(Run(python, new Dictionary<string, string>(), "--version").Exit == 0, $"{python} is not on this machine's PATH, so the reader cannot be run here");
+        using var tree = new TempTree();
+        foreach (var item in HandOverCases(tree))
+        {
+            var (exit, stdout, stderr) = Run(python, new Dictionary<string, string>(), "-I", "-c", reader.Groups["code"].Value, item.File, item.From, item.To, item.Exit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Assert.True(exit == 0, $"{item.Name}: {stderr}");
+            Assert.True(item.Fault == stdout.TrimEnd('\r', '\n'), $"{item.Name}: the macOS reader said '{stdout.Trim()}', not '{item.Fault}'");
+        }
+    }
+
+    /// <summary>
+    /// The Windows leg that updates from the one-installation release begins from the release its fetched manifest.json
+    /// names, installed with nothing of Jason's running after its install.ps1, and a runtime started as the previous
+    /// release's is (a wait only where the start refuses because the runtime it started is still running). Its verb runs
+    /// under a bound that keeps what it said in the leg's file as it says it; past the bound, what the verb set going and
+    /// that outlived it - Jason Desktop and whatever runs from the updater's folder - is ended by what it is. After the
+    /// update, Installed apps is read once its one entry is this version's, or at the bound, and nothing of the update may
+    /// be left running 30 s on, the setup it ran being given that long to end, each one left named.
+    /// </summary>
+    [Fact]
+    public void The_Windows_one_installation_leg_begins_from_its_pinned_release_and_leaves_nothing_of_the_update_running()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var step = WindowsProofStep(script, "FromOneInstallation");
+        int At(string text)
+        {
+            var at = step.IndexOf(text, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"the step FromOneInstallation does not say: {text}");
+            return at;
+        }
+
+        var updater = At("$updater = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'\n");
+        var manifest = At("$manifest = Get-Content -LiteralPath (Join-Path $OneInstallation 'manifest.json') -Raw | ConvertFrom-Json\n");
+        var named = At("if (-not $manifestVersion -or $manifestVersion -ceq $Version) { Fail ");
+        var install = At("(Join-Path $OneInstallation 'install.ps1')");
+        var pinned = At("if ($fromVersion -cne $manifestVersion) { Fail ");
+        var nothing = At("$running = @(Get-OwnProcesses $app)\nif ($running.Count -ne 0) { Fail ".Replace("\n", "\n        ", StringComparison.Ordinal));
+        var runtime = At("if (-not (Start-PreviousRuntime $carried $quiet \"the one-installation release's runtime\")) { Fail ");
+        Assert.True(manifest < named && named < install && install < pinned && pinned < nothing && nothing < runtime,
+            "the step FromOneInstallation does not read its manifest's version, install, hold the version installed to it and that nothing runs, then start a runtime, in that order");
+        Assert.DoesNotContain("Wait-Until { (Invoke-Program $carried @('runtime', 'status')", step, StringComparison.Ordinal);
+        Assert.Contains("function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}, [string] $who = \"the previous release's runtime\") {", script, StringComparison.Ordinal);
+
+        var kept = At("$kept = Join-Path $Out 'update-from-one-installation.json'\n");
+        var bounded = At("'--drain-seconds', '0') $quiet 900 $kept\n");
+        var outlived = At("foreach ($outlived in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater)) {\n");
+        var ended = At("Stop-Process -Id $outlived.ProcessId -Force -ErrorAction SilentlyContinue\n");
+        var rethrown = At("    throw\n        } finally {\n");
+        Assert.True(updater < kept && kept < bounded && bounded < outlived && outlived < ended && ended < rethrown,
+            "the step FromOneInstallation does not keep what its verb says, and end what that verb set going past its bound before it fails");
+        Assert.True(step[..bounded].LastIndexOf("try {\n", StringComparison.Ordinal) > kept && step[bounded..outlived].Contains("} catch {\n", StringComparison.Ordinal),
+            "the step FromOneInstallation ends what its verb set going only where the verb's run threw");
+        Assert.DoesNotContain("Set-Content -LiteralPath (Join-Path $Out 'update-from-one-installation.json')", step, StringComparison.Ordinal);
+
+        var read = At("$fault = Get-HandedFinishFault $update.Exit (Read-Document $update.Said) $fromVersion $Version\n");
+        var waited = At("while (-not (& $oneAtVersion) -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 500 }\n");
+        var entries = At("$entries = @(Get-JasonUninstallEntries)\n");
+        var still = At("$leftOf = { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }) + @(Get-OwnProcesses $updater) }\n");
+        var grace = At("$graceUntil = [DateTime]::UtcNow.AddSeconds(30)\n");
+        var given = At("while ($stillRunning.Count -ne 0 -and [DateTime]::UtcNow -lt $graceUntil) { Start-Sleep -Seconds 1; $stillRunning = @(& $leftOf) }\n");
+        var named2 = At("if ($stillRunning.Count -ne 0) { Fail ");
+        var shell = At("$found = @(Find-InNewShell 'jason')\n");
+        Assert.True(read < waited && waited < entries && entries < still && still < grace && grace < given && given < named2 && named2 < shell,
+            "the step FromOneInstallation does not wait for Installed apps' entry, then give what the update left 30 s to end and hold that nothing of it runs, before a new shell is asked for jason");
+        Assert.Contains("$oneAtVersion = { $now = @(Get-JasonUninstallEntries); $now.Count -eq 1 -and $now[0].PSObject.Properties['DisplayVersion'] -and [string]$now[0].DisplayVersion -ceq $Version }\n", step, StringComparison.Ordinal);
+        Assert.Contains("$until = [DateTime]::UtcNow.AddSeconds(120)\n", step, StringComparison.Ordinal);
+        Assert.Contains("$($_.ProcessId) $($_.CommandLine)", step[named2..shell], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Windows proof's <c>Invoke-Program</c>, run as the proof runs it: given a file to keep what the program says, it
+    /// writes each line there as it is said, so a run its bound ends leaves the lines said before it; at the bound it ends
+    /// the program and every process under it, the one the program started included, and fails the step. It ends nothing
+    /// else: not the feed server the step started before the program, not a stranger whose dead parent's id the process
+    /// table gives as the program's, not one of the runner's own processes, and not one the table makes this shell's
+    /// parent, the last two shown under the program as created after it. A run within the bound gives its exit code, its
+    /// file holding every line. <c>Write-JasonProcesses</c>, which names the machine's own processes of Jason's, is a
+    /// stand-in here, so the row reads none of them, and so is <c>Get-CimInstance</c>, which shows the real table as the
+    /// row makes it.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_s_bound_on_a_program_keeps_what_it_said_and_ends_every_process_under_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's Invoke-Program runs in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        using var tree = new TempTree();
+        string Quoted(string path) => "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, BoundHarness
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@OUT@", Quoted(tree.NewDirectory("out")), StringComparison.Ordinal)
+            .Replace("@NORMAL@", Quoted(Path.Combine(tree.Root, "kept-within.txt")), StringComparison.Ordinal)
+            .Replace("@BOUNDED@", Quoted(Path.Combine(tree.Root, "kept-at-bound.txt")), StringComparison.Ordinal)
+            .Replace("@PIDFILE@", Path.Combine(tree.Root, "started.txt").Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Fail(") + WindowsProofFunction(script, "Invoke-Program("), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        string Line(string label) => said.FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
+        Assert.True(Line("exit") == "3", $"a run within its bound did not give its exit code:{output}");
+        Assert.True(Line("kept") == "one|two", $"a run within its bound did not keep every line it said:{output}");
+        Assert.True(Line("bound").EndsWith("did not end within 15 s", StringComparison.Ordinal), $"a run past its bound did not fail the step at the bound:{output}");
+        Assert.True(Line("kept at the bound") == "said before the bound", $"a run past its bound did not leave the lines it said before it:{output}");
+        Assert.True(Line("the process the program started") == "ended", $"a run past its bound left the process the program started:{output}");
+        Assert.True(Line("the feed server") == "left alone", $"a run past its bound ended the feed server the step started before it:{output}");
+        Assert.True(Line("a stranger under a reused id") == "left alone", $"a run past its bound ended a stranger whose dead parent's id is the program's:{output}");
+        Assert.True(Line("one of the runner's") == "left alone", $"a run past its bound ended one of the runner's processes:{output}");
+        Assert.True(Line("this shell's parent") == "left alone", $"a run past its bound ended this shell's parent:{output}");
+    }
+
+    /// <summary>
+    /// The pwsh the bound's row runs: the settings lines of the proof's own prelude, a folder of its own for the step's
+    /// failure record, a stand-in for <c>Write-JasonProcesses</c>, and the proof's own <c>Fail</c> and
+    /// <c>Invoke-Program</c>; then a program that ends by itself, and one that says a line, starts a process of its own
+    /// and never ends, under a bound of 15 s. Four processes of the row's own, started before that program, stand for
+    /// what the bound must leave alone; <c>Get-CimInstance</c> shows the real process table with the stranger's parent
+    /// given as the program, the runner's process and this shell's parent shown under the program, created a second after
+    /// it, and this shell's parent being the last of the four. One line per finding, its label and what was seen, apart by
+    /// a colon.
+    /// </summary>
+    private const string BoundHarness = """
+        @PRELUDE@
+        $Out = @OUT@
+        function Write-JasonProcesses { Write-Host '  (the machine''s own processes are not named by this row)' }
+        function Start-Sleeper { Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow }
+        function Get-CimInstance {
+            $real = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process)
+            $program = @($real | Where-Object { $_.ParentProcessId -eq $PID -and "$($_.CommandLine)".Contains('said before the bound') }) | Select-Object -First 1
+            foreach ($process in $real) {
+                $shown = [pscustomobject]@{ ProcessId = $process.ProcessId; ParentProcessId = $process.ParentProcessId; Name = $process.Name; CreationDate = $process.CreationDate; ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine }
+                if ($program) {
+                    if ($process.ProcessId -eq $stranger.Id) { $shown.ParentProcessId = $program.ProcessId }
+                    if ($process.ProcessId -eq $runner.Id) { $shown.ParentProcessId = $program.ProcessId; $shown.Name = 'Runner.Listener.exe'; $shown.CreationDate = $program.CreationDate.AddSeconds(1) }
+                    if ($process.ProcessId -eq $ancestor.Id) { $shown.ParentProcessId = $program.ProcessId; $shown.CreationDate = $program.CreationDate.AddSeconds(1) }
+                    if ($process.ProcessId -eq $PID) { $shown.ParentProcessId = $ancestor.Id }
+                }
+                $shown
+            }
+        }
+        function Write-Left([string] $label, [System.Diagnostics.Process] $process) {
+            [Console]::Out.WriteLine("${label}: $(if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) { 'left alone' } else { 'ended' })")
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
+
+        @FUNCTIONS@
+
+        $normal = @NORMAL@
+        $bounded = @BOUNDED@
+        $ran = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', "Write-Output 'one'; Write-Output 'two'; exit 3") @{} 120 $normal
+        [Console]::Out.WriteLine("exit: $($ran.Exit)")
+        [Console]::Out.WriteLine("kept: $(@(Get-Content -LiteralPath $normal) -join '|')")
+        $server = Start-Sleeper
+        $stranger = Start-Sleeper
+        $runner = Start-Sleeper
+        $ancestor = Start-Sleeper
+        Start-Sleep -Seconds 1
+        $inner ="Write-Output 'said before the bound'; `$p = Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow; Set-Content -LiteralPath '@PIDFILE@' -Value `$p.Id; Start-Sleep -Seconds 120"
+        try {
+            $null = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', $inner) @{} 15 $bounded
+            [Console]::Out.WriteLine('bound: not reached')
+        } catch {
+            [Console]::Out.WriteLine("bound: $($_.Exception.Message)")
+        }
+        $started = 0
+        if (Test-Path -LiteralPath '@PIDFILE@') { $started = [int] "$(Get-Content -LiteralPath '@PIDFILE@' -Raw)".Trim() }
+        $until = [DateTime]::UtcNow.AddSeconds(10)
+        while ($started -gt 0 -and [DateTime]::UtcNow -lt $until -and (Get-Process -Id $started -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 200 }
+        [Console]::Out.WriteLine("kept at the bound: $(@(Get-Content -LiteralPath $bounded -ErrorAction SilentlyContinue) -join '|')")
+        [Console]::Out.WriteLine("the process the program started: $(if ($started -le 0) { 'never started' } elseif (Get-Process -Id $started -ErrorAction SilentlyContinue) { 'still running' } else { 'ended' })")
+        if ($started -gt 0) { Stop-Process -Id $started -Force -ErrorAction SilentlyContinue }
+        Write-Left 'the feed server' $server
+        Write-Left 'a stranger under a reused id' $stranger
+        Write-Left 'one of the runner''s' $runner
+        Write-Left 'this shell''s parent' $ancestor
+        exit 0
+        """;
+
+    /// <summary>
+    /// The macOS leg that updates from the one-installation release keeps, by one trap for its way out however it ends, the
+    /// feed server it starts ended, what of Jason Desktop and its ShipIt is still running printed and kept, and the
+    /// desktop's log and ShipIt's logs in the leg's folder before the uninstall after it takes them, each item ending true
+    /// whatever its own commands end with, so the items after it are run under the prelude's errexit. It begins from the
+    /// release its fetched manifest.json names, read by an isolated python3. Its runtime start and its verb each run in a
+    /// subshell, so a bound reached ends in a line of the leg's own: the start waits only where it refuses because the
+    /// runtime it started is still running. After the update, the processes of Jason Desktop and of its own ShipIt, never
+    /// another application's, are printed and given 30 s to end, launchd's ShipIt job is printed whole, and one still
+    /// running fails the leg by name.
+    /// </summary>
+    [Fact]
+    public void The_macOS_one_installation_leg_begins_from_its_pinned_release_and_says_what_the_update_leaves()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var step = MacProofStep(macos, "from-one-installation");
+        int At(string text)
+        {
+            var at = step.IndexOf(text, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"the step from-one-installation does not say: {text}");
+            return at;
+        }
+
+        var trap = Assert.Single(Regex.Matches(step, @"(?m)^    trap '(?<said>[^']*)' EXIT$"));
+        foreach (var said in new[]
+        {
+            "[ -z \"$server\" ] || kill \"$server\" 2>/dev/null || true",
+            "[ -z \"${placed:-}\" ] || { left=\"$(left_running \"$placed\")\"; echo \"${left:-none}\" > \"$OUT/one-installation-left-running.txt\"; echo \"left running as this step ends: ${left:-none}\"; } || true;",
+            "keep_desktop_log one-installation-desktop.jsonl",
+            "for log in \"$HOME\"/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_*.log; do [ ! -f \"$log\" ] || cp \"$log\" \"$OUT/one-installation-$(basename \"$log\")\" 2>/dev/null || true; done",
+        })
+        {
+            Assert.Contains(said, trap.Groups["said"].Value, StringComparison.Ordinal);
+        }
+
+        Assert.Single(Regex.Matches(step, @"(?m)^\s*trap\b"));
+        var manifest = At("manifest_version=\"$(python3 -I -c '");
+        var read = At("' \"$one/manifest.json\")\" || fail ");
+        var install = At("sh \"$one/install.sh\" || fail ");
+        var pinned = At("[ \"$old\" = \"$manifest_version\" ] || fail ");
+        Assert.True(trap.Index < manifest && manifest < read && read < install && install < pinned,
+            "the step from-one-installation does not set its trap, read its manifest's version, install, and hold the version installed to it, in that order");
+
+        var start = At("( within 120 \"$old's jason runtime start\" \"$carried\" runtime start ) > \"$OUT/one-installation-runtime-start.txt\" 2>&1 || status=$?\n");
+        var refused = At("{ grep -qF '\"runtime_start_failed\"' \"$OUT/one-installation-runtime-start.txt\" && grep -qF 'is still running' \"$OUT/one-installation-runtime-start.txt\"; }");
+        var waited = At("wait_until 180 \"a runtime answering $old's carried jason runtime status\"");
+        Assert.True(pinned < start && start < refused && refused < waited, "the step from-one-installation does not wait for its runtime only where the start refused because the runtime it started is still running");
+        Assert.DoesNotContain("if ! within 120", step, StringComparison.Ordinal);
+
+        var update = At("( within 900 \"$old's jason update apply --version $version\" \"$carried\" update apply --version \"$version\" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 ) > \"$OUT/update-from-one-installation.json\" 2> \"$OUT/update-from-one-installation.err\" || status=$?\n");
+        var handed = At("[ -z \"$handed_read\" ] || fail ");
+        var processes = At("still_running=\"$(left_running \"$placed\")\"\n");
+        var job = At("launchctl print \"gui/$(id -u)/ai.jasonharness.desktop.ShipIt\" > \"$OUT/one-installation-shipit-job.txt\" 2>&1");
+        var shown = At("cat \"$OUT/one-installation-shipit-job.txt\"\n");
+        var left = At("[ -z \"$still_running\" ] || fail ");
+        var shell = At("fresh 'command -v jason; jason --version'");
+        Assert.True(waited < update && update < handed && handed < processes && processes < job && job < shown && shown < left && left < shell,
+            "the step from-one-installation does not print what the update leaves running and launchd's ShipIt job, then fail on what is left, before a new login shell is asked for jason");
+        Assert.Contains("deadline=$(( $(date +%s) + 30 ))\n", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("pgrep -lf ShipIt", macos, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the macOS proof names as left running of Jason Desktop at its place, run as the proof runs it: the
+    /// application's own processes, and its ShipIt, known by launchd's job of Jason Desktop's or by the Squirrel.framework
+    /// inside the application; another application's ShipIt, or its own processes, are never named. <c>pgrep</c> is a
+    /// stand-in here, matching its pattern to a process table of the row's own as <c>pgrep -lf</c> does, so the row reads
+    /// none of the machine's processes. It runs in bash: /bin/bash on Linux and macOS, Git Bash on a Windows that has it.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_names_only_its_own_desktop_and_ShipIt_as_left_running()
+    {
+        var bash = OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe") : "/bin/bash";
+        Assert.SkipUnless(File.Exists(bash), $"This machine has no {bash} to run the macOS proof's functions in.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        using var tree = new TempTree();
+        var harness = Path.Combine(tree.Root, "harness.sh");
+        File.WriteAllText(harness, LeftRunningHarness
+            .Replace("@SETTINGS@", MacProofSettings(script), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", MacProofFunction(script, "left_running"), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Run(bash, new Dictionary<string, string>(), "--noprofile", "--norc", harness.Replace('\\', '/'));
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var left = SaidLine(stdout, "left").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(process => process.Split(' ')[0]).ToList();
+        Assert.True(left.SequenceEqual(["4101", "4102", "4105", "4106"]), $"what is left running of Jason Desktop at its place is not its own process and its own ShipIt alone, known by either half of the pattern:{output}");
+        Assert.True(SaidLine(stdout, "another's alone") == string.Empty, $"another application's ShipIt and processes were named as left running:{output}");
+    }
+
+    /// <summary>
+    /// The bash the row of what is left running runs: the shell options of the proof's own prelude, a stand-in for
+    /// <c>pgrep</c> matching its pattern to a table of the row's own as <c>pgrep -lf</c> does, and the proof's own
+    /// <c>left_running</c>, asked of Jason Desktop at its place with its own processes running, and then with another
+    /// application's alone. Its ShipIt is there three times: by both halves of the pattern, by the framework's path alone,
+    /// and by the job's label and cache alone, so each half is held on its own. One line per finding, its label and what
+    /// was seen, apart by a colon.
+    /// </summary>
+    private const string LeftRunningHarness = """
+        @SETTINGS@
+        TABLE='4101 /Applications/Jason.app/Contents/MacOS/Jason --update-apply --await-go
+        4102 /Applications/Jason.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt ai.jasonharness.desktop.ShipIt /Users/runner/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipItState.plist
+        4103 /Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.example.other.ShipIt /Users/runner/Library/Caches/com.example.other.ShipIt/ShipItState.plist
+        4104 /Applications/Other.app/Contents/MacOS/Other
+        4105 /Applications/Jason.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt
+        4106 ShipIt ai.jasonharness.desktop.ShipIt /Users/runner/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipItState.plist'
+        pgrep() { [ "$1" = -lf ] || return 2; printf '%s\n' "$TABLE" | grep -E -- "$2"; }
+
+        @FUNCTIONS@
+
+        echo "left: $(left_running /Applications/Jason.app)"
+        TABLE='4103 /Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.example.other.ShipIt /Users/runner/Library/Caches/com.example.other.ShipIt/ShipItState.plist
+        4104 /Applications/Other.app/Contents/MacOS/Other'
+        echo "another's alone: $(left_running /Applications/Jason.app)"
+        """;
+
+    /// <summary>
+    /// Each leg of both proofs says its time where it ends, in whole seconds from its begin, with the job's time so far
+    /// beside it, so that a leg's step and the job are bounded by what a run measured. A begin closes the leg before it,
+    /// which says its own time where it never ended, and only then starts this leg's clock; an end reads the clock before it
+    /// fails a leg whose compare differed, and says it either way. Every such line is said, and so is in the job's summary.
+    /// </summary>
+    [Fact]
+    public void Each_proof_leg_says_its_time_and_the_job_s_where_it_ends()
+    {
+        var root = RepositoryRoot();
+        var windows = File.ReadAllText(Path.Combine(root, ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Equal(2, WindowsClockFiles(windows).Count);
+        Assert.Contains("\n        Close-Leg\n        Start-LegClock\n", WindowsProofStep(windows, "Begin"), StringComparison.Ordinal);
+        var end = WindowsProofStep(windows, "End");
+        var read = end.IndexOf("\n        $clock = Get-LegClock\n", StringComparison.Ordinal);
+        var differing = end.IndexOf("\n            Say \"$Leg - ended $clock, its compare differing\"\n            exit 1\n", StringComparison.Ordinal);
+        Assert.True(read >= 0 && differing > read, "the Windows End does not read the leg's clock first, and say it where the leg's compare differed before it fails the step");
+        Assert.EndsWith("\n        Say \"$Leg - ended $clock\"", end, StringComparison.Ordinal);
+        Assert.Contains("\n    Say \"the leg '$open' did not end: it is closed $(Get-LegClock)\"\n", WindowsProofFunction(windows, "Close-Leg {"), StringComparison.Ordinal);
+
+        Assert.Contains("\n    close_leg\n    start_leg_clock\n", MacProofStep(macos, "begin"), StringComparison.Ordinal);
+        var macEnd = MacProofStep(macos, "end");
+        var macRead = macEnd.IndexOf("\n    clock=\"$(leg_clock)\"\n", StringComparison.Ordinal);
+        var macDiffering = macEnd.IndexOf("\n        say \"$1 - ended $clock, its compare differing\"\n        exit 1\n", StringComparison.Ordinal);
+        Assert.True(macRead >= 0 && macDiffering > macRead, "the macOS end does not read the leg's clock first, and say it where the leg's compare differed before it fails the step");
+        Assert.EndsWith("\n    say \"$1 - ended $clock\"", macEnd, StringComparison.Ordinal);
+        Assert.Contains("\n    say \"the leg '$open' did not end: it is closed $(leg_clock)\"\n", MacProofFunction(macos, "close_leg"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Windows proof's leg clock, run as the proof runs it: the first leg's begin counts the job from the start of the
+    /// runner's worker that runs it, and says so; where no worker is found, or its start cannot be read, from that begin,
+    /// saying why; a later begin keeps the job's start. An end says the leg's time from its begin and the job's so far, in
+    /// whole seconds. <c>Get-Process</c> is a stand-in here, so the row reads none of the machine's processes, and the
+    /// summary is a file of the row's own.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_s_leg_clock_counts_the_job_from_its_runner_s_worker_or_else_from_the_first_begin()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's leg clock runs in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        using var tree = new TempTree();
+        string Quoted(string path) => "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var summary = Path.Combine(tree.Root, "summary.md");
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, WindowsClockHarness
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@SUMMARY@", Quoted(summary), StringComparison.Ordinal)
+            .Replace("@FILES@", string.Join('\n', WindowsClockFiles(script)), StringComparison.Ordinal)
+            .Replace("@NONE@", Quoted(tree.NewDirectory("none")), StringComparison.Ordinal)
+            .Replace("@WORKER@", Quoted(tree.NewDirectory("worker")), StringComparison.Ordinal)
+            .Replace("@UNREAD@", Quoted(tree.NewDirectory("unread")), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Say(") + WindowsProofFunction(script, "Start-LegClock {") + WindowsProofFunction(script, "Get-LegClock {"), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        AssertTheLegClockSaid(stdout, File.ReadAllText(summary), output, @" \([^)\n]+\)");
+    }
+
+    /// <summary>
+    /// The macOS proof's leg clock, run as the proof runs it, as the Windows one's row runs that: the job counted from the
+    /// start of the runner's worker, read as ps writes how long a process has run, days included, or else from the first
+    /// leg's begin, saying why; a later begin keeps the job's start; an end says the leg's time and the job's. The worker is
+    /// the one this script descends from, found by walking up its parents, never the first a runner lists. <c>pgrep</c>
+    /// and <c>ps</c> are stand-ins here, so the row reads none of the machine's processes. It runs in bash: /bin/bash on
+    /// Linux and macOS, Git Bash on a Windows that has it.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_s_leg_clock_counts_the_job_from_its_runner_s_worker_or_else_from_the_first_begin()
+    {
+        var bash = OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe") : "/bin/bash";
+        Assert.SkipUnless(File.Exists(bash), $"This machine has no {bash} to run the macOS proof's functions in.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        using var tree = new TempTree();
+        string Quoted(string path) => "'" + path.Replace('\\', '/').Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+        var summary = Path.Combine(tree.Root, "summary.md");
+        var harness = Path.Combine(tree.Root, "harness.sh");
+        File.WriteAllText(harness, MacClockHarness
+            .Replace("@SETTINGS@", MacProofSettings(script), StringComparison.Ordinal)
+            .Replace("@SUMMARY@", Quoted(summary), StringComparison.Ordinal)
+            .Replace("@NONE@", Quoted(tree.NewDirectory("none")), StringComparison.Ordinal)
+            .Replace("@WORKER@", Quoted(tree.NewDirectory("worker")), StringComparison.Ordinal)
+            .Replace("@UNREAD@", Quoted(tree.NewDirectory("unread")), StringComparison.Ordinal)
+            .Replace("@DAYS@", Quoted(tree.NewDirectory("days")), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", MacProofFunction(script, "say") + MacProofFunction(script, "start_leg_clock") + MacProofFunction(script, "leg_clock"), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Run(bash, new Dictionary<string, string>(), "--noprofile", "--norc", harness.Replace('\\', '/'));
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        AssertTheLegClockSaid(stdout, File.ReadAllText(summary), output, string.Empty);
+        Assert.True(SaidLine(stdout, "days") == "93784", $"a runner's worker a day, two hours, three minutes and four seconds old, as ps writes it, was not read so:{output}");
+    }
+
+    /// <summary>
+    /// What both proofs' leg clocks say in their rows: the job begun at the leg's begin with no worker, or with one whose
+    /// start could not be read (<paramref name="why"/> matching what the Windows proof adds of why), and 90 s before it with
+    /// a worker 90 s old, each said once, in the summary; the job's start kept by a later begin; and an end 5 s after its
+    /// begin, the job 100 s old. A second boundary passed between two readings makes either a second more.
+    /// </summary>
+    private static void AssertTheLegClockSaid(string stdout, string summary, string output, string why)
+    {
+        Assert.True(SaidLine(stdout, "none") == "0", $"with no runner's worker the job was not counted from the first leg's begin:{output}");
+        Assert.True(SaidLine(stdout, "worker") is "90" or "91", $"the job was not counted from the start of a runner's worker 90 s old:{output}");
+        Assert.True(SaidLine(stdout, "a later begin keeps the job's start") == "True", $"a later leg's begin moved the job's start:{output}");
+        Assert.True(SaidLine(stdout, "unread") == "0", $"with a runner's worker whose start could not be read the job was not counted from the first leg's begin:{output}");
+        Assert.Matches("^(5|6) s after its begin, with the job at (100|101) s$", SaidLine(stdout, "ended"));
+        var lines = summary.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.True(lines.Length == 3, $"the summary does not hold one line for each job's clock started:\n{summary}{output}");
+        Assert.Equal("- the job's time is counted from this leg's begin: no runner's worker was found; it had run 0 s when this leg began", lines[0]);
+        Assert.Matches("^- the job's time is counted from the start of the runner's worker that runs it; it had run (90|91) s when this leg began$", lines[1]);
+        Assert.Matches("^- the job's time is counted from this leg's begin: the start of the runner's worker could not be read" + why + "; it had run 0 s when this leg began$", lines[2]);
+    }
+
+    /// <summary>The words a harness said after its label and a colon, on the first line it said them.</summary>
+    private static string SaidLine(string stdout, string label) =>
+        stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
+            .FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
+
+    /// <summary>
+    /// The pwsh the Windows leg clock's row runs: the settings lines of the proof's own prelude, a summary of the row's own,
+    /// a stand-in for <c>Get-Process</c> answering the workers the row sets, the proof's own <c>Say</c>,
+    /// <c>Start-LegClock</c> and <c>Get-LegClock</c>, and its two clock files' lines, set again for each leg's folder. One
+    /// line per finding, its label and what was seen, apart by a colon.
+    /// </summary>
+    private const string WindowsClockHarness = """
+        @PRELUDE@
+        $env:GITHUB_STEP_SUMMARY = @SUMMARY@
+        $script:workers = @()
+        function Get-Process { $script:workers }
+
+        @FUNCTIONS@
+
+        $clockFiles = {
+        @FILES@
+        }
+        function Read-Moment([string] $file) { [long] "$(Get-Content -LiteralPath $file -Raw)".Trim() }
+
+        $Out = @NONE@
+        . $clockFiles
+        Start-LegClock
+        [Console]::Out.WriteLine("none: $((Read-Moment $legBegan) - (Read-Moment $jobBegan))")
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        Set-Content -LiteralPath $jobBegan -Value ($now - 100)
+        Set-Content -LiteralPath $legBegan -Value ($now - 5)
+        [Console]::Out.WriteLine("ended: $(Get-LegClock)")
+
+        $Out = @WORKER@
+        . $clockFiles
+        $script:workers = @([pscustomobject]@{ StartTime = [DateTime]::Now.AddSeconds(-90) })
+        Start-LegClock
+        [Console]::Out.WriteLine("worker: $((Read-Moment $legBegan) - (Read-Moment $jobBegan))")
+        $first = Read-Moment $jobBegan
+        $script:workers = @([pscustomobject]@{ StartTime = [DateTime]::Now.AddSeconds(-500) })
+        Start-LegClock
+        [Console]::Out.WriteLine("a later begin keeps the job's start: $((Read-Moment $jobBegan) -eq $first)")
+
+        $Out = @UNREAD@
+        . $clockFiles
+        $script:workers = @([pscustomobject]@{ Id = 4242 })
+        Start-LegClock
+        [Console]::Out.WriteLine("unread: $((Read-Moment $legBegan) - (Read-Moment $jobBegan))")
+        exit 0
+        """;
+
+    /// <summary>
+    /// The bash the macOS leg clock's row runs: the shell options of the proof's own prelude, a summary of the row's own,
+    /// stand-ins for <c>pgrep</c> and <c>ps</c>, and the proof's own <c>say</c>, <c>start_leg_clock</c> and
+    /// <c>leg_clock</c>; the last leg's folder says its clock to no summary. The <c>pgrep</c> answers only
+    /// <c>pgrep -a -x Runner.Worker</c>: the worker is an ancestor of the step's shell, and macOS's pgrep leaves its own
+    /// ancestors out of what it matches unless <c>-a</c> is given, so without it the job was never counted from the worker
+    /// on a Mac. It lists the workers the row sets, another job's first: a runner may run more than one, and only the one
+    /// this script descends from is its job's. The <c>ps</c> answers a process's parent for each step from the harness's
+    /// own shell up to its worker and on to the first process, and how long each worker has run, as ps writes it; the
+    /// other job's worker has run an hour less a second. One line per finding, its label and what was seen, apart by a
+    /// colon.
+    /// </summary>
+    private const string MacClockHarness = """
+        @SETTINGS@
+        GITHUB_STEP_SUMMARY=@SUMMARY@
+        WORKERS=""
+        ETIME=""
+        pgrep() { [ "$*" = "-a -x Runner.Worker" ] || return 2; [ -n "$WORKERS" ] && printf '%s\n' $WORKERS; }
+        ps() {
+            case "$*" in
+                "-o ppid= -p $$") echo "  500" ;;
+                "-o ppid= -p 500") echo " 4242" ;;
+                "-o ppid= -p 4242") echo "    1" ;;
+                "-o etime= -p 4242") printf '   %s\n' "$ETIME" ;;
+                "-o etime= -p 4343") printf '   %s\n' "59:59" ;;
+                *) return 1 ;;
+            esac
+        }
+
+        @FUNCTIONS@
+
+        apart() { echo $(( $(cat "$OUT/leg-began.txt") - $(cat "$OUT/job-began.txt") )); }
+
+        OUT=@NONE@
+        start_leg_clock
+        echo "none: $(apart)"
+        now="$(date +%s)"
+        printf '%s\n' "$(( now - 100 ))" > "$OUT/job-began.txt"
+        printf '%s\n' "$(( now - 5 ))" > "$OUT/leg-began.txt"
+        echo "ended: $(leg_clock)"
+
+        OUT=@WORKER@
+        WORKERS="4343 4242"
+        ETIME="01:30"
+        start_leg_clock
+        echo "worker: $(apart)"
+        first="$(cat "$OUT/job-began.txt")"
+        ETIME="08:20"
+        start_leg_clock
+        if [ "$(cat "$OUT/job-began.txt")" = "$first" ]; then echo "a later begin keeps the job's start: True"; else echo "a later begin keeps the job's start: False"; fi
+
+        OUT=@UNREAD@
+        ETIME="??"
+        start_leg_clock
+        echo "unread: $(apart)"
+
+        GITHUB_STEP_SUMMARY=""
+        OUT=@DAYS@
+        ETIME="1-02:03:04"
+        start_leg_clock
+        echo "days: $(apart)"
+        """;
+
+    /// <summary>
+    /// What the one-installation release's own <c>jason update apply</c> printed, each case in a file of its own in the row's
+    /// tree: lines it said on standard error, then its document as the product's own type and serializer write it; with its
+    /// exit code, the version it went from and the version the leg asked for, and what the readers say of it. That release's
+    /// own part ends at the swap, in its own words (CarriedUpdate at v0.49.0): Jason Desktop asked to download the version
+    /// and wait for the go, then the application is that version. What follows is the finishing jason's, in this build's
+    /// words (<see cref="AssertTheFinishSaysWhatTheReadersRead"/>): the runtime healthy at the version, the update complete.
+    /// Handed and finished on Windows, on a Mac, and at a candidate's version; then one case for each way it was not, a
+    /// document of members the product never writes so among them, which both readers say in the same words.
+    /// </summary>
+    private static List<(string Name, string File, int Exit, string From, string To, string Fault)> HandOverCases(TempTree tree)
+    {
+        const string from = "0.49.0";
+        const string to = "0.49.2";
+        const string request = "cli-01JDX4M3V7Q2ZK8R";
+        string Asked(string version) => $"asked: Jason Desktop asked to download {version} and wait for the go, request {request}";
+        string[] Handed(string version, bool moves) =>
+        [
+            $"staged: {version}, for Jason Desktop to install",
+            Asked(version),
+            .. (moves ? [$@"moved: this jason's own file to C:\Users\runneradmin\AppData\Local\jason-desktop-updater\jason-carried\{request}\jason.exe, where it goes on running, so the installer finds none in the application's folder"] : Array.Empty<string>()),
+            $"stopped: Jason Desktop told to go, request {request}",
+            $"kept: Jason Desktop handed {version} to its installer",
+            $"swapped: the application is {version}",
+        ];
+        string[] Finished(string fromVersion, string version, string runtime) =>
+        [
+            $"started: {version}",
+            $"healthy: {runtime}, 31 migrations applied",
+            $"complete: {fromVersion} -> {version}",
+            "settle: Jason Desktop recorded the update as kept",
+        ];
+        static string Document(string documentFrom, string documentTo, string step, string[] steps) =>
+            JsonSerializer.Serialize(new Jason.Contracts.Api.UpdateApplyResponse(documentFrom, documentTo, step, steps), JasonJson.Options);
+        // A document of members the product's type never writes so, member by member, in the order the product writes them.
+        static string Shaped(JsonNode? documentFrom, JsonNode? documentTo, JsonNode? step, JsonNode? steps) =>
+            new JsonObject { ["from"] = documentFrom, ["to"] = documentTo, ["step"] = step, ["steps"] = steps }.ToJsonString();
+
+        var askedTo = $"asked: Jason Desktop asked to download {to} and wait for the go, request <id>";
+        var swappedTo = $"swapped: the application is {to}";
+        var healthyTo = $"healthy: {to}, <n> migrations applied";
+        string[] whole = [.. Handed(to, moves: true), .. Finished(from, to, $"{to}+3f9c1e7a")];
+        JsonArray Steps() => new([.. whole.Select(line => (JsonNode?)JsonValue.Create(line))]);
+        var error = """{"error":{"code":"update_refused_by_desktop","message":"Jason Desktop refused the update.","retryable":false}}""";
+        var cases = new (string Name, string Document, int Exit, string From, string To, string Fault)[]
+        {
+            ("handed and finished, as on Windows", Document(from, to, "complete", whole), 0, from, to, ""),
+            ("handed and finished, as on a Mac, a runtime already answering", Document(from, to, "complete", [.. Handed(to, moves: false), "started: a runtime is already answering", $"healthy: {to}, 31 migrations applied", $"complete: {from} -> {to}"]), 0, from, to, ""),
+            ("handed and finished at a candidate's version", Document(from, "0.49.2-rc.1", "complete", [.. Handed("0.49.2-rc.1", moves: true), .. Finished(from, "0.49.2-rc.1", "0.49.2-rc.1+3f9c1e7a")]), 0, from, "0.49.2-rc.1", ""),
+            ("handed and finished, the verb exiting 1", Document(from, to, "complete", whole), 1, from, to, "it exited with 1"),
+            ("refused, exiting 1, with an error's document", error, 1, from, to, "it exited with 1"),
+            ("the application already the version asked for", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", Asked(to), $"swapped: the application is {to} already", .. Finished(from, to, to)]), 0, from, to,
+                $"no step \"{swappedTo}\" follows \"{Asked(to)}\""),
+            ("finished before the swap", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", Asked(to), .. Finished(from, to, to), $"swapped: the application is {to}"]), 0, from, to,
+                $"no step \"{healthyTo}\" follows \"{swappedTo}\""),
+            ("Jason Desktop never asked", Document(from, to, "complete", [$"staged: {to}, for Jason Desktop to install", $"swapped: the application is {to}", .. Finished(from, to, to)]), 0, from, to,
+                $"no step \"{askedTo}\""),
+            ("the runtime healthy at the version it came from", Document(from, to, "complete", [.. Handed(to, moves: true), .. Finished(from, to, $"{from}+5b7d2c11")]), 0, from, to,
+                $"no step \"{healthyTo}\" follows \"{swappedTo}\""),
+            ("complete from another version", Document(from, to, "complete", [.. Handed(to, moves: true), .. Finished("0.48.7", to, $"{to}+3f9c1e7a")]), 0, from, to,
+                $"no step \"complete: {from} -> {to}\" follows \"healthy: {to}+3f9c1e7a, 31 migrations applied\""),
+            ("stopped at kept", Document(from, to, "kept", [.. Handed(to, moves: true)[..^1]]), 0, from, to,
+                "its document ends at the step kept, not complete"),
+            ("gone to another version", Document(from, "0.49.1", "complete", [.. Handed("0.49.1", moves: true), .. Finished(from, "0.49.1", "0.49.1")]), 0, from, to,
+                $"its document says {from} -> 0.49.1, not {from} -> {to}"),
+            ("its document's from alone another version", Document("0.48.7", to, "complete", whole), 0, from, to,
+                $"its document says 0.48.7 -> {to}, not {from} -> {to}"),
+            ("refused, with no document", "", 0, from, to, "it printed no document"),
+            ("an error's document", error, 0, from, to, "its document has no from"),
+            ("a document whose from is null", Shaped(null, to, "complete", Steps()), 0, from, to,
+                $"its document says  -> {to}, not {from} -> {to}"),
+            ("a document whose step is null", Shaped(from, to, null, Steps()), 0, from, to,
+                "its document ends at the step , not complete"),
+            ("a document whose steps are null", Shaped(from, to, "complete", null), 0, from, to,
+                $"no step \"{askedTo}\""),
+            ("a document whose steps are one line, not a list", Shaped(from, to, "complete", $"complete: {from} -> {to}"), 0, from, to,
+                $"no step \"{askedTo}\""),
+            ("a document whose steps are the asking line alone, not a list", Shaped(from, to, "complete", Asked(to)), 0, from, to,
+                $"no step \"{swappedTo}\" follows \"{Asked(to)}\""),
+        };
+
+        var folder = tree.NewDirectory("updates");
+        return [.. cases.Select((item, at) =>
+        {
+            var file = Path.Combine(folder, $"update-{at}.txt");
+            File.WriteAllText(file, $"Stopping the runtime before the update to {item.To}...\nJason Desktop is downloading {item.To}.\n" + (item.Document.Length > 0 ? item.Document + "\n" : string.Empty));
+            return (Name: item.Name, File: file, Exit: item.Exit, From: item.From, To: item.To, Fault: item.Fault);
+        })];
+    }
+
+    /// <summary>
+    /// The words the jason the one-installation release hands the rest to says once it has finished, which both proof
+    /// scripts read: this build's own, where <c>UpdateApplier</c> says them, and the swap its finish records, where
+    /// <c>UpdateCommands</c> adds it to the handing's steps.
+    /// </summary>
+    private static void AssertTheFinishSaysWhatTheReadersRead()
+    {
+        var applier = File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Update", "UpdateApplier.cs"));
+        Assert.Contains("Say(UpdateStep.Healthy, $\"{info.RuntimeVersion}, {info.Database.AppliedMigrations.Count} migrations applied\");", applier, StringComparison.Ordinal);
+        Assert.Contains("Say(UpdateStep.Complete, $\"{ledger.FromVersion} -> {ledger.ToVersion}\");", applier, StringComparison.Ordinal);
+        Assert.Contains("private void Say(UpdateStep step, string what) => Say(step.ToString().ToLowerInvariant(), what);", applier, StringComparison.Ordinal);
+        var commands = File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "src", "Jason.Cli", "Commands", "UpdateCommands.cs"));
+        Assert.Contains("handing.Steps.Add($\"swapped: the application is {inFlight.ToVersion}\");", commands, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The settings lines of the Windows proof's own prelude, taken from its text as the helper row takes them: of the block
+    /// after param()'s closing parenthesis, the lines that set a preference variable or the strict mode.
+    /// </summary>
+    private static string WindowsProofSettings(string script)
+    {
+        var paramsEnd = script.IndexOf("\n)\n\n", StringComparison.Ordinal);
+        Assert.True(paramsEnd >= 0, "Test-InstallationWindows.ps1 has no param() block followed by its prelude");
+        var preludeAt = paramsEnd + "\n)\n\n".Length;
+        var settings = script[preludeAt..script.IndexOf("\n\n", preludeAt, StringComparison.Ordinal)].Split('\n')
+            .Where(line => Regex.IsMatch(line, @"^(?:\$\w+Preference = .+|Set-StrictMode .+)$"))
+            .ToArray();
+        Assert.Contains("$ErrorActionPreference = 'Stop'", settings);
+        Assert.Contains("Set-StrictMode -Version Latest", settings);
+        return string.Join('\n', settings);
+    }
+
+    /// <summary>One function of the Windows proof, by the start of its line, to the closing brace that ends it.</summary>
+    private static string WindowsProofFunction(string script, string opening)
+    {
+        var at = script.IndexOf("\nfunction " + opening, StringComparison.Ordinal);
+        Assert.True(at >= 0, $"Test-InstallationWindows.ps1 has no function {opening}");
+        var end = script.IndexOf("\n}\n", at, StringComparison.Ordinal);
+        return script[(at + 1)..(end + 2)];
+    }
+
+    /// <summary>
+    /// The pwsh the Windows readers' row runs: the settings lines of the proof's own prelude, the proof's own two readers, and
+    /// each case read from its file as the proof keeps what the verb said, with its exit code, one line per case: its name
+    /// and what the readers say of it, apart by a tab.
+    /// </summary>
+    private const string HandOverHarness = """
+        @PRELUDE@
+
+        @FUNCTIONS@
+
+        foreach ($case in @(Get-Content -LiteralPath @CASES@ -Raw | ConvertFrom-Json)) {
+            $said = [IO.File]::ReadAllText($case.file)
+            [Console]::Out.WriteLine("$($case.name)`t$(Get-HandedFinishFault ([int] $case.exit) (Read-Document $said) $case.from $case.to)")
+        }
+        """;
+
+    /// <summary>One step of the Windows proof, from its label to the brace that closes it.</summary>
+    private static string WindowsProofStep(string script, string label)
+    {
+        var at = script.IndexOf($"\n    '{label}' {{\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, $"Test-InstallationWindows.ps1 has no step {label}");
+        var step = script[at..];
+        return step[..step.IndexOf("\n    }\n", StringComparison.Ordinal)];
+    }
+
+    /// <summary>One step of the macOS proof, from its label to the two semicolons that end it.</summary>
+    private static string MacProofStep(string script, string label)
+    {
+        var at = script.IndexOf($"\n{label})\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, $"test-installation-macos.sh has no step {label}");
+        var step = script[at..];
+        return step[..step.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
+    }
+
+    /// <summary>One function of the macOS proof, from its name to the line of the closing brace that ends it.</summary>
+    private static string MacProofFunction(string script, string name)
+    {
+        var at = script.IndexOf($"\n{name}() {{\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, $"test-installation-macos.sh has no function {name}");
+        var end = script.IndexOf("\n}\n", at, StringComparison.Ordinal);
+        return script[(at + 1)..(end + 3)];
+    }
+
+    /// <summary>The shell options of the macOS proof's own prelude: the lines of its text that set them.</summary>
+    private static string MacProofSettings(string script)
+    {
+        var settings = Regex.Matches(script, "(?m)^set -[a-z]+(?: [a-z]+)*$").Select(match => match.Value).ToList();
+        Assert.Contains("set -euo pipefail", settings);
+        return string.Join('\n', settings);
+    }
+
+    /// <summary>The Windows proof's two clock files: the lines of its text that name them in the leg's folder.</summary>
+    private static List<string> WindowsClockFiles(string script) =>
+        [.. Regex.Matches(script, @"(?m)^\$(?:legBegan|jobBegan) = Join-Path \$Out '[a-z]+-began\.txt'$").Select(match => match.Value)];
+
+    /// <summary>
     /// Every place a macOS leg refuses to start because it is there already is a leg's own scratch, which a clean begin
     /// takes by name before it reads the machine (take_scratch), so a leg that failed part way never keeps the next one
     /// from running.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_clean_begin_takes_every_place_a_macOS_leg_refuses_to_find_there_already()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1682,6 +2397,7 @@ public partial class InstallScriptTests
     /// person's copy is still in it.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void A_clean_begin_puts_the_person_s_own_quick_start_back_over_a_stand_in_before_it_removes_any_scratch()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1702,13 +2418,14 @@ public partial class InstallScriptTests
     /// printing the server's log, its process and what holds the port where it never answers.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_legs_serve_their_feed_by_the_proofs_own_server_and_say_why_it_never_answered()
     {
         var root = RepositoryRoot();
         var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
         var server = File.ReadAllText(Path.Combine(root, ".github", "scripts", "serve-feed.py")).Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.DoesNotContain("http.server 80", macos, StringComparison.Ordinal);
-        Assert.Equal(3, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
+        Assert.Equal(4, Regex.Matches(macos, @"(?m)^\s*serve_feed ""\$feed"" ""\$OUT/[a-z-]+\.log""$").Count);
         Assert.Contains("    python3 \"$(dirname \"$0\")/serve-feed.py\" \"$folder\" 8099 \"$log\" &\n", macos, StringComparison.Ordinal);
         Assert.Contains("    until=$(( $(date +%s) + 90 ))\n", macos, StringComparison.Ordinal);
         Assert.Contains("fail \"the feed on 127.0.0.1:8099 answering did not happen within 90 s; ", macos, StringComparison.Ordinal);
@@ -1725,12 +2442,66 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// On Windows the line every real install takes reads its feed over the web in Windows PowerShell 5.1, which a feed in a
+    /// directory never reaches. The proof's Windows job holds it in a leg of its own: the job's feed served on this machine
+    /// by the proof's one feed server, install.ps1 run by <c>powershell.exe</c> with that address and that shell said and
+    /// held to Windows PowerShell 5.1, the server's own record
+    /// of the manifest, the checksums and the setup each answered, and a runtime over the installed role skills saying
+    /// <c>role_skills</c> is ok. The role skills come from the skills beside the application's jason, so their record is
+    /// held to a folder of the application and never to the feed.
+    /// </summary>
+    [Fact]
+    public void The_windows_proof_installs_from_a_feed_served_on_the_machine_in_Windows_PowerShell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
+        var job = ci.IndexOf("\n  union-windows:\n", StringComparison.Ordinal);
+        Assert.True(job >= 0, "ci.yml no longer has the union-windows job.");
+        var leg = ci.IndexOf("- name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal\n", job, StringComparison.Ordinal);
+        Assert.True(leg > job, "union-windows no longer installs from a feed served on this machine in Windows PowerShell 5.1.");
+        var next = ci.IndexOf("\n      - ", leg + 1, StringComparison.Ordinal);
+        var step = next < 0 ? ci[leg..] : ci[leg..next];
+        var begin = step.IndexOf("-Step Begin -Out $env:OUT -Leg $env:LEG -Clean ", StringComparison.Ordinal);
+        var served = step.IndexOf("-Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script ", StringComparison.Ordinal);
+        var end = step.IndexOf("-Step End -Out $env:OUT -Leg $env:LEG", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && served > begin && end > served, $"the served feed's leg is not framed by a clean begin and its end:\n{step}");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).ReplaceLineEndings("\n");
+        var at = script.IndexOf("\n    'ServedFeed' {\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, "Test-InstallationWindows.ps1 has no ServedFeed step.");
+        var body = script[at..script.IndexOf("\n    }\n", at, StringComparison.Ordinal)];
+        foreach (var said in new[]
+        {
+            "$server = Start-FeedServer $Feed 8099 ",
+            "Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }",
+            "$served = 'http://127.0.0.1:8099'",
+            "Say \"install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition\"",
+            "$shellEdition -cne 'Desktop' -or -not \"$shellVersion\".StartsWith('5.1.')",
+            "@('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')",
+            "' HTTP/1\\.[01]\" 200'",
+            "skills\\roles\\.jason-skills.json",
+            "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
+        })
+        {
+            Assert.True(body.Contains(said, StringComparison.Ordinal), $"Test-InstallationWindows.ps1's ServedFeed step does not say: {said}");
+        }
+
+        // Every feed the script serves is served by the one feed server, which looks no name up between bind and listen.
+        Assert.Contains("$arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, \"$port\", $log)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-m', 'http.server'", script, StringComparison.Ordinal);
+        // Its answer waited for up to 90 s: the server is the proof's own, and a runner's image can start it slowly.
+        Assert.Contains("    $until = [DateTime]::UtcNow.AddSeconds(90)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\"the feed on 127.0.0.1:$port answering did not happen within 90 s\"", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "serve-feed.py")), "the one feed server is not in the tree.");
+    }
+
+    /// <summary>
     /// The uninstall the application's Uninstall Jason item starts writes both its streams into one file, and a wait's
     /// sentence goes to standard error: the macOS menu leg reads that file's JSON line only to SAY what the report says of
     /// itself (completed, the refusal code, kept and problems) and every other line as said, so a finding the report
     /// carries is in the log; the reading never fails the leg, which stands on the uninstall's exit and the files.
     /// </summary>
     [Fact]
+    [Critical(Family.I1, "the release proof\'s scripts keep what this row pins")]
     public void The_macOS_menu_leg_says_what_its_report_says_and_never_fails_on_reading_it()
     {
         var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1751,45 +2522,23 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
-    /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
-    /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
+    /// The real proof: CI runs each script against what the same run packaged: install.ps1 from a local directory, and
+    /// install.sh on Ubuntu through the apt route's leg, against the product's address as the leg serves it. The leg
+    /// moves a build older than install.sh's floor for Linux up to it, reading the floor from the one line that refuses
+    /// below it: a rewrite of that line would otherwise fail only the leg, late in the run.
     /// </summary>
     [Fact]
-    public void Ci_holds_the_installer_the_check_and_the_uninstall_to_the_profile_bash_reads()
+    public void Ci_runs_both_scripts_against_what_it_built()
     {
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        var step = ci.IndexOf("name: Install into the profile bash reads, and take it back out", StringComparison.Ordinal);
-
-        Assert.True(step >= 0, "ci.yml no longer installs into a home where bash reads ~/.bash_profile.");
-        Assert.True(ci.IndexOf("bash -l -c 'command -v jason'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
-        Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
-    }
-
-    /// <summary>
-    /// And CI holds the uninstall to the directory rule on a real machine: installed into a <c>~/.local/bin</c> that
-    /// another tool is in, the line it is found through stays — and the installer, run with no <c>SHELL</c> under
-    /// its own <c>set -eu</c>, writes the profile rather than dying before it.
-    /// </summary>
-    [Fact]
-    public void Ci_holds_the_uninstall_to_a_directory_other_tools_share_and_the_installer_to_no_shell()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        var step = ci.IndexOf("name: Install beside another tool with no SHELL set, and leave the line it is found through", StringComparison.Ordinal);
-
-        Assert.True(step >= 0, "ci.yml no longer installs into a directory another tool shares.");
-        Assert.True(ci.IndexOf("env -u SHELL sh install/install.sh", step, StringComparison.Ordinal) > step, "the step no longer runs the installer with no SHELL.");
-        Assert.True(ci.IndexOf("the uninstall took away the line another tool is found through", step, StringComparison.Ordinal) > step, "the step no longer asserts the line stays.");
-    }
-
-    /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
-    [Fact]
-    public void Ci_runs_both_scripts_against_the_archives_it_built()
-    {
-        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
-        Assert.Contains("install/install.sh", ci, StringComparison.Ordinal);
         Assert.Contains("install/install.ps1", ci, StringComparison.Ordinal);
         Assert.Contains("JASON_INSTALL_FEED", ci, StringComparison.Ordinal);
+        Assert.Contains("bash .github/scripts/test-apt-route.sh apt\n", ci, StringComparison.Ordinal);
+        var leg = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-apt-route.sh"));
+        Assert.Contains("\"$repository/install/install.sh\"", leg, StringComparison.Ordinal);
+        Assert.Contains("floor=$(sed -n 's/^ *if older_than \"\\$LATEST\" \\([0-9.]*\\) .*/\\1/p' \"$repository/install/install.sh\")", leg, StringComparison.Ordinal);
+        var floor = Assert.Single(Script("install.sh").Split('\n'), line => Regex.IsMatch(line, @"^ *if older_than ""\$LATEST"" [0-9.]+ "));
+        Assert.Contains("if older_than \"$LATEST\" 0.49.1 ", floor, StringComparison.Ordinal);
     }
 
     // --- install.ps1, run rather than read ----------------------------------------------------------------
@@ -1952,43 +2701,6 @@ public partial class InstallScriptTests
             $"{shell} {form} did not say the digest was refused. It said: {stderr}");
     }
 
-    /// <summary>
-    /// And <c>install.sh</c> stops on a command that fails without a check of the script's own around it: a feed whose
-    /// <c>checksums.txt</c> cannot be read makes <c>cp</c> fail, and <c>set -e</c> is what ends the run there, non-zero,
-    /// in <c>cp</c>'s own words and with nothing installed. Without it the run went on, and stopped later on a check of
-    /// its own, which is not where it failed.
-    /// </summary>
-    [Fact]
-    [UnsupportedOSPlatform("windows")]
-    public void Install_sh_stops_where_a_command_fails_with_nothing_installed()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux leg runs this row.");
-        Assert.SkipUnless(
-            OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64,
-            "install.sh takes an install directory on Linux on x64 alone: macOS installs Jason Desktop, and no other release is built.");
-
-        using var tree = new TempTree();
-        var feed = tree.NewDirectory("feed");
-        var asset = ReleaseAssets.For("linux-x64");
-        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"0.7.0\"\n}\n");
-        File.WriteAllText(Path.Combine(feed, asset), "Not an archive.\n");
-        var checksums = Path.Combine(feed, ReleaseAssets.Checksums);
-        File.WriteAllText(checksums, new string('0', 64) + "  " + asset + "\n");
-        File.SetUnixFileMode(checksums, UnixFileMode.None);
-        Assert.SkipWhen(Readable(checksums), "This account reads a file whatever its mode says, as root does, so there is no refusal to make.");
-
-        var install = tree.NewDirectory("bin");
-        var (exit, _, stderr) = Run(
-            "/bin/sh",
-            new Dictionary<string, string> { ["HOME"] = tree.NewDirectory("home") },
-            Path.Combine(RepositoryRoot(), "install", "install.sh"), "--feed", feed, "--install-dir", install, "--no-modify-path");
-
-        Assert.True(exit != 0, $"install.sh exited 0. It said: {stderr}");
-        Assert.Empty(Directory.EnumerateFileSystemEntries(install));
-        Assert.Contains(ReleaseAssets.Checksums, stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain("install.sh:", stderr, StringComparison.Ordinal);
-    }
-
     /// <summary>True when this account can open the file for reading.</summary>
     private static bool Readable(string path)
     {
@@ -2070,27 +2782,22 @@ public partial class InstallScriptTests
     /// </summary>
     private static (int Exit, string Stdout, string Stderr) Pwsh(IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it.");
-
-        return Run(pwsh!, environment, ["-NoProfile", "-NonInteractive", .. arguments]);
+        // A start cache of the child's own, gone with the child.
+        using var tree = new TempTree();
+        return Run(Jason.Runtime.Tests.ChildPwsh.StartInfo(tree.Root), environment, ["-NoProfile", "-NonInteractive", .. arguments]);
     }
 
     /// <summary>One program, run to completion, with the environment a test wants it to have.</summary>
-    private static (int Exit, string Stdout, string Stderr) Run(string executable, IReadOnlyDictionary<string, string> environment, params string[] arguments)
+    private static (int Exit, string Stdout, string Stderr) Run(string executable, IReadOnlyDictionary<string, string> environment, params string[] arguments) =>
+        Run(new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true }, environment, arguments);
+
+    /// <summary>One program, run to completion from a start made for it, with the environment a test wants it to have.</summary>
+    private static (int Exit, string Stdout, string Stderr) Run(ProcessStartInfo start, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var start = new ProcessStartInfo(executable)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         // PowerShell reports telemetry over the network unless told not to, and no test in this repository
         // reaches the network.
         start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
@@ -2114,7 +2821,7 @@ public partial class InstallScriptTests
             process.Kill(entireProcessTree: true);
             Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(10))).GetAwaiter().GetResult();
             Assert.Fail(
-                $"{Path.GetFileName(executable)} did not finish in two minutes.\n"
+                $"{Path.GetFileName(start.FileName)} did not finish in two minutes.\n"
                 + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}\n"
                 + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
         }

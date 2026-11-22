@@ -5,10 +5,6 @@ import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
 import { stubDesktop } from '../../test/desktop';
-import { fullAccessStanding } from '../../platform/full-access';
-import { Bridge } from '../../platform/bridge';
-import { noDesktop, setPlace, tabDesktop } from '../../platform/places';
-import { standInBridge, standInSecret } from '../../test/bridge';
 import { routeCounts } from './route-counts';
 
 function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'aged' = 'two') {
@@ -174,99 +170,92 @@ describe('System, the update sentence', () => {
         await act(async () => undefined);
         expect(screen.queryByText(/or press/)).toBeNull();
     });
+
+    it("in the deb's window names the system's update, which brings it, and never Check for Updates, which the deb has no item for", async () => {
+        // The deb's item, as its menu shows it: the package's, or its restart once the system installed a new version.
+        for (const label of [
+            'Updates Come Through the Package',
+            'Restart Jason and Its Runtime to Finish the Update to 9.9.9',
+        ]) {
+            recorded.update = update;
+            const item = async () => ({
+                version: '9.9.8',
+                item: { label, enabled: label !== 'Updates Come Through the Package' },
+                said: null,
+            });
+            window.jasonDesktop = {
+                platform: 'linux',
+                updates: { key: async () => null, item },
+            } as unknown as NonNullable<typeof window.jasonDesktop>;
+            systemFake();
+            await waitFor(() =>
+                expect(screen.getByText(/Your system updates Jason Desktop and the jason it carries/)).toBeTruthy(),
+            );
+            expect(screen.getByText(/Software Updater/)).toBeTruthy();
+            expect(screen.getByText('sudo apt update && sudo apt upgrade')).toBeTruthy();
+            expect(screen.queryByText(/Check for Updates/)).toBeNull();
+            expect(screen.queryByText(/updates itself/)).toBeNull();
+            cleanup();
+        }
+        // Until the item answers, neither sentence: drawing the updater's first would name Check for Updates on the deb.
+        recorded.update = update;
+        const unanswered = () => new Promise(() => undefined);
+        window.jasonDesktop = {
+            platform: 'linux',
+            updates: { key: async () => null, item: unanswered },
+        } as unknown as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        await act(async () => undefined);
+        expect(screen.queryByText(/Check for Updates/)).toBeNull();
+        expect(screen.queryByText(/Your system updates/)).toBeNull();
+        cleanup();
+        // A desktop whose item is its own updater's keeps the sentence above.
+        recorded.update = update;
+        const own = async () => ({
+            version: '9.9.8',
+            item: { label: 'Check for Updates…', enabled: true },
+            said: null,
+        });
+        window.jasonDesktop = {
+            platform: 'linux',
+            updates: { key: async () => null, item: own },
+        } as unknown as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        await act(async () => undefined);
+        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+        expect(screen.queryByText(/Software Updater/)).toBeNull();
+    });
 });
 
-describe('System, the standing choice of Full access', () => {
+describe('System, Full access with no standing choice', () => {
     afterEach(() => {
         delete window.jasonDesktop;
-        setPlace('window');
-        fullAccessStanding.value = null;
     });
 
-    it('in a browser shows no Full access card', async () => {
+    it('in the desktop shows no Always and no take-back, even from a desktop that still says Always stands', async () => {
+        const desktop = stubDesktop();
+        // A desktop of an earlier version kept Always on this computer, new chats included, and says so when asked.
+        const always = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        const asked: string[] = [];
+        Object.assign(desktop, {
+            fullAccess: {
+                standing: () => (asked.push('standing'), Promise.resolve(always)),
+                takeBack: () => (asked.push('takeBack'), Promise.resolve(null)),
+                onChanged: () => (asked.push('onChanged'), () => undefined),
+            },
+        });
+        window.jasonDesktop = desktop;
         systemFake();
         await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        await act(() => new Promise((resolve) => setTimeout(resolve, 100)));
         expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
-    });
-
-    it('with no desktop draws the card, off, with the sentence, and asks nothing', async () => {
-        setPlace('none', noDesktop());
-        systemFake();
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Full access' })).toBeTruthy());
-        const card = screen.getByRole('heading', { name: 'Full access' }).closest('section')!;
-        expect(within(card).getByText('This needs Jason Desktop.')).toBeTruthy();
-        const button = within(card).getByRole('button', { name: 'Ask each time again' }) as HTMLButtonElement;
-        expect(button.disabled).toBe(true);
-        expect(button.title).toBe('This needs Jason Desktop.');
-    });
-
-    it('in a tab with a bridge shows what stands and draws the take-back off, with the sentence', async () => {
-        const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
-        const stand = standInBridge(desktop);
-        setPlace('tab', tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch)));
-        systemFake();
-        await waitFor(() =>
-            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
-        );
-        const button = screen.getByRole('button', { name: 'Ask each time again' }) as HTMLButtonElement;
-        expect(button.disabled).toBe(true);
-        expect(button.title).toBe("Done in Jason Desktop's own window.");
-        expect(stand.asked.some((each) => each.member === 'fullAccess.takeBack')).toBe(false);
-    });
-
-    it('in the desktop says that Full access asks each time while no choice stands', async () => {
-        window.jasonDesktop = stubDesktop();
-        systemFake();
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Full access' })).toBeTruthy());
-        expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Ask each time again' })).toBeNull();
-    });
-
-    it('in the desktop shows Always and new chats, and takes them back with one button', async () => {
-        const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
-        window.jasonDesktop = desktop;
-        systemFake();
-        await waitFor(() =>
-            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
-        );
-        expect(screen.getByText('New chats start in Full access.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Ask each time again' }));
-        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
-        expect(desktop.calls.filter((each) => each.name === 'fullAccess.takeBack')).toHaveLength(1);
+        expect(screen.queryByText(/enter Full access without asking/)).toBeNull();
         expect(screen.queryByText('New chats start in Full access.')).toBeNull();
-    });
-
-    it('reads the choice again each time it shows, so one the desktop never said is shown', async () => {
-        const desktop = stubDesktop();
-        window.jasonDesktop = desktop;
-        systemFake();
-        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
-        cleanup();
-        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
-        systemFake();
-        await waitFor(() =>
-            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
-        );
-    });
-
-    it('a moment that is no date is shown without it, and the screen still draws', async () => {
-        const desktop = stubDesktop();
-        desktop.standing = { givenAt: '2026-99-99T99:99:99Z', newChats: false };
-        window.jasonDesktop = desktop;
-        systemFake();
-        await waitFor(() =>
-            expect(screen.getByText('Chats on this computer enter Full access without asking.')).toBeTruthy(),
-        );
-        expect(screen.getByRole('button', { name: 'Ask each time again' })).toBeTruthy();
-    });
-
-    it('in a desktop of an earlier version, with no standing choice to read, shows no card', async () => {
-        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
-        systemFake();
-        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
-        expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
+        expect(screen.queryByText('Full access asks you each time a chat enters it.')).toBeNull();
+        expect(asked).toEqual([]);
     });
 });
 

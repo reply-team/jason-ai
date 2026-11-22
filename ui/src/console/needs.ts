@@ -246,8 +246,17 @@ const acting = attention.acting;
 const senders = senderReads();
 let sending: { id: string; drawn: number } | null = null;
 
-/** Whether the item the pane showed left while the person was not acting on it, until they choose or act again. */
+/**
+ * Whether the item the pane showed left, in sight of the person and while they were not acting on it, until they choose
+ * or act again or the panel is shown anew.
+ */
 const left = signal(false);
+
+/**
+ * Whether the panel is the one in sight. It stays drawn, hidden, while another is shown; an item that leaves meanwhile
+ * left where the person could not see it go, so the pane says nothing of it.
+ */
+let sighted = false;
 
 /** Holds the pane where it stands (`placeOf`) and remembers the order drawn; true when the item chosen had left. */
 function keepPlace(): boolean {
@@ -285,8 +294,9 @@ function take(): void {
         const asked = now?.kind === 'approval' ? askedAfter(edits.value, now.id) : null;
         if (asked !== null && listedIds.has(asked)) chosen.value = { kind: 'approval', id: asked };
         if (agent.value !== null && !agentsOf(needsInput()).some((each) => each.id === agent.value)) agent.value = null;
-        // An item that leaves while no act of the person's is under way left by someone else's hand: the pane says so.
-        if (keepPlace() && acting.value === 0) left.value = true;
+        // An item that leaves in sight while no act of the person's is under way left by someone else's hand: the pane
+        // says so.
+        if (keepPlace() && acting.value === 0 && sighted) left.value = true;
     });
     readShown();
 }
@@ -326,9 +336,23 @@ export function forgetNeeds(): void {
     lastOrder = [];
     ownOpens.clear();
     left.value = false;
+    sighted = false;
     acting.value = 0;
     senders.lookups.value = {};
     sending = null;
+}
+
+/**
+ * The panel came into sight, or went out of it. Shown anew, it says nothing of what left before, and the order it holds
+ * its place by is the one the person sees now.
+ */
+export function sightNeeds(shown: boolean): void {
+    sighted = shown;
+    if (!shown) return;
+    batch(() => {
+        keepPlace();
+        left.value = false;
+    });
 }
 
 /** The panel is drawn: its approvals are read whole now, and at every reload while it stays drawn. */
@@ -1011,7 +1035,12 @@ export function needsView(): Html {
                         <div class="bd">You're all caught up</div>
                         <div class="needs-none-says">Nothing is waiting for your decision.</div>
                         <div class="ask-a">
-                            <button class="btn sm p" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                            <button
+                                class="btn sm p"
+                                type="button"
+                                ${act('side.start')}
+                                ${offUnless('chat.createAgent')}
+                            >
                                 New GTM agent
                             </button>
                             <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your agents</button>

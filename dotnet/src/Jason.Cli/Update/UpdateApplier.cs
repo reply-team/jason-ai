@@ -487,7 +487,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         if (replaced > 0)
         {
-            lines.Add(await ReloadAsync(cancellationToken).ConfigureAwait(false));
+            lines.AddRange(await ReloadAsync(cancellationToken).ConfigureAwait(false));
         }
 
         return new UpdateFinishPart(
@@ -497,17 +497,54 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             lines);
     }
 
-    /// <summary>The reload <c>jason plugin install</c> asks, of a runtime that answers; none is started.</summary>
-    private async Task<string> ReloadAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The reload <c>jason plugin install</c> asks, of a runtime that answers; none is started. After a reload that loaded,
+    /// one line for each plugin the runtime now holds back, by its id and its problems' own words, which end on the repair:
+    /// an unavailable plugin stops its work and says so nowhere else a person who updates is looking.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ReloadAsync(CancellationToken cancellationToken)
     {
         using var unasked = new StringWriter(CultureInfo.InvariantCulture);
         var (_, response) = await OperationRunner.SendAsync(env with { Out = unasked }, Operations.PluginReload, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
         return response switch
         {
-            null => "reload: no runtime answered, so the packages load at the runtime's next start",
-            { IsSuccess: true } => "reload: the runtime loaded the packages",
-            _ => $"reload: the runtime refused to reload ({ReasonSaid(OperationRunner.ErrorText(response))}); run: jason plugin reload",
+            null => ["reload: no runtime answered, so the packages load at the runtime's next start"],
+            { IsSuccess: true } => ["reload: the runtime loaded the packages", .. UnavailableLines(response.Body)],
+            _ => [$"reload: the runtime refused to reload ({ReasonSaid(OperationRunner.ErrorText(response))}); run: jason plugin reload"],
         };
+    }
+
+    /// <summary>"&lt;id&gt; unavailable: &lt;its problems' messages&gt;" for each plugin a registry lists unavailable; none for a body it cannot read.</summary>
+    private static IEnumerable<string> UnavailableLines(string body)
+    {
+        JsonNode? registry;
+        try
+        {
+            registry = JsonNode.Parse(body);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        if (registry?["plugins"] is not JsonArray plugins)
+        {
+            return [];
+        }
+
+        return plugins
+            .OfType<JsonObject>()
+            .Where(plugin => plugin["status"] is JsonValue status && status.TryGetValue<string>(out var said) && said == "unavailable")
+            .Select(plugin =>
+            {
+                var id = plugin["id"] is JsonValue value && value.TryGetValue<string>(out var named) ? named : "?";
+                var messages = (plugin["problems"] as JsonArray ?? [])
+                    .OfType<JsonObject>()
+                    .Select(problem => problem["message"] is JsonValue message && message.TryGetValue<string>(out var text) ? OneLine(text) : null)
+                    .OfType<string>();
+                return $"{id} unavailable: {string.Join(' ', messages)}";
+            })
+            .ToList();
     }
 
     /// <summary>The release's UI for the installed version, where the one in place is not that build already.</summary>

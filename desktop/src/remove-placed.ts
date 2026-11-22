@@ -35,11 +35,11 @@ export const removeLabel = 'Remove What Jason Placed…';
 export const debPackage = 'jason-desktop';
 
 /**
- * Whether the act is offered: on Linux, where no uninstaller starts the application. Windows keeps its own, and macOS has
- * Uninstall Jason…, the one uninstall (`uninstall-door.ts`).
+ * Whether the act is offered: on no system. Linux's door is Uninstall Jason…, the one uninstall, as macOS's is
+ * (`uninstall-door.ts`), and Windows keeps its uninstaller.
  */
-export function removalOffered(platform: NodeJS.Platform): boolean {
-    return platform === 'linux';
+export function removalOffered(_platform: NodeJS.Platform): boolean {
+    return false;
 }
 
 /**
@@ -240,7 +240,7 @@ export class RemovalAct {
 type CommandLike = UninstallDeps['command'];
 interface AutostartLike {
     registration(): Promise<{ registered: boolean; executable: string | null } | null>;
-    set(on: boolean): Promise<boolean | null>;
+    disable(): Promise<boolean | null>;
 }
 
 export interface PlacedInput {
@@ -305,7 +305,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
                 command,
                 login: input.login,
                 runtime: input.version === null ? null : { stop: () => stopWithDemo(() => stopFromAny(candidates(), (executable) => input.stopAs(executable)), () => input.stopDemo()) },
-                autostart: autostart === null ? null : { status: () => autostart.registration(), disable: () => autostart.set(false) },
+                autostart: autostart === null ? null : { status: () => autostart.registration(), disable: () => autostart.disable() },
                 application: applicationFolder(input.platform, input.execPath),
                 bundles: bundles === null ? null : { folder: bundles, runsFrom: () => input.runsFrom(bundles) },
                 jason: input.executable,

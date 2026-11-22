@@ -3,9 +3,14 @@
 // it was: a box's view is `view` pixels high; what it holds is its parts stacked in order, the thread, the queued line and
 // the cards that wait under them, each `perCharacter` pixels for each character of its words unless `heights` sizes it,
 // never less than the view all together; and its place stays between the top and the foot, as a browser keeps it. Each
-// part stands where the stacking puts it, as `getBoundingClientRect` says, the box's view starting at 0.
+// part stands where the stacking puts it, as `getBoundingClientRect` says, the box's view starting at 0. A box under a
+// hidden element is laid out as a browser lays out what is not displayed: every measure is 0 and a place written to it is
+// not taken, while the place it had is kept for when it is shown again.
 
 const box = (element: Element) => element.classList.contains('chat-scroll');
+
+/** Whether an element is under a hidden one, so laid out as nothing. */
+const unseen = (element: Element) => element.closest('[hidden]') !== null;
 const names = ['scrollHeight', 'clientHeight', 'scrollTop', 'getBoundingClientRect'] as const;
 
 /** The parts of a box that are its conversation: the thread and the line queued under it. */
@@ -22,10 +27,11 @@ let laid: { part: (element: Element) => number; view: number } | null = null;
  * `heights` sizes a part of a box by its own measure instead of its words, where it answers a number.
  */
 export function layOutChats(
-    view = 500,
+    initialView = 500,
     perCharacter = 4,
     heights: (part: Element) => number | undefined = () => undefined,
-): { restore: () => void } {
+): { restore: () => void; setView: (pixels: number) => void } {
+    let view = initialView;
     const proto = HTMLElement.prototype;
     const above = Object.getPrototypeOf(proto) as object;
     const saved = names.map((name) => [name, Object.getOwnPropertyDescriptor(proto, name)] as const);
@@ -38,36 +44,45 @@ export function layOutChats(
         );
     const place = (element: Element) => Math.min(Math.max(places.get(element) ?? 0, 0), height(element) - view);
     laid = { part, view };
+    const setView = (pixels: number) => {
+        view = pixels;
+        laid = { part, view };
+    };
     Object.defineProperty(proto, 'scrollHeight', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? height(this) : (Reflect.get(above, 'scrollHeight', this) as number);
+            if (box(this)) return unseen(this) ? 0 : height(this);
+            return Reflect.get(above, 'scrollHeight', this) as number;
         },
     });
     Object.defineProperty(proto, 'clientHeight', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? view : (Reflect.get(above, 'clientHeight', this) as number);
+            if (box(this)) return unseen(this) ? 0 : view;
+            return Reflect.get(above, 'clientHeight', this) as number;
         },
     });
     Object.defineProperty(proto, 'scrollTop', {
         configurable: true,
         get(this: HTMLElement) {
-            return box(this) ? place(this) : (Reflect.get(above, 'scrollTop', this) as number);
+            if (box(this)) return unseen(this) ? 0 : place(this);
+            return Reflect.get(above, 'scrollTop', this) as number;
         },
         set(this: HTMLElement, value: number) {
-            if (box(this)) places.set(this, Math.min(Math.max(value, 0), height(this) - view));
-            else Reflect.set(above, 'scrollTop', value, this);
+            if (box(this)) {
+                if (!unseen(this)) places.set(this, Math.min(Math.max(value, 0), height(this) - view));
+            } else Reflect.set(above, 'scrollTop', value, this);
         },
     });
     Object.defineProperty(proto, 'getBoundingClientRect', {
         configurable: true,
         writable: true,
         value(this: HTMLElement) {
-            if (box(this)) return rect(0, view);
+            if (box(this)) return unseen(this) ? rect(0, 0) : rect(0, view);
             const parent = this.parentElement;
             if (parent === null || !box(parent))
                 return (Reflect.get(above, 'getBoundingClientRect', this) as () => DOMRect).call(this);
+            if (unseen(parent)) return rect(0, 0);
             let top = 0;
             for (const each of Array.from(parent.children)) {
                 if (each === this) break;
@@ -77,6 +92,7 @@ export function layOutChats(
         },
     });
     return {
+        setView,
         restore: () => {
             laid = null;
             for (const [name, descriptor] of saved) {
@@ -114,4 +130,47 @@ export function followedPlace(element: HTMLElement): number {
 export function scrollAs(element: HTMLElement, top: number): void {
     element.scrollTop = top;
     element.dispatchEvent(new Event('scroll'));
+}
+
+/**
+ * Stands in for the page's ResizeObserver until `restore` is called: happy-dom never reports a size, so a test says
+ * when an element's size changed (`resized`) and each observer watching it is called, as a browser calls it after a layout.
+ */
+export function watchSizes(): { resized: (element: Element) => void; restore: () => void } {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    const live = new Set<StandInResizeObserver>();
+    class StandInResizeObserver {
+        readonly watched = new Set<Element>();
+        constructor(private readonly callback: ResizeObserverCallback) {
+            live.add(this);
+        }
+        observe(element: Element) {
+            this.watched.add(element);
+        }
+        unobserve(element: Element) {
+            this.watched.delete(element);
+        }
+        disconnect() {
+            this.watched.clear();
+            live.delete(this);
+        }
+        report(element: Element) {
+            if (this.watched.has(element))
+                this.callback([{ target: element } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+        configurable: true,
+        writable: true,
+        value: StandInResizeObserver,
+    });
+    return {
+        resized: (element) => {
+            for (const each of [...live]) each.report(element);
+        },
+        restore: () => {
+            if (saved) Object.defineProperty(globalThis, 'ResizeObserver', saved);
+            else delete (globalThis as Record<string, unknown>).ResizeObserver;
+        },
+    };
 }

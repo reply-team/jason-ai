@@ -22,10 +22,11 @@ is for what they cannot explain, and you cannot know that before you have read t
 investigation on its own, and each one makes the next easier to read.
 
 **Is the runtime answering at all?** If it is not, nothing anywhere is being claimed, and every item in the
-installation looks stuck for the same reason.
+installation looks stuck for the same reason. Its `runtime` check says whether a runtime answers, and the command that
+starts one where none does.
 
 ```
-jason runtime status --human
+jason status --human
 ```
 
 **A runtime that will not start on its data.** When `jason runtime start` answers `data_newer`, the database was
@@ -34,7 +35,7 @@ to update this Jason, as the refusal's own sentence says: `jason update apply`, 
 Desktop. Never restore an older backup over the database, delete anything in the data directory, or start an older
 build on it to get past the refusal: the data is the newer version's, and only that version or a later one reads it.
 
-**A command-line install moving into Jason Desktop.** On macOS and Windows, `jason status`'s optional `move` check says
+**A command-line install moving into Jason Desktop.** On macOS, Windows and Linux, `jason status`'s optional `move` check says
 where the move of a command-line install into Jason Desktop stands. It never stops work: until the move retires it, the
 command-line install answers as `jason`, its runtime with it. Where the check names a command, that is the repair, run
 on the person's word; where it names none, the move waits on something no command typed here changes, and the check says
@@ -292,7 +293,7 @@ repair while the wait holds: do not cancel it to unstick it, and do not create i
 decides it has waited enough, they end the wait themselves, and the item is started again with what is there:
 
 ```
-jason --actor human:ada workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the replies in are enough to decide"
+jason workitem resume wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the replies in are enough to decide'
 ```
 
 **A park on a provider block has a repair, and it is the person's.** Its `wait` names the block under `blocked_by` —
@@ -314,7 +315,7 @@ releases everything it held. Where the person knows the cause is gone, they clea
 themselves, under their own name, and the next scan releases what it held:
 
 ```
-jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the card on the account was renewed"
+jason block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason 'the card on the account was renewed'
 ```
 
 A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a
@@ -399,7 +400,7 @@ state 12: the same work goes through as a new item only once the provider offers
 snapshot is swapped whole, or the old one is kept and the reason is printed.
 
 ```
-jason plugin reload --reason "the package was updated"
+jason plugin reload --reason 'the package was updated'
 ```
 
 **Restarting the runtime**, when the process itself is the problem rather than anything in it. What that does

@@ -32,7 +32,10 @@ namespace Jason.Cli.Installation;
 /// the package's own directory. A registration names this, never the resolved keg.
 /// </param>
 /// <param name="UpgradeCommand">The one command that upgrades it, as that manager spells it.</param>
-/// <param name="UninstallCommand">The one command that takes it off, as that manager spells it.</param>
+/// <param name="UninstallCommand">
+/// The one command that takes it off, as that manager spells it: Homebrew's formula with <c>--formula</c>, since the cask of
+/// the same name makes a bare <c>brew uninstall jason</c> ambiguous.
+/// </param>
 public sealed record PackageOwner(
     string Manager,
     string Package,
@@ -130,7 +133,7 @@ public sealed record PackageOwner(
         }
 
         var link = Path.Combine(prefix, "bin", Path.GetFileName(image));
-        return new PackageOwner(Homebrew, Formula, image, bin!, link, link, $"brew upgrade {Formula}", $"brew uninstall {Formula}");
+        return new PackageOwner(Homebrew, Formula, image, bin!, link, link, $"brew upgrade {Formula}", $"brew uninstall --formula {Formula}");
     }
 
     /// <summary>

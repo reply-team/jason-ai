@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fuses, signer } from '../electron-builder.config.mjs';
-import { checkPackage, fuseFile, iconRoot, linuxIconSizes, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
+import { checkPackage, debScript, fuseFile, iconRoot, linuxIconSizes, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const library = createRequire(join(root, 'package.json'))('@electron/fuses') as {
@@ -79,7 +79,7 @@ const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${ex
 async function made(
     t: { after(fn: () => void): void },
     platform: Kind,
-    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null; icons?: number[]; debEntry?: string | null; plist?: string | null; appImageEntry?: string } = {},
+    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null; icons?: number[]; debEntry?: string | null; plist?: string | null; appImageEntry?: string; postinst?: string; aptRule?: boolean; keyring?: Buffer } = {},
 ): Promise<string> {
     const folder = temporary(t);
     const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? join('opt', 'Jason') : 'squashfs-root');
@@ -101,6 +101,24 @@ async function made(
         const applications = join(iconRoot(app, 'deb'), 'usr', 'share', 'applications');
         mkdirSync(applications, { recursive: true });
         writeFileSync(join(applications, 'jason-desktop-app.desktop'), options.debEntry ?? [menuEntry('/opt/Jason/jason-desktop-app -- %U'), 'MimeType=x-scheme-handler/jason-desktop;', ''].join('\n'));
+    }
+    if (platform === 'linux-deb') {
+        // What the deb places for the system, as dpkg-deb --raw-extract lays it out: the maintainer scripts under DEBIAN and
+        // the repository's key under the root; where a row says, a rule for apt's automatic updates as a configuration file.
+        const top = iconRoot(app, 'deb');
+        const placed: [string, string | Buffer][] = [
+            [join('DEBIAN', 'postinst'), options.postinst ?? debScript('after-install')],
+            [join('DEBIAN', 'postrm'), debScript('after-remove')],
+            [join('usr', 'share', 'keyrings', 'jason-desktop.gpg'), options.keyring ?? readFileSync(join(root, '..', 'install', 'jason-desktop-archive-keyring.gpg'))],
+            ...(options.aptRule ? [
+                [join('DEBIAN', 'conffiles'), '/etc/apt/apt.conf.d/50jason-desktop\n'],
+                [join('etc', 'apt', 'apt.conf.d', '50jason-desktop'), 'Unattended-Upgrade::Origins-Pattern { "origin=Jason,site=get.jasonharness.ai"; };\n'],
+            ] satisfies [string, string][] : []),
+        ];
+        for (const [path, bytes] of placed) {
+            mkdirSync(dirname(join(top, path)), { recursive: true });
+            writeFileSync(join(top, path), bytes);
+        }
     }
     if (platform === 'darwin' && options.plist !== null) writeFileSync(join(app, 'Contents', 'Info.plist'), options.plist ?? macPlist('jason-desktop'));
     if (platform === 'linux-deb' || platform === 'linux-appimage') {
@@ -280,6 +298,25 @@ test('linux: a deb carries the AppArmor profile that lets its program make user 
     assert.throws(() => check(other, 'linux-deb'), /apparmor-profile does not let \/opt\/Jason\/jason-desktop-app make user namespaces/);
     const without = await made(t, 'linux-deb', { profile: appArmorProfile.replace('  userns,\n', '') });
     assert.throws(() => check(without, 'linux-deb'), /apparmor-profile does not let \/opt\/Jason\/jason-desktop-app make user namespaces/);
+});
+
+test('linux: a deb carries the tree\'s own maintainer scripts and the repository\'s key, and no rule for apt\'s automatic updates', async (t) => {
+    const app = await made(t, 'linux-deb');
+    const said = check(app, 'linux-deb');
+    assert.ok(said.includes('postinst, postrm: installer/deb/after-install.sh and after-remove.sh'), said.join('\n'));
+    assert.ok(said.includes('/etc/apt/apt.conf.d: nothing'), said.join('\n'));
+    assert.ok(said.includes('/usr/share/keyrings/jason-desktop.gpg: install/jason-desktop-archive-keyring.gpg'), said.join('\n'));
+    // electron-builder's own template, which a configuration that lost its afterInstall would ship: no source, no key,
+    // no /usr/bin/jason.
+    const template = readFileSync(join(root, 'node_modules', 'app-builder-lib', 'templates', 'linux', 'after-install.tpl'), 'utf8');
+    const own = await made(t, 'linux-deb', { postinst: template.replaceAll('${executable}', 'jason-desktop-app').replaceAll('${sanitizedProductName}', 'Jason') });
+    assert.throws(() => check(own, 'linux-deb'), /DEBIAN\/postinst is not installer\/deb\/after-install\.sh/);
+    // Jason's updates are offered by the system's updater and installed when the person says so, never by the automatic
+    // updates: catches a rule that lets them install Jason's on their own.
+    const ruled = await made(t, 'linux-deb', { aptRule: true });
+    assert.throws(() => check(ruled, 'linux-deb'), /The deb places \/etc\/apt\/apt\.conf\.d\/50jason-desktop, and it places no apt configuration: Jason's updates are offered, never installed by the automatic updates\./);
+    const otherKey = await made(t, 'linux-deb', { keyring: Buffer.from('another key') });
+    assert.throws(() => check(otherKey, 'linux-deb'), /jason-desktop\.gpg is not install\/jason-desktop-archive-keyring\.gpg/);
 });
 
 test('linux: the form is required and is one of deb and appimage, and only Linux has one', async (t) => {

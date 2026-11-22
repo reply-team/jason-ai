@@ -47,7 +47,7 @@ public static class OperationCommands
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel));
 
-            if (await RouteCommands.RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            if (await RouteCommands.RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), parseResult.GetValue(human), cancellationToken).ConfigureAwait(false) is { } refused)
             {
                 return refused;
             }

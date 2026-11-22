@@ -28,9 +28,9 @@ public static class InstallCommand
     private static readonly string Contract =
         """
         Run by the jason Jason Desktop carries (a version.json beside the executable); any other jason is refused
-        (install_not_carried), and so is a system other than macOS and Windows (install_unsupported), and a
+        (install_not_carried), and so is a system other than macOS, Windows and Linux (install_unsupported), and a
         jason run elevated, as an administrator or as another account than the session's on Windows, as root on
-        macOS (install_elevated), each before anything is read or written. It is idempotent: a second run
+        macOS and Linux (install_elevated), each before anything is read or written. It is idempotent: a second run
         changes nothing and says so. It starts no process that outlives it, and prints one JSON document
         (--human: lines), always: a step that fails part-way is named under problems and the steps after it
         still run.
@@ -38,7 +38,7 @@ public static class InstallCommand
         Done, in this order, each step reported:
           1. A command-line install of Jason, where one is found, has its runtime drained and stopped: the
              executable --retire names, else the one the last `jason update apply` recorded, else the
-             installer's default place (~/.local/bin/jason on macOS, %LOCALAPPDATA%\Programs\jason\jason.exe
+             installer's default place (~/.local/bin/jason on macOS and Linux, %LOCALAPPDATA%\Programs\jason\jason.exe
              on Windows), only where it is Jason's: a jason-LICENSE or jason-THIRD-PARTY-NOTICES beside it,
              the record, or on Windows that folder. --retire takes only a regular file named jason (jason.exe
              on Windows) with one of those signs; anything else is named and left. Only a runtime running from
@@ -57,6 +57,12 @@ public static class InstallCommand
              read (layout_unreadable), no runtime is stopped, no registration moved and nothing of that
              install retired, with --roles or without.
           2. The terminal command.
+             Linux, the deb (package-type saying deb in the package's resources, beside this jason's folder): the
+             package's own /usr/bin/jason, a link to this jason for every account, read back and never written,
+             with no profile line; once it runs this jason, the application's own wrapper at ~/.local/bin/jason or
+             ~/.local/bin/jason-desktop, which the application wrote before its package put jason in the terminal,
+             taken back, each only where it is the application's shape. Linux, an AppImage's copy under the data
+             directory: as on macOS, below.
              macOS: ~/.local/bin/jason, the application's own two-line sh wrapper running this jason (naming
              JASON_DATA_DIR where that is set), written over an earlier wrapper, the retired executable, or a
              link to an application's jason, and over no other file; then, only where the PATH a terminal has
@@ -91,8 +97,9 @@ public static class InstallCommand
              own volume and left there, with nothing started to wait for that process, until a later jason install,
              jason update apply --finish, move or jason uninstall finds that process ended and removes the folder; its Path entry taken
              off where its folder then holds nothing but what install.ps1 wrote there before 0.49; the folder once empty.
-             macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
-             its profile block where its folder then holds nothing but Jason.
+             macOS, and an AppImage's copy on Linux: the wrapper has replaced it at the default place; an executable
+             elsewhere is removed, with its profile block where its folder then holds nothing but Jason. Linux, the
+             deb: the executable is removed, with its profile block where its folder then holds nothing but Jason.
           4. The harness skills, both packs, from the skills beside this jason (read where they stand, nothing
              downloaded), into the folder of each of two hosts found by its home folder, and of no other:
              Claude Code (~/.claude -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which
@@ -102,10 +109,19 @@ public static class InstallCommand
              named; one whose files equal this jason's, byte for byte, is one an earlier deployment wrote
              before its record, and is adopted.
           5. With --roles, the role skills into the data directory, as `jason skills install --roles-only`.
+          6. The runtime's start at logon, registered naming this jason and this data directory, as
+             `jason runtime autostart enable` from it registers it: where the data directory holds an installation
+             or the run is --roles, nothing is registered, and you have not turned it off with
+             `jason runtime autostart disable` (autostart/off.json, or launchd's record of the label as disabled on
+             macOS). Once per installation: autostart/default.json records it, and no later run registers it again.
+             A registration already standing is left; a system that refuses is said under left, never a problem.
+             Nothing is started now: the runtime runs from the next logon, from Jason Desktop, or from
+             `jason runtime start`; on macOS the LaunchAgent is written and not loaded.
 
-        Written under the data directory: nothing without --roles, so an application's first start still opens
-        on the Demo; only an install being retired, which has data already, may have its runtime stopped, the
-        note that a start is owed written, and its logon registration made again.
+        Written under the data directory: nothing without --roles where it holds no installation, so an
+        application's first start still opens on the Demo; only an install being retired, which has data
+        already, may have its runtime stopped, the note that a start is owed written, and its logon
+        registration made again, and an installation already there has its start at logon registered once.
 
         Callers: the Windows installer, at every install and update, silent or not, with no flags; the agent's
         install script on macOS, once the application is in place, with --roles and no --terminal-path; the
@@ -128,7 +144,8 @@ public static class InstallCommand
         false; false where finds is null)}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
-        problems (sentences); completed.
+        problems (sentences); completed; logon (registered, already, off, left, no_installation, refused,
+        unsupported: what became of the start at logon).
 
         One at a time with an update: where the data directory has an update folder, the setup holds the
         update's lock, <data>/update/update.lock, while it runs, and names itself beside it. While an update,
@@ -196,8 +213,7 @@ public static class InstallCommand
                 env,
                 options.Human,
                 CliErrors.InstallUnsupported,
-                "`jason install` sets up macOS and Windows for Jason Desktop, and this is neither, so nothing was read or written. "
-                + "On Linux, install.sh places jason, and `jason skills install` deploys the skills.");
+                "`jason install` sets up macOS, Windows and Linux for Jason Desktop, and this is none of them, so nothing was read or written.");
         }
 
         // An elevated setup would write the terminal command, the skills and a logon registration as that account, or into
@@ -216,7 +232,8 @@ public static class InstallCommand
                 CliErrors.InstallNotCarried,
                 "This jason is not the one Jason Desktop carries (no version.json beside it), so nothing was read or written. "
                 + "Run the jason inside the application: on macOS Jason.app/Contents/Resources/bundle/jason, on Windows "
-                + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
+                + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe, on Linux /opt/Jason/resources/bundle/jason "
+                + "for the deb, or the copy an AppImage makes under <data>/desktop/bundle/<version>/.");
         }
 
         // From a place that goes away, a mounted disk image or a translocated copy, nothing is set up: before the update's

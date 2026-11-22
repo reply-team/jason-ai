@@ -271,9 +271,10 @@ with what the runtime said or that it did not answer, that the archive still can
 fails, as the page holds it, it says that campaign is left as it is, keeps sending if it is live there, and cannot be
 paused by Jason once the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or
 paused and its route lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by
-asking in the agent's chat, and always in the provider itself. One press sends one archive. The page then goes back to
-the list, read again without the agent, and says the agent is archived and what was cancelled, only what there was; an
-archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
+asking in the agent's chat, and always in the provider itself, the same from Settings and from **Archive…** on the
+agent's row under **Agents**. One press sends one archive. The page then goes back to the list, read again without the
+agent, and says the agent is archived and what was cancelled, only what there was; an archived agent's Settings say it
+is archived and offer nothing, and a confirmation opened after another window archived
 the agent says so. The browser
 shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox, Results and Settings and no Sequence, its Chat, or its People where no chat can be made; an address that names Sequence still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
@@ -281,19 +282,39 @@ and its Chat under one header ([below](#an-agent-in-the-console)). Its **Chat** 
 kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents list's Chat opens the same one. An agent's
 conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
-no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
-the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
-conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
+no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and the other conversations the
+desktop keeps are listed in two sections, the open one marked: under **Agents** each agent that is not archived, by the
+agent's name, the one active most recently first, whether or not it has a conversation yet; the first ten under All, then
+**All agents**, and under any other filter every agent the filter keeps; and under **Chats** each chat about no campaign,
+by its first words, the newest first, ten at a time with **Load more**; a conversation is in one section alone. A conversation is kept, and
+listed, from its first turn, so a chat never sent to leaves nothing behind. A conversation leaves **Agents** once its
+campaign is read as archived, and the campaign's own **Chat** still opens it; a conversation
+whose campaign the runtime does not know stays. What happens in
 the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
 conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the AI hears the lines that came with your
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
-another, offers what its last turn made to pick from. An agent's header holds its conversation's acts in **…**:
-**Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
+another, offers what its last turn made to pick from. An agent's header holds in **…** the agent's folder in the file
+manager, named as Open in names that place, and after it **Open Claude Code in terminal** (or **Open Codex in
+terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat runs on
+where Open in found it, else the first found, Claude Code before Codex, one item even where both are found, none where
+neither is, none in the demo, and it leaves the window's Open in where it was. The menu on the agent's row under
+**Agents** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts: **Rename
+conversation**, which the row's menu holds as **Rename** and which there renames the agent itself, through
+`campaign.update`, with the row's name made a field in place (a chat's row renames its conversation in place the same
+way: Enter keeps the name, Escape or leaving the field keeps nothing, and once Enter has sent a name both wait for the
+answer, thirty seconds at most, a refusal is said under the field), **Start
+conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
-transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
+transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words.
+A file dropped on a chat's message box, or on the box of **Start**, puts its path in at the cursor, quoted, one for each
+file, as a terminal does. It goes in single quotes, which PowerShell, Git Bash and the macOS and Linux shells read as
+written, a UNC path among them. On Windows, a name with a quote (`'` or a typographic one: `‘ ’ ‚ ‛`) goes in double
+quotes instead. If that name also holds `$`, a backtick or a typographic double quote (`“ ” „`), or is a UNC path, its
+quotes are doubled for PowerShell, and Git Bash reads it wrong. Where a path cannot be read, in a tab or for a file dragged from a web page, the box says so.
+An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
 the account this conversation is in, which it does not name), on which channel, and the subject and text, or a search's
@@ -389,10 +410,20 @@ may run is your host's own permission settings' to decide. An item that no longe
 is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
 why: run it in a terminal and it prints the refusal and how to do the same by hand.
 
-- **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
-  then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
+- **Windows** opens Windows Terminal where your account has it: `wt.exe` in your WindowsApps folder
+  (`%LOCALAPPDATA%\Microsoft\WindowsApps`, where Windows keeps its alias; never one found on the search path), of
+  version 1.18.2681.0 or later, the first that hands a new tab the environment of the start that ran `wt.exe`. The version
+  is read from the package folder the alias names, without starting it. It runs as
+  `wt -w new new-tab -d <folder> -- <host> <words>`, a new window at the folder, and `wt.exe` is
+  started with the same environment the console host is: `JASON_DATA_DIR` and this `jason` first on `PATH`. Windows Terminal joins the words after
+  `--` into one command line itself and splits its own arguments at every `;`, so each word is handed over in the form
+  that join turns back into the word, and each `;` as `\;`: a folder or a brief with spaces, quotes, `;`, `$` or `^`
+  arrives as written. Where there is no Windows Terminal, or it does not start, Jason starts the console host,
+  `conhost.exe` from the system folder, with the host after `--`: once, and the command says so on stderr. Which window
+  the console host shows, a plain console window or one of your default terminal's, is not yet measured on a machine.
   The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
-  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+  before the host reads a word of it, and Windows Terminal may expand one too, so the refusal applies to both: a word
+  holding such a name starts nothing, and a folder holding a `%` is opened by the console host where there is one. A host's program, a folder the brief
   names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
   the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
@@ -539,12 +570,15 @@ jason session open --setup --host codex
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
 system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
-follows it. Its **Notifications** section is [described below](#notifications-in-settings).
+follows it. Its **Notifications** section is [described below](#notifications-in-settings). In Jason Desktop's own window it
+also has an **Update** section, the last, which shows the desktop's version and its update item, and a quiet mark while
+the desktop knows of a version it has not installed ([desktop.md](desktop.md#updating)); a tab and the Demo draw none.
 
 **The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
 Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
-the desktop, while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
-is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
+the desktop, while the desktop runs: it sends only to a chat in Ask first, Plan only or Full access, a turn it sends to a
+chat in Full access running in Ask first, says of a permission card or a plan card that it
+is answered in Jason Desktop, shows the mode it sends in as a label, and draws what only the desktop's window may do, such as the
 account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
 Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
 only place that approves
@@ -573,9 +607,12 @@ here: they are the **Notifications** section of Settings.
 ## Notifications in Settings
 
 **Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows what
-`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
+`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own; in Jason
+Desktop the page reads `system.info` again each time the window takes the focus back, beside the reload the Connect panel
+has, keeps the answer it has when that read fails, and drops a read a switch's answer overtook. It says whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
-with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+with its code and class, not shown with what Windows answered, not attempted with its reason, or nothing sent yet), with
+when that was. The text a failure carried is not drawn.
 Each channel has a switch, its on or off pill, which turns that one channel on or off as `jason notification enable` and
 `disable` do (`notification.enable`, `notification.disable`), in the paired person's name, as the command names who
 switches a channel; the section then shows the channels as the answer says them, and a refusal in the runtime's own
@@ -584,7 +621,8 @@ is `false` in the settings file every switch is off and inert, and the section s
 plugin channel that could not deliver (the runtime's `readiness`) says what is missing: that it cannot be turned on while
 it is off, with an inert switch, and that it cannot deliver while it is on, when it can still be turned off. What the
 operating system itself holds off stays words: a toast Windows did not show keeps its own switch, with the words beside
-it. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
+it, which say what Windows answered at that notification, never the switch as it is now, since the runtime asks Windows
+only when it sends a toast and asks again at the next one. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
 when an approval or a question is waiting, and how one channel is switched, there or with the command, in the person's
 name; in Jason Desktop a provider's channel is connected or disconnected on the Connect panel, which never changes the
 desktop toast; a browser has no Connect panel.

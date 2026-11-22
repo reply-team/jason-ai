@@ -1,0 +1,27 @@
+{
+  "operation": "campaign.update",
+  "case": "new-agent-name-too-long",
+  "request": {
+    "campaign_id": "cmp_1",
+    "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: name: too_long.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "name",
+          "code": "too_long",
+          "message": "name must be at most 200 characters."
+        }
+      ]
+    }
+  }
+}

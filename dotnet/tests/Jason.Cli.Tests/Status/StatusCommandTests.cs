@@ -95,11 +95,16 @@ public class StatusCommandTests
 
     // The autostart check says what a logon registration does at the next sign-in, and nothing of whether the runtime runs now.
 
-    private static async Task<StatusCheck> AutostartCheckAsync(bool registered)
+    private static async Task<StatusCheck> AutostartCheckAsync(bool registered, bool turnedOff = false)
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
         Running(dir);
+        if (turnedOff)
+        {
+            Jason.Cli.Autostart.AutostartOff.Write(dir.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        }
+
         var registrar = new RecordingRegistrar { State = new AutostartState(registered, registered ? ["jason", "runtime", "run"] : [], null) };
         var environment = Machine(dir, output) with { Autostart = registrar };
 
@@ -137,6 +142,21 @@ public class StatusCommandTests
 
         Assert.Equal(CheckState.Absent, check.State);
         Assert.Equal("No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", check.Fact);
+        Assert.Equal("jason runtime autostart enable", check.Fix);
+    }
+
+    /// <summary>
+    /// A turn-off the person made is said as theirs, with what a restart then means; the check stays optional and absent,
+    /// and the repair is the verb that takes it back.
+    /// </summary>
+    [Fact]
+    public async Task A_turn_off_is_said_as_the_persons_own()
+    {
+        var check = await AutostartCheckAsync(registered: false, turnedOff: true);
+
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.False(check.Required);
+        Assert.Equal("No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", check.Fact);
         Assert.Equal("jason runtime autostart enable", check.Fix);
     }
 
@@ -1368,7 +1388,8 @@ public class StatusCommandTests
     /// Another file first by name is what a person and every agent typing jason run, so this jason's readiness says nothing
     /// of theirs: the path check fails, naming both files, and the installation is not ready. That is so on a machine where
     /// a build of a checkout answers here and a release answers by name, and the sentence says why in one reading. On macOS
-    /// and Windows, where a machine holds one installation; Linux keeps the check it had (the next row).
+    /// and Windows, where a machine holds one installation; on Linux a jason Jason Desktop does not carry keeps the check it
+    /// had (the next row), and Jason Desktop's own is held by the row after it.
     /// </summary>
     [Fact]
     public async Task Another_jason_first_by_name_fails_the_path_check_naming_both()
@@ -1396,8 +1417,8 @@ public class StatusCommandTests
     }
 
     /// <summary>
-    /// On Linux the path check is exactly what it was before one installation per machine: another jason by name than the
-    /// one answering is said, the check passes, and readiness is not touched by it.
+    /// On Linux, for a jason Jason Desktop does not carry, the path check is exactly what it was before one installation per
+    /// machine: another jason by name than the one answering is said, the check passes, and readiness is not touched by it.
     /// </summary>
     [Fact]
     public async Task On_linux_another_jason_first_by_name_is_said_and_the_path_check_passes_as_before()
@@ -1418,13 +1439,47 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// On Linux the jason Jason Desktop carries is the machine's one installation, as on macOS and Windows: another jason first
+    /// by name fails the path check, naming both, and the deb's link to the carried jason is this jason by name. Catches the
+    /// Linux branch kept for a jason of the person's own swallowing the carried one.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_the_desktop_s_jason_fails_the_path_check_for_another_jason_first_by_name_and_passes_through_its_link()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "The deb and its link are Linux's; the rows above hold macOS and Windows.");
+        using var dir = new TempPaths();
+        Running(dir);
+        var carried = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "opt", "Jason", "resources", "bundle")).FullName, "jason");
+        File.WriteAllText(carried, string.Empty);
+        Installation.CarriedRecord.Beside(carried);
+        var found = Path.Combine(dir.Paths.Root, "bin", "jason");
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: carried), Ct);
+
+        var other = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, other.State);
+        Assert.StartsWith($"'jason' resolves to {found}, not to this jason ({carried})", other.Fact, StringComparison.Ordinal);
+
+        File.Delete(found);
+        File.CreateSymbolicLink(found, carried);
+        output = new StringWriter();
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: carried), Ct);
+
+        var linked = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, linked.State);
+        Assert.Equal($"'jason' resolves to {found}.", linked.Fact);
+    }
+
+    /// <summary>
     /// The application's wrapper running this jason is this jason by name: on macOS a new terminal finds
     /// <c>~/.local/bin/jason</c>, which runs the image inside the application.
     /// </summary>
     [Fact]
     public async Task The_application_s_wrapper_running_this_jason_is_this_jason_by_name()
     {
-        Assert.SkipUnless(OperatingSystem.IsMacOS(), "The wrapper is the application's on macOS; a Windows shell never runs a script with no extension by name, and Linux keeps the check it had.");
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "The wrapper is the application's on macOS; a Windows shell never runs a script with no extension by name, and on Linux the deb's link row holds the carried jason.");
         using var dir = new TempPaths();
         var output = new StringWriter();
         Running(dir);

@@ -7,7 +7,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { FakeApi, watch } from '../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
@@ -269,11 +269,19 @@ describe('a plan the AI proposes', () => {
         );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
         expect(part.textContent!.match(/\d+/g)).toEqual(['2']);
-        // The card reads the agent once; the agent's header over the chat reads it once more for itself.
+        // The card reads the agent once; the agent's header over the chat reads it once more for itself; and Recent reads
+        // it once, its state alone, since the list of agents does not hold it.
         expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([
             { campaign_id: 'cmp_5' },
             { campaign_id: 'cmp_5' },
+            { campaign_id: 'cmp_5' },
         ]);
+        // Its people are counted for it alone twice, once by the card and once by the header; Recent asks for none.
+        expect(
+            calls(fake, 'campaign.summary').filter(
+                (each) => JSON.stringify((each.body as { campaign_ids?: string[] }).campaign_ids) === '["cmp_5"]',
+            ),
+        ).toHaveLength(2);
         // A send names its channel, so where each channel's sends go is read by naming it, as the claim does.
         expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
             { campaign_id: 'cmp_5', operation: 'message.send', channel: 'email' },
@@ -342,7 +350,7 @@ describe('a plan the AI proposes', () => {
         expect(words(part)).toContain('People who have replied: Every message waits for you');
         expect(words(part)).toContain('Plugin that sends email: reply');
         expect(words(part)).toContain('Plugin that sends LinkedIn messages: reply');
-        expect(calls(fake, 'route.list').map((each) => each.body)).toEqual([{}]);
+        expect(callsBeyondStart(fake, 'route.list').map((each) => each.body)).toEqual([{}]);
         expect(calls(fake, 'campaign.get')).toEqual([]);
         expect(calls(fake, 'route.resolve')).toEqual([]);
     });
@@ -395,10 +403,10 @@ describe('a plan the AI proposes', () => {
         expect(within(ai(earlier)).getByText('**Winter** outreach')).toBeTruthy();
         expect(words(top(earlier))).toBe('Jason’s proposal Show now');
         expect(earlier.querySelector('.card-facts')).toBeNull();
-        expect(calls(fake, 'route.list')).toHaveLength(1);
+        expect(callsBeyondStart(fake, 'route.list')).toHaveLength(1);
         fireEvent.click(within(top(earlier)).getByRole('button', { name: 'Show now' }));
         const shown = await read(pane, 0);
-        expect(calls(fake, 'route.list')).toHaveLength(2);
+        expect(callsBeyondStart(fake, 'route.list')).toHaveLength(2);
         expect(within(facts(shown)).getByText('No agent is created yet.')).toBeTruthy();
         // The later card's read stands as it was: Show now read the earlier one alone.
         expect(within(facts(proposalsIn(pane)[1]!)).getByText('No agent is created yet.')).toBeTruthy();

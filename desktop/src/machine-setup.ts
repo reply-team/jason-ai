@@ -1,12 +1,12 @@
 /**
- * The machine set-up at a start, on macOS and Windows: the carried `jason install` (`docs/release-and-update.md` §9), which
+ * The machine set-up at a start, on macOS, Windows and Linux: the carried `jason install` (`docs/release-and-update.md` §9), which
  * puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where each is found and
  * retires an older command-line install; then the command line's finishing step, `jason update apply --finish` (§7), which brings the
  * plugin packages, the skills deployments and the UI up to the installed version, or finishes a carried update in flight
  * with the application at its version, the runtime's start included. The desktop runs both at a start where they have not
  * yet completed for the version the application carries, before the window's Demo or Live run goes on, and again on the
- * person's word from the Command Line item, which shows what the report said. On Linux none of this is offered: the
- * Command Line item there is the PATH command (`path-command.ts`).
+ * person's word from the Command Line item, which shows what the report said. On Linux it is run by the jason the deb
+ * carries, or by an AppImage's copy under `<data>/desktop/bundle/<version>/`, never by its mount's, which ends with the run.
  *
  * - **Nothing under the data directory but a record of the desktop's own.** It is run with no `--roles`, so the routine
  *   writes nothing there; where it ran is `<data>/desktop/machine-setup.json`, which `isNewInstallation` counts among the
@@ -56,19 +56,19 @@ export const noLimit = 0;
 const lookLimitMs = 30_000;
 const startLimitMs = 180_000;
 
-/** Whether the Command Line item is the routine's status: on macOS and Windows; Linux keeps its PATH command. */
+/** Whether the Command Line item is the routine's status: on macOS, Windows and Linux. */
 export function commandIsSetup(platform: NodeJS.Platform): boolean {
-    return platform === 'darwin' || platform === 'win32';
+    return platform === 'darwin' || platform === 'win32' || platform === 'linux';
 }
 
-/** Whether a start runs the routine: an installed build on macOS or Windows; a development build's jason is the checkout's. */
+/** Whether a start runs the routine: an installed build; a development build's jason is the checkout's. */
 export function setupOffered(platform: NodeJS.Platform, packaged: boolean): boolean {
     return packaged && commandIsSetup(platform);
 }
 
-/** The routine's arguments: on macOS the login shell's own PATH, or the empty value where it gave none; on Windows none. */
+/** The routine's arguments: on macOS and Linux the login shell's own PATH, or the empty value where it gave none; on Windows none. */
 export function setupArguments(platform: NodeJS.Platform, terminalPath: string | null): string[] {
-    return platform === 'darwin' ? ['install', '--terminal-path', terminalPath ?? ''] : ['install'];
+    return platform === 'win32' ? ['install'] : ['install', '--terminal-path', terminalPath ?? ''];
 }
 
 /** The routine's report, as the desktop reads it out of the document it prints. */
@@ -88,6 +88,12 @@ export interface SetupReport {
     left: string[];
     problems: string[];
     completed: boolean;
+    /**
+     * What became of the runtime's start at logon, in the routine's word (`registered`, `already`, `off`, `left`,
+     * `no_installation`, `refused`, `unsupported`); absent where the routine said none, as one of a version before it.
+     * `no_installation` is what Live's bringing up of a new installation runs the routine again for (`afterLive`).
+     */
+    logon?: string;
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string';
@@ -97,7 +103,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 /** Pure: the report a document says, or null for anything that is not one. */
 export function reportOf(raw: unknown): SetupReport | null {
     if (!isObject(raw)) return null;
-    const { version, executable, command, skills, runtime, done, left, problems, completed } = raw;
+    const { version, executable, command, skills, runtime, done, left, problems, completed, logon } = raw;
     const doneSaid = texts(done);
     const leftSaid = texts(left);
     const problemsSaid = texts(problems);
@@ -119,7 +125,7 @@ export function reportOf(raw: unknown): SetupReport | null {
         if (!isText(entry.root) || hosts === null || leftAlone === null || typeof entry.written !== 'number' || typeof entry.unchanged !== 'number') return null;
         roots.push({ root: entry.root, hosts, written: entry.written, unchanged: entry.unchanged, leftAlone });
     }
-    return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed };
+    return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed, ...(isText(logon) ? { logon } : {}) };
 }
 
 /**
@@ -403,6 +409,7 @@ export class MachineSetup {
     #state: SetupState;
     #running: Promise<SetupState> | null = null;
     #atStart: Promise<void> | null = null;
+    #afterLive: Promise<void> | null = null;
     #changed: (() => void)[] = [];
 
     constructor(deps: MachineSetupDeps) {
@@ -479,13 +486,29 @@ export class MachineSetup {
         }
     }
 
+    /**
+     * Once Live has brought up the installation: the routine once more, where the run this start shows found no
+     * installation in the data directory (`logon` `no_installation`), so that it registers the runtime's start at logon now
+     * that there is one to start. The registration is still the routine's alone; the desktop only runs it again. Once a
+     * start, after the run under way has ended; anything else runs nothing.
+     */
+    afterLive(): Promise<void> {
+        this.#afterLive ??= (async () => {
+            if (!this.#deps.offered || this.#deps.version === null) return;
+            await this.settled();
+            if (this.#running !== null) await this.#running;
+            if (this.#state.state === 'reported' && this.#state.report.logon === 'no_installation') await this.#run('live');
+        })();
+        return this.#afterLive;
+    }
+
     /** Put back, on the person's word: the routine run again, unless it is running already. */
     putBack(): Promise<SetupState> {
         if (!this.#deps.offered || this.#deps.version === null) return Promise.resolve(this.#state);
         return this.#run('put_back');
     }
 
-    #run(why: 'start' | 'put_back'): Promise<SetupState> {
+    #run(why: 'start' | 'put_back' | 'live'): Promise<SetupState> {
         if (this.#running !== null) return this.#running;
         this.#set({ state: 'running' });
         // Said once, as taking long; the run is never ended for it.
@@ -526,11 +549,11 @@ export class MachineSetup {
      * as `later` runs no finishing step, which would meet the same lock; any other outcome runs it, so a carried update in
      * flight is finished at this start whatever the routine came to.
      */
-    async #routine(why: 'start' | 'put_back'): Promise<Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>> {
+    async #routine(why: 'start' | 'put_back' | 'live'): Promise<Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>> {
         const { cli, platform, log, record } = this.#deps;
         const version = this.#deps.version ?? '';
         let terminalPath: string | null = null;
-        if (platform === 'darwin') terminalPath = await this.#deps.terminalPath().catch(() => null);
+        if (platform !== 'win32') terminalPath = await this.#deps.terminalPath().catch(() => null);
         // No time limit: a routine ended mid-write would leave a runtime draining or a retirement half done.
         const result = await cli.run(setupArguments(platform, terminalPath), { timeoutMs: noLimit });
         const answer = answerOf(result);

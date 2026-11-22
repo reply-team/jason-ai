@@ -75,9 +75,16 @@ export type Entry =
     | { kind: 'afresh' }
     /**
      * A sentence the desktop said once, in its own words, not kept by the desktop. `folder` is the name of an ended Full
-     * access folder the sentence points at, which its Open folder button opens; null for any other.
+     * access folder the sentence points at, which its Open folder button opens; null for any other. `closed` once the
+     * person closed it or the next answer began (`noteClosed`, `expired`): no longer drawn, it still locks a choice.
      */
-    | { kind: 'notice'; text: string; folder: string | null }
+    | { kind: 'notice'; text: string; folder: string | null; closed?: true }
+    /**
+     * What the desktop answered an `/export` with, where it wrote the file or why it did not: said in the page beside
+     * the conversation, not kept by the desktop, and no part of the conversation, so it ends no card and no plan.
+     * `closed` as a notice's.
+     */
+    | { kind: 'aside'; text: string; closed?: true }
     /** A line of the Feed, as the desktop kept it. */
     | { kind: 'line'; line: DesktopLineEntry }
     /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
@@ -90,6 +97,11 @@ export interface Chat {
     campaignId: string | null;
     /** Whether it is the Feed, the person's main chat, which keeps its name and is never handed over. */
     main: boolean;
+    /**
+     * Present, and true, for an agent's conversation the desktop made with its campaign at a click on New GTM agent:
+     * while nothing is in it, it asks Start's question (`asksStart`).
+     */
+    madeAtClick?: true;
     /** The host the next turn runs on: a `DesktopHost.id`, or null when none that drives the chat was found. */
     host: string | null;
     /** The model the next turn names, as the host takes it; null for the host's own. */
@@ -115,6 +127,11 @@ export interface Chat {
     outbox: string | null;
     /** The running turn's words when they were the waiting message, given back if that turn fails. */
     resent: string | null;
+    /**
+     * The words of an `/export` the desktop answers now, which is no turn: given back if it is refused. Null when none
+     * runs.
+     */
+    exporting: string | null;
     /** How many of the oldest entries the desktop let go to keep the conversation within its size. */
     dropped: number;
     /** Whether the person asked to remove the conversation and has not yet said again. */
@@ -171,6 +188,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         stopping: false,
         outbox: null,
         resent: null,
+        exporting: null,
         dropped: 0,
         removing: false,
         renaming: null,
@@ -226,6 +244,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         title: record.title,
         campaignId: record.campaignId,
         main: record.main === true,
+        ...(record.madeAtClick === true && record.campaignId !== null ? { madeAtClick: true as const } : {}),
         entries: record.entries.map(entryOf),
         reopened: record.entries.length,
         dropped: record.dropped,
@@ -237,6 +256,13 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
     };
 }
 
+/**
+ * Whether the chat asks Start's question in its place: an agent's chat made at the click, with nothing in it yet, no
+ * turn running and no message waiting. Its first message is the person's first minute, as Start's is, inside the agent.
+ */
+export const asksStart = (chat: Chat): boolean =>
+    chat.madeAtClick === true && !chat.main && chat.entries.length === 0 && !chat.running && chat.waiting === null;
+
 /** What the plan card sends, as the person's message, once the chat is in Ask first. */
 export const planGo = 'Go ahead with the plan in your last answer.';
 
@@ -244,9 +270,9 @@ export const planGo = 'Go ahead with the plan in your last answer.';
 export const planLine =
     'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.';
 
-/** The plan card's line on Codex, in place of `planLine`: Ask first runs Codex read-only too. */
+/** The plan card's line on Codex, in place of `planLine`: Codex runs Ask first read-only, and only Full access acts. */
 export const codexPlanLine =
-    'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+    'On Codex the approved plan still only reads: Codex runs Ask first read-only. To have it carried out, choose Full access or Claude Code for this chat.';
 
 /** The plan card's line once it was approved in this page. */
 export const planApproved = 'Approved: the chat is in Ask first.';
@@ -282,7 +308,7 @@ export function moded(chat: Chat, mode: DesktopChatMode): Chat {
  * Whether the chat's plan card may be approved now, with the go sent to `host`: its last entry is a plan the desktop
  * marked, the chat is still in Plan only, no turn runs, nothing waits to be sent, it is not the Feed, the person has
  * neither approved it nor kept planning, and `host` is the host that made it. Anything after the plan, a message, an
- * error or a note, makes it a plan of the past; another host makes it one that host never saw (`planElsewhere`).
+ * error or a note, makes it a plan of the past, but an export's answer beside the conversation does not (`lastEntryOf`); another host makes it one that host never saw (`planElsewhere`).
  */
 export function livePlan(chat: Chat, host: string | null): boolean {
     return planStands(chat) && host !== null && host === chat.turnHost;
@@ -293,9 +319,18 @@ export function planElsewhere(chat: Chat, host: string | null): boolean {
     return planStands(chat) && host !== null && host !== chat.turnHost;
 }
 
+/**
+ * The conversation's last entry: the last one that locks a choice (`locks`), so a line, a gap, a pick or an export's
+ * sentence beside the conversation is not one that follows it.
+ */
+export function lastEntryOf(chat: Chat): Entry | undefined {
+    for (let at = chat.entries.length - 1; at >= 0; at--) if (locks[chat.entries[at]!.kind]) return chat.entries[at];
+    return undefined;
+}
+
 /** `livePlan` on whichever host. */
 function planStands(chat: Chat): boolean {
-    const last = chat.entries.at(-1);
+    const last = lastEntryOf(chat);
     return (
         last?.kind === 'text' &&
         last.plan === true &&
@@ -307,24 +342,49 @@ function planStands(chat: Chat): boolean {
     );
 }
 
+/**
+ * What the question before a removal adds for a conversation with a folder of its own (`ownFolder`): the desktop moves
+ * the folder to its ended place, where it is kept seven days; on Windows a folder a program has open stays where it is
+ * until a later start moves it, and on macOS and Linux a terminal open in it is moved with it.
+ */
+export const removedFolder =
+    "Its folder is kept seven days, in Jason's data directory under desktop/chat-full-ended. On Windows, a program that has it open keeps it where it is until a later start of Jason Desktop moves it; on macOS and Linux, a terminal open in it follows it there.";
+
 /** What the line under the composer says while the desktop holds the chat in Full access. */
-export const fullAccessLine = 'Full access · the AI runs commands without asking, except those Jason cannot read';
+export const fullAccessLine =
+    "Full access · the AI runs commands without asking, except those that name Jason's own settings, data or variables";
+
+/**
+ * What the line under the composer says while a chat's turn runs in Full access on Codex: in `exec` Codex never asks,
+ * and with no sandbox nothing of Jason's holds it, the commands it cannot read included.
+ */
+export const codexFullAccessLine = 'Full access · Codex runs commands on this computer without asking, with no sandbox';
+
+/**
+ * What the menu says of a mode on Codex where it says other than on Claude Code: Codex in `exec` cannot ask, so its Ask
+ * first reads and proposes, in its read-only sandbox and with the jason it runs confined, and its Full access runs with no
+ * sandbox. The words claim no more than that holds. The other modes say what they say anywhere.
+ */
+export const codexModeSays: Readonly<Partial<Record<DesktopChatMode, string>>> = {
+    ask_first: 'Reads and proposes. Codex cannot ask before it acts.',
+    full_access: 'Runs commands on this computer without asking, with no sandbox.',
+};
 
 /** What the line under the composer says while the desktop holds the chat in Auto-edit. */
 export const autoEditLine =
     "Auto-edit · the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first";
 
 /**
- * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
- * the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
- * named there.
+ * What the line under the composer says while the chat's host is Codex on the person's sign-in, outside Full access: such
+ * a Codex turn leaves the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
+ * named there; a Full access turn reads it, and the line says so, so the mode is the one thing that decides it.
  */
 export const codexConfigLine =
-    'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
+    'In this mode the chat does not read your Codex config.toml; Full access does. A provider or profile set there is not used here; connect a key on the Connect card.';
 
 /**
  * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key,
- * system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
+ * outside Full access, system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
  * file from a command; on macOS and Linux nobody has looked, and a read-only command reads what the person can, so the
  * line there names the run token among what it can read. Neither says anything of the network or of acting for the
  * person, which nobody has seen; "read-only" is the mode the desktop runs Codex in.
@@ -356,31 +416,21 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Full access',
 };
 
-/** Why the desktop refuses Full access for the Feed, in its words. */
-const feedFullAccess =
-    'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /** Why the desktop refuses Auto-edit on Codex, in its words; with no host the menu says it too. */
 const codexAutoEdit =
     'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
 
-/** Why the desktop refuses Auto-edit for the Feed, in its words. */
-const feedAutoEdit =
-    'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
-
 /**
  * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
- * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
- * it; with no host, as on Codex; and for the Feed, in the order the desktop refuses it. Auto-edit is disabled the same
- * way, on Codex and for the Feed; it has no version floor.
+ * chosen there, or null. Full access is disabled with the desktop's own reason: on a Claude Code too old for it, or while
+ * the desktop does not offer it; Codex and no host say nothing against it. Auto-edit is disabled the same way, on Codex
+ * and with no host; it has no version floor. The Feed is offered the same as any chat.
  */
 export function modeChoices(
     host: DesktopHost | null,
-    feed = false,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full =
-        host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
-    const edit = host === null ? codexAutoEdit : (host.autoEdit ?? (feed ? feedAutoEdit : null));
+    const full = host === null ? null : host.fullAccess;
+    const edit = host === null ? codexAutoEdit : host.autoEdit;
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
@@ -389,19 +439,54 @@ export function modeChoices(
 }
 
 /**
+ * The mode the next turn runs in, which the line under the composer, the menu's check and a tab's label draw, and the
+ * desktop's sentence why when that is not the mode the chat keeps: as the desktop hands it for the host and for the place
+ * the turn is sent from (`DesktopHost.runs`), deciding it as it decides the turn. Where it hands nothing, the chat's own
+ * mode and no sentence: with no host, on a host that runs the mode as itself, and on a desktop of an earlier version.
+ */
+export function drawnMode(
+    chat: Pick<Chat, 'mode'>,
+    host: DesktopHost | null,
+    place: 'window' | 'tab',
+): { mode: DesktopChatMode; why: string | null } {
+    const step = host?.runs[place][chat.mode];
+    return step === undefined ? { mode: chat.mode, why: null } : { mode: step.mode, why: step.why };
+}
+
+/** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
+const breadth: Readonly<Record<DesktopChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
+
+/**
+ * Whether a choice of mode stops the chat's running turn, as the desktop stops it: a choice narrower than the mode that
+ * turn runs in (`drawnMode`), never the mode the chat keeps, so the checked mode stops nothing, Ask first on Codex in
+ * Auto-edit among them. A mode word this page does not know is taken as Full access, the widest.
+ */
+export function choiceStops(
+    chat: Pick<Chat, 'mode' | 'running'>,
+    mode: DesktopChatMode,
+    host: DesktopHost | null,
+    place: 'window' | 'tab',
+): boolean {
+    const runsIn = drawnMode(chat, host, place).mode;
+    return chat.running && (breadth[mode] ?? 3) < (breadth[runsIn] ?? 3);
+}
+
+/**
  * The hosts as the page reads them: a desktop of an earlier version, whose runtime serves this page, lists none of the
- * models a host offers, and such a host offers none here and takes no typed name.
+ * models a host offers, and such a host offers none here and takes no typed name; nor does it hand what a turn on a host
+ * runs in, and such a host is read as handing nothing, so the chat's own mode is drawn.
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
         const given = host as Partial<
-            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit'>
+            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit' | 'runs'>
         >;
         return Array.isArray(given.models) &&
             typeof given.typedModel === 'boolean' &&
             given.modelsUnread !== undefined &&
             given.fullAccess !== undefined &&
-            given.autoEdit !== undefined
+            given.autoEdit !== undefined &&
+            given.runs !== undefined
             ? host
             : {
                   ...host,
@@ -416,6 +501,7 @@ export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
                       typeof given.autoEdit === 'string' || given.autoEdit === null
                           ? given.autoEdit
                           : olderDesktopAutoEdit,
+                  runs: given.runs ?? { window: {}, tab: {} },
               };
     });
 }
@@ -509,10 +595,30 @@ export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat =
 });
 
 /**
+ * Whether a message is an export, which the desktop answers by writing the conversation to a file and starts no turn
+ * for: its first word is `/export` alone, as the desktop reads it (`exportName`, desktop/src/chat-export.ts).
+ */
+export const isExport = (text: string): boolean => /^\/export(?=[\s\u0085]|$)/.test(text.trim());
+
+/** What the chat says to an export the person did not type in the message box, as the desktop says it too. */
+export const exportTypeIt = 'Type /export in the message box yourself.';
+
+/**
+ * An export that did not come from the message box, a card's option or a card's field: it is sent as nothing, and the
+ * chat says so beside the conversation, where it ends no card and no plan.
+ */
+export const exportNotTyped = (chat: Chat): Chat => ({
+    ...chat,
+    entries: [...chat.entries, { kind: 'aside', text: exportTypeIt }],
+});
+
+/**
  * The person's words go into the chat and its turn starts; the first words of a chat give it its title. `resent` says
- * the words were the waiting message, which the turn gives back if it fails.
+ * the words were the waiting message, which the turn gives back if it fails. An export is no message of the
+ * conversation: it adds no entry and gives no title, and waits for the desktop's answer as a turn does.
  */
 export function said(chat: Chat, text: string, resent = false): Chat {
+    if (isExport(text)) return { ...chat, running: true, resent: resent ? text : null, exporting: text };
     const first = chat.campaignId === null && !chat.main && !chat.entries.some((each) => each.kind === 'user');
     return {
         ...chat,
@@ -520,6 +626,7 @@ export function said(chat: Chat, text: string, resent = false): Chat {
         entries: [...chat.entries, { kind: 'user', text }],
         running: true,
         resent: resent ? text : null,
+        exporting: null,
     };
 }
 
@@ -529,17 +636,17 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'step': {
             const step: Step =
                 event.detail === undefined ? { text: event.text } : { text: event.text, detail: event.detail };
-            return { ...chat, entries: [...chat.entries, { kind: 'step', step }] };
+            return expired({ ...chat, entries: [...chat.entries, { kind: 'step', step }] });
         }
         case 'text': {
             const entry: Entry =
                 typeof event.at === 'string'
                     ? { kind: 'text', text: event.text, at: event.at }
                     : { kind: 'text', text: event.text };
-            return { ...chat, entries: [...chat.entries, entry] };
+            return expired({ ...chat, entries: [...chat.entries, entry] });
         }
         case 'permission':
-            return {
+            return expired({
                 ...chat,
                 entries: [
                     ...chat.entries,
@@ -553,7 +660,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                         ...(event.why === undefined ? {} : { why: event.why }),
                     },
                 ],
-            };
+            });
         case 'permission_gone':
             return answered(chat, event.request, 'gone');
         case 'attached':
@@ -568,6 +675,9 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'pick':
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
         case 'notice':
+            // While an export runs, a sentence that names no folder is its answer: beside the conversation.
+            if (chat.exporting !== null && event.folder === undefined)
+                return { ...chat, entries: [...chat.entries, { kind: 'aside', text: event.text }] };
             return {
                 ...chat,
                 entries: [...chat.entries, { kind: 'notice', text: event.text, folder: event.folder ?? null }],
@@ -587,6 +697,13 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'gap':
             return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
+            // An export ended: no turn did, so no plan ends; a refusal is said beside the conversation, and its words go
+            // back to the box, once, above what is typed there.
+            if (chat.exporting !== null) {
+                if (event.error !== null) return exportRefused(chat, chat.exporting, event.error);
+                const over = ended(chat);
+                return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
+            }
             // A turn ended: every earlier plan is a plan of the past, and this turn's last words are its plan when the
             // desktop says so. The Feed has none.
             const words = unplanned(chat.entries);
@@ -604,6 +721,40 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             });
         }
     }
+}
+
+/**
+ * The notices and asides said before the person's last message, closed: what the next answer of the conversation does
+ * as it begins, and every end of its turn does where it gave none (`ended`), the desktop's, a turn it refused or failed
+ * to start, an export's, so none outlives the turn after the one it spoke of. Each stays in the thread, closed, and still
+ * locks a choice said before it.
+ */
+function expired(chat: Chat): Chat {
+    let last = -1;
+    chat.entries.forEach((each, at) => {
+        if (each.kind === 'user') last = at;
+    });
+    if (!chat.entries.some((each, at) => at < last && closable(each))) return chat;
+    return {
+        ...chat,
+        entries: chat.entries.map((each, at) =>
+            at < last && closable(each) ? { ...each, closed: true as const } : each,
+        ),
+    };
+}
+
+/** A notice or an aside still drawn. */
+const closable = (entry: Entry): entry is Extract<Entry, { kind: 'notice' | 'aside' }> =>
+    (entry.kind === 'notice' || entry.kind === 'aside') && entry.closed !== true;
+
+/** The notice or aside at `index` closed, as its close control does; any other entry, or none there, leaves the chat. */
+export function noteClosed(chat: Chat, index: number): Chat {
+    const entry = chat.entries[index];
+    if (entry === undefined || !closable(entry)) return chat;
+    return {
+        ...chat,
+        entries: chat.entries.map((each, at) => (at === index ? { ...entry, closed: true as const } : each)),
+    };
 }
 
 /** Words joined as one message: each trimmed, the empty ones left out, a blank line between. */
@@ -636,6 +787,65 @@ function givenBackAfterFailure(before: Chat, after: Chat): Chat {
 
 /** What is typed in the box. */
 export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text });
+
+/** The single quotes PowerShell reads: the plain one and the typographic ones, U+2018 to U+201B. */
+const singleQuotes = /['\u2018\u2019\u201a\u201b]/;
+
+/** What double quotes do not keep as it is, in PowerShell or in Bash: `$`, a backtick, and a double quote of any kind. */
+const unsafeInDouble = /[$`"\u201c\u201d\u201e]/;
+
+/**
+ * A path quoted so that a shell reads it back whole. On macOS and Linux, a path from the root: in single quotes, inside
+ * which every sign is taken as it is, a quote written as one closed, escaped and opened again. On Windows the path may
+ * meet PowerShell, the system's shell, or Git Bash, the shell of Claude Code there, and in neither do single quotes
+ * expand a `$` or a backtick, nor do they lose the backslashes of a UNC path, as Bash's double quotes do; so a name with
+ * no single quote goes in single quotes. A name with one, typographic ones among them, goes in double quotes, which both
+ * shells read back as it is while it holds no `$`, backtick or double quote and is not a UNC path. Beyond that, for a
+ * quote together with one of these, no form serves both: the quotes are doubled as PowerShell reads them, and Bash reads
+ * that name back wrong.
+ */
+function quotedPath(path: string): string {
+    if (path.startsWith('/')) return `'${path.split("'").join("'\\''")}'`;
+    if (singleQuotes.test(path) && !unsafeInDouble.test(path) && !path.startsWith('\\\\')) return `"${path}"`;
+    return `'${path.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&')}'`;
+}
+
+/**
+ * The box's text with the paths of files dropped on it put in at the caret, or over the words selected, as a terminal
+ * puts them: each quoted (`quotedPath`), a space between two, a space before them where a word ends at the caret and one
+ * after them where no space follows; and the caret's place, after them.
+ */
+export function withPaths(
+    text: string,
+    start: number,
+    end: number,
+    paths: readonly string[],
+): { text: string; caret: number } {
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+    const lead = before === '' || /\s$/.test(before) ? '' : ' ';
+    const put = lead + paths.map(quotedPath).join(' ') + (/^\s/.test(after) ? '' : ' ');
+    return { text: before + put + after, caret: before.length + put.length };
+}
+
+/** A caret a drop left to place: after the paths, in the box of the conversation `key`, once it shows `text`. */
+export interface DropCaret {
+    key: string;
+    text: string;
+    at: number;
+}
+
+/**
+ * Where the caret goes as the box of the conversation `key` shows `text`: after the dropped paths where it shows the text
+ * they were put in; nowhere for another conversation's box, nor for a text they never reached, as where the conversation
+ * was gone before they went in, so a later word typed takes no caret meant for them.
+ */
+export const dropCaretAt = (left: DropCaret | null, key: string, text: string): number | null =>
+    left !== null && left.key === key && left.text === text ? left.at : null;
+
+/** What the box says when no dropped file's path could be read, and when some could not. */
+export const noPathDropped = "A dropped file's path could not be read here; type or paste it instead.";
+export const somePathsDropped = "Some dropped files' paths could not be read here; type or paste theirs.";
 
 /**
  * The box's text added to the waiting message, under it with a blank line between, and the box cleared: what is sent
@@ -680,14 +890,16 @@ export const stopAsked = (chat: Chat): Chat => (chat.running ? everyWordBack({ .
 /** The page handed the turn's end's message to the desktop. */
 export const handed = (chat: Chat): Chat => ({ ...chat, outbox: null });
 
-/** A turn that ended: every request it still held is gone with it. */
+/** A turn that ended, by any road: every request it still held is gone with it, and so is what an earlier turn said. */
 function ended(chat: Chat): Chat {
+    const over = expired(chat);
     return {
-        ...chat,
+        ...over,
         running: false,
         stopping: false,
         resent: null,
-        entries: chat.entries.map((each) =>
+        exporting: null,
+        entries: over.entries.map((each) =>
             each.kind === 'permission' && each.answer === null ? { ...each, answer: 'gone' } : each,
         ),
     };
@@ -719,12 +931,25 @@ export const lost = (chat: Chat, request: string): Chat => ({
  * the person again, with what waited given back as a failed turn gives it back.
  */
 export function failed(chat: Chat, error: string): Chat {
+    if (chat.exporting !== null) return exportRefused(chat, chat.exporting, error);
     const over = ended(chat);
     return givenBackAfterFailure(chat, {
         ...over,
         outbox: null,
         entries: [...over.entries, { kind: 'error', text: error }],
     });
+}
+
+/**
+ * An export refused, by the desktop's answer or by the send itself: said beside the conversation, where it ends no card
+ * and no plan, and its words given back to the box, once, above what is typed there.
+ */
+function exportRefused(chat: Chat, words: string, error: string): Chat {
+    const over = ended(chat);
+    return givenBack(
+        released({ ...over, outbox: null, entries: [...over.entries, { kind: 'aside', text: error }] }),
+        words,
+    );
 }
 
 /** Something the desktop refused, said in the chat in its words; a turn that runs goes on. */
@@ -770,6 +995,7 @@ const locks: Readonly<Record<Entry['kind'], boolean>> = {
     permission: true,
     error: true,
     notice: true,
+    aside: false,
     attached: true,
     fresh: true,
     afresh: true,

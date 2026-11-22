@@ -13,3 +13,5 @@ export function checkPackage(app: string, platform: Platform, form?: Form): stri
 export const linuxIconSizes: readonly number[];
 /** Where a Linux package's file system begins: a deb's folder is /opt/Jason inside it, an AppImage's is its root. */
 export function iconRoot(app: string, form: Form): string;
+/** One of the deb's maintainer scripts as electron-builder writes it from installer/deb/<name>.sh, its two names filled in. */
+export function debScript(name: 'after-install' | 'after-remove'): string;
