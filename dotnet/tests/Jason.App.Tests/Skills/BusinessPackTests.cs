@@ -361,6 +361,105 @@ public class BusinessPackTests
         Assert.Equal("standing_approval", Jason.Runtime.Approvals.ApprovalGate.StandingApproval);
     }
 
+    /// <summary>
+    /// The launch skill is the method of Jason's set-up, and a host that matched "start a campaign" on it has to be sent
+    /// to the set-up first: the skill that leads the person through it and records it in Jason. Its broad trigger stays,
+    /// a sequence, a cadence and a drip among the words it is recognised by, and its last sentence sends the host on. A
+    /// description that lost the last sentence would have a host conduct a launch from the method alone, with nothing
+    /// recorded.
+    /// </summary>
+    [Fact]
+    public void Campaign_launch_defers_to_the_set_up()
+    {
+        Assert.Equal(
+            "Prepare and launch an outreach campaign with every precondition checked and the user's explicit approval of what will actually be sent. Covers sending capability, the content the user reads, timing, the checks before the first message and the go-live gate. Use when the user wants to create or start a campaign, add contacts to one, or begin sending — including when they call it a sequence, a cadence or a drip. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.",
+            Description("campaign-launch"));
+    }
+
+    /// <summary>
+    /// The same door for the people: the audience skill is the method by which the set-up brings a campaign's people in,
+    /// and its description ends by sending the host to the set-up.
+    /// </summary>
+    [Fact]
+    public void Audience_building_defers_to_the_set_up()
+    {
+        Assert.Equal(
+            "Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source or import the people, state how two records become one person, check what is actually reachable, and hold the result as a frozen list or a campaign's own members. Use when the user wants to import contacts, find or build an audience, extend a list, define a segment, or asks what to do about duplicates and messy data. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.",
+            Description("audience-building"));
+    }
+
+    /// <summary>
+    /// The launch skill names some fifty operations of the catalogue, and this build performs a few of them. Its section on
+    /// Jason says which, and that is a fact about what <c>docs/contracts/operations</c> publishes: the names the skill
+    /// prints that are published there must be exactly the names the sentence lists, so the day another one is published
+    /// this turns red rather than leaving the sentence wrong.
+    /// </summary>
+    [Fact]
+    public void Campaign_launch_says_which_of_its_operations_this_build_performs()
+    {
+        SaysWhichOfItsOperationsThisBuildPerforms("campaign-launch");
+    }
+
+    /// <summary>The same fact for the audience skill, whose names include the runtime's own <c>audience</c> family.</summary>
+    [Fact]
+    public void Audience_building_says_which_of_its_operations_this_build_performs()
+    {
+        SaysWhichOfItsOperationsThisBuildPerforms("audience-building");
+    }
+
+    /// <summary>
+    /// A launch is not a provider's programme of steps. The skill used to have its reader prepare and enrol, author the
+    /// cadence as steps and follow the catalogue's launch chain step by step; with Jason the roles send one message at a
+    /// time, so a text that kept those sentences would have a session build at the provider what Jason's roles then send
+    /// beside. The go-live gate says whose it is, and what holds where messages go one at a time.
+    /// </summary>
+    [Fact]
+    public void Campaign_launch_assumes_no_shape_of_campaign()
+    {
+        var skill = Flat("campaign-launch");
+
+        Assert.DoesNotContain("Use to prepare or start a campaign, and to enrol contacts into one.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("and follow it there", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("are inputs to `step.add`", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "This gate is a provider's programme's: one decision over a population. Where messages go one at a time, as Jason's do, each is its own decision, approved as it goes or released by a standing choice the user made, and no single act releases the population; E2 still holds: no route may cost fewer approvals than the people it reaches.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "how many touches one person gets, and how far apart, is the roles' under a ceiling the settings hold",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    private static string Description(string name) =>
+        SkillFrontMatter.Read(Assert.Single(SkillPack.Business(), skill => skill.Name == name).File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+    private static void SaysWhichOfItsOperationsThisBuildPerforms(string name)
+    {
+        const string Opening = "Which of this skill's operations this build performs is for the operations it publishes under `docs/contracts/operations/` to say: today ";
+        const string Close = ", and no other";
+        var skill = Flat(name);
+
+        var start = skill.IndexOf(Opening, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"'{name}' does not say \"{Opening}…\".");
+        var end = skill.IndexOf(Close, start, StringComparison.Ordinal);
+        Assert.True(end > start, $"'{name}' says \"{Opening}…\" and never closes it with \"{Close}\".");
+        var listed = OperationNames(skill[start..end]).ToHashSet(StringComparer.Ordinal);
+
+        var contracts = Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "operations");
+        var published = OperationNames(skill).Where(one => File.Exists(Path.Combine(contracts, one + ".json"))).ToHashSet(StringComparer.Ordinal);
+        Assert.True(published.Count > 0, $"'{name}' names no operation docs/contracts/operations publishes, so this guard holds nothing.");
+
+        Assert.True(
+            listed.SetEquals(published),
+            $"'{name}' names [{string.Join(", ", published.Order(StringComparer.Ordinal))}] that docs/contracts/operations publishes, "
+            + $"and its sentence on what this build performs lists [{string.Join(", ", listed.Order(StringComparer.Ordinal))}]. "
+            + "Rewrite the sentence to list what is published.");
+    }
+
+    private static IEnumerable<string> OperationNames(string text) =>
+        System.Text.RegularExpressions.Regex.Matches(text, @"`([a-z_]+\.[a-z_]+)`").Select(match => match.Groups[1].Value).Distinct(StringComparer.Ordinal);
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 
