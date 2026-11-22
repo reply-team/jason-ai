@@ -778,6 +778,120 @@ public class SummonerTests
         Assert.False(await Summoner.OpenCheckInAsync(db, checkIn.CampaignId, Ct));
     }
 
+    /// <summary>
+    /// Both clocks due at once is one review, and it is the deep one: its brief is the scheduled one, the grid moves on a
+    /// whole interval, and the quick anchor moves too, so the next scan has nothing due.
+    /// </summary>
+    [Fact]
+    public async Task Where_a_deep_review_and_a_quick_look_are_both_due_the_deep_one_runs()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        var campaign = await SeedAsync(harness, live: true);
+        await DeepDueAtAsync(harness, campaign, Noon.AddHours(2));
+        harness.Clock.Advance(TimeSpan.FromHours(2));
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var item = await SingleCheckInAsync(harness);
+        Assert.Equal("deep_review", item.Entry);
+        Assert.Equal("scheduled", (string?)item.Context["review_intent"]);
+        Assert.Null(item.Context["trigger"]);
+        Assert.Null(item.Context["cause"]);
+
+        await using (var db = harness.Open())
+        {
+            var row = await db.Campaigns.AsNoTracking().SingleAsync(Ct);
+            Assert.Equal(Noon.AddHours(2).AddDays(1), row.DeepReviewDueAt);
+            Assert.Equal(Noon.AddHours(2), row.ManagerReviewAnchor);
+        }
+
+        await FinishCheckInAsync(harness);
+        Assert.Equal(0, await SummonAsync(harness));
+    }
+
+    /// <summary>
+    /// A deep review due when a cause is read runs as the deep review and carries the cause in its brief exactly as a
+    /// triggered check-in would; it consumes the lines it read, so the cause summons no second review after it.
+    /// </summary>
+    [Fact]
+    public async Task A_deep_review_due_behind_a_cause_runs_and_carries_the_cause()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await DeepDueAtAsync(harness, campaign, Noon);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        await using (var db = harness.Open())
+        {
+            var failed = await db.Journal.Where(e => e.Kind == JournalKinds.WorkItemFailed).Select(e => e.PublicId).SingleAsync(Ct);
+            var item = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+            Assert.Equal("deep_review", item.Entry);
+            Assert.Equal("triggered", (string?)item.Context["review_intent"]);
+            Assert.Equal(JournalKinds.WorkItemFailed, (string?)item.Context["trigger"]);
+            Assert.Equal(failed, (string?)item.Context["cause"]!["journal_entry_id"]);
+            Assert.Equal(1, (int?)item.Context["cause"]!["qualifying_count"]);
+            Assert.Equal(Noon.AddDays(1), (await db.Campaigns.AsNoTracking().SingleAsync(Ct)).DeepReviewDueAt);
+        }
+
+        await FinishCheckInAsync(harness);
+        Assert.Equal(0, await SummonAsync(harness));
+    }
+
+    /// <summary>
+    /// A deep review that falls due while a check-in is held at the manager's daily limit waits behind it, as every summon
+    /// does, and runs at the first scan after the held one has ended.
+    /// </summary>
+    [Fact]
+    public async Task A_deep_review_due_while_a_check_in_is_held_runs_after_it()
+    {
+        using var harness = new DispatchHarness(Noon);
+        harness.Launches.CurrentValue = new LaunchesOptions { MaxPerDay = new(StringComparer.Ordinal) { ["manager"] = 1 } };
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(1, await SummonAsync(harness));
+        await RunCheckInAsync(harness);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        Assert.Equal(1, await SummonAsync(harness));
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await DeepDueAtAsync(harness, campaign, Noon);
+        Assert.Equal(0, await SummonAsync(harness));
+
+        harness.Clock.Now = new DateTimeOffset(Noon.Date.AddDays(1));
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+        Assert.Single(await harness.ClaimAsync(Ct));
+        Assert.Equal(0, await SummonAsync(harness));
+
+        await using (var db = harness.Open())
+        {
+            foreach (var open in await db.WorkItems.Where(w => w.Role == ManagerCheckIn.Role && w.Status != WorkItemStatus.Succeeded).ToListAsync(Ct))
+            {
+                open.Status = WorkItemStatus.Succeeded;
+                open.FinishedAt = harness.Clock.GetUtcNow().UtcDateTime;
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        await using var after = harness.Open();
+        var deep = await after.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role && w.Status != WorkItemStatus.Succeeded, Ct);
+        Assert.Equal("deep_review", deep.Entry);
+        Assert.Equal("scheduled", (string?)deep.Context["review_intent"]);
+    }
+
+    /// <summary>Puts a campaign's deep review grid at a moment, as a going live or a deep review would have.</summary>
+    private static async Task DeepDueAtAsync(DispatchHarness harness, string campaignPublicId, DateTime moment)
+    {
+        await using var db = harness.Open();
+        var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignPublicId, Ct);
+        campaign.DeepReviewDueAt = moment;
+        await db.SaveChangesAsync(Ct);
+    }
+
     /// <summary>The check-in now open runs once, started now, and succeeds: a launch its day counts.</summary>
     private static async Task RunCheckInAsync(DispatchHarness harness)
     {
