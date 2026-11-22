@@ -268,7 +268,8 @@ A silent skip would leave the item looking claimable forever.
 Work of a role is held, not failed, when `Launches:MaxPerDay:<role>` names the role and the item's campaign has already
 started that many runs of it since the installation's midnight: a failure would wake the manager, and a responder's reply
 would reach it by a second path. The day is the installation's, from one midnight to the next in its time zone —
-`Runtime:TimeZone` where the settings name one, the system's own zone where they do not — since a campaign has no time
+`Runtime:TimeZone` where the settings name one, the system's zone as the runtime read it when it started where they do
+not — since a campaign has no time
 zone of its own and a UTC midnight can fall in the middle of the person's afternoon; a day daylight saving shortens to 23
 hours or lengthens to 25 is counted from midnight to midnight as it is. The claim reads the zone and the limits once a
 scan. It counts the attempts of the campaign's `ai_role` items of the item's role that started since the local midnight,
@@ -285,7 +286,11 @@ of `launch_limit_lifts` for the local date in its zone, releases every open hold
 each item back to `created` through the transition table with a `workitem_resumed` line under the person's name and
 reason, and writes one `launch_limit_lifted` line. The claim reads that row once a scan, beside the limits, and while it
 covers the day it holds nothing; at the next local midnight it no longer covers the day the claim counts, nothing is
-deleted, and the limits hold again, so a lift made at 23:50 lasts ten minutes. A second lift the same day writes no row
+deleted, and the limits hold again, so a lift made at 23:50 lasts ten minutes. What the lift let go is bounded by the
+same midnight: an item it released that is claimed only after it is counted like any other item of the new day, and a
+new day already spent holds it again, where a person's own `workitem.resume` of one item keeps its run past the limit
+on any later day. The claim tells the two apart by the release's moment: a person's release made after a lift was taken
+and within the day it covers is the lift's. A second lift the same day writes no row
 and no line, answers `already_lifted`, and still lets go a hold that appeared since; a lift covers its date in the zone
 it was taken in, so moving `Runtime:TimeZone` moves the day out from under it. Only a person under their own name may
 lift: a role or an attempt is refused with `lift_not_human`, no named person with `actor_required`, and a request from
@@ -1614,7 +1619,7 @@ mistyped one.
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in the installation's day, counted from its midnight in `Runtime:TimeZone`; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the installation's next midnight, and `launches.lift` lifts every role's for the rest of the day (§The claim rule) |
-| `Runtime:TimeZone` | absent | an IANA id | the installation's time zone, whose day `Launches:MaxPerDay` counts and a lift covers; absent, the system's own zone; an id the system does not know, a Windows id among them, is refused at start and keeps the last good settings on a live edit (§The claim rule) |
+| `Runtime:TimeZone` | absent | an IANA id | the installation's time zone, whose day `Launches:MaxPerDay` counts and a lift covers, the day named by the zone's own id and both spellings of UTC as `UTC`; absent, the system's zone as the runtime read it when it started; an id the system does not know, a Windows id among them, or one spelled otherwise than the zone spells it, as `asia/tokyo` is, is refused at start and keeps the last good settings on a live edit (§The claim rule) |
 | `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds

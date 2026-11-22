@@ -1,7 +1,7 @@
 {
   "kind": "workitem_waiting",
   "version": 1,
-  "case": "the claim held any role at its campaign's daily limit for that role, with no attempt of its own, until the next 00:00Z, and the line names the role",
+  "case": "the claim held any role at its campaign's daily limit for that role, with no attempt of its own, until the installation's next midnight, and the line names the role",
   "body": {
     "key": null,
     "old": null,

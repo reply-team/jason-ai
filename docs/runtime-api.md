@@ -413,7 +413,8 @@ that is not that attempt does not call them.
   every item held at a daily limit, each as the person's `workitem.resume` would, and writes one `launch_limit_lifted`
   line. The answer is `{"until", "time_zone", "released", "already_lifted"}`: the next local midnight as a UTC moment,
   the zone, how many held items it let go, and whether the day was lifted already — a second lift the same day writes
-  nothing and still lets go a hold that appeared since. A role or an attempt is refused with `lift_not_human`, no named
+  nothing and still lets go a hold that appeared since. What it let go is past the limits only until `until`: an item
+  claimed after that midnight is counted like any other of the new day. A role or an attempt is refused with `lift_not_human`, no named
   person with `actor_required`, and a request from inside a run `403` `decided_inside_a_run`.
   [`docs/work-execution.md`](work-execution.md), "The claim rule", is the contract.
 

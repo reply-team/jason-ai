@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 namespace Jason.Runtime.Tests.Configuration;
 
 /// <summary>
-/// The daily limit of launches: one map from a role's name to how many runs one campaign may start in a UTC day. What the
+/// The daily limit of launches: one map from a role's name to how many runs one campaign may start in the installation's day. What the
 /// file writes joins what the runtime ships, so the responder keeps its limit whatever else is added, a role the map does
 /// not name has no limit, and the key 0.30.0 kept this number under stops a start rather than being passed over.
 /// </summary>
