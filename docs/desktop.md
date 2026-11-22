@@ -943,7 +943,7 @@ the turn just the same. The cards left in Plan only are a read outside the chat'
 page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
 access, where it runs with none.
 
-When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
+When a Plan only turn ends with an answer, the answer is shown as a plan card, as formatted text as any answer is, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
 your last answer." as your message; it never enters Auto-edit or Full access, and if the chat's mode changed in between,
 from the menu meanwhile, nothing is sent and the chat says so. The card is offered only

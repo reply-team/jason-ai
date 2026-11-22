@@ -787,7 +787,7 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
 }
 
 /**
- * A Plan only turn's plan, as a card: its words drawn as text, never as markup; a line saying what Approve and run does
+ * A Plan only turn's plan, as a card: its words drawn as the chat draws every answer, the Markdown subset and never the AI's own markup; a line saying what Approve and run does
  * on the host the go would go to now; and, while the card is live (`livePlan`), its two buttons. A card of the past,
  * approved or put aside, keeps the words and drops the buttons; one another host made says to ask for the plan again.
  */
@@ -817,8 +817,8 @@ function planCard(
                 : null;
     return html`<div class="ask chat-plan">
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
-        ${words.trim() === '' ? null : html`<div class="said plan-text">${words}</div>`} ${drawn}
-        ${line === null ? null : html`<div class="ask-w">${line}</div>`}
+        ${words.trim() === '' ? null : html`<div class="said plan-text">${markdownView(words, `${chat.id}:${chat.entries.indexOf(entry)}`)}</div>`}
+        ${drawn} ${line === null ? null : html`<div class="ask-w">${line}</div>`}
         ${drafts && (live || approving) ? html`<div class="ask-w plan-drafts">${planDrafts}</div>` : null}
         ${
             (live || approving) && inTab()
