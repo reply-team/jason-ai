@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -17,13 +18,17 @@ namespace Jason.Runtime.Contacts;
 /// whose line is already held, ended or removed is left as they are, and so is anyone who is not a member. One reserved
 /// line says it, <c>contacts_paused</c>, as the dispatcher, naming the person and the reply line by their ids alone.
 /// <para>
-/// A thread moves when Jason writes into it too, and a reply line says every move, so a line that may be Jason's own move
-/// holds nobody (<see cref="OwnMoveAsync"/>): its moment is not later than the latest moment Jason's own letter went out
-/// to the person in the campaign. That letter is a touch of the person there, at its result's <c>accepted_for</c> where
-/// it names one and otherwise at the end of its succeeded attempt, or a <c>conversation.reply</c> of the campaign into
-/// the line's own thread, at the end of its succeeded attempt. A touch records no thread, so touches are compared for the
-/// person across the campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a
-/// cancel took back never went. Moments of the runtime's own record are compared and nothing else.
+/// A thread moves when Jason writes into it too, and a line that does not know who moved the thread says every move: the
+/// inbound read's line, and the events store's line from a <c>thread_moved</c> event that names no side. Such a line that
+/// may be Jason's own move holds nobody (<see cref="OwnMoveAsync"/>): its moment is not later than the latest moment one
+/// of Jason's own letters went into the thread. That letter is any succeeded letter of Jason's own: a touch of the person
+/// in the campaign, at its result's <c>accepted_for</c> where it names one and otherwise at the end of its succeeded
+/// attempt, or an answer the responder sent, a <c>conversation.reply</c> of the campaign into the line's own thread, at
+/// the end of its succeeded attempt. A touch records no thread, so touches are compared for the person across the
+/// campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a cancel took back never
+/// went. Moments of the runtime's own record are compared and nothing else. A line whose stored event names the other side
+/// always holds, whatever the moments (<see cref="OtherSideNamedAsync"/>): where the provider said who wrote, the moments
+/// do not overrule it.
 /// </para>
 /// <para>
 /// Written once and called from one place, the respond step, inside the transaction that reads the reply line, whether
@@ -62,12 +67,25 @@ internal static class LineHold
           AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) <= julianday({7})
         """;
 
+    /// <summary>
+    /// Whether the stored event a line names is a thread the provider says the other side moved: the events contract's
+    /// <c>moved_by</c>, read from the event as it was stored.
+    /// </summary>
+    private const string OtherSideSql = """
+        SELECT count(*) AS "Value"
+        FROM events AS e
+        WHERE e.public_id = {0}
+          AND e.kind = {1}
+          AND json_extract(e.data_json, '$.moved_by') = {2}
+        """;
+
     private static readonly string Touches = JsonSerializer.Serialize(OperationCatalog.Touches);
 
     /// <summary>
     /// Holds the person's line in the campaign when they are enrolled there and the line is not Jason's own move, and
     /// answers whether it did. The membership is read and written inside the caller's transaction, which holds the writer,
-    /// so nothing changes it in between. A line with no moment the step can read is never taken for Jason's own move.
+    /// so nothing changes it in between. A line with no moment the step can read is never taken for Jason's own move, and
+    /// neither is one whose stored event, <paramref name="eventId"/>, names the other side.
     /// </summary>
     public static async Task<bool> ApplyAsync(
         JasonDbContext db,
@@ -78,12 +96,15 @@ internal static class LineHold
         string linePublicId,
         string? thread,
         DateTime? moved,
+        string? eventId,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(journal);
 
-        if (moved is { } moment && await OwnMoveAsync(db, campaignId, contactId, thread, moment, now, ct).ConfigureAwait(false))
+        if (moved is { } moment
+            && !(eventId is not null && await OtherSideNamedAsync(db, eventId, ct).ConfigureAwait(false))
+            && await OwnMoveAsync(db, campaignId, contactId, thread, moment, now, ct).ConfigureAwait(false))
         {
             return false;
         }
@@ -128,6 +149,20 @@ internal static class LineHold
             .SingleAsync(ct)
             .ConfigureAwait(false);
         return went > 0;
+    }
+
+    /// <summary>
+    /// Whether the line knows who moved the thread, and it was the other side: the stored event it names is a
+    /// <c>thread_moved</c> whose <c>moved_by</c> is <c>other_side</c>. An event that names no side, or none found, does not.
+    /// </summary>
+    public static async Task<bool> OtherSideNamedAsync(JasonDbContext db, string eventId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var named = await db.Database
+            .SqlQueryRaw<int>(OtherSideSql, eventId, ReadEvent.ThreadMoved, ReadEvent.MovedByOtherSide)
+            .SingleAsync(ct)
+            .ConfigureAwait(false);
+        return named > 0;
     }
 
     private static string Moment(DateTime moment) =>
