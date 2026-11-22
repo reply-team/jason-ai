@@ -206,7 +206,7 @@ internal static partial class CampaignPeople
     private const string Current = "f.state <> 'excluded'";
 
     // A member whose line is ended: nobody still to start on and nobody left idle, so New and Idle leave them out, while a
-    // held line, paused, is not ended and leaves them where they stood.
+    // paused line is not ended and leaves them where they stood.
     private const string LineOpen = "f.state <> 'finished'";
 
     // Everyone it happened to, removed since or not: last week does not change because somebody was taken out today.

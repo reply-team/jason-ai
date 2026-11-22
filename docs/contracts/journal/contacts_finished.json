@@ -21,7 +21,7 @@
         "additionalProperties": false,
         "required": ["finished", "already_finished", "not_member", "excluded", "rejected", "contact_ids"],
         "properties": {
-          "finished": { "type": "integer", "minimum": 0, "description": "Items that ended an enrolled or a held member's line." },
+          "finished": { "type": "integer", "minimum": 0, "description": "Items that ended an enrolled or a paused member's line." },
           "already_finished": { "type": "integer", "minimum": 0, "description": "Items naming a person whose line was ended already." },
           "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
           "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },

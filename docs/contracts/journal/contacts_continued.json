@@ -2,7 +2,7 @@
   "kind": "contacts_continued",
   "version": 1,
   "since": "0.50.0",
-  "summary": "One request continued the lines of people held in a campaign: the line counts what happened to its items and names the people enrolled again.",
+  "summary": "One request continued the paused lines of people in a campaign: the line counts what happened to its items and names the people enrolled again.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -21,8 +21,8 @@
         "additionalProperties": false,
         "required": ["continued", "not_paused", "not_member", "excluded", "rejected", "contact_ids"],
         "properties": {
-          "continued": { "type": "integer", "minimum": 0, "description": "Items that enrolled a held member again." },
-          "not_paused": { "type": "integer", "minimum": 0, "description": "Items naming a member who was not held: enrolled, or with their line ended." },
+          "continued": { "type": "integer", "minimum": 0, "description": "Items that enrolled a paused member again." },
+          "not_paused": { "type": "integer", "minimum": 0, "description": "Items naming a member who was not paused: enrolled, or with their line ended." },
           "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
           "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },
           "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },

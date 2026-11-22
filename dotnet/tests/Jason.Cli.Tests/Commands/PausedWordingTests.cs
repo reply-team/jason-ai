@@ -8,7 +8,7 @@ namespace Jason.Cli.Tests.Commands;
 /// <summary>
 /// A person's line that a reply stopped is <c>paused</c>, one word in the code and in what a person reads: the state the
 /// summary, <c>list-contacts</c> and the item results name. "Held" is a send the provider holds for a later moment, a
-/// different thing, so the help a person and an agent read never calls the paused state held: no held line, person,
+/// different thing, so neither the CLI's help, nor a skill, nor a page that describes the line calls the paused state held: no held line, person,
 /// member or contact, no people held in a campaign, and no line held, is held or stays held. The act keeps its own name, the
 /// hold, and every other held thing keeps the word: an item held at a daily limit, a letter the provider holds for later,
 /// <c>audience_search_held</c>, a search that is held.
@@ -49,6 +49,53 @@ public partial class PausedWordingTests
         Walk(root, "jason", found);
 
         Assert.Empty(found);
+    }
+
+    /// <summary>
+    /// The pages that describe a person's line, and every skill an agent reads, say it the same way: each file is read
+    /// with its line breaks folded into spaces, so a wording wrapped over two lines is found too.
+    /// </summary>
+    [Fact]
+    public void No_skill_and_no_page_of_the_line_calls_a_paused_line_held()
+    {
+        var root = RepositoryRoot();
+        string[] pages =
+        [
+            "docs/work-execution.md", "docs/inbound-sync.md", "docs/runtime-api.md", "docs/routing.md", "docs/campaign-manager.md",
+            "docs/contracts/README.md",
+        ];
+        var files = pages
+            .Concat(Under(root, "skills", "*.md"))
+            .Concat(Under(root, "docs/contracts/journal", "contacts_*.json"))
+            .Concat(Under(root, "docs/contracts/fixtures/journal", "*.json").Where(file => file.Contains("/contacts_", StringComparison.Ordinal)))
+            .ToList();
+        Assert.Contains(files, file => file.StartsWith("skills/runtime/roles/manager/", StringComparison.Ordinal));
+
+        var found = new List<string>();
+        foreach (var file in files)
+        {
+            var text = Regex.Replace(File.ReadAllText(Path.Combine(root, file)), @"\s+", " ");
+            found.AddRange(HeldForPaused().Matches(text).Select(match => $"{file}: \"{match.Value}\""));
+        }
+
+        Assert.Empty(found);
+    }
+
+    private static IEnumerable<string> Under(string root, string folder, string pattern) =>
+        Directory.EnumerateFiles(Path.Combine(root, folder), pattern, SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.Ordinal);
+
+    private static string RepositoryRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        return root.FullName;
     }
 
     private static void Walk(Command command, string path, List<string> found)
