@@ -82,6 +82,9 @@ function msOf(moment: string | undefined): number {
     return Number.isNaN(ms) ? 0 : ms;
 }
 
+/** A row's time from the moment it stands by; none for a moment that is not known. */
+const ageAt = (moment: number, now: number): string => (moment > 0 ? ageOf(new Date(moment).toISOString(), now) : '');
+
 /**
  * Every conversation except the Feed and those whose agent is archived, newest first as the desktop listed them, with its
  * agent's state and what waits. An archived agent's conversation is reached from that agent's own place; one whose agent
@@ -149,9 +152,10 @@ export function agentRows(input: RecentInput): RecentRow[] {
         seen.add(row.campaignId);
         // An agent is named by its campaign's name wherever the console holds it: a title its conversation carries never
         // masks a rename. One whose agent is not read yet keeps its conversation's title.
+        const moment = Math.max(updated.get(row.id) ?? 0, changed(row.campaignId));
         rows.push({
-            row: row.agent === null ? row : { ...row, title: row.agent },
-            moment: Math.max(updated.get(row.id) ?? 0, changed(row.campaignId)),
+            row: { ...(row.agent === null ? row : { ...row, title: row.agent }), age: ageAt(moment, input.now) },
+            moment,
         });
     }
     const waits = {
@@ -179,7 +183,7 @@ export function agentRows(input: RecentInput): RecentRow[] {
                 state,
                 running: false,
                 dot: count.n > 0 ? 'waiting' : (state ?? 'none'),
-                age: '',
+                age: ageAt(changed(agent.id), input.now),
             },
         });
     }

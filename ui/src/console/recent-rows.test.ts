@@ -250,6 +250,26 @@ describe('the two sections', () => {
         expect(rows.map((each) => each.title)).toEqual(['Pending', 'Handed over', 'Alpha', 'Drafty']);
     });
 
+    it('shows an agent’s time as the later of its conversation’s activity and its own last change, an agent with no conversation by its own', () => {
+        const rows = agentRows({
+            ...input,
+            conversations: input.conversations.map((each) =>
+                each.id === 'conv_a' ? { ...each, updatedAt: before(5 * 24 * 3_600_000) } : each,
+            ),
+            campaigns: [
+                // Its conversation is five days old, the agent itself was changed an hour ago.
+                { ...agents[0]!, created_at: before(9 * 24 * 3_600_000), updated_at: before(3_600_000) },
+                // Made from the command line three hours ago: no conversation.
+                { ...agents[1]!, created_at: before(3 * 3_600_000), updated_at: before(3 * 3_600_000) },
+                agents[2]!,
+            ],
+        });
+        expect(rows.find((each) => each.id === 'conv_a')?.age).toBe('1 h');
+        expect(rows.find((each) => each.id === 'cmp_p')?.age).toBe('3 h');
+        // An agent whose moments cannot be read shows none.
+        expect(rows.find((each) => each.id === 'cmp_d')?.age).toBe('');
+    });
+
     it('orders an agent by the later of its conversation’s activity and its own last change', () => {
         const rows = agentRows({
             ...input,
