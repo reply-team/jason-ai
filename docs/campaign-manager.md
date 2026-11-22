@@ -234,6 +234,10 @@ review a cause summons:
 | the quick look at the floor, 300 | 287 | 1 | 288 | 2880 |
 | the deep review at the floor, 300 | 0 | 288 | 288 | 2880 |
 
+The manager's daily limit, `Launches:MaxPerDay:manager` (25 by default), holds each campaign at that many launches in
+the installation's day, so the floors run into it, and the rest of the day's check-ins wait for the installation's
+midnight or a person's lift.
+
 A start adds at most one review per going live, a resume included, and each review a person asks for adds one, counted
 under the manager's daily limit as every check-in is. While that review
 runs, the campaign's other work waits behind it, as it waits behind any item of the campaign that runs (a campaign has

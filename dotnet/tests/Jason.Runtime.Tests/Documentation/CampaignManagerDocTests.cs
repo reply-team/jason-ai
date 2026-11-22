@@ -160,6 +160,14 @@ public partial class CampaignManagerDocTests
         var floor = ManagerOptions.MinimumReviewSeconds;
         Assert.Contains($"| the quick look at the floor, {floor} | {(Day / floor) - 1} | 1 | {Day / floor} | {10 * Day / floor} |", page, StringComparison.Ordinal);
         Assert.Contains($"| the deep review at the floor, {floor} | 0 | {Day / floor} | {Day / floor} | {10 * Day / floor} |", page, StringComparison.Ordinal);
+
+        // The floors' launches pass the manager's daily limit, and the page says that the limit holds them there.
+        var limit = new LaunchesOptions().MaxPerDay["manager"];
+        Assert.True(limit < Day / floor, $"The manager's daily limit, {limit}, no longer holds a campaign below the floor's {Day / floor} launches a day.");
+        Assert.Contains(
+            $"The manager's daily limit, `Launches:MaxPerDay:manager` ({limit} by default), holds each campaign at that many launches in the installation's day, so the floors run into it, and the rest of the day's check-ins wait for the installation's midnight or a person's lift.",
+            page,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
