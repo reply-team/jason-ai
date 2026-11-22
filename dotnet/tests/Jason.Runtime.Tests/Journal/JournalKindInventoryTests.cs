@@ -74,6 +74,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ContactsFinished,
         JournalKinds.ContactsContinued,
         JournalKinds.ContactsReopened,
+        JournalKinds.ContactsPaused,
         JournalKinds.ContactCreated,
         JournalKinds.ContactUpdated,
         JournalKinds.ContactArchived,

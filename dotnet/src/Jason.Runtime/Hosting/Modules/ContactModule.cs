@@ -19,6 +19,11 @@ public static class ContactModule
         services.AddScoped<ContactThreadService>();
         services.TryAddScoped<IProviderReadInvoker, PluginProviderReadInvoker>();
         services.AddScoped<MembershipService>();
+
+        // Ending a line and removing a person take back what the provider still holds for them, through the routine the
+        // respond step's hold takes it back through; the dispatcher module names it too.
+        services.TryAddScoped<HeldSendCancels>();
+        services.TryAddSingleton<HeldSendCancelSkips>();
         services.AddScoped<SuppressionService>();
 
         // The claim asks the register one question, through the service that owns what suppression means.

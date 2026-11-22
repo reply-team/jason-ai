@@ -125,6 +125,15 @@ public class ChannelRoutesEndToEndTests
         Assert.Equal([Feed, email, Feed, mailReply], CallsAt(mailbox));
         Assert.Equal([Feed, linkedin, Feed, socialReply], CallsAt(profile));
 
+        // The replies paused the person's line in the campaign, so their touches wait until a role continues it. The
+        // manager does that once the replies are answered; here the test does it in the manager's name.
+        var (continueStatus, continueBody) = await host.Fixture.PostAsync(
+            Operations.CampaignContinueContacts,
+            new { campaign_id = campaign, contact_ids = new[] { contact }, reason = "The replies were answered.", actor = new { type = "role", id = "manager" } },
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, continueStatus);
+        Assert.Contains("\"continued\"", continueBody, StringComparison.Ordinal);
+
         // 4. A deferred send on each channel: two hours after the runtime's clock, which is long past by the machine's
         //    own, so only a guard that reads the runtime's clock still finds them held. Each result says the provider
         //    holds it and can cancel it.

@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_paused",
+  "version": 1,
+  "case": "a hold that does not name the reply line that held the person",
+  "body": { "key": null, "old": null, "new": { "contact_ids": ["cnt_01JC0000000000000000000003"] } },
+  "expect": { "invalid": [{ "pointer": "/new/line", "reason": "required" }] }
+}

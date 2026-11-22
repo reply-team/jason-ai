@@ -319,7 +319,9 @@ public sealed class Claimer(
     /// One item per campaign, the most important first, and never more than the free slots. Raw SQL because the
     /// per-campaign choice is a window function: doing it in memory would either idle a slot or read the whole
     /// backlog. Its campaign rule is the eligible predicate's, written a second time here and held to it by a test:
-    /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there.
+    /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there. Its
+    /// person's rule too: a touch (<see cref="OperationCatalog.Touches"/>) of a person held in the item's campaign is no
+    /// candidate, so it neither runs nor holds its campaign's turn.
     /// </summary>
     internal static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
     {
@@ -329,9 +331,13 @@ public sealed class Claimer(
         var active = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Active);
         var paused = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Paused);
         var archived = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Archived);
+        var held = SnakeCaseEnumConverter<MembershipState>.Format(MembershipState.Paused);
         var runsInPaused = JsonSerializer.Serialize(OperationCatalog.RunsInPausedCampaign);
         var runsInArchived = JsonSerializer.Serialize(OperationCatalog.RunsInArchivedCampaign);
+        var touches = JsonSerializer.Serialize(OperationCatalog.Touches);
 
+        // The person's rule is written with the operation named not null: a NULL operation would make the whole test NULL,
+        // and NOT NULL takes a role's work out of the queue.
         return await db.WorkItems.FromSqlInterpolated($"""
             SELECT * FROM (
               SELECT w.*, ROW_NUMBER() OVER (PARTITION BY w.campaign_id ORDER BY w.priority DESC, w.id ASC) AS rn
@@ -340,6 +346,10 @@ public sealed class Claimer(
                 AND (c.status = {active}
                      OR (c.status = {paused} AND w.operation IN (SELECT value FROM json_each({runsInPaused})))
                      OR (c.status = {archived} AND w.operation IN (SELECT value FROM json_each({runsInArchived}))))
+                AND NOT (w.operation IS NOT NULL
+                         AND w.operation IN (SELECT value FROM json_each({touches}))
+                         AND EXISTS (SELECT 1 FROM campaign_contacts m
+                                     WHERE m.campaign_id = w.campaign_id AND m.contact_id = w.contact_id AND m.state = {held}))
                 AND (w.not_before IS NULL OR w.not_before <= {now})
                 AND (w.due_at IS NULL OR w.due_at > {now})
                 AND (w.retry_after IS NULL OR w.retry_after <= {now})

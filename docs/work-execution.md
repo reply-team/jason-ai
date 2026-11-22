@@ -189,7 +189,7 @@ state change writes one journal entry.
 
 ## Eligibility
 
-An item is **eligible** — the dispatcher would claim it right now — when all five of these hold:
+An item is **eligible** — the dispatcher would claim it right now — when all six of these hold:
 
 1. its status is `created` — work `awaiting_approval` is not eligible, and no number of scans makes
    it so;
@@ -201,14 +201,23 @@ An item is **eligible** — the dispatcher would claim it right now — when all
    `dispatch.in_archived_campaign: runs`, today `audience.search_cancel` alone: archiving is how a person stops a
    campaign, so the archive cancels the campaign's open work but such a stop, and the next scan makes one stop for each
    search of the campaign still in flight, which ends it `cancelled`;
-3. `not_before` is unset or already past;
-4. `due_at` is unset or still ahead;
-5. `retry_after` is unset or already past.
+3. it is not a touch of a person held in its campaign: an item whose operation's document says `touch: true` —
+   `message.send`, `social_invitation.send` and `campaign.enroll` — about a person whose membership in the item's
+   campaign is `paused` waits, as a paused campaign's work does: it stays `created`, and no status, wait or attempt is
+   written, until the line is continued or ended ([A person's line in a campaign](#a-persons-line-in-a-campaign)). A
+   reply to the person, a take-back of a send and every other item of theirs are not held;
+4. `not_before` is unset or already past;
+5. `due_at` is unset or still ahead;
+6. `retry_after` is unset or already past.
 
 `eligible` is never stored. It is computed from one shared expression that the item list and the DTO
 use, and that the claim query states again in SQL — a window function the expression cannot carry — held to
-it by a test across every campaign state, so `workitem.list --eligible` tells you exactly what the next
-scan would consider.
+it by a test across every campaign state and every state of a person's membership, so `workitem.list --eligible`
+tells you exactly what the next scan would consider. Every way a letter comes to be sent passes the claim, so a held
+person's letter waits whether it was waiting for its `not_before`, parked for an approval the person then gave, or
+released from a wait. A letter already `scheduled` or `processing` is on its way and is not held; one the provider
+already took for a later moment cannot be held, only taken back (below), and so is one on its way at the hold that the
+provider then takes for a later moment.
 
 ## The claim rule
 
@@ -820,11 +829,48 @@ whose open wait names it (§Provider blocks).
 ## A person's line in a campaign
 
 A membership's `state` is where the line with that person in that campaign stands. `enrolled` is a line that goes on.
-`excluded` is a person removed (`campaign.remove_contacts`), with every piece of their open work there cancelled.
+`excluded` is a person removed (`campaign.remove_contacts`), with every piece of their open work there cancelled and
+what the provider holds for them there taken back (below).
 `finished` is a line that was ended: the claim refuses every touch to the person in that campaign, `line_finished`
 (below), while a reply in a thread the person opened, a take-back of a send and every read go on, and the line stays
-ended until it is reopened. `paused` is a person held: nothing in this version holds one, and a held person's touches
-are not refused by the claim.
+ended until it is reopened. `paused` is a line held: a reply holds it, and while it is held the claim takes none of
+the person's touches in that campaign ([Eligibility](#eligibility), rule 3) — a touch waits, `created`, with nothing
+written — while a reply to the person, a take-back of a send and every read go on. The hold never stops the campaign,
+and it lasts until the line is continued or ended; the manager settles it, since the reply that held it wakes the
+manager, and the deep review accounts for every person held.
+
+**The hold.** The respond step ([docs/inbound-sync.md](inbound-sync.md) §1) holds the line of the person an
+`inbound_reply_observed` line names, by the line's contact column, inside the transaction that reads the line and before
+anything else it does with it: whether or not `Responder:OnReply` is on, and whatever skip passes the line over. An
+`enrolled` member of the campaign becomes `paused`, and one reserved line says it, `contacts_paused`, as
+`system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already held, ended or
+removed is left as they are, and a line that names no contact — the thread's person is pinned to none, or to more than
+one — holds nobody. A thread moves when Jason writes into it too, so a line that may be Jason's own move holds nobody
+either: one whose `last_activity_at` is not later than the latest moment one of Jason's letters to the person in the
+campaign went out — a touch's `accepted_for` where its result names one, otherwise the end of its succeeded attempt,
+across the campaign since a touch records no thread, or a `conversation.reply` of the campaign into the line's own
+thread, at the end of its succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a
+succeeded cancel names never went. Moments of the runtime's own record are compared, and nothing the line says is read
+for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
+step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
+
+**Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`
+or `social_invitation.send` that succeeded with the provider's reference, whose result says `cancelable: true`, for a
+moment still to come — cannot be held at the claim, only cancelled. Three acts stop a line, and each, in its own save,
+queues one `message.cancel` for each such letter of the people it stopped in that campaign, by the runtime's one
+definition of a send the provider holds (the one a route change is held to, [routing](routing.md)), as
+`system:dispatcher`, root work about no person, one above `Responder:Priority`, unless a cancel still open or one that
+succeeded already names the letter: the hold, `campaign.finish_contacts` and `campaign.remove_contacts`. A touch that
+was on its way at the hold, `scheduled` or `processing`, is taken back where it ends: when its attempt succeeds and the
+person is `paused` in that campaign by then, the routine that ends attempts asks for the same take-back for them once the
+success is saved, so a letter the provider took for a later moment after the hold is cancelled as one it took before.
+This applies only to a letter the provider holds for a moment still ahead; one that already went when its attempt
+ended is a race nobody can win, and nothing more is promised for it. A take-back the runtime refuses there is logged by
+the code and costs the success nothing. A letter whose
+cancel no route active now takes where it ran, at its plugin and its account, is not taken back, since the claim would
+refuse the cancel; the act goes on, and the runtime's log says so once per campaign, by the campaign's id and the code
+`held_send_cancel_not_routed`. A letter already on its way at the provider answers the cancel `send_not_pending`, and
+nothing more can be done for it.
 
 Three acts move a line, one operation each, and each takes `campaign_id` and `contact_ids` (at most 1000), answers one
 result per item in the order asked, as `campaign.remove_contacts` does, and writes one reserved line for the request:
@@ -832,9 +878,10 @@ result per item in the order asked, as `campaign.remove_contacts` does, and writ
 - **`campaign.finish_contacts`** (`jason campaign finish-contacts`) ends the line with an `enrolled` or `paused` member:
   the membership becomes `finished`, and in the same save the person's open touches in that campaign — the operations
   whose document says `touch: true` — are cancelled, while their responder, its `conversation.get`, a
-  `conversation.reply`, a `message.cancel` and every other item are left to run. Any named actor may end a line, a role
-  from its run among them, and the `reason` is required (`validation_failed`, `required` on `reason`). The line is
-  `contacts_finished`, with the people whose line it ended and the reason.
+  `conversation.reply`, a `message.cancel` and every other item are left to run, and what the provider holds for them
+  there is taken back (above). Any named actor may end a line, a role from its run among them, and the `reason` is
+  required (`validation_failed`, `required` on `reason`). The line is `contacts_finished`, with the people whose line it
+  ended and the reason.
 - **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose held
   touches are candidates again by that alone; any named actor may. The line is `contacts_continued`.
 - **`campaign.reopen_contacts`** (`jason campaign reopen-contacts`) enrols a `finished` member again. It is the person's
@@ -1395,7 +1442,8 @@ whose document says `touch: true`, today `message.send`, `social_invitation.send
 contact: they ask by the person and the operation, never by a channel, so a reply in a thread the person opened
 (`conversation.reply`), a take-back (`message.cancel`) and every read pass whatever the line's state. `line_finished`
 refuses a touch to a person whose membership of the campaign is `finished`: the line with them was ended, and only the
-person reopens it; a `paused` membership is not refused here. `touch_ceiling_reached` refuses a touch to a person who has
+person reopens it; a `paused` membership is not refused here, since a held person's touch is no candidate at all
+([Eligibility](#eligibility), rule 3). `touch_ceiling_reached` refuses a touch to a person who has
 already had `Lines:MaxTouches` touches in this campaign (§Settings): a touch counts when it is one of those operations
 about the person in this campaign, other than the item being claimed, and it succeeded, or any attempt of it ended classed
 `ambiguous`, since that attempt may have reached the person, whatever came after it and whatever became of the item —

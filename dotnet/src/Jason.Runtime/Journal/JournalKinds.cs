@@ -32,6 +32,13 @@ public static partial class JournalKinds
     /// question whose answer carried the person's decision where a run sent it.
     /// </summary>
     public const string ContactsReopened = "contacts_reopened";
+
+    /// <summary>
+    /// A reply line held a person's line in a campaign: the person, enrolled until then, is <c>paused</c>, so the claim takes
+    /// none of their touches there until the line is continued or ended. Names the person and the reply line, by ids only,
+    /// written by the respond step as the dispatcher.
+    /// </summary>
+    public const string ContactsPaused = "contacts_paused";
     public const string ContactCreated = "contact_created";
     public const string ContactUpdated = "contact_updated";
     public const string ContactArchived = "contact_archived";
@@ -405,6 +412,7 @@ public static partial class JournalKinds
         ContactsFinished,
         ContactsContinued,
         ContactsReopened,
+        ContactsPaused,
         ContactCreated,
         ContactUpdated,
         ContactArchived,

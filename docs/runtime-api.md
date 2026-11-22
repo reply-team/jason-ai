@@ -266,16 +266,21 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   each `{mode, source}`, the source `campaign`, `preference` or `default`; `campaign.update` takes no mode.
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
-- `campaign.remove_contacts`
+- `campaign.remove_contacts`: the person's open work in the campaign is cancelled, and what the provider still holds for
+  them there for a later moment is taken back, one cancel a letter, made by the dispatcher.
 - `campaign.finish_contacts`: ends the line with each person named, at most 1000: an `enrolled` or `paused` member
   becomes `finished`, and their open touches in the campaign, the provider operations whose document says
-  `touch: true`, are cancelled in the same save; their conversation, a reply in it and a take-back go on. Any named
+  `touch: true`, are cancelled in the same save, and what the provider holds for them there is taken back, as at a
+  removal; their conversation, a reply in it and a take-back go on. Any named
   actor may, a role from its run among them. `reason` is required: a missing or blank one is `validation_failed` with
   the detail `required` on `reason`. The answer is `remove_contacts`'s shape, each item `finished`, `already_finished`,
   `not_member`, `excluded` or `rejected`, under a `summary` that counts each, and the request writes one
   `contacts_finished` line ([docs/work-execution.md](work-execution.md), "A person's line in a campaign").
 - `campaign.continue_contacts`: a `paused` member is enrolled again; each item `continued`, `not_paused`,
-  `not_member`, `excluded` or `rejected`, and one `contacts_continued` line. Any named actor may.
+  `not_member`, `excluded` or `rejected`, and one `contacts_continued` line. Any named actor may. No verb pauses a
+  member: a reply does, in the dispatcher's respond step, which writes one reserved `contacts_paused` line
+  (`{contact_ids, line}`, the person and the reply line by their ids, as `system:dispatcher`), and while a member is
+  paused the claim takes none of their touches in the campaign ([docs/inbound-sync.md](inbound-sync.md) §1).
 - `campaign.reopen_contacts`: a `finished` member is enrolled again, on the person's decision, carried one of two ways:
   their own word, a named `human` from outside any run, or a run that names in `decision_id` the campaign's question
   that a named person answered and that references, as a `journal_entry`, the campaign's `contacts_finished` line that

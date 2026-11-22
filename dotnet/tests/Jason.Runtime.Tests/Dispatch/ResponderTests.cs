@@ -20,7 +20,7 @@ namespace Jason.Runtime.Tests.Dispatch;
 /// the thread and a responder waiting on it, once a thread while that responder is open; a further move is recorded on
 /// it. What the items carry is identifiers and moments, never a word of the conversation.
 /// </summary>
-public class ResponderTests
+public partial class ResponderTests
 {
     private static readonly DateTime Noon = new(2026, 10, 6, 12, 0, 0, DateTimeKind.Utc);
 
@@ -891,7 +891,8 @@ public class ResponderTests
         string? contact = null,
         string? attributedBy = null,
         bool events = false,
-        bool campaignOwn = false)
+        bool campaignOwn = false,
+        int? contactRow = null)
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
@@ -922,7 +923,8 @@ public class ResponderTests
             JournalKinds.InboundReplyObserved,
             campaign,
             key: InboundSync.ObservationKey(Reader, thread, moment),
-            updated: said);
+            updated: said,
+            contactId: contactRow);
         await db.SaveChangesAsync(Ct);
         return entry.PublicId;
     }
