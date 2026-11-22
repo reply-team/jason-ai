@@ -18,7 +18,7 @@ public sealed class LinesOptions
 
     /// <summary>
     /// How many touches — the operations whose document says <c>touch: true</c> — a person may have in one campaign, counted
-    /// by the work that succeeded or ended ambiguous, since that may have reached them. At the ceiling the claim refuses the
+    /// by the work that succeeded or whose last attempt is classed ambiguous, since that may have reached them. At the ceiling the claim refuses the
     /// next touch with <c>touch_ceiling_reached</c>, and the manager ends the line.
     /// </summary>
     public int MaxTouches { get; set; } = 5;

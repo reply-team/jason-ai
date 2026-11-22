@@ -1317,12 +1317,13 @@ contact: they ask by the person and the operation, never by a channel, so a repl
 refuses a touch to a person whose membership of the campaign is `finished`: the line with them was ended, and only the
 person reopens it; a `paused` membership is not refused here. `touch_ceiling_reached` refuses a touch to a person who has
 already had `Lines:MaxTouches` touches in this campaign (§Settings): a touch counts when it is one of those operations
-about the person in this campaign, other than the item being claimed, and it succeeded, or failed with a last attempt
-classed `ambiguous`, since that attempt may have reached the person — one definition, which the people list counts by
-too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+about the person in this campaign, other than the item being claimed, and it succeeded, or its last attempt is classed
+`ambiguous`, since that attempt may have reached the person, whatever became of the item since — put back for a repeat,
+parked again, cancelled or expired — one definition, which the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
 dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
-cannot both pass the count, since the claim takes one item of a campaign at a time and none while another of its items
-is `scheduled` or `processing`.
+cannot both pass the count: the claim takes one item of a campaign at a time and none while another of its items is
+`scheduled` or `processing`, so every touch claimed before is counted by its last attempt once it has left
+`processing`, and one that has not run yet is counted at its own claim.
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
@@ -1600,7 +1601,7 @@ mistyped one.
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
 | `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
-| `Lines:MaxTouches` | `5` | 1..20 | the most touches — operations whose document says `touch: true` — a person may have in one campaign, counted by the work about them there that succeeded or failed with a last attempt classed `ambiguous`; at it the claim refuses the next touch with `touch_ceiling_reached`, before anybody is asked to approve it, and the manager ends the line (§Provider operations); there is no 0 and no unlimited, and no verb writes it, only the settings file |
+| `Lines:MaxTouches` | `5` | 1..20 | the most touches — operations whose document says `touch: true` — a person may have in one campaign, counted by the work about them there that succeeded or whose last attempt is classed `ambiguous`, whatever became of it since; at it the claim refuses the next touch with `touch_ceiling_reached`, before anybody is asked to approve it, and the manager ends the line (§Provider operations); there is no 0 and no unlimited, and no verb writes it, only the settings file |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps

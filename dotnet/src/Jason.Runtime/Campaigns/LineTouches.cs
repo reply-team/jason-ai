@@ -12,9 +12,10 @@ namespace Jason.Runtime.Campaigns;
 /// <remarks>
 /// <para>
 /// A touch counts when its work item is a provider operation whose document says <c>touch: true</c>
-/// (<see cref="OperationCatalog.Touches"/>) and it either succeeded or failed with a last attempt whose class is
-/// <c>ambiguous</c>, since that attempt may have reached the person. Work that failed any other way, work still open, and
-/// work expired or cancelled reached nobody, and counts for nothing.
+/// (<see cref="OperationCatalog.Touches"/>) and it either succeeded or has a last attempt whose class is <c>ambiguous</c>,
+/// whatever the item's status since, since that attempt may have reached the person: an item put back for a repeat,
+/// parked again, cancelled or expired after such an attempt still counts. Work whose last attempt ended any other way, and
+/// work that never ran, reached nobody, and counts for nothing.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
@@ -33,9 +34,8 @@ internal static class LineTouches
         (w.kind = 'provider_op'
          AND w.operation IN ({{TouchesSql}})
          AND (w.status = 'succeeded'
-              OR (w.status = 'failed'
-                  AND (SELECT json_extract(a.error_json, '$.class') FROM attempts AS a
-                       WHERE a.work_item_id = w.id ORDER BY a.number DESC LIMIT 1) = 'ambiguous')))
+              OR (SELECT json_extract(a.error_json, '$.class') FROM attempts AS a
+                  WHERE a.work_item_id = w.id ORDER BY a.number DESC LIMIT 1) = 'ambiguous'))
         """;
 
     /// <summary>

@@ -19,7 +19,8 @@ namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
 /// The line's two checks through the real claim, its real reads and a real database, with <c>Lines:MaxTouches</c> at two:
-/// what the ceiling counts — a touch that succeeded, or failed with a last attempt classed ambiguous, and nothing else — and
+/// what the ceiling counts — a touch that succeeded, or whose last attempt is classed ambiguous whatever became of the item
+/// since, and nothing else — and
 /// that a refusal is decided before anybody is asked to approve, ends the item failed, and wakes the manager.
 /// </summary>
 public partial class ClaimerTests
@@ -126,11 +127,12 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// What the ceiling counts is the person's touches in this campaign and nothing else: another person's, the person's in
-    /// another campaign, work that reaches nobody, and touches still open or that expired count for nothing.
+    /// What the ceiling counts is the person's touches in this campaign that may have reached them and nothing else: another
+    /// person's, the person's in another campaign, work that reaches nobody, and touches that never ran count for nothing;
+    /// a touch whose only attempt was ambiguous counts whatever became of the item since, put back for a repeat or cancelled.
     /// </summary>
     [Fact]
-    public async Task Only_the_person_s_own_touches_in_this_campaign_that_ended_are_counted()
+    public async Task Only_the_person_s_own_touches_in_this_campaign_that_may_have_reached_them_are_counted()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -145,13 +147,16 @@ public partial class ClaimerTests
         await TouchedAsync(db, campaign, contact, WorkItemStatus.Expired);
         await TouchedAsync(db, campaign, contact, WorkItemStatus.AwaitingApproval);
         await TouchedAsync(db, campaign, contact, WorkItemStatus.Cancelled);
+        await AmbiguousAsync(db, await TouchedAsync(db, campaign, contact, WorkItemStatus.Created));
+        await AmbiguousAsync(db, await TouchedAsync(db, campaign, contact, WorkItemStatus.Cancelled));
 
-        Assert.Equal(1, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, workItemId: 0, Ct));
+        Assert.Equal(3, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, workItemId: 0, Ct));
     }
 
     /// <summary>
     /// The item being claimed is never counted against itself, whatever its own attempts were: an earlier attempt of it that
-    /// lost its answer is the repeat's own concern (check 23), not one more touch.
+    /// lost its answer is the repeat's own concern (check 23), not one more touch. That attempt is ambiguous, so counted it
+    /// would bring the item to the ceiling of two with the one other touch; left out, the claim goes on to check 23.
     /// </summary>
     [Fact]
     public async Task The_item_s_own_earlier_attempt_is_not_counted_against_it()
@@ -174,10 +179,45 @@ public partial class ClaimerTests
         var refusal = (await fresh.Attempts.AsNoTracking().Where(a => a.WorkItemId == repeat.Id).OrderByDescending(a => a.Number).FirstAsync(Ct)).Error!;
         Assert.Equal(AttemptErrors.ProviderAnswerLost, refusal.Code);
 
-        // And the count itself leaves the item out even where the item has ended as one that would count.
+        // The count itself: the repeat's lost attempt counts for every other item, and never for the repeat; and an item
+        // left out is left out even where it ended as one that would count.
+        await using var counting = database.Open();
+        Assert.Equal(1, await LineTouches.OthersAsync(counting, campaign.Id, contact.Id, repeat.Id, Ct));
+        Assert.Equal(2, await LineTouches.OthersAsync(counting, campaign.Id, contact.Id, workItemId: 0, Ct));
         var ended = await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
-        Assert.Equal(1, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, ended.Id, Ct));
-        Assert.Equal(2, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, workItemId: 0, Ct));
+        Assert.Equal(2, await LineTouches.OthersAsync(counting, campaign.Id, contact.Id, ended.Id, Ct));
+        Assert.Equal(3, await LineTouches.OthersAsync(counting, campaign.Id, contact.Id, workItemId: 0, Ct));
+    }
+
+    /// <summary>
+    /// The boundary of the ceiling while a touch waits to be repeated: four touches went out, a fifth lost its answer and was
+    /// put back to be tried again later, and a sixth is claimed meanwhile. The fifth may have reached the person, so the
+    /// sixth meets the ceiling of five, and is refused, though the fifth has not ended.
+    /// </summary>
+    [Fact]
+    public async Task A_touch_put_back_after_a_lost_answer_counts_against_the_next_one_at_the_boundary()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LineHarness();
+        harness.Lines.CurrentValue = new LinesOptions { MaxTouches = 5 };
+        var (campaign, contact) = await LineSceneAsync(db);
+        for (var sent = 0; sent < 4; sent++)
+        {
+            await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        }
+
+        var repeat = await TouchedAsync(db, campaign, contact, WorkItemStatus.Created);
+        repeat.RetryAfter = Noon.AddHours(1);
+        await AmbiguousAsync(db, repeat);
+        var next = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(AttemptErrors.TouchCeilingReached, await RefusalAsync(fresh, next));
+        Assert.Equal(WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == repeat.Id, Ct)).Status);
     }
 
     /// <summary>
@@ -323,6 +363,18 @@ public partial class ClaimerTests
         db.CampaignContacts.Add(new CampaignContact { Campaign = campaign, Contact = contact, State = state, AddedAt = Noon.AddDays(-7), UpdatedAt = Noon.AddDays(-1) });
         await db.SaveChangesAsync(Ct);
         return (campaign, contact);
+    }
+
+    /// <summary>An attempt of <paramref name="item"/> that lost its answer, its only one: it may have reached the person.</summary>
+    private static async Task AmbiguousAsync(JasonDbContext db, WorkItem item)
+    {
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon.AddHours(-2));
+        attempt.FinishedAt = Noon.AddMinutes(-90);
+        attempt.Error = new AttemptErrorDto("provider_answer_lost", "The answer was lost.", true, Class: FailureClass.Ambiguous);
+        item.AttemptCount = 1;
+        item.LastError = attempt.Error with { Trace = null };
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
     }
 
     /// <summary>
