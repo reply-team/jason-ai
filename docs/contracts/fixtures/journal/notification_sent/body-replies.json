@@ -1,0 +1,20 @@
+{
+  "kind": "notification_sent",
+  "version": 1,
+  "case": "a notification that counted the replies a role judged a person's own since the last one that reached anybody, beside the approval an answer needs",
+  "body": {
+    "key": "notification",
+    "old": null,
+    "new": {
+      "notification_id": "ntf_01JC000000000000000000000G",
+      "counts": { "approvals": 1, "decisions": 0, "protective_failures": 0, "event_gaps": 0, "blocks": 0, "held": 0, "bounces": 0, "replies": 1 },
+      "covered_through": "jrn_01JC000000000000000000000H",
+      "channels": [
+        { "channel": "desktop", "kind": "toast", "outcome": "delivered", "attempts": 1 }
+      ],
+      "last_delivered_at": "2026-11-22T12:01:10.000Z",
+      "delivered_through": "jrn_01JC000000000000000000000H"
+    }
+  },
+  "expect": "valid"
+}
