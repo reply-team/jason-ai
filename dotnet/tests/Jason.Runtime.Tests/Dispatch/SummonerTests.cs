@@ -181,6 +181,73 @@ public class SummonerTests
         Assert.Null(item.Context["trigger"]);
     }
 
+    /// <summary>A review the cadence brought round, with nothing in the chronicle to cause it, is the quick look.</summary>
+    [Fact]
+    public async Task A_scheduled_check_in_with_no_cause_is_the_quick_look()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        await SeedAsync(harness, live: true);
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var item = await SingleCheckInAsync(harness);
+        Assert.Equal("scheduled", (string?)item.Context["review_intent"]);
+        Assert.Equal("quick_look", item.Entry);
+    }
+
+    /// <summary>A thread that moved is the <c>inbound_reply</c> entry, and the brief names the line it was.</summary>
+    [Fact]
+    public async Task A_reply_line_gives_the_inbound_reply_entry()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.InboundReplyObserved);
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var item = await SingleCheckInAsync(harness);
+        Assert.Equal("triggered", (string?)item.Context["review_intent"]);
+        Assert.Equal(JournalKinds.InboundReplyObserved, (string?)item.Context["trigger"]);
+        Assert.Equal("inbound_reply", item.Entry);
+    }
+
+    /// <summary>
+    /// A reply read behind a failure in one pass is the cause, so the entry, the brief's trigger and the line its cause
+    /// names all agree, and the count still counts both lines.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_behind_a_failure_is_the_cause_the_brief_and_the_entry_name()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+        await JournalAsync(harness, campaign, JournalKinds.InboundReplyObserved);
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        await using var db = harness.Open();
+        var reply = await db.Journal.Where(e => e.Kind == JournalKinds.InboundReplyObserved).Select(e => e.PublicId).SingleAsync(Ct);
+        var item = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+        Assert.Equal("inbound_reply", item.Entry);
+        Assert.Equal(JournalKinds.InboundReplyObserved, (string?)item.Context["trigger"]);
+        Assert.Equal(reply, (string?)item.Context["cause"]!["journal_entry_id"]);
+        Assert.Equal(2, (int?)item.Context["cause"]!["qualifying_count"]);
+    }
+
+    /// <summary>Any other cause is the general text: the check-in names no entry.</summary>
+    [Fact]
+    public async Task A_failure_names_no_entry()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.WorkItemFailed);
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        Assert.Null((await SingleCheckInAsync(harness)).Entry);
+    }
+
     /// <summary>And never twice, however many scans run while the first one is open.</summary>
     [Fact]
     public async Task A_due_campaign_is_not_summoned_again_while_its_check_in_is_open()

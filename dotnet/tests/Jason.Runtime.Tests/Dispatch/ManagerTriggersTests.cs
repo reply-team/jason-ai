@@ -118,6 +118,122 @@ public class ManagerTriggersTests
         Assert.Equal("att_first", cause.AttemptId);
     }
 
+    private static readonly IReadOnlySet<string> OnAll = new HashSet<string>(StringComparer.Ordinal)
+    {
+        JournalKinds.WorkItemFailed,
+        JournalKinds.InboundReplyObserved,
+        JournalKinds.CampaignStarted,
+    };
+
+    /// <summary>
+    /// A reply that moved behind a failure in one read is the cause: the review the burst summons is the one that
+    /// reads the reply, and its entry and its brief say so.
+    /// </summary>
+    [Fact]
+    public void A_reply_behind_a_failure_in_one_read_is_the_cause()
+    {
+        var entries = new[]
+        {
+            Entry(5, JournalKinds.WorkItemFailed, workItemId: "wi_failed", attemptId: "att_failed"),
+            Entry(6, JournalKinds.InboundReplyObserved),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAll, Nobody, watermark: 4);
+
+        var cause = Assert.NotNull(read.Cause);
+        Assert.Equal(JournalKinds.InboundReplyObserved, cause.Kind);
+        Assert.Equal("jrn_00006", cause.JournalEntryId);
+        Assert.Null(cause.WorkItemId);
+    }
+
+    /// <summary>And a start outranks a reply: the campaign going live is what the review that follows is for.</summary>
+    [Fact]
+    public void A_start_behind_a_reply_is_the_cause()
+    {
+        var entries = new[]
+        {
+            Entry(5, JournalKinds.WorkItemFailed),
+            Entry(6, JournalKinds.InboundReplyObserved),
+            Entry(7, JournalKinds.CampaignStarted),
+            Entry(8, JournalKinds.InboundReplyObserved),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAll, Nobody, watermark: 4);
+
+        var cause = Assert.NotNull(read.Cause);
+        Assert.Equal(JournalKinds.CampaignStarted, cause.Kind);
+        Assert.Equal("jrn_00007", cause.JournalEntryId);
+    }
+
+    /// <summary>Within one rank the first line still wins, as it did before kinds were ranked.</summary>
+    [Fact]
+    public void Two_failures_keep_the_first()
+    {
+        var entries = new[]
+        {
+            Entry(5, JournalKinds.WorkItemFailed, workItemId: "wi_first"),
+            Entry(6, JournalKinds.WorkItemFailed, workItemId: "wi_second"),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAll, Nobody, watermark: 4);
+
+        Assert.Equal("wi_first", Assert.NotNull(read.Cause).WorkItemId);
+    }
+
+    /// <summary>
+    /// Two starts in one read keep the first, which is the one the first-start lookup can recognise; and a second
+    /// reply behind the first keeps the first reply.
+    /// </summary>
+    [Fact]
+    public void Within_a_ranked_kind_the_first_line_wins_too()
+    {
+        var starts = ManagerTriggers.Read(
+            [Entry(5, JournalKinds.CampaignStarted), Entry(6, JournalKinds.CampaignStarted)], OnAll, Nobody, watermark: 4);
+        var replies = ManagerTriggers.Read(
+            [Entry(5, JournalKinds.InboundReplyObserved), Entry(6, JournalKinds.InboundReplyObserved)], OnAll, Nobody, watermark: 4);
+
+        Assert.Equal("jrn_00005", Assert.NotNull(starts.Cause).JournalEntryId);
+        Assert.Equal("jrn_00005", Assert.NotNull(replies.Cause).JournalEntryId);
+    }
+
+    /// <summary>The rank chooses the cause and nothing else: the count is every qualifying line, whatever its kind.</summary>
+    [Fact]
+    public void The_count_counts_every_qualifying_line_whatever_the_rank()
+    {
+        var entries = new[]
+        {
+            Entry(5, JournalKinds.WorkItemFailed),
+            Entry(6, JournalKinds.InboundReplyObserved),
+            Entry(7, JournalKinds.ContactsAdded),
+            Entry(8, JournalKinds.WorkItemFailed, workItemId: "wi_check_in"),
+            Entry(9, JournalKinds.CampaignStarted),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAll, Ours("wi_check_in", "att_1"), watermark: 4);
+
+        var cause = Assert.NotNull(read.Cause);
+        Assert.Equal(JournalKinds.CampaignStarted, cause.Kind);
+        Assert.Equal(3, cause.QualifyingCount);
+        Assert.Equal(9, read.Watermark);
+    }
+
+    /// <summary>A check-in's own start is passed over before it is ranked, so it never outranks a real line.</summary>
+    [Fact]
+    public void A_check_ins_own_line_is_not_ranked()
+    {
+        var entries = new[]
+        {
+            Entry(5, JournalKinds.WorkItemFailed, workItemId: "wi_real"),
+            Entry(6, JournalKinds.CampaignStarted, actor: ActorType.Attempt, actorId: "att_1"),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAll, Ours("wi_check_in", "att_1"), watermark: 4);
+
+        var cause = Assert.NotNull(read.Cause);
+        Assert.Equal(JournalKinds.WorkItemFailed, cause.Kind);
+        Assert.Equal(1, cause.QualifyingCount);
+    }
+
     /// <summary>
     /// The manager about to be launched reads the whole chronicle, so everything in this read is accounted for
     /// by the check-in this read creates. Ten failures in a burst are one launch; a watermark left at the cause
