@@ -134,7 +134,8 @@ public partial class HeldSendsCancelTests
     /// as the inbound read's line is.
     /// </summary>
     [Theory]
-    [InlineData("other_side", MembershipState.Paused)]
+    // Critical: a reply the provider says the other side wrote, skipped by its moments, lets the next touch go to a person who answered.
+    [InlineData("other_side", MembershipState.Paused, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.N2)])]
     [InlineData(null, MembershipState.Enrolled)]
     public async Task An_events_line_that_names_the_other_side_holds_whatever_the_moments(string? movedBy, MembershipState expected)
     {
