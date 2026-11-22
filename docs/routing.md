@@ -251,12 +251,13 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twenty-eight answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the thirty answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last twenty-one are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last twenty-three are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
-value is suppressed, whether the person stands opted out, whether the routed plugin has pinned the person an operation that works by the pin
+value is suppressed, whether the person stands opted out, whether the line with the person in the campaign was ended, whether the person has had
+the most touches the ceiling allows there, whether the routed plugin has pinned the person an operation that works by the pin
 alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
 made under the route the item is routed to, the same three questions of the search a status read or a stop names, whether an audience named
 by its number is one the campaign holds, whether the composed input satisfies the schema, whether the definition it carries satisfies the
@@ -503,7 +504,7 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twenty-eight, in the order they are checked
+### At the claim — the thirty, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -564,7 +565,7 @@ is asked about work while the provider refuses it, and work a person releases st
 
 A row's number is its name and stays the same from release to release, and the order the checks are asked in is the
 order of this table: so row 27 stands between rows 23 and 24, so that nobody is asked to approve, and no block holds, a
-reply that could only be refused.
+reply that could only be refused, and rows 28, 29 and 30 stand between rows 10 and 11, in that order.
 
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
@@ -579,6 +580,8 @@ reply that could only be refused.
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out, or takes back a send to them, declares `preflight.suppression: not_applicable` — today `optout.record`, `enrollment.stop` and `message.cancel`, and `audience.search_cancel`, which stops a search and reaches nobody — and meets neither the check nor the read: a suppressed person is exactly who it is for |
 | 28 | `opted_out` | permanent | a verdict that stands says the person asked not to be written to: a `reply_classified` line of any campaign whose nature is `opt_out` and whose body names this contact, with no later verdict on that reply that lifts it. The register is by value and this lock is by the person: it is asked right after row 10, under the same gate and over the same operations, and refuses what row 10 would for a value the register never held — an address or a profile the contact gained after the verdict, or any value of a contact who had none when they asked. It is asked only where row 10 found no entry, so a person who lists the register finds the entry wherever one is. Like the register, it holds in every campaign: a person's request to be left alone is not one campaign's. Only a person's own later verdict on the same reply in that verdict's campaign lifts it — recorded under a `human` actor that names the person, outside any run, and stating a nature other than `opt_out`; a role's or a run's own verdict never lifts it, nor does a person named from inside a run or under the chat's marker (a verdict recorded under it, `confined` on its line, as a chat wrote one before 0.49.2 or any caller that sets `JASON_CONFINED` writes one, is the chat's), a `human` actor with no name, a verdict that states no nature, or one that carries a person's answer to the campaign's question (`decision_id`) by that alone. `suppression.remove` takes one entry off the register and leaves this lock where it is ([runtime API](runtime-api.md), `reply.record`). The lock holds by the contact record: another contact record of the same person, with a value the opted-out record never had, is not covered, since Jason does not merge contacts |
+| 29 | `line_finished` | permanent | the operation is a touch — its document says `touch: true`, today `message.send`, `social_invitation.send` and `campaign.enroll` — and the person the item names has a line in this campaign that was ended: their membership of the campaign is `finished`. Only the person reopens it. It asks by the person and the operation, never by a channel, so it is asked after row 28 whatever the operation consumes, and only of a touch that names a contact: a reply in a thread the person opened (`conversation.reply`), a take-back (`message.cancel`) and every read pass, whatever the line's state. A `paused` membership is not refused here |
+| 30 | `touch_ceiling_reached` | permanent | the operation is a touch, as row 29 reads it, and the person has already had `Lines:MaxTouches` touches in this campaign (five unless set, one to twenty, never zero and never unlimited). A touch counts when its work item is one of those operations about the person in this campaign, other than the item being claimed, and it succeeded, or any attempt of it ended classed `ambiguous`, which may have reached the person, whatever came after that attempt and whatever became of the item — put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most, and work that neither succeeded nor had an ambiguous attempt counts for nothing. Where a later attempt found nothing had been sent, this counts one too many, the safe side of a ceiling. The count is one definition, which the people list counts by too. The refusal is the manager's to read: `workitem_failed` wakes it, and it ends the line. Raise the setting only where the campaign should go on with this person |
 | 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act) |
 | 12 | `send_unknown` | permanent | the operation reads or takes back one send — its input schema names `send`, today `message.status` and `message.cancel` — and the work item `args.send` names is not one of this campaign's, or is not an operation that makes a send: `message.send` or `social_invitation.send`. Name the work item that made the send, in this campaign; then create a new item. An operation that names no send never meets this check, nor the two after it |
 | 13 | `send_reference_absent` | permanent | the send named has no reference to act by: it has not succeeded, or the provider gave it none. The runtime composes `send.reference` from the send's own attempt and from nothing a caller writes, so there is nothing to read or take back yet. Wait for the send to succeed, or create a new item for another one |
@@ -603,7 +606,8 @@ it keeps what the attempt before it left unknown; everything else is structural.
 before it may have reached the person: while the item carries an unsettled attempt of an operation row 23 holds — one the
 work item's key settles, or a metered one its recovery read settles — every refusal from check 2 to check 22 keeps its
 code, and so does check 27, and is recorded `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the
-person, or may have acted and be spending. A route moved since the lost answer to a plugin
+person, or may have acted and be spending. Checks 28, 29 and 30 are asked among the first of those, by their place, so they are among
+them too: a touch refused for an ended line, or at the ceiling, after a lost answer may still have reached the person. A route moved since the lost answer to a plugin
 without the operation is `plugin_operation_unsupported` so. Whatever a row above says to change, new work for that
 send is created only once the provider has said the earlier attempt did not act. And an argument that
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the

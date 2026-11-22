@@ -39,7 +39,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twenty-eight checks' order")]
+    [Critical(Family.W3, "the thirty checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -88,7 +88,21 @@ public partial class ProviderOpPreflightTests
         scenario.OptedOut = OptOutVerdict;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
+        // Twenty-ninth and thirtieth, asked right after the twenty-eighth, by the person and the operation rather than a
+        // channel: a touch to a person whose line in this campaign was ended, then a touch past the ceiling. The delete is
+        // no touch, so an enrolment of the same person stands in for these two.
         scenario.OptedOut = null;
+        var person = (scenario.Operation, scenario.Arguments);
+        scenario.Operation = Enroll;
+        scenario.Arguments = Scenario.CompleteEnrollment;
+        scenario.Line = new LineFacts(MembershipState.Finished, Touches: 0, Ceiling: 5);
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Line = new LineFacts(MembershipState.Enrolled, Touches: 5, Ceiling: 5);
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Line = null;
+        (scenario.Operation, scenario.Arguments) = person;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
         // Twelfth to fourteenth: a read of a send acts by the reference the send's own attempt returned, so it is asked before the input
@@ -282,7 +296,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty-eight is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the thirty is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -312,13 +326,13 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// The one answer three of the checks give that is not a refusal is named beside the twenty-eight rather than among
+    /// The one answer three of the checks give that is not a refusal is named beside the thirty rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
     /// outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_twenty_eight()
+    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_thirty()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -1470,6 +1484,9 @@ public partial class ProviderOpPreflightTests
 
         public string? OptedOut { get; set; }
 
+        /// <summary>Where the line with the person in the campaign stands, as the claim would have read it for a touch; null where it read nothing.</summary>
+        public LineFacts? Line { get; set; }
+
         public JsonObject? Arguments { get; set; }
 
         public IReadOnlyDictionary<string, string> ContactPins { get; set; } = PreflightFacts.NoPins;
@@ -1625,7 +1642,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread, OptedOut: OptedOut);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread, OptedOut: OptedOut, Line: Line);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

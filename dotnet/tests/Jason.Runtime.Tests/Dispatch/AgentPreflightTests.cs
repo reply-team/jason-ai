@@ -920,6 +920,7 @@ public class AgentPreflightTests
                 settings,
                 TestOptions.LaunchesSettings(),
                 TestOptions.SendingSettings(),
+                TestOptions.LinesSettings(),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>());
         }

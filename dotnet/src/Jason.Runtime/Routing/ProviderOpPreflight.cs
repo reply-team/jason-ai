@@ -56,10 +56,12 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Twenty-eight checks in one
+/// Everything that can stop a provider work item, decided before a child process exists. Thirty checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
-/// another plugin, numbered after the rest and asked after the twenty-third, before the twenty-fourth, and the
-/// twenty-eighth, a contact who opted out, numbered after it and asked right after the tenth — then whether another search of the campaign
+/// another plugin, numbered after the rest and asked after the twenty-third, before the twenty-fourth, the
+/// twenty-eighth, a contact who opted out, numbered after it and asked right after the tenth, and the twenty-ninth and
+/// thirtieth, a touch on a line that was ended and a touch past the ceiling, numbered after that and asked right after
+/// the twenty-eighth — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -67,7 +69,8 @@ public sealed record PreflightVerdict(
 /// <remarks>
 /// <para>
 /// A pure function over <see cref="PreflightFacts"/> and two immutable snapshots, matching schema patterns under
-/// the timing every validating site is handed: no database, no clock, no options. The claimer reads the facts
+/// the timing every validating site is handed: no database, no clock, no options — the ceiling of touches is read by the
+/// claimer once a scan and carried among the facts (<see cref="LineFacts"/>). The claimer reads the facts
 /// inside the claim transaction and this decides on them, which is what keeps the claim to a handful of indexed
 /// reads and lets the order above be a unit test with no fixture.
 /// </para>
@@ -86,7 +89,7 @@ public static class ProviderOpPreflight
     private const string ContactPin = "contact";
 
     /// <summary>
-    /// The twenty-eight, in the order they are checked: the published order. The first that fails is the one the attempt
+    /// The thirty, in the order they are checked: the published order. The first that fails is the one the attempt
     /// records. A check's number is its name, <see cref="Numbers"/>, and is not its place here.
     /// </summary>
     /// <remarks>
@@ -107,6 +110,8 @@ public static class ProviderOpPreflight
         AttemptErrors.NoChannelValue,
         AttemptErrors.Suppressed,
         AttemptErrors.OptedOut,
+        AttemptErrors.LineFinished,
+        AttemptErrors.TouchCeilingReached,
         AttemptErrors.ContactNotLinked,
         AttemptErrors.SendUnknown,
         AttemptErrors.SendReferenceAbsent,
@@ -130,7 +135,13 @@ public static class ProviderOpPreflight
     /// The checks added after the rest were numbered, in the order they were added: each takes the next number free
     /// wherever it is asked, so that no row's number, and no "check N" a page or a person cites, ever moves.
     /// </summary>
-    private static readonly string[] NumberedAfterTheRest = [AttemptErrors.ThreadRouteMismatch, AttemptErrors.OptedOut];
+    private static readonly string[] NumberedAfterTheRest =
+    [
+        AttemptErrors.ThreadRouteMismatch,
+        AttemptErrors.OptedOut,
+        AttemptErrors.LineFinished,
+        AttemptErrors.TouchCeilingReached,
+    ];
 
     /// <summary>
     /// Each check's published number, its name from release to release: the place it is asked at among the checks numbered
@@ -166,7 +177,8 @@ public static class ProviderOpPreflight
 
     /// <summary>
     /// The refusals from <c>no_route</c> through <c>template_not_offered</c>, named by the last of them and counted by
-    /// its place, so a check added among them is among them, and <c>thread_route_mismatch</c>, named: they say nothing of
+    /// its place, so a check added among them is among them — <c>opted_out</c>, <c>line_finished</c> and
+    /// <c>touch_ceiling_reached</c> are, by their place — and <c>thread_route_mismatch</c>, named: they say nothing of
     /// whether an earlier attempt acted. While the work item carries one that may have reached the person, each keeps its
     /// code and is recorded ambiguous, with <see cref="MayHaveActed"/>.
     /// </summary>
@@ -204,7 +216,7 @@ public static class ProviderOpPreflight
             : verdict;
     }
 
-    /// <summary>The twenty-eight checks, in the published order: the first that fails is the verdict.</summary>
+    /// <summary>The thirty checks, in the published order: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
@@ -266,6 +278,27 @@ public static class ProviderOpPreflight
                     resolution,
                     AttemptErrors.OptedOut,
                     $"The contact asked not to be written to (opt-out verdict {verdict}), so nothing reaches them on any channel, in any campaign. Only a person's own later verdict on that reply lifts this: recorded under their name, outside any run, saying what the reply is other than an opt-out; taking a value off the suppression list does not.");
+            }
+        }
+
+        // Twenty-ninth and thirtieth, asked right after the twenty-eighth: the line with the person in this campaign has an
+        // end. They are the person's checks, decided by the operation and not by a channel, so they sit outside the channel's
+        // block and ask only of a touch — an act that opens or carries on the line — that names somebody. A reply in a thread
+        // the person opened, a take-back and every read pass, whatever the line's state. An ended line answers first: it is
+        // what a person decided, and the ceiling only what the count reached.
+        if (OperationCatalog.Touches.Contains(contract.Id) && facts.Contact is not null && facts.Line is { } line)
+        {
+            if (line.State == MembershipState.Finished)
+            {
+                return Refused(resolution, AttemptErrors.LineFinished, "The line with this person in this campaign was ended; only the person reopens it.");
+            }
+
+            if (line.Touches >= line.Ceiling)
+            {
+                return Refused(
+                    resolution,
+                    AttemptErrors.TouchCeilingReached,
+                    string.Create(CultureInfo.InvariantCulture, $"This person has had the most touches Lines:MaxTouches allows in this campaign, {line.Ceiling}; the manager ends the line."));
             }
         }
 

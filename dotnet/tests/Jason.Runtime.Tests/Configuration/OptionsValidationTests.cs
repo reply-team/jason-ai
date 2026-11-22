@@ -209,6 +209,37 @@ public class OptionsValidationTests
         Assert.Contains("Dispatcher:MaxParallel must be between 1 and 64; got 65.", result.Failures!);
     }
 
+    /// <summary>
+    /// The ceiling of touches a person may have in one campaign is one to twenty, five unless set: there is no zero and no
+    /// unlimited, so a line always has an end.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(21)]
+    [InlineData(-1)]
+    public void The_ceiling_of_touches_is_one_to_twenty(int touches)
+    {
+        var result = new LinesOptionsValidator().Validate(null, new LinesOptions { MaxTouches = touches });
+
+        Assert.True(result.Failed, $"A ceiling of {touches} touches was accepted.");
+        Assert.Contains($"Lines:MaxTouches must be between 1 and 20; got {touches}.", result.Failures!);
+        Assert.True(new LinesOptionsValidator().Validate(null, new LinesOptions { MaxTouches = 1 }).Succeeded);
+        Assert.True(new LinesOptionsValidator().Validate(null, new LinesOptions { MaxTouches = 20 }).Succeeded);
+        Assert.Equal(5, new LinesOptions().MaxTouches);
+        Assert.True(new LinesOptionsValidator().Validate(null, new LinesOptions()).Succeeded);
+    }
+
+    /// <summary>The runtime's own registration holds the section to its validator, so a ceiling outside its bounds is refused by path.</summary>
+    [Fact]
+    public void A_ceiling_of_touches_outside_its_bounds_stops_the_start()
+    {
+        using var dir = new TempDataDir();
+        using var provider = Registered(dir.Paths, Json("""{"Lines":{"MaxTouches":0}}""")).BuildServiceProvider();
+
+        var refused = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptionsMonitor<LinesOptions>>().CurrentValue);
+        Assert.Contains("Lines:MaxTouches must be between 1 and 20; got 0.", refused.Failures);
+    }
+
     [Theory]
     [InlineData(59)]
     [InlineData(86_401)]

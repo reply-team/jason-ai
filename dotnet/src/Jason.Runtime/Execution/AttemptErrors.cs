@@ -139,6 +139,18 @@ public static class AttemptErrors
     public const string OptedOut = "opted_out";
 
     /// <summary>
+    /// The work touches a person — opens or carries on the line with them — whose line in this campaign was ended: their
+    /// membership is <c>finished</c>. Only the person reopens it.
+    /// </summary>
+    public const string LineFinished = "line_finished";
+
+    /// <summary>
+    /// The work touches a person who has already had, in this campaign, the most touches <c>Lines:MaxTouches</c> allows:
+    /// the manager ends the line rather than the claim letting one more through.
+    /// </summary>
+    public const string TouchCeilingReached = "touch_ceiling_reached";
+
+    /// <summary>
     /// The operation works by the routed plugin's pin alone, and that plugin has pinned nothing for the person: nobody at
     /// the provider is known to be them, so there is nothing to act on and nobody is looked up to find out.
     /// </summary>

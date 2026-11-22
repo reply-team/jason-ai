@@ -20,7 +20,7 @@ public static class SettingsVocabulary
     {
         // The sections.
         "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Launches", "Harness",
-        "Subscriptions", "Sending",
+        "Subscriptions", "Sending", "Lines",
 
         // Runtime and Logging.
         "Port",
@@ -69,6 +69,9 @@ public static class SettingsVocabulary
 
         // Sending: the daily ceiling of automatic sends.
         "AutomaticMaxPerDay",
+
+        // Lines: the ceiling of touches a person may have in one campaign.
+        "MaxTouches",
 
         // Harness.
         "Root",

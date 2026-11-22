@@ -2199,6 +2199,7 @@ public partial class ClaimerTests
                 settings,
                 TestOptions.LaunchesSettings(),
                 TestOptions.SendingSettings(Sending),
+                TestOptions.LinesSettings(Lines),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
@@ -2215,6 +2216,9 @@ public partial class ClaimerTests
 
         /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
         public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
+
+        /// <summary>The lines section the claim reads at each scan's start, which a test may change between scans.</summary>
+        public TestOptionsMonitor<LinesOptions> Lines { get; } = new(new LinesOptions());
 
         /// <summary>
         /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen

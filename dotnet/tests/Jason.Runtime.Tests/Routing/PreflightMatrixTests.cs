@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
@@ -22,7 +23,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Seventeen of the twenty-eight are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Nineteen of the thirty are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
 /// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead, and so is <c>provider_answer_lost</c>,
 /// which needs an earlier attempt that lost its answer and is met through the real claim in <c>ClaimerTests</c>. The five
@@ -241,6 +242,38 @@ public class PreflightMatrixTests
             AttemptErrors.OptedOut,
             FailureClass.Permanent),
 
+        // A send to a person whose line in this campaign was ended: refused by the person, before anybody is asked to
+        // approve it. Nothing ends a line through the API yet, so the membership is written where a caller cannot.
+        [AttemptErrors.LineFinished] = new(
+            SendsNow,
+            _ => new Route(SendingNow, null, null),
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "email", "ada@example.test", ct);
+                await FinishedAsync(api, campaign, contact, ct);
+                return await ItemAsync(api, campaign, "message.send", Plain(), ct, contact);
+            },
+            AttemptErrors.LineFinished,
+            FailureClass.Permanent),
+
+        // A send to a person who has had as many touches in this campaign as the shipped ceiling allows, five sends that
+        // went out, written where a caller cannot: the sixth is refused before anybody is asked to approve it.
+        [AttemptErrors.TouchCeilingReached] = new(
+            SendsNow,
+            _ => new Route(SendingNow, null, null),
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "email", "ada@example.test", ct);
+                for (var sent = 0; sent < new LinesOptions().MaxTouches; sent++)
+                {
+                    await SendRowAsync(api, campaign, WorkItemStatus.Succeeded, SendingNow, ct, contact);
+                }
+
+                return await ItemAsync(api, campaign, "message.send", Plain(), ct, contact);
+            },
+            AttemptErrors.TouchCeilingReached,
+            FailureClass.Permanent),
+
         // A delete works by the routed plugin's pin alone, and this person was never pinned by anybody: refused at the
         // claim, where a person would otherwise have been asked to approve it.
         [AttemptErrors.ContactNotLinked] = new(
@@ -337,6 +370,22 @@ public class PreflightMatrixTests
     {
     }
 
+    private static void SendsNow(JasonPaths paths) => TestPlugins.Write(
+        paths,
+        SendingNow,
+        TestPlugins.Manifest(SendingNow, "[message.send]"),
+        "export function invoke() { return { result: {} }; }");
+
+    /// <summary>The person's membership of the campaign ended, as the verb that ends a line will leave it.</summary>
+    private static async Task FinishedAsync(RuntimeApiFixture api, string campaign, string contact, CancellationToken ct)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var membership = await db.CampaignContacts.SingleAsync(m => m.Campaign!.PublicId == campaign && m.Contact!.PublicId == contact, ct);
+        membership.State = MembershipState.Finished;
+        await db.SaveChangesAsync(ct);
+    }
+
     private static void ReadsSends(JasonPaths paths) => TestPlugins.Write(
         paths,
         ReadingSends,
@@ -350,7 +399,7 @@ public class PreflightMatrixTests
     /// <paramref name="status"/>, whose one attempt ran under <paramref name="pluginId"/> and, where it succeeded, returned
     /// its reference.
     /// </summary>
-    private static async Task<string> SendRowAsync(RuntimeApiFixture api, string campaign, WorkItemStatus status, string pluginId, CancellationToken ct)
+    private static async Task<string> SendRowAsync(RuntimeApiFixture api, string campaign, WorkItemStatus status, string pluginId, CancellationToken ct, string? contact = null)
     {
         await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
@@ -358,6 +407,11 @@ public class PreflightMatrixTests
         var owner = await db.Campaigns.SingleAsync(c => c.PublicId == campaign, ct);
         var send = WorkItemFactory.NewProviderOp(owner, "message.send", now);
         send.Status = status;
+        if (contact is not null)
+        {
+            send.Contact = await db.Contacts.SingleAsync(person => person.PublicId == contact, ct);
+        }
+
         var succeeded = status == WorkItemStatus.Succeeded;
         var attempt = WorkItemFactory.NewAttempt(send, 1, succeeded ? AttemptStatus.Succeeded : AttemptStatus.Failed, now);
         attempt.Provenance = new AttemptProvenanceDto(
@@ -403,6 +457,13 @@ public class PreflightMatrixTests
         ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
         ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
         ["send_after"] = "2026-11-02T09:00:00+01:00",
+    };
+
+    private static JsonObject Plain() => new()
+    {
+        ["channel"] = "email",
+        ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+        ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
     };
 
     private static JsonObject Template() => new()

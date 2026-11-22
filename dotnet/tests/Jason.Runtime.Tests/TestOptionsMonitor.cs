@@ -78,6 +78,10 @@ public static class TestOptions
     public static LiveSettings<SendingOptions> SendingSettings(IOptionsMonitor<SendingOptions>? monitor = null) =>
         Seam(monitor ?? new TestOptionsMonitor<SendingOptions>(new SendingOptions()), SendingOptions.Section);
 
+    /// <summary>The seam over the lines section, which the claim reads for the ceiling of touches a person may have in a campaign.</summary>
+    public static LiveSettings<LinesOptions> LinesSettings(IOptionsMonitor<LinesOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<LinesOptions>(new LinesOptions()), LinesOptions.Section);
+
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
     public static LiveSettings<DispatcherOptions> NothingValidated() =>
         Settings(new ThrowingOptionsMonitor<DispatcherOptions>(new OptionsValidationException(
