@@ -115,7 +115,7 @@ rule of the skills.
   the IANA zone `Runtime:TimeZone` names, so the count no longer starts again in the middle of your afternoon.
 - **Lift today's limits with one word.** Tell your agent "ignore the limit", or run
   `jason launches lift --actor human:<your name>`: what the limits hold is released at once, and nothing new is held
-  until the installation's midnight. The agent says until when, in your own time and naming the zone. The notification
+  until the installation's midnight. The agent says until when, in your own time and naming the zone, and how long from now. The notification
   of an item held at a daily limit says how to go on today.
 
 **Notifications**
@@ -126,9 +126,6 @@ rule of the skills.
 
 ## Fixed since 0.49.2
 
-- **The texts say rightly when a send from the chat waits.** What Jason does is unchanged: a message the chat writes
-  follows its campaign's send mode, as one from a terminal does, and only one written in a turn that can only read and
-  propose, as in Plan only, always waits for you. The skills, the pages and the README now all say so.
 - **An act's reason is the agent's own short line**, never the text you pasted.
 - **The skills' examples pass long text on standard input.** A campaign's context, a role's brief or a note goes through
   a here-document, so an agent copying an example no longer breaks it on an apostrophe or shows the text in the list of
@@ -144,7 +141,8 @@ rule of the skills.
   adds the new record of a work item's entry, of the deep review's grid and of a day's lift. Each active campaign's
   first deep review comes one day after the update.
 - **Going back.** From 0.49.0 on, a runtime refuses a database holding a migration it does not know (`data_newer`), so
-  0.49.x refuses data that 0.50 has opened.
+  0.49.x refuses data that 0.50 has opened; a version before 0.49.0 has no such check and runs its own model over the
+  newer schema, so it is not run on such data.
   [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says
   when `jason update rollback` restores the backup the migration took, and
   [Restoring a database by hand](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#restoring-a-database-by-hand)
@@ -160,6 +158,8 @@ rule of the skills.
 
 ## Known issues
 
+- The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches now count your
+  installation's own day.
 - Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
   turn that runs in Ask first, Auto-edit or Plan only.
 - No screen lists the archived agents yet.
