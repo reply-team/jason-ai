@@ -20,11 +20,12 @@
  */
 
 import { instructionsFile } from './chat-deny.ts';
+import { claudeToolWord } from './chat-hosts.ts';
 import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'hookFiltered' | 'bypassGone' | 'fullFolderFailed' | 'sandboxChecked' | 'cardRefused';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'memoryGiven' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged' | 'unchecked' | 'hookFiltered' | 'removedRefused' | 'bypassGone' | 'fullFolderFailed' | 'sandboxChecked' | 'cardRefused';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
@@ -42,7 +43,8 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         named: (outcome) => log.info('chat_named', { Outcome: outcome }),
         modeChanged: (from, to) => log.info('chat_mode_changed', { From: from, To: to }),
         unchecked: () => log.warn('chat_turn_stopped', { Cause: 'unchecked_tool' }),
-        hookFiltered: (mode) => log.warn('chat_hook_filtered', { Mode: mode }),
+        hookFiltered: (mode, tool) => log.warn('chat_hook_filtered', { Mode: mode, Tool: claudeToolWord(tool) }),
+        removedRefused: (mode, tool) => log.info('chat_removed_tool_refused', { Mode: mode, Tool: claudeToolWord(tool) }),
         bypassGone: (why, named) => log.warn('chat_bypass_unavailable', { Cause: why, Named: named ?? 'none' }),
         fullFolderFailed: (step, code) => log.warn('chat_full_folder_failed', { Step: step, Code: code }),
         sandboxChecked: (answer, settings) => log.info('chat_sandbox_checked', { Answer: answer, Settings: settings }),

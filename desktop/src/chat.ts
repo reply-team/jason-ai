@@ -36,7 +36,7 @@ import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
-import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import { chatRules, claudeArguments, claudeLine, claudeRemovedToolsOf, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -266,10 +266,15 @@ export interface ChatOptions {
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw, or such a tool ran after a stop. */
     unchecked?(): void;
     /**
-     * Said once in a turn of Ask first or Auto-edit, by its mode, when a tool ran or was refused that its hook never saw:
-     * the turn runs on under its cards and the host's own rules.
+     * Said once in a turn of Ask first or Auto-edit, by its mode and the tool's name as the host said it, when a tool ran or
+     * was refused that its hook never saw: the turn runs on under its cards and the host's own rules.
      */
-    hookFiltered?(mode: ChatMode): void;
+    hookFiltered?(mode: ChatMode, tool: string | undefined): void;
+    /**
+     * Said once in a turn, by its mode and the tool's name as the host said it, when the host refused a tool this start's
+     * mode takes out and its own list of the start's tools does not name (`claudeRemovedToolsOf`).
+     */
+    removedRefused?(mode: ChatMode, tool: string): void;
     /**
      * Said once as the chat is made where the desktop runs as root, and each time a turn finds Claude Code's bypass not
      * available where no earlier finding still holds: its cause, and the mode Claude Code named instead, a word of its
@@ -1941,6 +1946,8 @@ export class Chat {
         let requests = 0;
         /** Whether the log was told that a tool of this turn ran or was refused unseen by its hook (`hookFiltered`). */
         let filteredLogged = false;
+        /** Whether the log was told that the host refused a tool this turn's mode takes out (`removedRefused`). */
+        let refusedLogged = false;
         // A start's environment is built as it starts, from the mode it starts in, as its command line is (`argsFor`), never
         // from the conversation's record: a Full access start carries no scrub (`hostEnvironment`), and a start in Ask first,
         // the one a turn is narrowed to before it starts or started again in after Claude Code's bypass was found not
@@ -2133,6 +2140,8 @@ export class Chat {
             let heard = false;
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
+            // The tools this start has, as its init line names them; null until a list is read.
+            let startTools: ReadonlySet<string> | null = null;
             let host: HostProcess | null = null;
             // Beside the session the record keeps whether this turn was plain: the person's own login, in any mode. Only
             // such a session is one a terminal may continue (`continuableOf`).
@@ -2175,6 +2184,10 @@ export class Chat {
                     if (resolved.keyed) stopFor(line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label));
                     return;
                 }
+                if (line.kind === 'tools') {
+                    startTools = new Set(line.names);
+                    return;
+                }
                 if (line.kind === 'tool_use') {
                     uses.set(line.id, line.name);
                     return;
@@ -2194,9 +2207,21 @@ export class Chat {
                     // desktop, and the records keep their modes. A Full access turn ends there, said in its own sentence;
                     // one already stopped, by Stop or by a change of mode, ends as its stop ends it, its next turn saying
                     // why it runs in Ask first. A turn of Ask first or Auto-edit runs on, its cards and Claude Code's own
-                    // rules deciding as before; the log is told once in the turn, and the conversation once.
-                    if (!hooked || uses.get(line.id) === 'EndConversation') return;
+                    // rules deciding as before; the log is told once in the turn, and the conversation once. A tool this
+                    // start's mode takes out (`claudeRemovedToolsOf`), which the conversation still names from a turn of
+                    // another mode, Claude Code refuses before any hook fires: a result of it marked an error, where the
+                    // start's own list of its tools was read and does not name it, is no tool the hook missed, and the log
+                    // is told so once in the turn. Any other result of it, or one with no such list read, is.
+                    const tool = uses.get(line.id);
+                    if (!hooked || tool === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
+                    if (line.error === true && tool !== undefined && startTools !== null && !startTools.has(tool) && claudeRemovedToolsOf(running.mode).includes(tool)) {
+                        if (!refusedLogged) {
+                            refusedLogged = true;
+                            this.#options.removedRefused?.(running.mode, tool);
+                        }
+                        return;
+                    }
                     this.#bypassGone({ why: 'unguarded', named: null });
                     if (running.mode === 'full_access') {
                         this.#options.unchecked?.();
@@ -2209,7 +2234,7 @@ export class Chat {
                     }
                     if (!filteredLogged) {
                         filteredLogged = true;
-                        this.#options.hookFiltered?.(running.mode);
+                        this.#options.hookFiltered?.(running.mode, tool);
                     }
                     if (this.#toldFiltered.has(conversation.id)) return;
                     this.#toldFiltered.add(conversation.id);

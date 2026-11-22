@@ -294,23 +294,48 @@ test('a key source that stops nothing is logged by its word alone', (t) => {
     assert.deepEqual(said, (['unexplained', 'unlisted', 'absent'] as const).map((source) => ({ '@l': 'Warning', Source: source })));
 });
 
-test('a tool the hook never saw is logged by its turn\'s mode alone: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
+test('a tool the hook never saw is logged by its turn\'s mode and the tool\'s word of a closed table: a Full access turn stopped for it, and an Ask first or Auto-edit turn that went on', (t) => {
     const removals: (() => void)[] = [];
     t.after(() => removals.forEach((remove) => remove()));
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
     const log = fileLogger(b.paths.logs);
     const logged = loggedTurns(log);
     logged.unchecked();
-    logged.hookFiltered('ask_first');
-    logged.hookFiltered('auto_edit');
+    // The log itself closes the name: a caller that hands it a server's tool, or none, still logs `other`.
+    logged.hookFiltered('ask_first', 'Read');
+    logged.hookFiltered('auto_edit', 'mcp__someone__send_mail');
+    logged.hookFiltered('auto_edit', undefined);
     const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    assert.doesNotMatch(text, /someone|send_mail/);
     const said = lines0(text)
         .filter((line) => line.EventName === 'chat_turn_stopped' || line.EventName === 'chat_hook_filtered')
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
     assert.deepEqual(said, [
         { '@l': 'Warning', EventName: 'chat_turn_stopped', Cause: 'unchecked_tool' },
-        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first' },
-        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'ask_first', Tool: 'Read' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit', Tool: 'other' },
+        { '@l': 'Warning', EventName: 'chat_hook_filtered', Mode: 'auto_edit', Tool: 'other' },
+    ]);
+});
+
+test('a tool the host refused, one the turn\'s mode takes out, is logged as a line of its own by the mode and the tool\'s word of the closed table, never a raw name', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.removedRefused('ask_first', 'PowerShell');
+    logged.removedRefused('full_access', 'Monitor');
+    logged.removedRefused('auto_edit', 'mcp__someone__PowerShell');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    assert.doesNotMatch(text, /someone/);
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_removed_tool_refused' || line.EventName === 'chat_hook_filtered')
+        .map(({ '@t': _at, '@mt': _template, SourceContext: _source, ...rest }) => rest);
+    assert.deepEqual(said, [
+        { EventName: 'chat_removed_tool_refused', Mode: 'ask_first', Tool: 'PowerShell' },
+        { EventName: 'chat_removed_tool_refused', Mode: 'full_access', Tool: 'Monitor' },
+        { EventName: 'chat_removed_tool_refused', Mode: 'auto_edit', Tool: 'other' },
     ]);
 });
 

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { helpNouns, modeFence, readFence, withoutRequestFiles } from '../src/chat-deny.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, pinnedEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedToolsOf, claudeStep, claudeToolWord, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, pinnedEnvironment, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
 import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
@@ -698,6 +698,7 @@ test('a recorded Claude Code turn maps to its mode, its session, its words and o
     const lines = fixture('claude-turn.jsonl').flatMap((line) => claudeLine(line));
     assert.deepEqual(lines, [
         { kind: 'permission_mode', mode: 'default' },
+        { kind: 'tools', names: ['Bash', 'Read', 'Skill'] },
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
@@ -836,6 +837,36 @@ test('an unreadable line, a tool\'s output and a malformed session say nothing',
     assert.deepEqual(claudeLine('{"type":"user","message":{"content":[{"type":"tool_result","content":"secret"}]}}'), []);
     assert.deepEqual(claudeLine('{"type":"system","subtype":"init","session_id":"a b"}'), [{ kind: 'key_source', source: 'absent' }]);
     assert.deepEqual(codexLine('{"type":"thread.started","thread_id":"../x y"}', new Set()), []);
+});
+
+test('a tool\'s result says it was an error only when Claude Code marks it so, `is_error` true and nothing else, and never carries the result\'s text', () => {
+    const result = (extra: string) => claudeLine(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"<tool_use_error>Error: No such tool available: PowerShell</tool_use_error>"${extra}}]}}`);
+    assert.deepEqual(result(',"is_error":true'), [{ kind: 'tool_result', id: 'toolu_9', error: true }]);
+    for (const extra of ['', ',"is_error":false', ',"is_error":"true"', ',"is_error":1', ',"is_error":null']) assert.deepEqual(result(extra), [{ kind: 'tool_result', id: 'toolu_9' }], extra);
+});
+
+test('the init line says the start\'s tools only when it carries a list of names and nothing else', () => {
+    const init = (tools: string) => claudeLine(`{"type":"system","subtype":"init"${tools}}`).filter((line) => line.kind === 'tools');
+    assert.deepEqual(init(',"tools":["Bash","mcp__s__t"]'), [{ kind: 'tools', names: ['Bash', 'mcp__s__t'] }]);
+    assert.deepEqual(init(',"tools":[]'), [{ kind: 'tools', names: [] }]);
+    for (const tools of ['', ',"tools":null', ',"tools":"Bash"', ',"tools":["Bash",1]', ',"tools":[{"name":"Bash"}]', ',"tools":{"0":"Bash"}']) assert.deepEqual(init(tools), [], tools);
+});
+
+test('the tools a turn takes out are one list per mode, the one its command line names', () => {
+    for (const mode of ['full_access', 'ask_first', 'auto_edit', 'plan_only'] as const) {
+        const args = claudeArguments({ ...turn, mode, settingsFile: '/t/s.json' });
+        const from = args.indexOf('--disallowedTools') + 1;
+        assert.deepEqual(args.slice(from, from + claudeRemovedToolsOf(mode).length), [...claudeRemovedToolsOf(mode)], mode);
+    }
+    assert.deepEqual(claudeRemovedToolsOf('ask_first'), ['PowerShell', 'Monitor']);
+    assert.deepEqual(claudeRemovedToolsOf('auto_edit'), ['PowerShell', 'Monitor']);
+    assert.deepEqual(claudeRemovedToolsOf('full_access'), ['Monitor']);
+    assert.deepEqual(claudeRemovedToolsOf('plan_only'), ['PowerShell', 'Monitor', 'ExitPlanMode']);
+});
+
+test('a tool reaches the log by its own name only when it is one of Claude Code\'s own, from a closed table; any other name, a server\'s tool among them, is `other`', () => {
+    for (const tool of ['Bash', 'PowerShell', 'Monitor', 'Read', 'Write', 'Edit', 'WebFetch', 'Agent', 'TodoWrite']) assert.equal(claudeToolWord(tool), tool);
+    for (const tool of [undefined, '', 'mcp__someone__send_mail', 'my private tool', 'toString', '__proto__', 'bash']) assert.equal(claudeToolWord(tool), 'other', String(tool));
 });
 
 test('a recorded Codex turn maps to its thread, one step per command said once, its message, then the end', () => {

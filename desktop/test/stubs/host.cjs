@@ -13,7 +13,9 @@
 //   { "unhooked": { "tool": "Bash", "input": {...} } } use a tool and say its result without asking any hook, as a hook
 //                                                    filtered out by a managed policy would let it; "prompt": true asks
 //                                                    the permission prompt tool first, as the default mode does for a
-//                                                    tool no rule allows, and its deny says the result refused
+//                                                    tool no rule allows, and its deny says the result refused;
+//                                                    "refused": "<text>" says that text as an error result, as Claude
+//                                                    Code refuses a tool a bare rule took out before any hook fires
 //   { "wait": "<file>" }                              start a process of its own, write that process's id to the file, and hang
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
@@ -33,6 +35,7 @@
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
 // STUB_KEY_SOURCE puts that apiKeySource on Claude Code's init line; without it the line carries none.
+// STUB_INIT_TOOLS puts a `tools` list on Claude Code's init line (`initTools`); without it the line carries none.
 // STUB_INIT_MODE is the mode Claude Code's init line names; without it the line names none. STUB_FORCED_DEFAULT has Claude
 // Code force its default mode and say so on stderr, as 2.1.329 does under CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1: "scrub"
 // where the start's environment sets that, "always" on every start that asks for another mode. STUB_BYPASS "refused"
@@ -119,6 +122,23 @@ function hookOf(args) {
     } catch {
         return null;
     }
+}
+
+/** Every tool the stand-in has, before a start's bare `--disallowedTools` rules take any out. */
+const allTools = ['Task', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'WebFetch', 'WebSearch', 'Skill', 'PowerShell', 'Monitor', 'ExitPlanMode'];
+
+/**
+ * The `tools` the init line lists (`STUB_INIT_TOOLS`): unset, none at all; "removed", every tool less the bare names of
+ * the start's `--disallowedTools`, as Claude Code takes them out; otherwise the JSON list given, as it is.
+ */
+function initTools(args) {
+    const asked = process.env.STUB_INIT_TOOLS;
+    if (asked === undefined || asked === '') return {};
+    if (asked !== 'removed') return { tools: JSON.parse(asked) };
+    const at = args.indexOf('--disallowedTools');
+    const bare = new Set();
+    for (let i = at + 1; at >= 0 && i < args.length && !args[i].startsWith('--'); i++) if (!args[i].includes('(')) bare.add(args[i]);
+    return { tools: allTools.filter((tool) => !bare.has(tool)) };
 }
 
 /** The permission mode the turn was started in: the flag's value, or Claude Code's default. */
@@ -213,7 +233,7 @@ async function claude(args, stdin) {
         if (forking && existsSync(join(store, asked))) writeFileSync(join(store, session), readFileSync(join(store, asked)));
         appendFileSync(join(store, session), stdin);
     }
-    print({ type: 'system', subtype: 'init', session_id: session, ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
+    print({ type: 'system', subtype: 'init', session_id: session, ...initTools(args), ...(named ? { permissionMode: named } : {}), ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
@@ -244,7 +264,12 @@ async function claude(args, stdin) {
         } else if (step.unhooked !== undefined) {
             const id = `toolu_unhooked_${++n}`;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
-            const [content, error] = step.unhooked.prompt ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input) : ['ran', false];
+            const [content, error] =
+                typeof step.unhooked.refused === 'string'
+                    ? [step.unhooked.refused, true]
+                    : step.unhooked.prompt
+                      ? await prompted(config, prompt, step.unhooked.tool, step.unhooked.input)
+                      : ['ran', false];
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content} unhooked` }] } });
         }

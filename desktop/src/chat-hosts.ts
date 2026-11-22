@@ -49,6 +49,15 @@ export const claudeRemovedTools: readonly string[] = ['PowerShell', 'Monitor'];
 export const fullAccessRemovedTools: readonly string[] = ['Monitor'];
 
 /**
+ * The tools a turn of `mode` is started with taken out (`--disallowedTools`), the one list its command line names and the
+ * turn reads its tool results by. A conversation may still name one of them, from a turn of another mode it held: Claude
+ * Code then refuses the use, before any hook fires, as a tool the start does not have.
+ */
+export function claudeRemovedToolsOf(mode: ChatMode): readonly string[] {
+    return [...(mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools), ...(mode === 'plan_only' ? planRemovedTools : [])];
+}
+
+/**
  * The permission mode each mode names to Claude Code, by name every time, so that a `defaultMode` of the person's or a
  * project's never decides it: Full access the host's own bypass, Ask first and Auto-edit its default, Plan only plan.
  */
@@ -295,8 +304,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     const hooked = mode !== 'plan_only' && turn.settingsFile !== undefined;
     const allowed = mode === 'plan_only' ? (turn.reads ?? []) : hooked ? turn.allowed : withoutRequestFiles(turn.allowed);
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(allowed), ...helpRules(helpNouns(turn.allowed, turn.reads ?? [])));
-    const removed = mode === 'full_access' ? fullAccessRemovedTools : claudeRemovedTools;
-    args.push('--disallowedTools', ...removed, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied, hooked), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
+    args.push('--disallowedTools', ...claudeRemovedToolsOf(mode), ...denyRules(turn.denied, hooked), confinedRule, ...searchRules, attemptRule, chatTurnRule, ...turn.dataRules);
     if (sealed) args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'plan_only' ? planTurnSettings : (turn.settingsFile ?? claudeTurnSettings));
     args.push('--permission-mode', permissionModes[mode]);
@@ -793,10 +801,18 @@ export type HostLine =
     | { kind: 'session'; id: string }
     /** The permission mode Claude Code says the turn runs in, on its `system/init` line, as one word. */
     | { kind: 'permission_mode'; mode: string }
+    /**
+     * The tools Claude Code says the start has, on its `system/init` line (`tools`): said only when the line carries a
+     * list of names and nothing else, so a start that says none, or a list of anything but names, says nothing.
+     */
+    | { kind: 'tools'; names: readonly string[] }
     /** Claude Code began to use a tool: its id and name, said before the step that shows it. */
     | { kind: 'tool_use'; id: string; name: string }
-    /** A tool's result came back to Claude Code, by the id of its use: the tool ran, or was refused. */
-    | { kind: 'tool_result'; id: string }
+    /**
+     * A tool's result came back to Claude Code, by the id of its use: the tool ran, or was refused. `error` when Claude Code
+     * marked the result an error (`is_error` true, and nothing else); never the result's text.
+     */
+    | { kind: 'tool_result'; id: string; error?: true }
     /** Where Claude Code says the turn's key came from (`keySourceOf`). */
     | { kind: 'key_source'; source: KeySource }
     /**
@@ -923,6 +939,15 @@ const claudeSteps: ReadonlyMap<string, { text: string; detail?: Field }> = new M
     ['TaskList', { text: 'Read its task list' }],
 ]);
 
+/**
+ * A tool's word for the log: its own name when it is one of Claude Code's own tools, from this closed table, and `other`
+ * for any other name, a server's tool among them, whose name is someone's text and never reaches a log.
+ */
+export function claudeToolWord(name: string | undefined): string {
+    if (name === undefined) return 'other';
+    return claudeSteps.has(name) || name === 'Bash' || claudeRemovedTools.includes(name) ? name : 'other';
+}
+
 /** A tool use as a step, in the desktop's words for what it did. */
 export function claudeStep(name: unknown, input: unknown): Step {
     const fields = input !== null && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
@@ -962,7 +987,8 @@ export function claudeLine(line: string): HostLine[] {
         // The mode the turn runs in: a Full access turn whose host turned its bypass off says so here alone, as seen on 2.1.329.
         // It comes first, so a start stopped for it names no session.
         const mode: HostLine[] = typeof event.permissionMode === 'string' && /^[A-Za-z]{1,32}$/.test(event.permissionMode) ? [{ kind: 'permission_mode', mode: event.permissionMode }] : [];
-        return [...mode, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
+        const tools: HostLine[] = Array.isArray(event.tools) && event.tools.every((name) => typeof name === 'string') ? [{ kind: 'tools', names: event.tools as string[] }] : [];
+        return [...mode, ...tools, ...session, { kind: 'key_source', source: keySourceOf(event.apiKeySource) }];
     }
     if (event.type === 'system' && event.subtype === 'api_retry') {
         if (event.error === 'authentication_failed' || event.error_status === 401) return [{ kind: 'refused' }];
@@ -985,9 +1011,10 @@ export function claudeLine(line: string): HostLine[] {
     if (event.type === 'user') {
         const content = (event.message as { content?: unknown } | null)?.content;
         if (!Array.isArray(content)) return [];
-        return (content as { type?: unknown; tool_use_id?: unknown }[]).flatMap((block) =>
-            block?.type === 'tool_result' && typeof block.tool_use_id === 'string' ? [{ kind: 'tool_result' as const, id: block.tool_use_id }] : [],
-        );
+        return (content as { type?: unknown; tool_use_id?: unknown; is_error?: unknown }[]).flatMap((block): HostLine[] => {
+            if (block?.type !== 'tool_result' || typeof block.tool_use_id !== 'string') return [];
+            return [block.is_error === true ? { kind: 'tool_result', id: block.tool_use_id, error: true } : { kind: 'tool_result', id: block.tool_use_id }];
+        });
     }
     if (event.type === 'result') {
         const failed = event.is_error === true || (typeof event.subtype === 'string' && event.subtype !== 'success');
