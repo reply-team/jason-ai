@@ -2150,6 +2150,7 @@ public partial class ClaimerTests
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             var clock = new FixedClock(at ?? Noon);
+            Clock = clock;
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);
@@ -2199,6 +2200,7 @@ public partial class ClaimerTests
                 settings,
                 TestOptions.LaunchesSettings(),
                 TestOptions.SendingSettings(Sending),
+                new InstallationDay(clock, TestOptions.RuntimeSettings(Runtime)),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
@@ -2212,6 +2214,12 @@ public partial class ClaimerTests
         public JasonPaths Paths => _dir.Paths;
 
         public Claimer Claimer { get; }
+
+        /// <summary>The claim's clock, whose zone is the system's own where the runtime section names none.</summary>
+        public FixedClock Clock { get; }
+
+        /// <summary>The runtime section the claim reads the installation's zone from, which a test may change between scans.</summary>
+        public TestOptionsMonitor<RuntimeOptions> Runtime { get; } = new(new RuntimeOptions());
 
         /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
         public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());

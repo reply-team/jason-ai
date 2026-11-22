@@ -74,6 +74,13 @@ public static class TestOptions
     public static LiveSettings<LaunchesOptions> LaunchesSettings(LaunchesOptions? options = null) =>
         Seam(new TestOptionsMonitor<LaunchesOptions>(options ?? new LaunchesOptions()), LaunchesOptions.Section);
 
+    /// <summary>
+    /// The seam over the runtime section, which the claim and the lift read for the installation's zone: none by default, so
+    /// the day is the zone of the clock the test hands the runtime.
+    /// </summary>
+    public static LiveSettings<RuntimeOptions> RuntimeSettings(IOptionsMonitor<RuntimeOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<RuntimeOptions>(new RuntimeOptions()), RuntimeOptions.Section);
+
     /// <summary>The seam over the sending section, which the claim reads for the daily ceiling of automatic sends.</summary>
     public static LiveSettings<SendingOptions> SendingSettings(IOptionsMonitor<SendingOptions>? monitor = null) =>
         Seam(monitor ?? new TestOptionsMonitor<SendingOptions>(new SendingOptions()), SendingOptions.Section);

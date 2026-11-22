@@ -361,6 +361,14 @@ public static partial class JournalKinds
     /// </summary>
     public const string SubscriptionCursorRewound = "subscription_cursor_rewound";
 
+    /// <summary>
+    /// A person lifted the daily limits of launches for the rest of the installation's day: keyed by the local date it
+    /// covers, with the UTC instant of the next local midnight it lasts until, the zone, and how many held items it let go.
+    /// Written by <c>launches.lift</c> only, once a day, as the person who asked, with their reason; it names no campaign,
+    /// and no program may subscribe to it.
+    /// </summary>
+    public const string LaunchLimitLifted = "launch_limit_lifted";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -444,6 +452,7 @@ public static partial class JournalKinds
         PreferenceUnset,
         SubscriptionFailed,
         SubscriptionCursorRewound,
+        LaunchLimitLifted,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

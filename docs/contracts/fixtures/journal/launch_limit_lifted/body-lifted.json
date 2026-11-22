@@ -1,0 +1,11 @@
+{
+  "kind": "launch_limit_lifted",
+  "version": 1,
+  "case": "a day lifted in a zone nine hours ahead of UTC, two holds let go",
+  "body": {
+    "key": "2026-10-07",
+    "old": null,
+    "new": { "until": "2026-10-07T15:00:00.000Z", "time_zone": "Asia/Tokyo", "released": 2 }
+  },
+  "expect": "valid"
+}

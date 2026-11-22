@@ -82,6 +82,7 @@ public static class OperationFamilies
         Operations.WorkItemResume, Operations.WorkItemReview,
         Operations.ApprovalApprove, Operations.ApprovalReject, Operations.ApprovalSetStanding, Operations.ApprovalUnsetStanding,
         Operations.BlockClear,
+        Operations.LaunchesLift,
         Operations.DecisionRaise, Operations.DecisionAnswer,
         Operations.ReplyRecord,
         Operations.SuppressionRemove,

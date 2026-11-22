@@ -100,9 +100,10 @@ public static class AttemptErrors
     public const string ProviderBlocked = "provider_blocked";
 
     /// <summary>
-    /// Work of a role in the item's campaign has started as many runs since 00:00Z as <c>Launches:MaxPerDay:&lt;role&gt;</c>
-    /// allows. Not a refusal of the work: the claim holds the item, with no attempt, until the next 00:00Z, and a person's
-    /// <c>workitem.resume</c> lets it go sooner. Only that hold writes this code.
+    /// Work of a role in the item's campaign has started as many runs since the installation's midnight as
+    /// <c>Launches:MaxPerDay:&lt;role&gt;</c> allows. Not a refusal of the work: the claim holds the item, with no attempt,
+    /// until the installation's next midnight, and a person's <c>workitem.resume</c> of the item, or <c>launches.lift</c> of
+    /// the day, lets it go sooner. Only that hold writes this code.
     /// </summary>
     public const string LaunchesSpent = "launches_spent";
 
