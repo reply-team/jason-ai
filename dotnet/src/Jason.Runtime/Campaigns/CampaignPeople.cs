@@ -399,6 +399,24 @@ internal static partial class CampaignPeople
         + $"FROM ({Facts(SummaryDefinitions.SelectMany(definition => definition.Parts), PageMembers, page: true)}) AS f";
 
     /// <summary>
+    /// How many touches each membership of a page's people has had, and when the last one was: <c>{0}</c> is the campaigns
+    /// of those memberships and <c>{1}</c> the people, the work read by its index on the campaign and the person as the
+    /// work part reads it. Which work is a touch is <see cref="LineTouches.CountedSql"/>, spliced in whole, so the number a
+    /// row shows is the number the claim's ceiling counts. A touch's moment is its item's finish where it succeeded, else
+    /// the end of the latest attempt of it that ended classed <c>ambiguous</c>, which is what made it count.
+    /// </summary>
+    internal static readonly string TouchesSql = $$"""
+        SELECT t.campaign_id AS CampaignId, t.contact_id AS ContactId, count(*) AS Touches, max(t.at) AS LastTouchAt
+        FROM (SELECT w.campaign_id, w.contact_id,
+                     coalesce(CASE WHEN w.status = 'succeeded' THEN w.finished_at END,
+                              (SELECT max(a.finished_at) FROM attempts AS a
+                               WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous')) AS at
+              FROM work_items AS w
+              WHERE w.campaign_id IN {{Asked}} AND w.contact_id IN (SELECT value FROM json_each({1})) AND {{LineTouches.CountedSql}}) AS t
+        GROUP BY t.campaign_id, t.contact_id
+        """;
+
+    /// <summary>
     /// The people of these campaigns one Summary count counts, now; of one audience's people among them where
     /// <paramref name="audience"/> names its row.
     /// </summary>
@@ -451,6 +469,18 @@ internal static partial class CampaignPeople
         return rows.ToDictionary(
             row => (row.ContactId, row.CampaignId),
             row => (IReadOnlyList<CampaignSummaryFilter>)[.. SummaryDefinitions.Where((_, bit) => (row.Counts & (1 << bit)) != 0).Select(definition => definition.Filter)]);
+    }
+
+    /// <summary>
+    /// The touches of each membership of these people that has had any, and the moment of the last, keyed by the person and
+    /// the campaign; a membership with none is absent. One read for the whole page, never one per person.
+    /// </summary>
+    public static async Task<Dictionary<(int ContactId, int CampaignId), (int Touches, DateTime? LastTouchAt)>> TouchesAsync(
+        JasonDbContext db, IReadOnlyCollection<int> campaignIds, IReadOnlyCollection<int> contactIds, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var rows = await db.Database.SqlQueryRaw<TouchRow>(TouchesSql, Keys(campaignIds), Keys(contactIds)).ToListAsync(ct).ConfigureAwait(false);
+        return rows.ToDictionary(row => (row.ContactId, row.CampaignId), row => (row.Touches, row.LastTouchAt));
     }
 
     /// <summary>Every Activity count of each campaign asked that has had people, in one read; archived contacts left out when asked.</summary>
@@ -701,6 +731,9 @@ internal static partial class CampaignPeople
 
 /// <summary>Where one membership stands: one bit per Summary count, as <see cref="CampaignPeople.StandingAsync"/> reads it.</summary>
 internal sealed record StandingRow(int ContactId, int CampaignId, int Counts);
+
+/// <summary>One membership's touches and the moment of the last, as <see cref="CampaignPeople.TouchesAsync"/> reads them.</summary>
+internal sealed record TouchRow(int CampaignId, int ContactId, int Touches, DateTime? LastTouchAt);
 
 /// <summary>One happening of a count: whose, and when, in Unix milliseconds.</summary>
 internal sealed record Moment(int ContactId, long Ms);

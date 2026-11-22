@@ -1,5 +1,8 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Contacts;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -128,6 +131,69 @@ public class CampaignPeopleSummaryTests
         Assert.Equal([CampaignSummaryFilter.Finished], standing[(world.People["Tess"].Id, world.Spring.Id)]);
         Assert.Equal([CampaignSummaryFilter.Out, CampaignSummaryFilter.Finished], standing[(world.People["Jon"].Id, world.Spring.Id)]);
     }
+
+    /// <summary>
+    /// A people-list row says how many touches the person has had in the campaign and when the last was, by the ceiling's
+    /// own definition: an enroll and a send that succeeded count at their finish, a send one attempt of which lost its
+    /// answer counts at that attempt's end though a transient failure ended it later, and a send refused permanently and a
+    /// reply in the person's thread count nothing. Somebody with no touch has none, and no moment.
+    /// </summary>
+    [Fact]
+    public async Task A_row_carries_the_touches_the_ceiling_counts_and_the_last_of_them()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var noon = new DateTime(2026, 11, 9, 12, 0, 0, DateTimeKind.Utc);
+        var campaign = WorkItemFactory.NewCampaign(now: noon.AddDays(-7));
+        var touched = Person("Marta", noon);
+        var untouched = Person("Nils", noon);
+        db.Campaigns.Add(campaign);
+        db.CampaignContacts.AddRange(
+            new CampaignContact { Campaign = campaign, Contact = touched, AddedAt = noon.AddDays(-7), UpdatedAt = noon.AddDays(-7) },
+            new CampaignContact { Campaign = campaign, Contact = untouched, AddedAt = noon.AddDays(-7), UpdatedAt = noon.AddDays(-7) });
+
+        Ended(Work("campaign.enroll", WorkItemStatus.Succeeded, noon.AddHours(-6)), AttemptStatus.Succeeded, noon.AddHours(-6), null);
+        Ended(Work("message.send", WorkItemStatus.Succeeded, noon.AddHours(-5)), AttemptStatus.Succeeded, noon.AddHours(-5), null);
+        var lost = Work("message.send", WorkItemStatus.Failed, noon.AddHours(-3));
+        Ended(lost, AttemptStatus.Failed, noon.AddHours(-4), FailureClass.Ambiguous);
+        Ended(lost, AttemptStatus.Failed, noon.AddHours(-3), FailureClass.Transient);
+        Ended(Work("message.send", WorkItemStatus.Failed, noon.AddHours(-2)), AttemptStatus.Failed, noon.AddHours(-2), FailureClass.Permanent);
+        Ended(Work("conversation.reply", WorkItemStatus.Succeeded, noon.AddHours(-1)), AttemptStatus.Succeeded, noon.AddHours(-1), null);
+        await db.SaveChangesAsync(Ct);
+
+        var memberships = new MembershipService(db, new JournalWriter(TimeProvider.System), TimeProvider.System, TestCanceller.New(TimeProvider.System));
+        var rows = (await memberships.ListAsync(new ListContactsRequest(campaign.PublicId, null, null, null), Ct)).Items
+            .ToDictionary(row => row.Contact.FirstName!, StringComparer.Ordinal);
+
+        Assert.Equal(3, rows["Marta"].Touches);
+        Assert.Equal(await LineTouches.OthersAsync(db, campaign.Id, touched.Id, 0, Ct), rows["Marta"].Touches);
+        Assert.Equal(new DateTimeOffset(noon.AddHours(-4)), rows["Marta"].LastTouchAt);
+        Assert.Equal(0, rows["Nils"].Touches);
+        Assert.Null(rows["Nils"].LastTouchAt);
+
+        WorkItem Work(string operation, WorkItemStatus status, DateTime finishedAt)
+        {
+            var item = WorkItemFactory.NewProviderOp(campaign, operation, noon.AddDays(-1));
+            item.Contact = touched;
+            item.Status = status;
+            item.FinishedAt = finishedAt;
+            db.WorkItems.Add(item);
+            return item;
+        }
+
+        void Ended(WorkItem item, AttemptStatus status, DateTime at, FailureClass? failed)
+        {
+            var attempt = WorkItemFactory.NewAttempt(item, item.Attempts.Count + 1, status, at.AddMinutes(-5));
+            attempt.FinishedAt = at;
+            attempt.Error = failed is { } kind ? new AttemptErrorDto("provider_said_so", "The provider answered so.", kind == FailureClass.Transient, Class: kind) : null;
+            item.AttemptCount = item.Attempts.Count;
+            item.LastError = attempt.Error;
+            db.Attempts.Add(attempt);
+        }
+    }
+
+    private static Contact Person(string name, DateTime now) =>
+        new() { PublicId = Jason.Contracts.Ids.PublicId.New("cnt"), FirstName = name, CreatedAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) };
 
     [Fact]
     public async Task A_removed_person_counts_in_nothing_else_on_the_Summary_side()
