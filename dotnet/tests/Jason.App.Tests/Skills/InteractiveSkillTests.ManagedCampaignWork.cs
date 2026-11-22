@@ -1136,10 +1136,10 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// "Ignore the limit" sits beside the acts that stop or hold work, as the one that lets held work go today: the session
-    /// runs the lift as the person, under their name, says which campaigns and roles it let go, until when in the person's
-    /// own time with the zone named, and that the released items are counted again after midnight; it never lifts on its
-    /// own initiative, and a role cannot.
+    /// "Ignore the limit" sits beside the acts that stop or hold work, as the one that lets held work go today: the
+    /// session runs the lift as the person, under their name, says which campaigns and roles it let go, until when as
+    /// the clock time in the answer's zone, named, with how long from now in brackets, and that the released items are
+    /// counted again after midnight; it never lifts on its own initiative, and a role cannot.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
@@ -1152,7 +1152,7 @@ public partial class InteractiveSkillTests
             "**\"Ignore the limit\" lets held work go today, and only on the person's word.**",
             "When the person tells you to ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, until the installation's next midnight.",
-            "Then say three things: which campaigns and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and that the items it released are counted again after that midnight.",
+            "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight.",
             "Never lift on your own initiative: only the person's word lifts, and a role inside a run cannot.",
         })
         {
