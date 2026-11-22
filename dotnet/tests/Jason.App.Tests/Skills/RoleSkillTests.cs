@@ -18,6 +18,14 @@ public partial class RoleSkillTests
     internal static string Flattened(string role) =>
         Whitespace().Replace(File.ReadAllText(SkillPack.Find(role).File), " ");
 
+    /// <summary>One entry of a role, <c>entries/&lt;entry&gt;.md</c> beside its head, flattened the same way.</summary>
+    internal static string FlattenedEntry(string role, string entry) =>
+        Whitespace().Replace(File.ReadAllText(EntryFile(role, entry)), " ");
+
+    /// <summary>The file of one entry of a role, which must be there.</summary>
+    internal static string EntryFile(string role, string entry) =>
+        Assert.Single(SkillPack.Entries(role), one => one.Name == entry).File;
+
     /// <summary>
     /// And that this file carries the launch contract at all. The pack-wide guard holds the blocks identical to
     /// each other; this holds that a role has one, so a file that dropped it fails in its own name rather than

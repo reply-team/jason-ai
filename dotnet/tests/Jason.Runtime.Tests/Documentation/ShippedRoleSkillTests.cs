@@ -55,6 +55,36 @@ public partial class ShippedRoleSkillTests
         }
     }
 
+    /// <summary>
+    /// The manager's whole folder — the head and its entries — composed as an operator composes it, reaches a work
+    /// directory under the cap that refuses a role's folder past it: the entries are copied beside the head, every one the
+    /// runtime may name, and the folder's bytes are counted against <c>Roles:MaxSkillBytes</c> with room to spare.
+    /// </summary>
+    [Fact]
+    public void The_managers_folder_with_its_entries_reaches_a_work_directory_under_the_cap()
+    {
+        var pack = Path.Combine(RoleSkillsPack(), "manager");
+        var bytes = Directory.EnumerateFiles(pack, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+        var cap = new RolesOptions().MaxSkillBytes;
+        Assert.True(bytes < cap / 4, $"The manager's folder is {bytes} bytes, too near the cap of {cap}.");
+
+        using var data = new TempDataDir();
+        Compose(pack, Path.Combine(data.Paths.RoleSkillsDirectory, "manager"));
+        var workDir = data.Paths.AttemptWorkDirectory("wi_A", "att_A");
+        var report = WorkDirectory.Prepare(workDir, ["Write"], "manager", data.Paths.RoleSkillsDirectory, cap);
+
+        Assert.Null(report.RefusalCode);
+        Assert.NotNull(report.Skill);
+        Assert.True(report.Skill.Copied);
+        var copied = Path.Combine(workDir, ".claude", "skills", "manager");
+        foreach (var entry in Jason.Contracts.Execution.RoleEntries.Of("manager"))
+        {
+            var file = Path.Combine(copied, Jason.Contracts.Execution.RoleEntries.RelativePath(entry));
+            Assert.True(File.Exists(file), $"The entry '{entry}' did not reach the work directory.");
+            Assert.Equal(File.ReadAllText(Path.Combine(pack, Jason.Contracts.Execution.RoleEntries.RelativePath(entry))), File.ReadAllText(file));
+        }
+    }
+
     /// <summary>The pack, files and directories alike, as an operator would have composed it.</summary>
     private static void Compose(string source, string target)
     {
@@ -147,9 +177,11 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("`review_intent`", skill, StringComparison.Ordinal);
         Assert.Contains("`cause`", skill, StringComparison.Ordinal);
 
-        // 2. INV-MEM-001, in the order that makes it bite: the runtime first, the note afterwards, and the
-        // runtime wins where they disagree. A manager is the role most tempted to believe its own last note.
-        Assert.Contains("Read runtime state before memory", skill, StringComparison.Ordinal);
+        // 2. INV-MEM-001, where it bites: the note is where a review starts, because one manager goes from one review
+        // to the next, and the runtime wins wherever the two disagree. A manager is the role most tempted to believe its
+        // own last note, so the head says both in its heading.
+        Assert.Contains("## Start from your note, and believe the runtime over it", skill, StringComparison.Ordinal);
+        Assert.Contains("**The note is never the truth over the campaign's state:**", skill, StringComparison.Ordinal);
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("runtime state wins", skill, StringComparison.OrdinalIgnoreCase);
 

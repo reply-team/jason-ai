@@ -87,7 +87,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_woken_by_a_reply_reads_the_lines_and_the_thread_and_leaves_the_read_to_the_runtime()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("`trigger` is `inbound_reply_observed`", skill, StringComparison.Ordinal);
         Assert.Contains("--kind inbound_reply_observed --since", skill, StringComparison.Ordinal);
@@ -115,7 +115,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_woken_by_its_own_reply_is_told_nothing_happened()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains(
             "Whether the provider's list moves a thread for a reply Jason sends is the provider's matter, and its plugin's README says which. Where it does, the line says it like any other:",
@@ -135,13 +135,15 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_reads_a_thread_found_by_the_person_before_it_answers()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("under `attributed_by`", skill, StringComparison.Ordinal);
         Assert.Contains("`contact_pin` is the person alone", skill, StringComparison.Ordinal);
         Assert.Contains("Raise the responder at your next review, once the read shows whose thread it is;", skill, StringComparison.Ordinal);
         Assert.Contains("a thread the outreach of another campaign that is not archived owns is that campaign's to answer, never yours.", skill, StringComparison.Ordinal);
-        Assert.Contains("or the read alone where the line says `attributed_by` `contact_pin`", skill, StringComparison.Ordinal);
+
+        // The provider event's section stays in the head, and reads a detected reply as the reply's entry says.
+        Assert.Contains("or the read alone where the line says `attributed_by` `contact_pin`", Flattened("manager"), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -151,12 +153,12 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_defers_a_marked_line_to_the_runtime_and_keeps_an_unmarked_one()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("and for a line found by the person's pin that says `campaign_own` `true`, the runtime queues the read of the thread and the responder by itself", skill, StringComparison.Ordinal);
         Assert.Contains("A line found by the person's pin without `campaign_own` is yours, as below: the runtime raises nothing for it.", skill, StringComparison.Ordinal);
         Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
-        Assert.Contains("a provider event's line never says `campaign_own`", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider event's line never says `campaign_own`", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written, it already was, or no campaign the reply was found in held it yet and this campaign was the only one", skill, StringComparison.Ordinal);
         Assert.Contains("that had written to the person through that plugin before the reply — a message, an invitation or an answer that succeeded — and the reply named no provider campaign.", skill, StringComparison.Ordinal);
     }
@@ -168,7 +170,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_reads_a_thread_found_by_the_person_only_at_the_line_s_plugin()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
         Assert.Contains("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get", skill, StringComparison.Ordinal);
@@ -183,7 +185,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_leaves_a_thread_no_campaign_owns_to_a_campaign_already_answering_it()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("before you raise the responder for it, read the person's chronicle across campaigns", skill, StringComparison.Ordinal);
         Assert.Contains("jason journal list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", skill, StringComparison.Ordinal);
@@ -201,7 +203,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_raises_the_responder_without_a_person_when_the_line_names_none()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains(
             "Where the line's `contact_id` is null, nobody is pinned to the thread: create the responder's item without `--contact`, and the responder finds the person through the read.",
@@ -396,7 +398,7 @@ public partial class RoleSkillTests
     [Fact]
     public void The_manager_defers_to_the_responder_the_runtime_raised_for_the_line()
     {
-        var skill = Flattened("manager");
+        var skill = FlattenedEntry("manager", "inbound_reply");
 
         Assert.Contains("**The runtime has usually raised the responder already.**", skill, StringComparison.Ordinal);
         Assert.Contains("`inbound_reply.moves` names each line it answers by the line's `jrn_` id", skill, StringComparison.Ordinal);
@@ -409,7 +411,8 @@ public partial class RoleSkillTests
             "If it succeeded, read its result (`outcome`, `verdict`, `created_work_items`) and never draft or act again on that line",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("If it failed, was cancelled or expired, the failed inbox above and the text below apply.", skill, StringComparison.Ordinal);
+        Assert.Contains("If it failed, was cancelled or expired, the failed inbox of your skill's review and the text below apply.", skill, StringComparison.Ordinal);
+        Assert.Contains("**Failed items are your inbox.**", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("**No responder names the line.** The rule left it to you", skill, StringComparison.Ordinal);
         Assert.Contains("Where no responder names the line, queue the read", skill, StringComparison.Ordinal);
     }
@@ -517,7 +520,7 @@ public partial class RoleSkillTests
         var skill = Flattened("manager");
 
         Assert.Contains("Where the responder's guess was `opt_out` and the answer names another category, the register entries the runtime made for that person when the guess was recorded were made on a guess: remove each, with a reason that names the decision.", skill, StringComparison.Ordinal);
-        Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, below.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, in the `inbound_reply` entry: the file `entries/inbound_reply.md` beside this one.", skill, StringComparison.Ordinal);
         Assert.Contains("where the answer is `opt_out`, it finds the register entries already there and goes on to the provider's half", skill, StringComparison.Ordinal);
         Assert.Contains("Every other answer stays as written: you draft nothing and act on nothing on the reply yourself.", skill, StringComparison.Ordinal);
         Assert.Contains("A draft written after your verdict waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision: without one, its attempt is neither the run the runtime gave that reply nor a named person.", skill, StringComparison.Ordinal);
@@ -528,11 +531,11 @@ public partial class RoleSkillTests
         Assert.Contains("--value ", removal, StringComparison.Ordinal);
         Assert.Matches(@"--reason ""[^""]*dec_[0-9A-Z]{26}", removal);
 
-        // The queueing the answer points at is the one the skill prints for a line no responder names, further down.
-        Assert.True(
-            skill.IndexOf("exactly as for a line no responder names, below.", StringComparison.Ordinal)
-            < skill.IndexOf("**No responder names the line.**", StringComparison.Ordinal),
-            "The answer's queueing must point to a section further down.");
+        // The queueing the answer points at is the one the reply's entry prints for a line no responder names.
+        Assert.Contains("**No responder names the line.**", FlattenedEntry("manager", "inbound_reply"), StringComparison.Ordinal);
+        Assert.Contains(
+            SkillPack.PrintedCommands(EntryFile("manager", "inbound_reply")),
+            line => line.StartsWith("jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder ", StringComparison.Ordinal));
     }
 
     /// <summary>
