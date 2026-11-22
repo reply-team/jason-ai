@@ -393,6 +393,48 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A `not_now` that names no day leaves the line paused with no day to continue it on, so the deep review accounts for
+    /// those people by one question for all of them together, write again or end, asked once and recorded in the note so
+    /// that no later review asks it again; and the line is ended on the person's answer only, never on the manager's own
+    /// judgement.
+    /// </summary>
+    [Fact]
+    public void The_deep_review_asks_once_about_the_people_whose_not_now_named_no_day()
+    {
+        var review = FlattenedEntry("manager", "deep_review");
+
+        Assert.Contains("Where a `not_now` named no day, the line stays paused, and that is the reason too: name those people in your line, and raise one question to the person for all of them together — they said not now and named no day: write to them again, or end their lines?", review, StringComparison.Ordinal);
+        Assert.Contains("Record in your note that you asked, and for whom, so that no later review asks again for the same people.", review, StringComparison.Ordinal);
+        Assert.Contains("Such a line is ended on the person's answer only, never on your own judgement.", review, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A campaign linked to a provider's sequence gets no letters of Jason's own, and a set-up may link one before its
+    /// first start. So the start entry says, before it hands the first batch to the planner, and the resume entry says,
+    /// where it plans a first batch, that such a campaign has none planned: the planner is handed nothing, and the manager
+    /// makes the check its head's review gives a linked campaign.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
+    public void The_start_and_the_resume_plan_no_batch_for_a_campaign_linked_to_a_provider_s_sequence()
+    {
+        const string Fence = "Where the campaign's context says it is linked to a provider's sequence, plan no batch: hand nothing to the planner, say so in your line, and make the check your skill's review gives such a campaign.";
+        var start = FlattenedEntry("manager", "start");
+        var fence = start.IndexOf(Fence, StringComparison.Ordinal);
+        var hand = start.IndexOf("3. **Hand the first batch to the planner, by one item.**", StringComparison.Ordinal);
+        Assert.True(fence >= 0 && hand > fence, $"The start entry does not say, before its step 3, '{Fence}' (at {fence}, step 3 at {hand}).");
+
+        var resume = FlattenedEntry("manager", "resume");
+        var then = resume.IndexOf("**What it then needs.**", StringComparison.Ordinal);
+        var plan = resume.IndexOf("Plan a first batch only where nobody in the campaign was ever touched", StringComparison.Ordinal);
+        var linked = resume.IndexOf(Fence, StringComparison.Ordinal);
+        Assert.True(then >= 0 && plan > then && linked > then, $"The resume entry's \"What it then needs\" does not say '{Fence}' (at {linked}).");
+
+        // The check it points at is in the head's review and in the deep review's section of its own.
+        Assert.Contains("## A campaign linked to a provider's sequence", FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// On a provider without events, a thread can move for a follow-up the provider sent later than recorded, and the
     /// runtime pauses the person for it: the reply entry is the one place that continues them, plans again what the hold
     /// took back, and says so in the note.

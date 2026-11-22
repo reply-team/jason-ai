@@ -58,6 +58,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind campaign_sta
    jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner
    ```
 
+   Where the campaign's context says it is linked to a provider's sequence, plan no batch: hand nothing to the
+   planner, say so in your line, and make the check your skill's review gives such a campaign.
+
 3. **Hand the first batch to the planner, by one item.** The planner runs the first batch as its pilot, the medium
    chain its skill orders, and raises each role's work itself — one copywriter's item for the campaign's line, research
    for one person only where the person asked or it can say why, one personalizer's item for each person's first letter,
