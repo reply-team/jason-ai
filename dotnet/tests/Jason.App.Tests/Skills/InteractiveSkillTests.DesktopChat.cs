@@ -154,6 +154,25 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// The chat's plan card may carry steps with a subject and a body, and no role sends those texts: after the start the
+    /// roles write their own. So the managed path's chat passage says what a step on the card holds, and that a letter on
+    /// it is an example shown only where the person asked to see one. Without it a person agrees to letters they take for
+    /// what goes out. Said once, in the passage, since a person's own session has no card.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_says_a_plan_card_s_letter_is_an_example_shown_only_when_asked()
+    {
+        const string Sentence =
+            "On a plan card the steps say when and by which channel. Put a subject and a body on a step only where the "
+            + "person asked to see a letter, and say that it is an example: the roles write their own letters after the start.";
+        var passage = Whitespace().Replace(
+            MarkedBlock.Extract(SkillPack.Find("managed-campaign-work").File, "<!-- desktop-chat:begin -->", "<!-- desktop-chat:end -->") ?? string.Empty,
+            " ");
+        Assert.True(passage.Contains(Sentence, StringComparison.Ordinal), $"The chat's passage of managed-campaign-work reads '{passage.Trim()}', without '{Sentence}'.");
+        Assert.Single(Regex.Matches(Flattened("managed-campaign-work"), Regex.Escape(Sentence)));
+    }
+
+    /// <summary>
     /// When a person's memory file is written is one rule, said in the same sentence in the chat's passage and in the
     /// section a person's own session follows, as rule 17 of the chat's instructions says it: on the person's word, and a
     /// rule stated without that word proposed and asked once. Two sentences that differ give the same words from the person

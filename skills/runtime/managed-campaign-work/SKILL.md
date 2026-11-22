@@ -34,6 +34,8 @@ over the sections below. In a person's own session it does not apply.
   `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words, at the end of
   the command, and never say it has started until `jason campaign get` answers the status `active`. Where the chat's
   mode only reads and proposes, you do not start it: say that this mode does not.
+- On a plan card the steps say when and by which channel. Put a subject and a body on a step only where the person
+  asked to see a letter, and say that it is an example: the roles write their own letters after the start.
 <!-- desktop-chat:end -->
 
 ## What you are responsible for, and what the runtime is
