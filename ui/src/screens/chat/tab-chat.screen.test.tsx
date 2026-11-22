@@ -8,6 +8,7 @@ import { standInBridge, standInSecret, type StandIn } from '../../test/bridge';
 import { setupFound, stubDesktop, type StubDesktop } from '../../test/desktop';
 import { FakeApi } from '../../test/fake-api';
 import { renderApp } from '../../test/render-app';
+import type { FixtureName } from '../../test/fixtures';
 import { nothingWaitsInChats } from '../../test/waiting';
 
 // The classic shell's Chat screen with a bridge to the desktop's chat: the console's list, a conversation and its box,
@@ -149,8 +150,8 @@ describe('the agent’s move in a tab’s chat', () => {
 });
 
 describe('the draft New GTM agent made, in a tab’s chat, which no agent header is drawn above', () => {
-    it('offers no Start in the chat bar while it has no brief and no one in it', async () => {
-        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1' });
+    /** The tab, over the recorded draft; `get` names what its `campaign.get` answers now. */
+    async function draftTab(get: () => FixtureName, unreachable = false): Promise<void> {
         const bridge: Bridge = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch, () => {
             if (session.bridge.value === bridge) session.dropBridge();
         });
@@ -158,18 +159,64 @@ describe('the draft New GTM agent made, in a tab’s chat, which no agent header
         const fake = nothingWaitsInChats(new FakeApi())
             .answerAnyRequest('campaign.list', 'campaign.list/new-agent')
             .answerAnyRequest('campaign.summary', 'campaign.summary/new-agent')
-            .answerAnyRequest('campaign.get', 'campaign.get/new-agent')
+            .answerAnyRequest('campaign.get', () => get())
             .answerAnyRequest('workitem.list', 'workitem.list/creating-none')
             .answerAnyRequest('plugin.list', 'plugin.list/none')
             .answerAnyRequest('route.list', 'route.list/empty')
             .answerAnyRequest('ui.tokens', 'ui.tokens/two');
+        if (unreachable) fake.unreachable('campaign.get');
         renderApp(fake);
         route.value = { screen: 'chat' };
         await waitFor(() => screen.getByRole('navigation', { name: 'Chats' }));
+    }
+
+    it('offers no Start in the chat bar while it has no brief and no one in it', async () => {
+        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1' });
+        await draftTab(() => 'campaign.get/new-agent');
         fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'New agent 1' })));
         const group = await waitFor(() => screen.getByRole('group', { name: 'This agent' }));
         expect(within(group).getByText('Draft')).toBeTruthy();
         await waitFor(() => expect(within(group).queryByRole('button', { name: 'Start' })).toBeNull());
+    });
+
+    it('reads the brief again once a turn ends: a brief the turn set brings Start back', async () => {
+        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1' });
+        let briefed = false;
+        await draftTab(() => (briefed ? 'campaign.get/new-agent-brief' : 'campaign.get/new-agent'));
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'New agent 1' })));
+        const group = () => screen.getByRole('group', { name: 'This agent' });
+        await waitFor(() => expect(within(group()).queryByRole('button', { name: 'Start' })).toBeNull());
+        const box = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: 'Heads of finance at Polish SaaS firms' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(called('chat.send')).toHaveLength(1));
+        // The turn writes the brief, then ends.
+        briefed = true;
+        flush(() => desktop.emit('conv_1', { kind: 'done', error: null }));
+        await waitFor(() => expect(within(group()).getByRole('button', { name: 'Start' })).toBeTruthy());
+    });
+
+    it('offers Start where the draft’s brief could not be read: a context not read holds nothing back', async () => {
+        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1' });
+        // The read never reaches the runtime: no context was read, and the draft is not said gone.
+        await draftTab(() => 'campaign.get/new-agent', true);
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'New agent 1' })));
+        const group = await waitFor(() => screen.getByRole('group', { name: 'This agent' }));
+        await waitFor(() => expect(within(group).getByRole('button', { name: 'Start' })).toBeTruthy());
+    });
+
+    it('moves no focus when the list changes chat from an agent in its opening to another one', async () => {
+        desktop.keep({ id: 'conv_1', title: 'New agent 1', campaignId: 'cmp_1', madeAtClick: true });
+        desktop.keep({ id: 'conv_2', title: 'Set-up' });
+        await draftTab(() => 'campaign.get/new-agent');
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'New agent 1' })));
+        await waitFor(() => expect(document.querySelector('.agent-opening')).not.toBeNull());
+        const other = within(list()).getByRole('button', { name: 'Set-up' });
+        other.focus();
+        fireEvent.click(other);
+        await waitFor(() => expect(other.getAttribute('aria-current')).toBe('true'));
+        await waitFor(() => expect(document.querySelector('.agent-opening')).toBeNull());
+        expect(document.activeElement).toBe(other);
     });
 });
 
