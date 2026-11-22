@@ -42,9 +42,9 @@ Eight things, and only these:
 - **a reply a person wrote** — a reply a role judged, inside a run, a person's own: a `reply_classified` verdict with the
   nature `person` that names the run's attempt ([inbound-sync.md](inbound-sync.md)). It wakes a pointer when the run that
   judged it ends — its `workitem_succeeded`, `workitem_failed` or `workitem_expired` line — so the approval the answer
-  the responder drafted needs, parked at the claim a tick later, is said in the same pointer; a verdict recorded after its
-  run already ended wakes one by its own line. The pointer counts each reply once, by the key every verdict on it
-  carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
+  the responder drafted needs, parked at the campaign's next claim, which in a quiet campaign is the next scan, is said
+  in the same pointer; a verdict recorded after its run already ended wakes one by its own line.
+  The pointer counts each reply once, by the key every verdict on it carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
   person records outside a run is one they already know of, the desktop chat's is never a person's, and an automatic
   answer, a bounce, an opt-out and a verdict that does not say are no person's reply: none of them is counted, and an
   opt-out tells nobody. `Notifications:Replies` turns this one off alone (§9). Who replied, and in which campaign, the
