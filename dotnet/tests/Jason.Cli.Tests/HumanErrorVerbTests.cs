@@ -2,9 +2,12 @@ using System.Net;
 using Jason.Cli;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
+using Jason.Cli.Link;
+using Jason.Cli.Process;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Installation;
+using Jason.Cli.Tests.Link;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Tests.Status;
 using Jason.Cli.Tests.Update;
@@ -197,24 +200,78 @@ public sealed class HumanErrorVerbTests : IDisposable
             "Refused (autostart_refused): schtasks refused: ERROR: Access is denied.");
     }
 
-    // ---- ui open ----
+    // ---- ui open: the runtime's refusal under --web, and each of its own ----
 
-    [Fact]
-    public async Task Ui_open_refused_by_the_runtime()
+    /// <summary>
+    /// Every refusal <c>ui open</c> prints: the runtime's under <c>--web</c>, as it came, and each of its own, which without
+    /// <c>--human</c> is the envelope on stdout and its sentence again on stderr; with it, every one is the sentence once, on
+    /// stdout alone. Breaks if a refusal of its own prints the envelope under <c>--human</c>, or says its sentence twice.
+    /// </summary>
+    [Theory]
+    [InlineData("refused by the runtime")]
+    [InlineData("no build of one's own")]
+    [InlineData("an approval id of another shape")]
+    [InlineData("a question id of another shape")]
+    [InlineData("no desktop")]
+    [InlineData("links elsewhere")]
+    [InlineData("opener not started")]
+    public async Task Ui_open_refused_by_the_runtime_or_by_itself(string refusal)
     {
-        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
-        // ui open asks the runtime only under --web, and only over a build of one's own the runtime serves first.
-        var custom = _dir.Paths.UiCustomDirectory;
-        Directory.CreateDirectory(custom);
-        File.WriteAllText(Path.Combine(custom, Jason.Contracts.Ui.UiAssetLayout.IndexFile), "<!doctype html>");
-        File.WriteAllText(Path.Combine(custom, Jason.Contracts.Ui.UiAssetLayout.ManifestFile), "{\"version\":\"0.1.0\",\"api_version\":\"v1\"}");
-        const string refused = "{\"error\":{\"code\":\"ui_not_installed\",\"message\":\"No UI is installed.\",\"retryable\":false}}";
+        const string Approval = "apr_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+        const string Question = "dec_01JBZ3X7Q9K2M4N6P8R0S2T4V6";
+        HttpMessageHandler runtime = RuntimeVerbs.NeverCalled();
+        IDesktopRegistration? desktop = FakeRegistration.Present(new CliEnvironment(TextWriter.Null, TextWriter.Null, _dir.Paths));
+        var opener = new HandingOpener();
+        var (words, code, said, alsoOnStderr) = refusal switch
+        {
+            "refused by the runtime" => (new[] { "ui", "open", "--web", "--no-open" }, "ui_not_installed", "No UI is installed.", false),
+            "no build of one's own" => (new[] { "ui", "open", "--web" }, "custom_ui_not_installed", $"No web UI of your own is installed ({_dir.Paths.UiCustomDirectory}); Jason runs in Jason Desktop.", true),
+            "an approval id of another shape" => (new[] { "ui", "open", "--approval", Question }, "approval_not_found", "--approval names no approval: an approval's id is apr_ and 26 letters and digits, as approval list shows it.", true),
+            "a question id of another shape" => (new[] { "ui", "open", "--question", Approval }, "decision_not_found", "--question names no question: a question's id is dec_ and 26 letters and digits, as decision list shows it.", true),
+            "no desktop" => (new[] { "ui", "open" }, "desktop_not_installed", "Nothing was opened: no Jason Desktop that takes its links is installed for this account.", true),
+            "links elsewhere" => (new[] { "ui", "open" }, "desktop_links_elsewhere", LinksElsewhere.Said, true),
+            "opener not started" => (new[] { "ui", "open", "--approval", Approval }, "opener_not_started", "Jason Desktop was not opened: the system's opener did not hand it the address (opener_not_started). Nothing else was opened.", true),
+            _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, null),
+        };
+        switch (refusal)
+        {
+            case "refused by the runtime":
+                // ui open asks the runtime only under --web, and only over a build of one's own the runtime serves first.
+                _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+                var custom = _dir.Paths.UiCustomDirectory;
+                Directory.CreateDirectory(custom);
+                File.WriteAllText(Path.Combine(custom, Jason.Contracts.Ui.UiAssetLayout.IndexFile), "<!doctype html>");
+                File.WriteAllText(Path.Combine(custom, Jason.Contracts.Ui.UiAssetLayout.ManifestFile), "{\"version\":\"0.1.0\",\"api_version\":\"v1\"}");
+                runtime = new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.Conflict, Envelope(code, said)));
+                break;
+            case "no desktop":
+                desktop = null;
+                break;
+            case "links elsewhere":
+                desktop = new LinksElsewhere();
+                break;
+            case "opener not started":
+                opener = new HandingOpener(UrlHandOff.NotStarted);
+                break;
+        }
 
+        var errors = new List<string>();
         await BothAsync(
-            human => Cli(new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.Conflict, refused)), human, "ui", "open", "--web", "--no-open"),
+            async human =>
+            {
+                var output = new StringWriter();
+                var error = new StringWriter();
+                var env = new CliEnvironment(output, error, _dir.Paths, runtime, null, new FakeProcessControl(), Opener: opener, Desktop: desktop);
+                var exit = await CliApp.RunAsync(human ? [.. words, "--human"] : words, env, Ct);
+                errors.Add(error.ToString());
+                return (exit, output.ToString());
+            },
             ExitCodes.ApiError,
-            refused,
-            "Refused (ui_not_installed): No UI is installed.");
+            Envelope(code, said),
+            "Refused (" + code + "): " + said);
+
+        Assert.Equal(alsoOnStderr ? said + Environment.NewLine : string.Empty, errors[0]);
+        Assert.Equal(string.Empty, errors[1]);
     }
 
     // ---- a channel route asked of a runtime older than channel routes ----
@@ -303,6 +360,10 @@ public sealed class HumanErrorVerbTests : IDisposable
     /// <summary>A path as the envelope's JSON spells it.</summary>
     private static string Json(string path) => path.Replace("\\", "\\\\", StringComparison.Ordinal);
 
+    /// <summary>A refusal's envelope as the CLI prints it, from its sentence: a path's separators and an apostrophe as its JSON spells them.</summary>
+    private static string Envelope(string code, string said) =>
+        "{\"error\":{\"code\":\"" + code + "\",\"message\":\"" + Json(said).Replace("'", "\\u0027", StringComparison.Ordinal) + "\",\"retryable\":false}}";
+
     private static string[] Words(FakeInstallation installation, string verb) =>
         verb == "apply" ? ["update", "apply", "--feed", installation.Feed.ToString(), "--drain-seconds", "0"] : ["update", "rollback"];
 
@@ -325,5 +386,15 @@ public sealed class HumanErrorVerbTests : IDisposable
     {
         var (env, output, _) = RuntimeVerbs.Environment(_dir, handler, processes);
         return (await verb(env), output.ToString());
+    }
+
+    /// <summary>A Jason Desktop that is installed while the system would hand its links to another program.</summary>
+    private sealed class LinksElsewhere : IDesktopRegistration
+    {
+        public const string Said = "Nothing was opened: this account opens jason-desktop: links with other.desktop, not with Jason Desktop.";
+
+        public string? Program() => null;
+
+        public DesktopRefusal? Elsewhere() => new(CliErrors.DesktopLinksElsewhere, Said);
     }
 }

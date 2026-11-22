@@ -440,7 +440,7 @@ public static class DesktopLinks
     /// <summary>The desktop's own scheme, the same on every system.</summary>
     public const string Scheme = "jason-desktop";
 
-    /// <summary>The sentence a refusal for no desktop says, on stderr, where a person or a click's log reads it.</summary>
+    /// <summary>The sentence a refusal for no desktop says, where a person or a click's log reads it.</summary>
     public const string NotInstalled = "Nothing was opened: no Jason Desktop that takes its links is installed for this account.";
 
     /// <summary>How long the opener is given to hand the address on before the hand-on is said as not finished.</summary>
