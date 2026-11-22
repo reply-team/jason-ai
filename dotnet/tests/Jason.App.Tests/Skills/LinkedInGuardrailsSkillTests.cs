@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -16,6 +17,7 @@ public sealed partial class LinkedInGuardrailsSkillTests
     /// that moved its bound turns this red until the skill says the new one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_connection_note_bound_is_the_bound_the_contract_enforces()
     {
         var bound = NoteBound();
@@ -28,6 +30,7 @@ public sealed partial class LinkedInGuardrailsSkillTests
 
     /// <summary>Said once, where the skill speaks about the invitation, so that a second copy cannot drift from the first.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_note_bound_is_said_once()
     {
         var said = Regex.Matches(Flat(Text()), $@"\b{NoteBound()} characters\b").Count;
@@ -40,6 +43,7 @@ public sealed partial class LinkedInGuardrailsSkillTests
     /// week, never an allowance spent at once, and how many is read from the account rather than remembered.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Invitations_are_paced_across_the_day_and_the_week_by_the_account_s_own_allowance()
     {
         var pacing = Pacing();
@@ -59,6 +63,7 @@ public sealed partial class LinkedInGuardrailsSkillTests
     /// advice carries no digit, and every question an expert still owes an answer to keeps its marker.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_pacing_advice_carries_no_figure_and_the_expert_markers_survive()
     {
         var pacing = Pacing();

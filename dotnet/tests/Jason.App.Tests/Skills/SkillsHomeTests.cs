@@ -72,6 +72,7 @@ public class SkillsHomeTests
     /// rather than copied into this test, so a rename that leaves the passage behind goes red.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_skills_readme_says_where_the_business_pack_stands_and_how_a_host_takes_it()
     {
         var root = SkillPack.RepositoryRoot();
@@ -176,6 +177,7 @@ public class SkillsHomeTests
     /// public repository it is read as a statement about how this project is maintained.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Codeowners_names_no_team_that_does_not_exist()
     {
         var file = Path.Combine(SkillPack.RepositoryRoot(), "CODEOWNERS");

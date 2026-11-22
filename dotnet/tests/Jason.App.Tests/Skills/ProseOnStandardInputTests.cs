@@ -45,6 +45,7 @@ public class ProseOnStandardInputTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_page_of_the_runtime_pack_prints_prose_on_the_command_line()
     {
         var offences = new List<string>();
@@ -72,6 +73,7 @@ public class ProseOnStandardInputTests
 
     /// <summary>The guard reads what it says it reads: each flag it names is found, and each line that keeps to the shape passes.</summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("jason campaign create --name \"Q3\" --context '{\"offer\":\"payroll\"}'", "--context")]
     [InlineData("jason rolenote set --role analyst --note '{\"checked\":\"2026-09-21\"}'", "--note")]
     [InlineData("jason campaign update-context cmp_1 --set '{\"directive\":\"paused until the domain is warm\"}'", "--set")]
@@ -82,6 +84,7 @@ public class ProseOnStandardInputTests
         Assert.Equal([flag], Prose(line).Select(found => found.Split(' ')[0]));
 
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("jason campaign update-context cmp_1 --set '{\"daily_cap\":20}' --reason \"the warm-up plan\"")]
     [InlineData("jason preference set send_mode.cold --value '{\"mode\":\"automatic\"}' --actor human:ada")]
     [InlineData("jason workitem create cmp_1 --kind provider_op --operation audience.search --input '{\"audience\":1,\"count\":25}' --reason 'the person asked'")]

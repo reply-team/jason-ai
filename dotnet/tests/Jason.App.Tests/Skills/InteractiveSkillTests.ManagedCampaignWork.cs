@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Cli.Tests.Documentation;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -13,6 +14,7 @@ public partial class InteractiveSkillTests
     /// the probe, would set a second number over the runtime's, or tell a person a null before the start means none.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_reserve_s_threshold_is_one_batch_the_first_start_sets_and_a_person_clears_after_it()
     {
         var managed = Flattened("managed-campaign-work");
@@ -30,6 +32,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_says_what_the_runtime_decides_and_what_it_promises_nothing_about()
     {
         var skill = Flattened("managed-campaign-work");
@@ -94,6 +97,7 @@ public partial class InteractiveSkillTests
     /// made, then the campaign under it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_first_campaign_goes_under_the_project_of_what_is_sold()
     {
         const string Opening = "**What is sold is the project.**";
@@ -144,6 +148,7 @@ public partial class InteractiveSkillTests
     /// project, the campaign and its people would stop the first run before anything was made.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_no_plugin_stop_is_for_work_that_reaches_a_provider()
     {
         Assert.Contains(
@@ -164,6 +169,7 @@ public partial class InteractiveSkillTests
     /// key is reserved" into its opposite while every sentence pinned here still stood.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_brief_becomes_Jason_s_campaign_before_any_contact_exists()
     {
         const string Opening = "**The brief becomes the campaign.**";
@@ -215,6 +221,7 @@ public partial class InteractiveSkillTests
     /// paragraph follows the one on the brief, and its line is printed beside it, where the sequence test runs it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_change_of_direction_goes_into_the_campaign_s_context()
     {
         const string Opening = "**A change of direction goes into the context as well.**";
@@ -246,6 +253,7 @@ public partial class InteractiveSkillTests
     /// host to have read all three would plan a campaign against the campaign's words alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_reads_what_the_person_wrote_down_in_order_and_by_path()
     {
         var skill = Flattened("managed-campaign-work");
@@ -283,6 +291,7 @@ public partial class InteractiveSkillTests
     /// campaign's last. One that still said a role keeps one note per campaign would read a role's craft as missing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_reads_a_role_s_notes_at_three_levels()
     {
         var skill = Flattened("managed-campaign-work");
@@ -306,6 +315,7 @@ public partial class InteractiveSkillTests
     /// answered from whatever it already had. The description names that question too, beside the one it always named.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_s_description_names_the_first_question()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -322,6 +332,7 @@ public partial class InteractiveSkillTests
     /// looking for a rule nobody wrote, and a document that is not named leaves the session to guess the input.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operation_documents_the_managed_path_names_exist()
     {
         var skill = Flattened("managed-campaign-work");
@@ -351,6 +362,7 @@ public partial class InteractiveSkillTests
     /// are the line's <c>--input</c>, or the <c>context.input</c> of the request its here-document hands the program.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Every_provider_operation_the_managed_path_prints_carries_arguments_its_document_accepts()
     {
         var printed = SkillPack.Printed(SkillPack.Find("managed-campaign-work").File)
@@ -396,6 +408,7 @@ public partial class InteractiveSkillTests
     /// such, to an inbox the person never wrote from. The decision itself is the approvals skill's, named rather than copied.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_reply_is_one_approval_per_send_in_the_person_s_own_thread()
     {
         var section = Whitespace().Replace(Section("Answering a conversation"), " ");
@@ -413,6 +426,7 @@ public partial class InteractiveSkillTests
     /// then the thread, then the reply, in that order, and what was read is said to the person before anything is drafted.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_reply_the_runtime_saw_is_read_and_said_before_it_is_answered()
     {
         var raw = Section("Answering a conversation");
@@ -438,6 +452,7 @@ public partial class InteractiveSkillTests
     /// the document, so the skill cannot keep a class the document no longer gives.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_restates_no_approval_class_but_the_provider_pause_s_from_its_document()
     {
         var skill = Flattened("managed-campaign-work");
@@ -462,6 +477,7 @@ public partial class InteractiveSkillTests
     /// provider is stopped first.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Stopping_or_holding_work_names_four_acts_and_what_each_does_not_stop()
     {
         var raw = Section("Stopping or holding work");
@@ -520,6 +536,7 @@ public partial class InteractiveSkillTests
     /// example's category promises nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Filing_a_thread_may_carry_the_provider_s_own_meaning_and_closing_or_reopening_reaches_no_person()
     {
         var section = Whitespace().Replace(Section("Answering a conversation"), " ");
@@ -555,6 +572,7 @@ public partial class InteractiveSkillTests
     /// before the reply, and the reads on request say what they refuse and what they take.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_line_that_names_no_person_is_read_by_its_thread_and_answered_in_its_campaign()
     {
         var raw = Section("Answering a conversation");
@@ -595,6 +613,7 @@ public partial class InteractiveSkillTests
     /// the provider already had it — and that a reply cannot be taken back.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_wrong_copy_is_stopped_by_freeing_the_campaign_before_the_provider_s_pause()
     {
         var raw = Section("Stopping or holding work");
@@ -627,6 +646,7 @@ public partial class InteractiveSkillTests
     /// held against the four documents, so a document that let one of them run would turn this red.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Answering_a_conversation_needs_an_active_campaign()
     {
         var section = Whitespace().Replace(Section("Answering a conversation"), " ");
@@ -655,6 +675,7 @@ public partial class InteractiveSkillTests
     /// says neither of the words the description was first written with. It names both.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_s_description_names_answering_and_stopping_work()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -683,6 +704,7 @@ public partial class InteractiveSkillTests
     /// document. So the page's <c>--input</c> is judged here against that document, and the page cannot drift from it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_input_the_wiring_check_prints_for_a_direct_send_is_accepted_by_the_operations_document()
     {
         var page = Path.Combine(SkillPack.RepositoryRoot(), "docs", "golden-path.md");
@@ -726,6 +748,7 @@ public partial class InteractiveSkillTests
     /// a person who wants it to go on sooner ends the wait on their own word, which the line records as theirs.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_says_what_waiting_means_and_reads_the_wait_block_to_the_person()
     {
         var skill = Flattened("managed-campaign-work");
@@ -763,6 +786,7 @@ public partial class InteractiveSkillTests
     /// the session, releases it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_campaign_work_skill_says_what_is_blocked_where_waiting_is_explained()
     {
         var skill = Flattened("managed-campaign-work");
@@ -785,6 +809,7 @@ public partial class InteractiveSkillTests
     /// them: it is neither the caller's arguments nor an unreachable provider.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_campaign_work_skill_names_a_provider_that_does_not_offer_what_was_asked_among_the_codes()
     {
         var skill = Flattened("managed-campaign-work");
@@ -802,6 +827,7 @@ public partial class InteractiveSkillTests
     /// without goals is refused, is corrected here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void What_the_campaign_is_for_is_its_goals_the_one_reserved_key()
     {
         var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -827,6 +853,7 @@ public partial class InteractiveSkillTests
     /// runtime writes, and the filter the printed list takes is the role's own name.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_session_asked_to_answer_a_reply_looks_at_what_the_responder_left_first()
     {
         var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -847,6 +874,7 @@ public partial class InteractiveSkillTests
     /// approval, never a session's, and the two lines that show what it let go. The kinds and the verbs are the runtime's.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_standing_approval_is_a_person_s_and_the_chronicle_shows_what_it_let_go()
     {
         var skill = Flattened("managed-campaign-work");
@@ -865,6 +893,7 @@ public partial class InteractiveSkillTests
     /// "nothing yet" and waiting for the runtime's own read. The two cadences it names are the options' real defaults.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Asked_whether_somebody_answered_the_agent_reads_now_and_names_the_real_cadences()
     {
         foreach (var pack in new[] { "managed-campaign-work", "inbox-triage" })
@@ -906,6 +935,7 @@ public partial class InteractiveSkillTests
     /// matched the business pack's launch skill on "start a campaign" meets this one too.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_s_description_names_the_start_and_its_method()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -917,6 +947,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>The catalog says the managed path sets a campaign up and starts it, and names the set-up's method.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_catalog_says_the_managed_path_sets_a_campaign_up_with_its_method()
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
@@ -935,6 +966,7 @@ public partial class InteractiveSkillTests
     /// shares no run of eight words with them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_start_names_its_method_and_copies_no_rule()
     {
         var section = Section(SetUp);
@@ -962,6 +994,7 @@ public partial class InteractiveSkillTests
     /// was told.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_start_fills_a_draft_that_already_exists()
     {
         var section = Whitespace().Replace(Section(SetUp), " ");
@@ -978,6 +1011,7 @@ public partial class InteractiveSkillTests
     /// prints no send.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_set_up_writes_no_letter_unasked()
     {
         var raw = Section(SetUp);
@@ -1004,6 +1038,7 @@ public partial class InteractiveSkillTests
     /// has a value it is said back and never asked again.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_set_up_asks_the_sender_s_name_once_and_first()
     {
         var section = Whitespace().Replace(Section(SetUp), " ");
@@ -1029,6 +1064,7 @@ public partial class InteractiveSkillTests
     /// thing that is not so, and one that asked them to choose there would set a mode on a word given to another question.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_set_up_says_how_messages_go_from_what_the_campaign_answers()
     {
         var section = Whitespace().Replace(Section(SetUp), " ");
@@ -1054,6 +1090,7 @@ public partial class InteractiveSkillTests
     /// nothing where all is well.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_roles_check_speaks_only_on_a_problem_and_stops_the_start()
     {
         var raw = Section(SetUp);
@@ -1081,6 +1118,7 @@ public partial class InteractiveSkillTests
     /// a person whose notifications work hears nothing of them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_early_check_says_once_that_nothing_will_tell_them_and_never_stops_the_start()
     {
         Assert.Contains(
@@ -1094,6 +1132,7 @@ public partial class InteractiveSkillTests
     /// recorded where the roles read it, the campaign's context, under one key.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_set_up_says_the_first_batch_is_twenty_and_records_another_number_the_person_names()
     {
         var raw = Section(SetUp);
@@ -1114,6 +1153,7 @@ public partial class InteractiveSkillTests
     /// A start at a moment the person names does not exist, and is never promised.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_start_comes_on_the_person_s_yes_and_says_whose_name_it_carries()
     {
         var raw = Section(SetUp);
@@ -1142,6 +1182,7 @@ public partial class InteractiveSkillTests
     /// block, whose commands it points to. And what a session's acts carry is said once, before either.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_set_up_stands_before_the_work_and_says_whose_name_the_acts_carry()
     {
         var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -1172,6 +1213,7 @@ public partial class InteractiveSkillTests
     /// in the manager's place.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_campaign_with_no_item_is_woken_by_its_manager_and_the_session_ends_at_the_start()
     {
         var skill = Flattened("managed-campaign-work");
@@ -1191,6 +1233,7 @@ public partial class InteractiveSkillTests
     /// holds some.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_fence_on_a_providers_sequence_is_said_where_a_direct_request_lands()
     {
         const string Never = "A provider's sequence is never offered, also where the account holds some.";
@@ -1230,6 +1273,7 @@ public partial class InteractiveSkillTests
     /// putting or adding somebody into one; and offering, proposing, suggesting or recommending one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void No_skill_but_the_fences_two_places_speaks_of_linking_or_creating_a_providers_sequence()
     {
         var phrases = new (string Name, Regex Pattern, string Steer)[]

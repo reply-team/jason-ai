@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -17,6 +18,7 @@ public partial class InteractiveSkillTests
     /// to write as silent about the one thing that holds every message.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_quick_start_starts_the_campaign_on_the_persons_word_in_the_desktop_chat_but_in_plan_only()
     {
         var skill = Flattened("quick-start");
@@ -34,6 +36,7 @@ public partial class InteractiveSkillTests
     /// The passage comes before every other section of the file.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("managed-campaign-work")]
     [InlineData("quick-start")]
     [InlineData("planner-in-session")]
@@ -63,6 +66,7 @@ public partial class InteractiveSkillTests
     /// must find. A person's own session still starts the campaign from the work block.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_starts_archives_and_sets_the_name_and_tone_on_the_persons_word_in_the_desktop_chat()
     {
         var skill = Flattened("managed-campaign-work");
@@ -89,6 +93,7 @@ public partial class InteractiveSkillTests
     /// sets them in Plan only; a person's own session still asks and sets.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_sets_the_name_and_tone_on_the_persons_word_in_the_desktop_chat_but_in_plan_only()
     {
         var skill = Flattened("planner-in-session");
@@ -102,6 +107,7 @@ public partial class InteractiveSkillTests
     /// mode's name, which would be untrue on one of the hosts.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_skills_the_chat_reads_name_its_modes_by_what_they_do()
     {
         var found = new List<string>();
@@ -131,6 +137,7 @@ public partial class InteractiveSkillTests
     /// write a rule into a file the chat never writes.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_memory_files_are_given_in_the_desktop_chat_and_written_by_the_person_alone()
     {
         var managed = Flattened("managed-campaign-work");

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -29,6 +30,7 @@ public class MarketplaceTests
     private static string Manifest() => Path.Combine(Root(), ".claude-plugin", "marketplace.json");
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manifest_offers_both_packs_by_a_relative_path_inside_this_repository()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(Manifest()));
@@ -80,6 +82,7 @@ public class MarketplaceTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_offered_pack_says_where_its_skills_are_and_the_paths_hold_skills()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(Manifest()));
@@ -166,6 +169,7 @@ public class MarketplaceTests
     /// business knowledge came from, and carries no link an outside reader cannot open.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manifest_points_at_this_repository()
     {
         var text = File.ReadAllText(Manifest());
@@ -182,6 +186,7 @@ public class MarketplaceTests
     /// address, rather than to wherever its files happen to be stored.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_owner_links_to_the_products_address()
     {
         using var manifest = JsonDocument.Parse(File.ReadAllText(Manifest()));

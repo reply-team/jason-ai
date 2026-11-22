@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -17,6 +18,7 @@ public partial class CraftBlockTests
     /// <see cref="LaunchContractTests"/> — so a pairing with a taught role is a pairing with a real one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_session_file_pairs_with_a_role_this_pack_teaches()
     {
         var sessions = CraftBlock.SessionFiles();
@@ -40,6 +42,7 @@ public partial class CraftBlockTests
     /// the pairs, because the pairs are found by name: a roster here would make every new pair an edit in two places.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_has_no_session_file()
     {
         var manager = SessionFilesFor("manager", CraftBlock.SessionFiles());
@@ -56,6 +59,7 @@ public partial class CraftBlockTests
     /// it is written and would show nothing about itself without a stand-in it must find.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_refusal_finds_a_session_file_named_for_the_manager()
     {
         var file = Path.Combine(SkillPack.Root(), "manager-in-session", SkillPack.SkillFile);
@@ -72,6 +76,7 @@ public partial class CraftBlockTests
     /// pointing at a sentence nobody kept sends its reader to nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_catalog_says_the_manager_has_no_session_file()
     {
         const string sentence =
@@ -93,6 +98,7 @@ public partial class CraftBlockTests
     /// hold the two together.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_session_file_carries_a_method_file()
     {
         var sessions = Directory.EnumerateDirectories(SkillPack.Root(), "*-in-session").ToList();
@@ -111,6 +117,7 @@ public partial class CraftBlockTests
     ];
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_role_and_its_session_file_share_one_craft_block_byte_for_byte()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -144,6 +151,7 @@ public partial class CraftBlockTests
     /// somewhere and changes nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_craft_block_is_carried_once_and_only_by_a_role_and_its_session_file()
     {
         var sessions = CraftBlock.SessionFiles();
@@ -172,6 +180,7 @@ public partial class CraftBlockTests
     /// teach one seat the other's mechanics.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_craft_block_prints_no_command()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -202,6 +211,7 @@ public partial class CraftBlockTests
     /// mechanics, and still one seat's.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public async Task A_craft_block_names_no_verb_of_the_program()
     {
         var (names, pairs) = await ProgramNamesAsync();
@@ -225,6 +235,7 @@ public partial class CraftBlockTests
     /// span, after the program's own word, or with a hyphenated verb nobody writes in a sentence.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("Write it with `campaign update-context --set`.", true)]
     [InlineData("A change is written with campaign update-context and nothing else.", true)]
     [InlineData("Read it back with `campaign get` before you plan.", true)]
@@ -284,6 +295,7 @@ public partial class CraftBlockTests
     /// nowhere, least of all in the text every campaign's planner is taught from.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("Start from what worked last time.", true)]
     [InlineData("It belongs to the client.", true)]
     [InlineData("Ask the person in front of you one question.", true)]
@@ -297,6 +309,7 @@ public partial class CraftBlockTests
             $"'{sentence}' is {(refused ? "not refused, and it is true in one seat only or carries results across campaigns" : "refused, and it reads this campaign or holds in both seats")}.");
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_craft_block_holds_in_both_seats_and_records_no_results()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -318,6 +331,7 @@ public partial class CraftBlockTests
     /// be of a body that is no longer there.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_status_line_stays_outside_the_craft_block()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -339,6 +353,7 @@ public partial class CraftBlockTests
     /// role the runtime started — in a conversation with the person those rules were never about.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_session_file_carries_no_launch_contract()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -373,6 +388,7 @@ public partial class CraftBlockTests
     /// backticks with the inline spans' lost them, and a session file could say `note_bytes` unrefused.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_launch_contracts_vocabulary_is_read_past_its_fenced_commands()
     {
         var terms = ContractVocabulary(SkillPack.Find("planner").File);
@@ -445,6 +461,7 @@ public partial class CraftBlockTests
     /// without what it needs — in both seats at once, when the sentence is in the shared block.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_file_of_a_pair_says_every_role_reads_the_campaign()
     {
         foreach (var session in CraftBlock.SessionFiles())
@@ -472,6 +489,7 @@ public partial class CraftBlockTests
     /// touches is read: the catalog, the pack table and the walkthrough, beside the files themselves.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_session_files_and_the_craft_blocks_never_say_chair_or_projection()
     {
         var texts = new List<(string Where, string Text)>
@@ -510,6 +528,7 @@ public partial class CraftBlockTests
     /// this version. So the paragraph is held whole, in that section.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_catalog_says_the_block_is_judgement_never_a_record_of_results()
     {
         var text = File.ReadAllText(SkillPack.Catalog()).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -538,6 +557,7 @@ public partial class CraftBlockTests
     /// own conversation from the one person deciding whether to install it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_packs_table_says_the_runtime_pack_carries_a_session_file()
     {
         var path = Path.Combine(SkillPack.RepositoryRoot(), "skills", "README.md");

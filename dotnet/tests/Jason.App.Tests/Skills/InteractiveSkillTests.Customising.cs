@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
@@ -9,6 +11,7 @@ public partial class InteractiveSkillTests
     /// let more go out unread and the person would not hear it first.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_customising_skill_names_what_an_automatic_send_stands_on_beside_the_launch_contract()
     {
         var paragraph = Assert.Single(

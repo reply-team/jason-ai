@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Context;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -23,6 +24,7 @@ public sealed partial class GoalsInTheSkillsTests
     /// campaign is given its goals; the session file points to the second for it.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("planner")]
     [InlineData("managed-campaign-work")]
     public void The_goals_a_skill_prints_are_ones_the_runtime_accepts(string skill)
@@ -76,6 +78,7 @@ public sealed partial class GoalsInTheSkillsTests
 
     /// <summary>The kinds a skill lists are the document's, all of them and no other.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_kinds_the_managed_work_skill_names_are_the_kinds_the_runtime_knows()
     {
         var contract = ContextKeyCatalog.Find("goals");
@@ -95,6 +98,7 @@ public sealed partial class GoalsInTheSkillsTests
     /// reserved one, so a skill that said a campaign with no goals is refused, or that the roles take a trial, fails.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("planner")]
     [InlineData("planner-in-session")]
     [InlineData("managed-campaign-work")]

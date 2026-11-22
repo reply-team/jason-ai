@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_deliverability_specialist_is_told_that_there_is_nothing_here_to_warm()
     {
         var skill = Flattened("deliverability-specialist");

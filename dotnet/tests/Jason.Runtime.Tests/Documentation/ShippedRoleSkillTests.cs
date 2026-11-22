@@ -14,6 +14,7 @@ public partial class ShippedRoleSkillTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public void The_shipped_role_skill_is_named_after_its_directory()
     {
         var packs = Directory.GetDirectories(RoleSkillsPack());
@@ -75,6 +76,7 @@ public partial class ShippedRoleSkillTests
     /// plain command word the envelope names, and a note is the role's own memory rather than what is true.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task The_researchers_skill_teaches_the_plain_callback_and_what_a_note_is_worth()
     {
         // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
@@ -134,6 +136,7 @@ public partial class ShippedRoleSkillTests
     /// without.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task The_managers_skill_teaches_the_review_the_boundary_and_the_line_it_always_leaves()
     {
         // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
@@ -247,6 +250,7 @@ public partial class ShippedRoleSkillTests
     /// the JSON on a command line has it written.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task Every_role_skill_carries_the_one_result_file_sentence_and_the_qualified_no_file_sentence()
     {
         var roles = Directory.GetDirectories(RoleSkillsPack());
@@ -269,6 +273,7 @@ public partial class ShippedRoleSkillTests
     /// teaches a second meaning to the one reader who has no way to ask which was meant.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task Only_the_manager_is_taught_the_word_check_in()
     {
         foreach (var pack in Directory.GetDirectories(RoleSkillsPack()))

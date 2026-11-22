@@ -10,6 +10,7 @@ public partial class InteractiveSkillTests
     /// front matter and the body say draft, and the catalog records no reading of this text.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_approvals_skill_is_a_draft_until_a_host_reads_its_current_text()
     {
         const string Name = "approvals-and-questions";
@@ -28,6 +29,7 @@ public partial class InteractiveSkillTests
     /// And what <c>--answer</c> is for is the manager's reading, not the role's that asked, which ended when it asked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_approvals_skill_leaves_the_work_an_answer_implies_to_the_managers_next_check_in()
     {
         var skill = Flattened("approvals-and-questions");
@@ -49,6 +51,7 @@ public partial class InteractiveSkillTests
     /// person is not asked to approve the example as though it were the message every recipient gets.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_approvals_skill_presents_an_example_as_one_reading_of_the_template()
     {
         Assert.Contains(
@@ -62,6 +65,7 @@ public partial class InteractiveSkillTests
     /// and numbers, and the intent beside it is only the operation's generic sentence.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_approvals_skill_quotes_the_summary_first()
     {
         Assert.Contains(
@@ -75,6 +79,7 @@ public partial class InteractiveSkillTests
     /// notifications reach them, finds the skill only if its description says so.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("approvals-and-questions", "or arrives because a notification said approvals or questions are waiting")]
     [InlineData("operating-the-installation", "whether notifications reach the person and turning them off")]
     public void The_skills_that_teach_notifications_say_so_in_their_description(string name, string words) =>
@@ -141,6 +146,7 @@ public partial class InteractiveSkillTests
     /// be corrected by the text and not by a refusal.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_approvals_skill_says_how_a_person_sets_lists_and_unsets_a_standing_approval()
     {
         var text = File.ReadAllText(SkillPack.Find("approvals-and-questions").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -187,6 +193,7 @@ public partial class InteractiveSkillTests
     /// see what went out without them, by the two lines the runtime writes for it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void A_reply_parked_before_the_standing_approval_stays_the_persons_and_what_went_out_is_visible()
     {
         var skill = Flattened("approvals-and-questions");
