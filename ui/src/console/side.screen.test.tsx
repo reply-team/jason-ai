@@ -503,11 +503,9 @@ describe('the sidebar’s look', () => {
         await settled();
         for (const each of [newAgent(), newChat()])
             expect(styleOf(each), each.getAttribute('aria-label') ?? '').toMatchObject({
-                width: 'var(--plus-size)',
-                height: 'var(--plus-size)',
-                border: '1px solid var(--plus-border)',
-                background: 'var(--plus-bg)',
-                color: 'var(--plus-fg)',
+                width: '20px',
+                height: '20px',
+                color: 'var(--accent-text)',
             });
         // Neither is marked: a plus makes its kind, it brings no page forward.
         expect(newAgent().getAttribute('aria-current')).toBeNull();

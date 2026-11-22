@@ -2480,21 +2480,6 @@ body,
     display: flex;
     gap: 0;
 }
-/* The plus of a section header, drawn at rest by four custom properties. Form A (the default): a surface square with a
-   1px border, the plus in the text colour. Form B2: data-plus='b2' on .side (or any ancestor) gives a pale accent tint,
-   an accent-tinted border and an accent plus. --plus-size takes 20px, 22px or 24px. */
-.jc-console {
-    --plus-size: 22px;
-    --plus-bg: var(--panel);
-    --plus-border: var(--line);
-    --plus-fg: var(--ink);
-}
-.jc-console[data-plus='b2'],
-.jc-console [data-plus='b2'] {
-    --plus-bg: color-mix(in srgb, var(--accent) 12%, var(--panel));
-    --plus-border: color-mix(in srgb, var(--accent) 35%, var(--panel));
-    --plus-fg: var(--accent);
-}
 .jc-console .rbtn {
     display: flex;
     align-items: center;
@@ -2512,19 +2497,37 @@ body,
     background: var(--hover);
     color: var(--ink);
 }
+/* The plus of a section header: a 20px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
+   the plus in the accent's text colour (6.4:1 on the tint in light, 6.9:1 in dark).
+   The plus drawn in its icon box is about 9px, 16px box. */
 .jc-console .rbtn.plus {
     box-sizing: border-box;
-    width: var(--plus-size);
-    height: var(--plus-size);
-    margin-left: 4px;
-    border: 1px solid var(--plus-border);
-    background: var(--plus-bg);
-    color: var(--plus-fg);
+    width: 20px;
+    height: 20px;
+    margin: 0 0 0 5px;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--side-bg));
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--accent) 14%, var(--side-bg));
+    color: var(--accent-text);
+}
+:root[data-theme='dark'] .jc-console .rbtn.plus {
+    background: color-mix(in srgb, var(--accent) 20%, var(--side-bg));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--side-bg));
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .rbtn.plus {
+        background: color-mix(in srgb, var(--accent) 20%, var(--side-bg));
+        border-color: color-mix(in srgb, var(--accent) 45%, var(--side-bg));
+    }
+}
+.jc-console .rbtn.plus svg {
+    width: 16px;
+    height: 16px;
 }
 .jc-console .rbtn.plus:hover {
-    background: var(--hover);
-    border-color: var(--mute);
-    color: var(--ink);
+    background: color-mix(in srgb, var(--accent) 26%, var(--side-bg));
+    border-color: var(--accent);
+    color: var(--accent-text);
 }
 .jc-console .rbtn.plus:focus-visible {
     outline: 2px solid var(--accent, var(--ink));
@@ -2546,6 +2549,7 @@ body,
 .jc-console .rbtn.plus[disabled]:hover {
     background: none;
     border-color: var(--line);
+    color: var(--faint);
 }
 .jc-console .recent .menu {
     left: auto;
