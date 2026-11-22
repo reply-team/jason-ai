@@ -104,7 +104,9 @@ for a role that sits with a person, the judgement it shares with its session fil
   order, what it may decide alone, how it asks a person the one question it cannot answer, and the line it leaves in
   the chronicle every time; for replies, the verdicts it reads by category and the responder it defers to; and for the
   audience, how a search ended, the analyst asked once the probe has had its window, the planner launched on a verdict
-  of replace, and the top-ups it runs under the person's allowance.
+  of replace, and the top-ups it runs under the person's allowance. Its five entries are the reviews it is launched for
+  by name: a first start, a start after a pause, the quick look, the deep review that accounts for every person's line,
+  and a reply.
 - [`roles/planner`](roles/planner/SKILL.md) — The next short horizon of work: what a planner reads
   before it plans, the order a first campaign opens in, a campaign never split only to give some of its people
   another tone of voice, the goals a campaign is made with, an audience formed from a search with its probe sized by the
@@ -139,9 +141,15 @@ into each attempt's own work directory. Composing rather than reading from two p
 answerable: what exactly was this role taught on this attempt.
 
 **What each pack contributes to that one directory.** This pack contributes `SKILL.md` — the runtime's launch
-contract and the role's purpose. The business pack will contribute `METHOD.md` beside it, the profession's
-method for that role. They are separate files so that installing one never overwrites the other, and a role
-with no `METHOD.md` is taught the contract and nothing else, which is complete on its own.
+contract and the role's purpose — and, for the manager, one file under `entries/` for each named way into its job:
+[`start`](roles/manager/entries/start.md), [`resume`](roles/manager/entries/resume.md),
+[`quick_look`](roles/manager/entries/quick_look.md), [`deep_review`](roles/manager/entries/deep_review.md) and
+[`inbound_reply`](roles/manager/entries/inbound_reply.md). The manager's `SKILL.md` is then its head, what every review
+shares, and a check-in the runtime created with an entry is handed that entry's text in its launch envelope, which the
+run follows first. An entry file names its entry and its status in its front matter, and carries no name and no launch
+contract, so no host loads it as a skill of its own. The business pack will contribute `METHOD.md` beside them, the
+profession's method for that role. They are separate files so that installing one never overwrites the other, and a
+role with no `METHOD.md` is taught the contract and nothing else, which is complete on its own.
 
 ## A role that sits with a person
 
@@ -180,6 +188,16 @@ Every skill here carries `metadata.status`, and it has exactly two values.
   the body it followed — so that an edit to either without a new reading is a failing test rather than a claim
   nobody can check.
 
+A role's entry carries the same status, and has a row of its own, keyed `` `<role>/<entry>` ``. What a host reads when
+it is launched with an entry is the head and the entry together, so a verified entry's row records the SHA-256 of the
+head's description and body followed by the entry's body, and an edit to the head turns every entry's row stale as an
+edit to the entry does. Every entry is a draft in this build: no host has read one yet.
+
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
+| `manager/start` | none yet | - | draft |
+| `manager/resume` | none yet | - | draft |
+| `manager/quick_look` | none yet | - | draft |
+| `manager/deep_review` | none yet | - | draft |
+| `manager/inbound_reply` | none yet | - | draft |

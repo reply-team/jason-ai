@@ -230,7 +230,8 @@ composed rather than a role nobody wrote for.
 **Who contributes what to that directory.** An operator composes `<data>/skills/roles/<role>/` from the
 skill packs, and the packs contribute **different files** so that installing one never overwrites the
 other. This repository's runtime pack contributes `SKILL.md`: the launch contract every role is held to
-and what that role is for. A business pack contributes `METHOD.md` beside it — the profession's method
+and what that role is for; and, for the manager, `entries/<name>.md` beside it, one file for each of its five entries,
+its `SKILL.md` then being the head every review shares. A business pack contributes `METHOD.md` beside it — the profession's method
 for that role — which the runtime copies across with everything else in the directory. A role whose
 directory holds only `SKILL.md` is taught the contract and nothing else, and that is complete on its
 own: nothing in the launch depends on a second file being there, or on the role reading one.
