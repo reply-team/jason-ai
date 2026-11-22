@@ -229,8 +229,21 @@ the end of its succeeded attempt; and for an answer, a `conversation.reply` of t
 the end of its succeeded attempt. A touch records no thread, so touches count for the person across the campaign and an
 answer only for its own thread. Only a moment that has come counts, so a letter the provider still holds for later is no
 reason to leave a reply alone, and a letter a cancel took back never went. A line later than every such moment holds the
-line as any reply does, whoever moved the thread: a provider that sends a held letter after the moment it named moves the
-thread later than that moment, and the manager reads the thread and continues the line again.
+line as any reply does, whoever moved the thread.
+
+The rule has limits, and they run both ways:
+
+- It skips the hold and the take-back, and nothing else: the line is still written, and the responder is still woken
+  for it as for any line.
+- A follow-up the provider sends later than the moment the runtime holds for it — its `accepted_for`, or the end of
+  its attempt — moves the thread later than that moment, so the line is read as the other side's move and holds the
+  person. This is the safe side: nobody is written to again unread, and the manager reads the thread and continues the
+  line.
+- A reply that came before Jason's own latest letter went out, and is read only after it, has a moment that letter
+  reaches, so it does not hold at once. The role that judges the reply, woken for it as for any line, ends the line or
+  continues it.
+
+The events path is not this rule's: there the account's own letter is `provider_send_observed`, never a reply line.
 
 ## 5. Where a read starts
 

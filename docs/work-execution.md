@@ -864,7 +864,9 @@ succeeded already names the letter: the hold, `campaign.finish_contacts` and `ca
 was on its way at the hold, `scheduled` or `processing`, is taken back where it ends: when its attempt succeeds and the
 person is `paused` in that campaign by then, the routine that ends attempts asks for the same take-back for them once the
 success is saved, so a letter the provider took for a later moment after the hold is cancelled as one it took before.
-A take-back the runtime refuses there is logged by the code and costs the success nothing. A letter whose
+This applies only to a letter the provider holds for a moment still ahead; one that already went when its attempt
+ended is a race nobody can win, and nothing more is promised for it. A take-back the runtime refuses there is logged by
+the code and costs the success nothing. A letter whose
 cancel no route active now takes where it ran, at its plugin and its account, is not taken back, since the claim would
 refuse the cancel; the act goes on, and the runtime's log says so once per campaign, by the campaign's id and the code
 `held_send_cancel_not_routed`. A letter already on its way at the provider answers the cancel `send_not_pending`, and
