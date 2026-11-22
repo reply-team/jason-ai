@@ -224,13 +224,15 @@ public class NewerDatabaseTests
         "20261116022841_ProviderSends",
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
-        "20261122072659_DeepReviewGrid",
+        "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid",
     ];
 
     /// <summary>
     /// Migration ids are append-only: this build knows every id a release shipped, and the last migration this build knows
     /// is the last one on the list. A release that adds a migration appends its id to <see cref="Shipped"/>: 0.50 adds
-    /// <c>WorkItemEntry</c>, a work item's entry, and <c>DeepReviewGrid</c>, the deep review's grid.
+    /// <c>WorkItemEntry</c>, a work item's entry, and <c>LaunchLimitLifts</c>, a person's lifts of the daily limits, and
+    /// <c>DeepReviewGrid</c>, the deep review's grid.
     /// </summary>
     [Fact]
     [Critical(Family.P2, "every shipped migration id is still known, so no installation is refused as newer by mistake")]

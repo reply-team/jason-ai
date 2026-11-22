@@ -1,0 +1,28 @@
+{
+  "kind": "launch_limit_lifted",
+  "version": 1,
+  "since": "0.50.0",
+  "summary": "A person lifted the daily limits of launches for the rest of the installation's day, so every role in every campaign runs past them until the next local midnight, and what they held was let go.",
+  "subscribable": false,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The installation's local date the lift covers, yyyy-MM-dd." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["until", "time_zone", "released"],
+        "properties": {
+          "until": { "type": "string", "format": "date-time", "description": "The UTC instant of the installation's next local midnight, when the limits hold again." },
+          "time_zone": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The zone the date was taken in, an IANA id." },
+          "released": { "type": "integer", "minimum": 0, "description": "How many items held at a daily limit the lift let go." }
+        }
+      }
+    }
+  }
+}

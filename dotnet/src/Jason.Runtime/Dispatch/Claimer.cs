@@ -13,6 +13,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Launches;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
@@ -45,6 +46,7 @@ public sealed class Claimer(
     LiveSettings<DispatcherOptions> settings,
     LiveSettings<LaunchesOptions> launches,
     LiveSettings<SendingOptions> sending,
+    InstallationDay installation,
     LiveSettings<LinesOptions> lines,
     JasonPaths paths,
     ILogger<Claimer> logger,
@@ -109,13 +111,15 @@ public sealed class Claimer(
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
-        // And the daily limits, for the same reason: a limit raised halfway through a scan applies from the next one. The
-        // day is UTC, since a campaign has no time zone of its own.
+        // And the daily limits, for the same reason: a limit raised halfway through a scan applies from the next one. Their
+        // day is the installation's, from one midnight to the next in its zone, read once too: a campaign has no zone of its
+        // own, and a UTC midnight can fall in the middle of the person's afternoon.
         var limits = launches.Current.MaxPerDay;
-        var today = now.Date;
+        var day = installation.Of(now);
 
-        // And the daily ceiling of automatic sends, for the same reason and over the same UTC day.
-        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, today);
+        // And the daily ceiling of automatic sends, for the same reason. It keeps the UTC day, 00:00Z to 00:00Z: two days
+        // are counted here, and only the limits' day has moved to the installation's zone so far.
+        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, now.Date);
 
         // And the ceiling of touches a person may have in a campaign, for the same reason.
         var maxTouches = lines.Current.MaxTouches;
@@ -128,6 +132,10 @@ public sealed class Claimer(
         // these snapshots or older ones, never newer ones than the claim then decides by.
         var packages = plugins.Snapshot;
         var routing = routes.Snapshot;
+
+        // Whether a person lifted the limits for this day, read once beside them and once the scan holds the database, so a
+        // lift committed before the scan began lets every item of this scan go and one made after it waits for the next.
+        var lifted = limits.Count > 0 && await LaunchLimitLifts.CoverAsync(db, day, ct).ConfigureAwait(false);
 
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
@@ -153,13 +161,13 @@ public sealed class Claimer(
             }
 
             // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
-            // responder's reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
-            if (item.Kind == WorkItemKind.AiRole
+            // responder's reply would reach it by a second path. It waits, with no attempt, for the installation's next midnight.
+            // A day a person lifted holds nothing.
+            if (item.Kind == WorkItemKind.AiRole && !lifted
                 && item.Role is { } role && limits.TryGetValue(role, out var limit)
-                && await SpentAsync(db, item, limit, today, ct).ConfigureAwait(false))
+                && await SpentAsync(db, item, limit, day.Start, ct).ConfigureAwait(false))
             {
-                var tomorrow = today.AddDays(1);
-                outcomes.Hold(db, item, tomorrow, LaunchesSpent(role, limit, today, tomorrow), limit, Actors.Dispatcher);
+                outcomes.Hold(db, item, day.End, LaunchesSpent(role, limit, day), limit, Actors.Dispatcher);
                 await SaveAsync(db, item, ct).ConfigureAwait(false);
                 continue;
             }
@@ -347,22 +355,25 @@ public sealed class Claimer(
 
     /// <summary>
     /// Whether the work of <paramref name="item"/>'s role in its campaign has started <paramref name="limit"/> runs or more
-    /// since <paramref name="today"/>, 00:00Z. A run counts when its attempt started, so an attempt the claim refused, which
+    /// since <paramref name="since"/>, the installation's midnight as a UTC instant. A run counts when its attempt started, so an attempt the claim refused, which
     /// never started, spends nothing. One item is let go past the limit: a hold a person resumed. The hold alone writes its
     /// code as the item's last error, and its wait is the item's latest, released by a person, with no attempt and no
-    /// block; a wait released any other way, midnight among them, is counted as usual. Columns and the clock only.
+    /// block; a wait released any other way, midnight among them, is counted as usual, and so is one a lift let go, whose
+    /// release falls in the day a lift covers: a lift is bounded by its day, and the claim asks this only on a day no lift
+    /// covers. Columns and the clock only.
     /// </summary>
-    private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime today, CancellationToken ct)
+    private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime since, CancellationToken ct)
     {
         if (AttemptErrors.IsDailyHold(item.LastError?.Code))
         {
             var latest = await db.WorkItemWaits.AsNoTracking()
                 .Where(w => w.WorkItemId == item.Id)
                 .OrderByDescending(w => w.Id)
-                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId })
+                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId, w.ReleasedAt })
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
-            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null })
+            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null, ReleasedAt: { } released }
+                && !await LaunchLimitLifts.ReleasedAsync(db, released, ct).ConfigureAwait(false))
             {
                 return false;
             }
@@ -373,24 +384,28 @@ public sealed class Claimer(
                 a => a.WorkItem!.CampaignId == item.CampaignId
                     && a.WorkItem.Kind == WorkItemKind.AiRole
                     && a.WorkItem.Role == item.Role
-                    && a.StartedAt >= today,
+                    && a.StartedAt >= since,
                 ct)
             .ConfigureAwait(false);
         return started >= limit;
     }
 
     /// <summary>
-    /// The last error of an item held at its role's limit for the day: the limit and its moment, and the three ways out — the next
-    /// 00:00Z, a person's resume, or a raised limit. Not retried: the moment releases it.
+    /// The last error of an item held at its role's limit for the day: the limit, the installation's midnight it is counted from
+    /// with the zone the day is counted in, the moment it waits until, and the ways out — the installation's next midnight, a
+    /// person's resume of this item, a person's lift of the day, or a raised limit. The moments are UTC. Not retried: the
+    /// moment releases it.
     /// </summary>
-    internal static AttemptErrorDto LaunchesSpent(string role, int limit, DateTime today, DateTime tomorrow)
+    internal static AttemptErrorDto LaunchesSpent(string role, int limit, LocalDay day)
     {
         var runs = limit == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{limit} runs");
         return new AttemptErrorDto(
             AttemptErrors.LaunchesSpent,
-            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, {runs} started since {Zulu(today)}; "
-            + $"this item waits until {Zulu(tomorrow)}. A person's workitem.resume lets it go sooner, past the limit, and a raised "
-            + "limit applies from the next scan to work not yet held, while this item keeps its moment.",
+            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, {runs} started since the "
+            + $"installation's midnight ({Zulu(day.Start)}, {day.TimeZone}); this item waits until {Zulu(day.End)}. A person's "
+            + "workitem.resume lets it go sooner, past the limit, jason launches lift lets every role in every campaign past it until "
+            + "the installation's next midnight, and a raised limit applies from the next scan to work not yet held, while this item "
+            + "keeps its moment.",
             Retriable: false);
 
         static string Zulu(DateTime moment) => moment.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);

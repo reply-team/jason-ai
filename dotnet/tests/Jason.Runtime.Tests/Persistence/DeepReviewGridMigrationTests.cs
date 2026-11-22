@@ -16,9 +16,9 @@ namespace Jason.Runtime.Tests.Persistence;
 /// </summary>
 public class DeepReviewGridMigrationTests
 {
-    private const string PreviousMigration = "20261122055316_WorkItemEntry";
+    private const string PreviousMigration = "20261122065647_LaunchLimitLifts";
 
-    private const string ThisMigration = "20261122072659_DeepReviewGrid";
+    private const string ThisMigration = "20261122075940_DeepReviewGrid";
 
     [Fact]
     [Critical(Family.P2, BrokenUntouched.Migration)]

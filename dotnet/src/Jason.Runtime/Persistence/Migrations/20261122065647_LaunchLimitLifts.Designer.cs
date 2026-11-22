@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jason.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(JasonDbContext))]
-    [Migration("20261122072659_DeepReviewGrid")]
-    partial class DeepReviewGrid
+    [Migration("20261122065647_LaunchLimitLifts")]
+    partial class LaunchLimitLifts
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -519,10 +519,6 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
-
-                    b.Property<DateTime?>("DeepReviewDueAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("deep_review_due_at");
 
                     b.Property<DateTime?>("EventsFrom")
                         .HasColumnType("TEXT")
@@ -1656,6 +1652,53 @@ namespace Jason.Runtime.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_journal_old_json", "old_json IS NULL OR json_valid(old_json)");
                         });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.LaunchLimitLift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("local_date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("time_zone");
+
+                    b.HasKey("Id")
+                        .HasName("pk_launch_limit_lifts");
+
+                    b.HasIndex("LocalDate", "TimeZone")
+                        .IsUnique()
+                        .HasDatabaseName("ix_launch_limit_lifts_local_date_time_zone");
+
+                    b.ToTable("launch_limit_lifts");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Preference", b =>

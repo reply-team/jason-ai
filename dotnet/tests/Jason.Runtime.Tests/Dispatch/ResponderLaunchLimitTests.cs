@@ -20,9 +20,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// How many runs of a role one campaign may start in a UTC day, the responder's first among them. The claim counts the attempts of the item's role in its
-/// campaign that started since 00:00Z, and an item it finds at the limit is held, not failed: it waits, with no
-/// attempt, until the next 00:00Z, so the reply it would answer never reaches the manager by a second path. The count
+/// How many runs of a role one campaign may start in the installation's day, the responder's first among them. The claim counts the attempts of the item's
+/// role in its campaign that started since the installation's midnight — 00:00Z here, the clock's zone being UTC — and an item it finds at the limit is
+/// held, not failed: it waits, with no attempt, until the next one, so the reply it would answer never reaches the manager by a second path. The count
 /// reads columns and the clock only.
 /// </summary>
 public class ResponderLaunchLimitTests
@@ -60,9 +60,11 @@ public class ResponderLaunchLimitTests
         Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
         Assert.False(item.LastError.Retriable);
         Assert.Equal(
-            "Work of the responder role in this campaign has reached the limit Launches:MaxPerDay:responder sets, 2 runs started since "
-            + "2026-10-06T00:00:00Z; this item waits until 2026-10-07T00:00:00Z. A person's workitem.resume lets it go sooner, "
-            + "past the limit, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
+            "Work of the responder role in this campaign has reached the limit Launches:MaxPerDay:responder sets, 2 runs started since the "
+            + "installation's midnight (2026-10-06T00:00:00Z, UTC); this item waits until 2026-10-07T00:00:00Z. A person's "
+            + "workitem.resume lets it go sooner, past the limit, jason launches lift lets every role in every campaign past it until "
+            + "the installation's next midnight, and a raised limit applies from the next scan to work not yet held, while this item "
+            + "keeps its moment.",
             item.LastError.Message);
 
         var wait = await db.WorkItemWaits.AsNoTracking().Include(w => w.Items).SingleAsync(w => w.WorkItemId == held, Ct);
@@ -470,9 +472,11 @@ public class ResponderLaunchLimitTests
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
         Assert.Empty(item.Attempts);
         Assert.Equal(
-            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, 1 run started since "
-            + "2026-10-06T00:00:00Z; this item waits until 2026-10-07T00:00:00Z. A person's workitem.resume lets it go sooner, "
-            + "past the limit, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
+            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, 1 run started since the "
+            + "installation's midnight (2026-10-06T00:00:00Z, UTC); this item waits until 2026-10-07T00:00:00Z. A person's "
+            + "workitem.resume lets it go sooner, past the limit, jason launches lift lets every role in every campaign past it until "
+            + "the installation's next midnight, and a raised limit applies from the next scan to work not yet held, while this item "
+            + "keeps its moment.",
             item.LastError!.Message);
         var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
         Assert.Equal((WaitStatus.Open, (int?)null, (int?)null, Tomorrow), (wait.Status, wait.AttemptId, wait.ProviderBlockId, wait.Until!.Value));

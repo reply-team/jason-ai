@@ -83,6 +83,8 @@ public static class Operations
     public const string BlockGet = "block.get";
     public const string BlockClear = "block.clear";
 
+    public const string LaunchesLift = "launches.lift";
+
     public const string DecisionRaise = "decision.raise";
     public const string DecisionAnswer = "decision.answer";
     public const string DecisionGet = "decision.get";

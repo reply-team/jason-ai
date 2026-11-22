@@ -44,6 +44,7 @@ public class InsideARunTests
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
         Operations.CampaignStart,
+        Operations.LaunchesLift,
     ];
 
     /// <summary>
@@ -68,6 +69,8 @@ public class InsideARunTests
         Assert.Equal(
             operation == Operations.CampaignStart
                 ? $"This request comes from inside attempt `{HeaderAttempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision."
+                : operation == Operations.LaunchesLift
+                ? $"This request comes from inside attempt `{HeaderAttempt}`. Lifting the daily limits of launches is a person's own word, given outside any run: a role leaves it to the person, or raises it as a decision."
                 : $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
             error.Message);
         Assert.Equal(before, await StateAsync(api));
@@ -120,7 +123,8 @@ public class InsideARunTests
     /// and a check-in that could start its own campaign under another actor would summon its own successor. A preference
     /// is among them for every key, not for the keys that steer sends alone: a preference
     /// is what a named person states, and in a dispatched run no person is there, so a run that names a person on any key
-    /// is what the refusal exists for. The gate is by operation and never reads the body, so it holds a key nobody has
+    /// is what the refusal exists for. A lift of the daily limits of launches is among them: a run that lifted them would
+    /// let every role in every campaign past them for the rest of the day on no person's word. The gate is by operation and never reads the body, so it holds a key nobody has
     /// written yet; refusing some keys in the service instead would be a second mechanism the next sensitive key had to
     /// remember. The other verbs that take no default actor — a block's clear, a resume, a report and a subscription's
     /// rewind — are not among them: a resume and a report are a run's to make, and the rest are a person's already by
@@ -249,6 +253,9 @@ public class InsideARunTests
 
             case Operations.CampaignGet:
                 return new { campaign_id = await CampaignAsync(api) };
+
+            case Operations.LaunchesLift:
+                return new { actor = Ada, reason = "a launch day" };
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(operation), operation, "No world is arranged for this verb.");

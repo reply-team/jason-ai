@@ -26,7 +26,8 @@ public partial class PageClaimsTests
     private static readonly string[] MigrationsAfter049 =
     [
         "20261122055316_WorkItemEntry",
-        "20261122072659_DeepReviewGrid",
+        "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid",
     ];
 
     /// <summary>

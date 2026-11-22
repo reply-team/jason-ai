@@ -330,6 +330,16 @@ public static class DomainErrors
     public static InvalidRequestException BlockActorRequired() =>
         new("actor_required", "actor.id is required on a block clear: what is recorded has to name the person whose word it is.");
 
+    /// <summary>A role, an attempt or the system lifting the daily limits: a lift is a person's word, as a block's clear is.</summary>
+    public static InvalidRequestException LiftNotHuman(ActorType type) =>
+        new(
+            "lift_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot lift the daily limits of launches; a lift is a person's word.");
+
+    /// <summary>The same code a block clear without a named person is refused with: a lift records whose word it is.</summary>
+    public static InvalidRequestException LiftActorRequired() =>
+        new("actor_required", "actor.id is required on a lift of the daily limits: what is recorded has to name the person whose word it is.");
+
     /// <summary>
     /// The decision has already been made, or the work it was about has moved on without it. Either way there is
     /// nothing here to decide, and the row says which of the two happened.
@@ -388,6 +398,12 @@ public static class DomainErrors
         new(
             "decided_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision.");
+
+    /// <summary>Inside a run, a lift of the daily limits of launches: the code of a person's word, in a sentence of its own.</summary>
+    public static ForbiddenException LiftInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Lifting the daily limits of launches is a person's own word, given outside any run: a role leaves it to the person, or raises it as a decision.");
 
     /// <summary>
     /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
