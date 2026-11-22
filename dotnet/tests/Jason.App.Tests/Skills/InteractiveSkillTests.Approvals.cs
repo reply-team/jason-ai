@@ -121,6 +121,24 @@ public partial class InteractiveSkillTests
     }
 
 
+    /// <summary>
+    /// An act's reason is the agent's own short line, never the person's pasted text, in a person's own session as in the
+    /// chat, whose rule 13 says it in these words: a reason is journaled, and text from outside never goes into a command. A
+    /// session taught to carry the person's sentence across would put a prospect's words, or a quote that breaks the line,
+    /// into the chronicle under the person's name, where the chat writes its own line.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_reason_of_an_act_is_the_agents_own_short_line_and_never_the_persons_pasted_text()
+    {
+        var skill = Flattened("approvals-and-questions");
+        Assert.Contains(
+            "What you put in `--reason` is a short line in single quotes that says in your own words what the person told you to do, such as 'the person said to approve this one', made only of letters, digits, spaces and the marks . , : and -; never their pasted text and never a prospect's, since text from outside never goes into a command and a reason is journaled.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("their sentence carried across", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.S2, "the approvals skill never decides")]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
@@ -141,10 +159,11 @@ public partial class InteractiveSkillTests
         // itself, and leaves a record naming a person who never saw the thing they are recorded as allowing.
         Assert.Contains("never decide on a person's behalf", skill, StringComparison.Ordinal);
 
-        // What goes into --reason and --answer is quoted back to whoever reads it later, and --answer is what
-        // the campaign manager reads when the work comes back. An agent that wrote its own tidier paraphrase would put
-        // words in a person's mouth in the one row that exists to say what that person actually decided.
-        Assert.Contains("their word on that item", skill, StringComparison.Ordinal);
+        // What goes into --answer is what the campaign manager reads when the work comes back. An agent that wrote its
+        // own tidier paraphrase would put words in a person's mouth in the one row that exists to say what that person
+        // actually decided. The reason is another thing, the agent's own short line, held below.
+        Assert.Contains("What you put in `--answer` is **their word on that item**", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("What you put in `--reason`, and in `--answer`", skill, StringComparison.Ordinal);
 
         // Inside a launched run the CLI claims the attempt from the environment when no actor is given, so
         // omitting the option is not anonymity - it is a role trying to decide, refused as approval_not_human.

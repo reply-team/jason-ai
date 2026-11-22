@@ -122,8 +122,11 @@ optional on most of them. An actor of any other type is refused with `approval_n
 actor with no name at all with `actor_required`. Leaving the option off inside a launched run is worse
 than useless: the command line then claims the attempt it was launched for, and that is refused too.
 
-What you put in `--reason`, and in `--answer`, is **their word on that item** — their sentence carried
-across, not your account of what they probably meant. `--answer` is required and is what the campaign
+What you put in `--reason` is a short line in single quotes that says in your own words what the person
+told you to do, such as 'the person said to approve this one', made only of letters, digits, spaces and the
+marks . , : and -; never their pasted text and never a prospect's, since text from outside never goes into a
+command and a reason is journaled. What you put in `--answer` is **their word on that item** — their answer
+carried across, not your account of what they probably meant. `--answer` is required and is what the campaign
 manager reads at its next check-in, so a one-word answer to a question that
 deserved two sentences is a decision half recorded.
 
