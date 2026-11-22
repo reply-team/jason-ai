@@ -126,7 +126,7 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// The reserve's threshold is the campaign's, one batch of twenty set by the runtime at the first start; and where no
+    /// The reserve's threshold is the campaign's, twenty, the runtime's own number, set by the runtime at the first start; and where no
     /// top-up can bring more, the manager asks at once rather than at the next deep review.
     /// </summary>
     [Fact]
@@ -134,7 +134,7 @@ public partial class RoleSkillTests
     {
         var head = Flattened("manager");
 
-        Assert.Contains("fell under the threshold the campaign holds — one batch, twenty, which the runtime sets at the campaign's first start where its people come from a search (`Manager:AudienceThreshold`), unless the person changed it", head, StringComparison.Ordinal);
+        Assert.Contains("fell under the threshold the campaign holds — twenty, the runtime's own number, which it sets at the campaign's first start where its people come from a search (`Manager:AudienceThreshold`), unless the person changed it", head, StringComparison.Ordinal);
         Assert.DoesNotContain("the threshold the person set", head, StringComparison.Ordinal);
         Assert.Equal(20, new Jason.Runtime.Configuration.ManagerOptions().AudienceThreshold);
         Assert.Contains("**Where no top-up can bring more, ask at once.**", head, StringComparison.Ordinal);

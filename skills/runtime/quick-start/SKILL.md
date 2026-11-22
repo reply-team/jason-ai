@@ -32,7 +32,8 @@ Send this, with nothing before it, as free text and not through a question tool:
 >
 > If you like, add a line about yourself and how you write. You can also do that later.
 
-A no, or silence about the second part, is an answer. Do not ask for it again while sends are manual.
+A no, or silence about the second part, is an answer: do not ask for it again here. Where nobody is named to write as
+yet, the set-up in `managed-campaign-work` asks for it once, first, as it says.
 
 ## 2. Read the channels, never ask for them
 

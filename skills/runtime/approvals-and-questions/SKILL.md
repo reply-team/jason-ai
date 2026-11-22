@@ -235,9 +235,9 @@ the allowance it suggests. Read it from the work item the approval names, and gi
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-The price is the provider's: give the planner's figure as the planner's, and where there is none, say that the
-provider charges per person found and Jason does not know its price. The threshold the proposal names is the campaign's
-own field, one batch, twenty, which the runtime sets at the campaign's first start, because its people come from a
+The price is the provider's: give the planner's figure as the planner's, and where there is none, say that the provider
+charges per person found and Jason does not know its price. The threshold the proposal names is the campaign's own
+field, twenty, the runtime's own number, which it sets at the campaign's first start, because its people come from a
 search. Changed, or cleared after the start to have none, it is changed only on the person's word, under their name:
 
 ```

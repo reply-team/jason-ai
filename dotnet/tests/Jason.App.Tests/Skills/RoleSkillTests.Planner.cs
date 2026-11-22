@@ -107,12 +107,13 @@ public partial class RoleSkillTests
         Assert.Contains("The probe waits for the person who owns the campaign, who sees the definition and the number before anything is spent", skill, StringComparison.Ordinal);
         Assert.Contains("You propose the allowance with its numbers and name the threshold the start sets, and you set neither: changing the threshold and giving the allowance are the person's.", skill, StringComparison.Ordinal);
 
-        // The threshold is one batch, which the runtime sets at the first start: a planner still proposing a fifth of the
+        // The threshold is twenty, the runtime's own number whatever the first batch, which it sets at the first start: a planner still proposing a fifth of the
         // probe would name a number under which the next batch is already short, and one that never said the start sets
         // it would leave the person thinking a null means none.
-        Assert.Contains("is running out of people nobody has started on: one batch, twenty.", skill, StringComparison.Ordinal);
+        Assert.Contains("is running out of people nobody has started on: twenty, the runtime's own number.", skill, StringComparison.Ordinal);
         Assert.Contains("The runtime sets it at the campaign's first start, because its people come from a search; the person may change it, or clear it after the start to have none.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("a fifth of the probe", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("one batch", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
