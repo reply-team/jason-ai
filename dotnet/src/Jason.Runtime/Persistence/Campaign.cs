@@ -97,6 +97,14 @@ public sealed class Campaign
     /// </summary>
     public DateTime? ManagerReviewAnchor { get; set; }
 
+    /// <summary>
+    /// The next moment of the deep review's grid. Set at every going live to that moment plus <c>Manager:DeepReviewSeconds</c>,
+    /// so a resume starts the grid again, and moved on by whole intervals to the first moment after now by each deep review
+    /// the runtime creates, and by nothing else: a quick look or a triggered review leaves it alone. Null while a campaign
+    /// has never been live, which is also why such a campaign is never due for one.
+    /// </summary>
+    public DateTime? DeepReviewDueAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

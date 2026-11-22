@@ -82,6 +82,10 @@ public static class TestOptions
     public static LiveSettings<LinesOptions> LinesSettings(IOptionsMonitor<LinesOptions>? monitor = null) =>
         Seam(monitor ?? new TestOptionsMonitor<LinesOptions>(new LinesOptions()), LinesOptions.Section);
 
+    /// <summary>The seam over the manager's section, which a campaign going live reads for the deep review's interval.</summary>
+    public static LiveSettings<ManagerOptions> ManagerSettings(IOptionsMonitor<ManagerOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<ManagerOptions>(new ManagerOptions()), ManagerOptions.Section);
+
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
     public static LiveSettings<DispatcherOptions> NothingValidated() =>
         Settings(new ThrowingOptionsMonitor<DispatcherOptions>(new OptionsValidationException(
