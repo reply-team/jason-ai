@@ -123,6 +123,7 @@ public sealed class SettingsAllowlist
         new("Manager:MaxAttempts", Kind.Integer32),
         new("Manager:Priority", Kind.Integer32),
         new("Manager:MaxEntriesPerScan", Kind.Integer32),
+        new("Manager:AudienceThreshold", Kind.Integer32),
         new("Roles:MaxStdoutBytes", Kind.Integer32),
         new("Roles:MaxSkillBytes", Kind.Integer32),
         new("Update:InitialDelayMinutes", Kind.Integer32),

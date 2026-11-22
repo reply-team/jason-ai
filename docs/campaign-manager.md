@@ -474,6 +474,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
 | `Manager:Priority` | `0` | -1000..1000 | where a check-in sits in the queue |
 | `Manager:MaxEntriesPerScan` | `500` | 50..10000 | how much chronicle one summon reads |
+| `Manager:AudienceThreshold` | `20` | 1..100000 | the reserve's default, given at its first start to a campaign whose people come from a search and that holds no threshold (§9) |
 
 There is no `Manager:Enabled`: `Dispatcher:Enabled` already decides whether this runtime has a loop
 at all, and a runtime with no dispatcher summons nothing.
@@ -504,8 +505,23 @@ configuration — it is a legitimate thing to write — so it is said here inste
 
 A campaign can say how many people it wants to keep in reserve: members nobody has started on yet.
 `jason campaign update <campaign-id> --audience-threshold 50` sets the number, between 1 and 100000, and
-`--clear audience_threshold` takes it away. A campaign has none until one is set, and without one nobody counts. It is a
-field beside the review pace rather than a key in the context for the same reason (§4): the dispatcher reads it.
+`--clear audience_threshold` takes it away; without one nobody counts. It is a field beside the review pace rather than a
+key in the context for the same reason (§4): the dispatcher reads it.
+
+**The default at the first start.** A campaign is made with none. When it first goes live, `campaign.start` from
+`draft`, holding none, and its people come from a search that can top them up, the runtime gives it
+`Manager:AudienceThreshold`, twenty by default (§8): one batch of the people a manager starts on at once, so the low line
+comes while a top-up can still keep the next batch full. Its people come from a search where it holds an audience (§10)
+or an `audience.search` is recorded for it that was not `cancelled` or `expired`, the probe left while it was set up
+waiting for the start, since a draft's work is not claimed. A campaign whose people the person brought as a list holds
+neither and is given nothing: a list is a closed set, which no top-up refills. A threshold the person set before the
+start is kept. The act is the runtime's own: the start's line is the person's, and the default is one `campaign_updated`
+line of its own beside it, key `audience_threshold`, by `system:runtime`, whose reason says it is the default at the
+first start; the start's answer shows the campaign with it. Only the first start does this. A resume never does, and a
+campaign that was already live when its installation was upgraded is never given one. So a person who wants none clears
+it after the start, `--clear audience_threshold`, and it stays cleared through every pause and resume. A null before the
+start means only that the start has not happened yet. While the probe's people are still landing, a reserve under the
+default is said once and recovers as the pages land; the recovery wakes nobody.
 
 **Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about
