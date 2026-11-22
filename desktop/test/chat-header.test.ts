@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { feedBlock, givenTitle, header, nameLimit, nameOf, recap, recapLimit, titleLimit, titleOf, turnInput } from '../src/chat-header.ts';
 import type { LineEntry } from '../src/feed.ts';
+import { readFileSync } from 'node:fs';
+import { chatModes, codexModeSays, modeNames, modeSays, type ChatMode } from '../src/chat-modes.ts';
 
 const campaign = (name: string | null, fields: { status?: string; folder?: string | null } = {}) => ({
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
@@ -206,4 +208,56 @@ test('a title drops every default-ignorable code point, so a name of fillers alo
     }
     assert.equal(givenTitle('Spring\u3164 plan'), 'Spring plan');
     assert.equal(nameOf('Spring\u115f outreach'), 'Spring outreach');
+});
+
+const claudeStart = (mode: ChatMode, sealed = mode !== 'full_access') => ({ mode, program: 'claude' as const, sealed });
+
+test('the header ends by naming the mode the start runs in and what the AI does in it, in the menu\'s own words, every mode, on one line', () => {
+    const expected: Record<ChatMode, string> = {
+        ask_first: 'This turn runs in Ask first: in it the AI asks on a card before anything Jason does not settle itself.',
+        plan_only: 'This turn runs in Plan only: in it the AI reads and proposes, and changes nothing.',
+        auto_edit: "This turn runs in Auto-edit: in it the AI works on files in the chat's own folder without asking; everything else is as in Ask first.",
+        full_access: "This turn runs in Full access: in it the AI runs commands on this computer without asking, except those that name Jason's own settings, data or variables.",
+    };
+    for (const mode of chatModes) {
+        const said = header(campaign('Spring'), 'ada', claudeStart(mode));
+        assert.ok(said.startsWith(`${header(campaign('Spring'), 'ada')} ${expected[mode]} `), mode);
+        assert.match(said, /The person may change the mode between turns, so earlier turns' modes say nothing of this one; each turn's first paragraph names its own\./);
+        assert.doesNotMatch(said, /\n/);
+        for (const other of chatModes) if (other !== mode) assert.ok(!said.includes(expected[other]), `${mode} names ${other}`);
+    }
+});
+
+test('on Codex the header says a mode in Codex\'s own words where the menu does', () => {
+    const codex = (mode: ChatMode) => header({ campaign: null }, 'ada', { mode, program: 'codex', sealed: false });
+    assert.match(codex('ask_first'), /This turn runs in Ask first: in it the AI reads and proposes\. Codex cannot ask before it acts\./);
+    assert.match(codex('full_access'), /This turn runs in Full access: in it the AI runs commands on this computer without asking, with no sandbox\./);
+    assert.match(codex('plan_only'), /This turn runs in Plan only: in it the AI reads and proposes, and changes nothing\./);
+    assert.doesNotMatch(codex('ask_first'), /Claude Code settings/, 'the sealing sentence is Claude Code\'s');
+});
+
+test('a sealed Claude Code start is told the person\'s own configuration is not loaded, an unsealed Full access start is not, and a keyed Full access start, sealed, is told what stays true of it', () => {
+    const sealedWords = "This turn does not load the person's own Claude Code settings, MCP servers or plugins; only a Full access turn on the person's own sign-in does.";
+    for (const mode of ['ask_first', 'auto_edit', 'plan_only'] as const) assert.ok(header({ campaign: null }, 'ada', claudeStart(mode)).endsWith(` ${sealedWords}`), mode);
+    assert.ok(!header({ campaign: null }, 'ada', claudeStart('full_access')).includes('Claude Code settings'));
+    const keyed = header({ campaign: null }, 'ada', claudeStart('full_access', true));
+    assert.ok(keyed.includes('This turn runs in Full access:'));
+    assert.ok(keyed.endsWith(` ${sealedWords}`));
+});
+
+/** The string each mode has in one `Record` of the page's source, read from its text: the page's code is not the desktop's to import. */
+function pageWords(file: string, name: string): Record<string, string> {
+    const source = readFileSync(new URL(`../../ui/src/${file}`, import.meta.url), 'utf8');
+    const start = source.indexOf(`const ${name}`);
+    assert.ok(start >= 0, `${name} in ${file}`);
+    const body = source.slice(start, source.indexOf('};', start));
+    const words: Record<string, string> = {};
+    for (const [, mode, quote, text] of body.matchAll(/(\w+):\s*(['"])((?:\\.|(?!\2).)*)\2/g)) words[mode as string] = (text as string).split(`\\${quote}`).join(quote as string);
+    return words;
+}
+
+test('the desktop says the modes in the page\'s own words, word for word: their names, what each does, and Codex\'s', () => {
+    assert.deepEqual(pageWords('console/chat-model.ts', 'modeWords'), { ...modeNames });
+    assert.deepEqual(pageWords('console/start-menus.tsx', 'modeSays'), { ...modeSays });
+    assert.deepEqual(pageWords('console/chat-model.ts', 'codexModeSays'), { ...codexModeSays });
 });

@@ -6,6 +6,7 @@
 
 import type { KeptEntry } from './chat-conversations.ts';
 import type { LineEntry } from './feed.ts';
+import { codexModeSays, modeNames, modeSays, type ChatMode } from './chat-modes.ts';
 
 /** The longest campaign name a header or a title carries, in characters. */
 export const nameLimit = 120;
@@ -107,12 +108,44 @@ function personSentence(account: unknown): string {
         : `The person you talk with acts as \`${actor}\`.`;
 }
 
+/** What a start is: the mode its arguments run it in, its host, and whether it is sealed from the person's own configuration. */
+export interface TurnStart {
+    mode: ChatMode;
+    program: 'claude' | 'codex';
+    /** A Claude Code start given none of the person's own settings, servers or plugins (`claudeSealed`). */
+    sealed: boolean;
+}
+
+/**
+ * What the header says of the start: the mode it runs in and what the AI does in it, in the menu's own words for the mode
+ * (`modeSays`, Codex's where they differ), every turn, since the person may change the mode between turns and the
+ * history says only the modes of earlier ones; and, for a sealed Claude Code start, that the person's own configuration
+ * is not loaded, which only a Full access turn on their own sign-in loads.
+ */
+export function startSentences(start: TurnStart): string {
+    const says = (start.program === 'codex' ? codexModeSays[start.mode] : undefined) ?? modeSays[start.mode];
+    const parts = [
+        `This turn runs in ${modeNames[start.mode]}: in it the AI ${says.charAt(0).toLowerCase()}${says.slice(1)}`,
+        "The person may change the mode between turns, so earlier turns' modes say nothing of this one; each turn's first paragraph names its own.",
+    ];
+    if (start.program === 'claude' && start.sealed) {
+        parts.push("This turn does not load the person's own Claude Code settings, MCP servers or plugins; only a Full access turn on the person's own sign-in does.");
+    }
+    return parts.join(' ');
+}
+
 /**
  * The header: one paragraph in the desktop's words, the first of every turn's message. With `account`, the person is
  * named right after Jason's own sentence (`personSentence`); a turn always gives it, null where the name could not be
- * read, and a row about the rest of the header leaves it out, which says nothing of the person.
+ * read, and a row about the rest of the header leaves it out, which says nothing of the person. With `start`, the
+ * paragraph ends with what the start is (`startSentences`); a turn always gives it.
  */
-export function header(about: About, account?: string | null): string {
+export function header(about: About, account?: string | null, start?: TurnStart): string {
+    const body = headerBody(about, account);
+    return start === undefined ? body : `${body} ${startSentences(start)}`;
+}
+
+function headerBody(about: About, account?: string | null): string {
     const lead = ['Jason, not the person, wrote this first paragraph.', ...(account === undefined ? [] : [personSentence(account)])].join(' ');
     const campaign = about.campaign;
     if (about.main === true) {

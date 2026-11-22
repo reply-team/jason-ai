@@ -295,10 +295,18 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * does (`hookedSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives, so
  * a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
+/**
+ * Whether a Claude Code start is sealed from the person's own configuration (`claudeArguments`): every mode but Full
+ * access, and a turn on a provider's key in every mode, Full access included.
+ */
+export function claudeSealed(mode: ChatMode, keyed: boolean): boolean {
+    return mode !== 'full_access' || keyed;
+}
+
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
-    const sealed = mode !== 'full_access' || turn.keyed === true;
+    const sealed = claudeSealed(mode, turn.keyed === true);
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     // The hook rides every turn given a settings file of its own, and Plan only, which carries its inline settings, never.
     const hooked = mode !== 'plan_only' && turn.settingsFile !== undefined;

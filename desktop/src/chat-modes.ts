@@ -256,8 +256,26 @@ export function turnMode(recorded: ChatMode, program: string, place: TurnPlace):
     return { mode: recorded, why: null };
 }
 
-/** The modes by the names the menu gives them. */
-const modeNames: Readonly<Record<ChatMode, string>> = { ask_first: 'Ask first', plan_only: 'Plan only', auto_edit: 'Auto-edit', full_access: 'Full access' };
+/** The modes by the names the menu gives them (the page's `modeWords`, held to them by a test). */
+export const modeNames: Readonly<Record<ChatMode, string>> = { ask_first: 'Ask first', plan_only: 'Plan only', auto_edit: 'Auto-edit', full_access: 'Full access' };
+
+/**
+ * What each mode does, in the words the menu says under its name and the line under the composer says (the page's
+ * `modeSays`, ui/src/console/start-menus.tsx, held to them word for word by a test): the desktop has no reach into the
+ * page's code, so the words stand here once more, and the test keeps the two one wording.
+ */
+export const modeSays: Readonly<Record<ChatMode, string>> = {
+    ask_first: 'Asks on a card before anything Jason does not settle itself.',
+    plan_only: 'Reads and proposes, and changes nothing.',
+    auto_edit: "Works on files in the chat's own folder without asking; everything else is as in Ask first.",
+    full_access: "Runs commands on this computer without asking, except those that name Jason's own settings, data or variables.",
+};
+
+/** What a mode does on Codex where the menu says other than on Claude Code (the page's `codexModeSays`, held the same way). */
+export const codexModeSays: Readonly<Partial<Record<ChatMode, string>>> = {
+    ask_first: 'Reads and proposes. Codex cannot ask before it acts.',
+    full_access: 'Runs commands on this computer without asking, with no sandbox.',
+};
 
 /**
  * What a conversation is told, once, when a turn cannot run in its mode: why, and what the menu draws, that the turn runs

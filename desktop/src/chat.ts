@@ -36,7 +36,7 @@ import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder, ownConversationFolder } from './chat-agent-folder.ts';
 import { endConversationFolder, endedNameShape, moveLeftovers, moveOwnLeftovers, sweepCap, sweepEnded } from './chat-full-folder.ts';
-import { chatRules, claudeArguments, claudeLine, claudeRemovedToolsOf, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import { chatRules, claudeArguments, claudeLine, claudeRemovedToolsOf, claudeSealed, codexArguments, codexLine, dataRules, hostEnvironment, pinnedEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
 import {
     bounded,
     conversationIdShape,
@@ -1992,7 +1992,7 @@ export class Chat {
         const held = digestsOf(memory);
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
         const headFor = (resumed: string | undefined): string =>
-            [header(about, this.#options.account), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
+            [header(about, this.#options.account, { mode: running.mode, program: resolved.program, sealed: claudeSealed(running.mode, resolved.keyed) }), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
         // Every turn of a conversation runs in its folder, in every mode and on every host: its own, or the shared chat
         // folder for one an earlier desktop made.
         const own = conversation.folder === 'own';

@@ -177,6 +177,31 @@ test('a new chat is in Full access; put in Ask first, its turn starts Claude Cod
     assert.deepEqual(r.started, ['ask_first']);
 });
 
+test('every start\'s first paragraph names the mode that start runs in: the turn after a change of mode carries the new one, and a Full access start the host refused, started again in Ask first, says Ask first', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    await r.turn(id, 'plan it', claude);
+    await r.chat.setMode(id, 'ask_first');
+    await r.turn(id, 'now do it', claude);
+    const [planned, asked] = r.hosts().map((host) => host.stdin);
+    assert.match(planned ?? '', /This turn runs in Plan only: /);
+    assert.match(asked ?? '', /This turn runs in Ask first: /);
+    assert.doesNotMatch(asked ?? '', /This turn runs in Plan only/);
+    assert.match(asked ?? '', /does not load the person's own Claude Code settings/);
+    assert.ok(flag(r.hosts()[1]?.args ?? [], '--resume') !== undefined, 'the same conversation, resumed');
+    // A Full access start refused by the host is started again in Ask first, and is told so.
+    const refused = rig(t, { env: { STUB_BYPASS: 'refused' } });
+    const other = await refused.chat.create();
+    await refused.turn(other.id, 'hello', claude);
+    const starts = refused.hosts();
+    assert.deepEqual(starts.map((host) => flag(host.args, '--permission-mode')), ['bypassPermissions', 'default']);
+    assert.match(starts[0]?.stdin ?? '', /This turn runs in Full access: /);
+    assert.doesNotMatch(starts[0]?.stdin ?? '', /Claude Code settings/, 'a Full access start on the sign-in loads them');
+    assert.match(starts[1]?.stdin ?? '', /This turn runs in Ask first: /);
+    assert.match(starts[1]?.stdin ?? '', /does not load the person's own Claude Code settings/);
+});
+
 test('Ask first\'s hook stands in front of the host\'s allow rules: a verb the host would run with no card, fed the settings file or the run file, is refused', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
