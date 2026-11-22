@@ -334,7 +334,7 @@ read_terminal_before() {
 # file: there the profiles the report says it wrote are said, and the leg fails only where that login shell does not find
 # jason.
 hold_account_terminal() {
-    local version="$1" written="${2:-}" record="${3:-}" homebrew_carried="${4:-}" shell found every profile listed name hashed now done_list said_done entry other
+    local version="$1" written="${2:-}" record="${3:-}" homebrew_carried="${4:-}" shell found every profile listed name hashed now done_list said_done entry other carried_real entry_real
     shell="$(account_shell)"
     [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
     found="$(within 60 "a new login shell of $shell finding jason" fresh_in "$shell" 'command -v jason; jason --version')" || true
@@ -346,13 +346,20 @@ hold_account_terminal() {
             if [ -z "$homebrew_carried" ]; then
                 [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell of $shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
             else
-                # Each place once, in the shell's order; the first is the wrapper (held above), every other leads to the
-                # carried jason of the application Homebrew placed, by its real path, and none to anything else.
+                # Each place once, in the shell's order; the first is the wrapper, every other leads to the carried jason
+                # of the application Homebrew placed, by its real path, and none to anything else. A listing that timed
+                # out or named nothing, and a real path that could not be read, fail: neither is an answer.
                 every="$(printf '%s\n' "$every" | awk 'NF && !seen[$0]++')"
+                [ -n "$every" ] || fail "a new login shell of $shell listed no jason (which -a jason answered nothing, or did not end within 60 s)"
+                [ "$(printf '%s\n' "$every" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell of $shell lists '$(printf '%s\n' "$every" | sed -n 1p)' first, not $WRAPPER: $(printf '%s\n' "$every" | tr '\n' ' ')"
+                carried_real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$homebrew_carried")" || carried_real=""
+                [ -n "$carried_real" ] || fail "the real path of $homebrew_carried could not be read"
                 other=""
                 while IFS= read -r entry; do
                     [ -n "$entry" ] && [ "$entry" != "$WRAPPER" ] || continue
-                    [ "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$entry")" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$homebrew_carried")" ] || fail "a new login shell of $shell finds a jason at $entry that does not lead to $homebrew_carried, this build's carried jason: $(printf '%s\n' "$every" | tr '\n' ' ')"
+                    entry_real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$entry")" || entry_real=""
+                    [ -n "$entry_real" ] || fail "the real path of $entry, which a new login shell of $shell lists, could not be read"
+                    [ "$entry_real" = "$carried_real" ] || fail "a new login shell of $shell finds a jason at $entry that leads to $entry_real, not to $homebrew_carried, this build's carried jason: $(printf '%s\n' "$every" | tr '\n' ' ')"
                     other="$other $entry"
                 done <<< "$every"
                 say "a new login shell of $shell lists $(printf '%s\n' "$every" | tr '\n' ' ')- the wrapper first, then${other:- nothing else}, which leads to $homebrew_carried, as Homebrew's link to an application it placed does"
