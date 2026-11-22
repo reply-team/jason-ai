@@ -34,6 +34,12 @@ public partial class RoleSkillTests
         // edited the failed item, or copied its input, would ask nobody about the number that is actually there.
         Assert.Contains("with both numbers in the failed attempt's `trace`. Read the count again and create a new item for the new number", skill, StringComparison.Ordinal);
         Assert.Contains("a different population is a different decision, never an edit of the old one", skill, StringComparison.Ordinal);
+
+        // And the start of a provider's campaign is never the planner's to propose: it is prepared only on the person's
+        // direct word. A planner that prepared one for every campaign would put a sequence at the provider beside the
+        // letters Jason's roles write.
+        Assert.Contains("**Starting a provider's campaign is a person's decision over a population, and only on their direct word.** You never propose it.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("plan the horizon from that", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -113,12 +119,17 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
 
-        // And one message at a time is how a campaign's people are written to, every batch of them: a provider's campaign
-        // is the person's to ask for by name. A planner told that a population is a provider campaign's would build a
-        // sequence at the provider for every campaign past its pilot.
+        // And one message at a time is how a campaign's people are written to, every batch of them: a provider's sequence
+        // is never proposed, and a campaign linked to one gets no letters of Jason's own. A planner told that a population
+        // is a provider campaign's would build a sequence at the provider for every campaign past its pilot, and one that
+        // planned sends in a linked campaign would send beside the sequence's own steps.
         Assert.Contains("**A person is reached one message at a time.**", skill, StringComparison.Ordinal);
         Assert.Contains("That is how a campaign's people are written to, its first batch and the batches after it alike.", skill, StringComparison.Ordinal);
-        Assert.Contains("is used only where the person asks for one by name.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A provider's sequence is never part of that, and never proposed: a campaign linked to one gets no letters of Jason's own, so you create no send in it, and a person who asks for one directly is answered as `managed-campaign-work` says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("is used only where the person asks for one by name.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("a population is a campaign's", skill, StringComparison.Ordinal);
 
         // The runtime never repeats an attempt whose send ended without knowing whether it went out, but a planner that
