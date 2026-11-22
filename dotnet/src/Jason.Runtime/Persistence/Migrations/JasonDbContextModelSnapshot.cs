@@ -2581,6 +2581,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("due_at");
 
+                    b.Property<string>("Entry")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("entry");
+
                     b.Property<string>("ExecutionProfile")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT")

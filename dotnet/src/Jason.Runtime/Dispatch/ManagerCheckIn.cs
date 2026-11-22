@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
@@ -76,18 +77,31 @@ public static class ManagerCheckIn
     /// rather than derived: the actor, which is the dispatcher, and the lineage, which is the chain of the
     /// thing the review is about.
     /// </summary>
+    /// <param name="entry">
+    /// The named way into the manager's job the check-in is created with, one of the manager's in
+    /// <see cref="RoleEntries"/>, or null for none. This is the one writer of a work item's entry. A name the table does
+    /// not give the manager is a programming error, refused before anything is written.
+    /// </param>
     public static async Task<WorkItem> CreateAsync(
         WorkItemService items,
         JasonDbContext db,
         Campaign campaign,
         ManagerCause? cause,
         ManagerOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? entry = null)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(options);
+        if (entry is not null && !RoleEntries.Carries(Role, entry))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(entry),
+                entry,
+                $"The {Role} has no entry of that name; its entries are {string.Join(", ", RoleEntries.Of(Role).Order(StringComparer.Ordinal))}.");
+        }
 
         var lineage = await LineageAsync(db, cause, cancellationToken).ConfigureAwait(false);
         var request = new WorkItemCreateRequest(
@@ -108,7 +122,7 @@ public static class ManagerCheckIn
             Actor: null,
             Reason: cause is null ? "the review cadence came round" : "the chronicle asked for a review");
 
-        var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken).ConfigureAwait(false);
+        var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken, entry).ConfigureAwait(false);
 
         // The cadence is measured from the last check-in the runtime created, not from the last one that
         // finished: a review whose host was missing, or whose answer was refused, must not stop the loop. The

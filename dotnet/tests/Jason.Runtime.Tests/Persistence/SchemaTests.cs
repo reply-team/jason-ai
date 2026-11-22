@@ -81,7 +81,7 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "ask_person_note", "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at",
+                "ask_person_note", "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at", "entry",
                 "execution_profile", "finished_at", "heartbeat_seconds", "id", "idempotency_digest", "idempotency_key", "kind", "last_error_json", "lineage_from_attempt_id",
                 "lineage_profile_name", "lineage_profile_revision", "lineage_state", "max_attempts", "not_before", "operation",
                 "priority", "public_id", "result_format_json", "result_json", "retry_after", "review_note", "role", "status", "timeout_seconds",

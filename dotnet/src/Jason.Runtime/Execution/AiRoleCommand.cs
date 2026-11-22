@@ -96,7 +96,8 @@ public sealed class AiRoleCommand(
             paths.RoleSkillsDirectory,
             roles.Current.MaxSkillBytes,
             host,
-            context.Allow);
+            context.Allow,
+            context.Entry);
         if (prepared.RefusalCode is { } refusal)
         {
             return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
@@ -104,7 +105,16 @@ public sealed class AiRoleCommand(
 
         // What this attempt was given, kept where the rest of the launch is kept: which rules the agent ran
         // under, and whether it was taught anything at all.
-        launch = launch with { Deny = context.Deny, Allow = context.Allow is { Count: > 0 } allow ? allow : null, RoleSkill = prepared.Skill };
+        // And which entry it came in by, with the text its file held in the copy, or none where the copy has no such file:
+        // the attempt still runs, and is never handed some other text in its place.
+        var entry = context.Entry is { } name ? prepared.Entry ?? WorkDirectoryEntry.Absent(name) : null;
+        launch = launch with
+        {
+            Deny = context.Deny,
+            Allow = context.Allow is { Count: > 0 } allow ? allow : null,
+            RoleSkill = prepared.Skill,
+            Entry = entry is null ? null : new LaunchEntryRecordDto(entry.Entry.Name, entry.Bytes),
+        };
 
         // Where the person's memory files are, as the claim decided it with the command that may read them: named
         // here as they are, never looked up again, so the envelope cannot know better than the provenance.
@@ -190,7 +200,7 @@ public sealed class AiRoleCommand(
             var transcript = OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes, maxBytes);
             var diagnostics = OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes, maxBytes);
 
-            await WriteEnvelopeAsync(process, context, memoryFiles, host).ConfigureAwait(false);
+            await WriteEnvelopeAsync(process, context, memoryFiles, host, entry?.Entry).ConfigureAwait(false);
 
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
@@ -259,7 +269,7 @@ public sealed class AiRoleCommand(
     /// ends rather than guessing where the envelope stops. A host that reads a stream of lines is given the document as
     /// the content of one, by its own framing.
     /// </summary>
-    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles, IAgentHost? host)
+    private async Task WriteEnvelopeAsync(Process process, CommandContext context, MemoryFileLocations memoryFiles, IAgentHost? host, LaunchEntry? entry)
     {
         var envelope = new LaunchEnvelope(
             LaunchEnvelope.CurrentVersion,
@@ -287,7 +297,11 @@ public sealed class AiRoleCommand(
 
             // What the wait before this run ended with, where there was one: read from the same object as everything
             // else here, so a host that hands the role its envelope hands it the resumption too.
-            context.Resumption);
+            context.Resumption,
+
+            // The entry the item carries, with its file's text whole as the copy in the work directory holds it: the same
+            // words for every host, inside the one document it is already handed, and no change to its command line.
+            entry);
 
         try
         {

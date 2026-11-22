@@ -37,7 +37,8 @@
         "finished_at": null,
         "campaign_name": "Autumn outreach",
         "contact_name": "Ada Lovelace",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_5",
@@ -65,7 +66,8 @@
         "finished_at": null,
         "campaign_name": "SMB test",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_6",
@@ -93,7 +95,8 @@
         "finished_at": null,
         "campaign_name": "Autumn outreach",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_7",
@@ -121,7 +124,8 @@
         "finished_at": null,
         "campaign_name": "SMB test",
         "contact_name": "Tomás Aguilar",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_8",
@@ -149,7 +153,8 @@
         "finished_at": null,
         "campaign_name": "Autumn outreach",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       }
     ],
     "next_cursor": null
