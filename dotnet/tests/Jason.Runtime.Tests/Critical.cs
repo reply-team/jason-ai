@@ -291,6 +291,12 @@ public enum Family
     /// <summary>A published document is true of the tree it ships in: no file it ships says what the tree has outgrown.</summary>
     D3,
 
+    /// <summary>
+    /// The words an agent is taught, by the skills and by the Desktop chat's instructions and fence, say what was decided:
+    /// no sentence teaches what a pin over them refuses.
+    /// </summary>
+    D4,
+
     /// <summary>Edges and bounds: caps, cuts through a character, timeouts that are never verdicts, races decided once.</summary>
     X1,
 

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -16,6 +17,7 @@ public sealed partial class CatalogClaimsTests
             .Order(StringComparer.Ordinal)];
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_catalog_says_which_skills_mention_the_newer_verbs()
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
@@ -39,6 +41,7 @@ public sealed partial class CatalogClaimsTests
     /// never looks for the sixth.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_pages_count_the_skills_a_person_s_session_reads_as_the_pack_holds_them()
     {
         var word = InteractiveCount();

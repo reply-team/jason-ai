@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -16,6 +17,7 @@ public sealed partial class CampaignPlanningSkillTests
     /// skill.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_description_defers_to_the_planner_in_a_session_when_Jason_is_installed()
     {
         var description = SkillFrontMatter.Read(SkillPack.Business().Single(skill => skill.Name == "campaign-planning").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -33,6 +35,7 @@ public sealed partial class CampaignPlanningSkillTests
     /// in a conversation that ends, would start the work from less than the person gave.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_brief_becomes_Jason_s_campaign_before_any_contact_exists()
     {
         var skill = Flat(Text());
@@ -56,6 +59,7 @@ public sealed partial class CampaignPlanningSkillTests
     /// order would send outreach before anything was learned.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Pilot_then_rest_is_one_natural_path_and_never_the_workflow()
     {
         const string Opening = "**One natural path: a pilot, then the rest.**";
@@ -115,6 +119,7 @@ public sealed partial class CampaignPlanningSkillTests
     /// provider here would make a vendor-neutral pack teach one vendor.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_provider_may_offer_a_slot_of_its_own_and_its_skill_is_the_authority()
     {
         const string Bullet = "- **A provider may offer a slot of its own** beside an operation's arguments, for what it knows about the work that the contract does not hold. What goes in it, and when, is the provider's own skill's to say, and that skill is the authority.";
@@ -141,6 +146,7 @@ public sealed partial class CampaignPlanningSkillTests
     /// with no goals works towards a demo, as the contract says, and the skill says which thing <c>goal.get</c> is.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void With_Jason_what_the_campaign_is_for_is_its_goals_and_a_campaign_with_none_works_towards_a_demo()
     {
         var text = Text();

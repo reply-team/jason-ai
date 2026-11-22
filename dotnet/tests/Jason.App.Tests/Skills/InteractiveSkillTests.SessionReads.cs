@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
@@ -9,6 +11,7 @@ public partial class InteractiveSkillTests
     /// session skills that touch such an answer say who acts on it and that the session stops at the recording.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("managed-campaign-work", "you record it with `jason decision answer` and the person as `--actor`, and you stop there")]
     [InlineData("managed-campaign-work", "the answer releases the campaign manager's next check-in, and the manager creates the work the answer implies")]
     [InlineData("managed-campaign-work", "**A question a role raised is answered by recording the answer, and the campaign's manager acts on it.**")]
@@ -29,6 +32,7 @@ public partial class InteractiveSkillTests
     /// tells the person nothing acts on a campaign that is not active, and says the check-in has not run yet where it is.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("managed-campaign-work", "runs only for an active campaign and at the next scan")]
     [InlineData("managed-campaign-work", "If the campaign is not active, tell the person that nothing acts on the answer until it is.")]
     [InlineData("managed-campaign-work", "say the check-in has not run yet and create nothing in its place")]
@@ -45,6 +49,7 @@ public partial class InteractiveSkillTests
     /// what the list follows, what lists every project, and which reads answer for every project regardless.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_managed_path_says_that_campaign_list_follows_the_folder()
     {
         var skill = Flattened("managed-campaign-work");
@@ -62,6 +67,7 @@ public partial class InteractiveSkillTests
     /// there, so the skills that read the list say what the word does not mean.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("managed-campaign-work", "`enrolled` here is Jason's own membership and nothing more.")]
     [InlineData("troubleshooting-jason", "its `enrolled` is Jason's own membership, never enrolment at the provider")]
     [InlineData("planner-in-session", "it is Jason's own membership, and `managed-campaign-work` says what it does not mean")]
@@ -78,6 +84,7 @@ public partial class InteractiveSkillTests
     /// figure the reads gave.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Performance_analysis_reads_the_current_route_and_latest_outcomes_before_naming_a_failure()
     {
         var skill = BusinessFlattened("performance-analysis");
@@ -93,6 +100,7 @@ public partial class InteractiveSkillTests
     /// finished items, and the one for sends names the operation's kind, so that the latest send can be read from it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Performance_analysis_lists_the_newest_finished_work_not_the_oldest()
     {
         var file = Path.Combine(SkillPack.BusinessRoot(), "performance-analysis", SkillPack.SkillFile);
@@ -109,6 +117,7 @@ public partial class InteractiveSkillTests
     /// job; the failure a reader meets when an agent program was not installed is named by its code.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void Performance_analysis_frames_the_runtime_reads_as_the_runtimes_and_names_the_launch_code()
     {
         var skill = BusinessFlattened("performance-analysis");
@@ -122,6 +131,7 @@ public partial class InteractiveSkillTests
     /// has to be kept true by hand is not kept, so it names the skills by what they do.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_business_catalog_gives_no_count_of_the_skills_that_carry_the_boundary_note()
     {
         var catalog = File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "README.md"));
@@ -134,6 +144,7 @@ public partial class InteractiveSkillTests
     /// silently, and the seat that drafts for a person and the role that drafts for an approval both say so.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("inbox-triage", "**Greet the person by the name you hold for them**")]
     [InlineData("responder", "**Greet the person by the name Jason holds, and say when the thread names them otherwise.**")]
     public void A_draft_greets_by_Jasons_person_and_says_when_the_thread_differs(string name, string sentence)

@@ -3,12 +3,14 @@ using System.Text.RegularExpressions;
 using Jason.Cli.Tests.Documentation;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_is_told_that_a_reply_is_read_only_through_the_provider()
     {
         var skill = Flattened("responder");
@@ -24,6 +26,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_a_stop_in_order_and_proposes_taking_the_person_out()
     {
         var skill = Flattened("responder");
@@ -52,6 +55,7 @@ public partial class RoleSkillTests
     /// on the read it was created waiting on.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_reads_the_reply_from_the_read_its_brief_names()
     {
         var skill = Flattened("responder");
@@ -88,6 +92,7 @@ public partial class RoleSkillTests
     /// no draft and no act, and at most as many options as a question holds.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_rather_than_drafts_below_the_confidence_the_data_file_names()
     {
         var skill = Flattened("responder");
@@ -121,6 +126,7 @@ public partial class RoleSkillTests
     /// nothing is created, and a bounce never reaches the register of people who refused.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_notes_a_return_a_later_moment_or_a_bounce_and_sends_nothing()
     {
         var skill = Flattened("responder");
@@ -160,6 +166,7 @@ public partial class RoleSkillTests
     /// wrong. The catalog says the same of the role, and nothing says the answer is only words.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_in_the_person_s_own_thread_and_never_in_a_new_one()
     {
         var skill = Flattened("responder");
@@ -207,6 +214,7 @@ public partial class RoleSkillTests
     /// approves nor bundles.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_one_approval_for_each_send()
     {
         var skill = Flattened("responder");
@@ -221,6 +229,7 @@ public partial class RoleSkillTests
     /// read that stops short of the end, or a last message nobody can place, does not show the latest message: a question.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_has_nothing_to_answer_when_the_latest_message_is_Jason_s_own()
     {
         var skill = Flattened("responder");
@@ -241,6 +250,7 @@ public partial class RoleSkillTests
     /// comes before the reply and says so. A stop from somebody Jason cannot name still reaches the register, by address.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_sends_no_answer_to_a_person_who_asked_to_stop()
     {
         var skill = Flattened("responder");
@@ -268,6 +278,7 @@ public partial class RoleSkillTests
     /// question for a person, never a guess, and the reply's own check is what stands behind a wrong one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_finds_the_person_through_the_thread_when_its_item_names_nobody()
     {
         var skill = Flattened("responder");
@@ -297,6 +308,7 @@ public partial class RoleSkillTests
     /// filed. A read of one thread reports only the category it sits in now, so nothing is checked against it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_files_the_thread_only_under_a_category_the_campaign_names()
     {
         var skill = Flattened("responder");
@@ -331,6 +343,7 @@ public partial class RoleSkillTests
     /// names one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void Every_provider_operation_the_responder_prints_carries_arguments_its_document_accepts()
     {
         var operations = new List<string>();
@@ -380,6 +393,7 @@ public partial class RoleSkillTests
     /// category is what a standing approval is set on, so two replies whose safe reaction differs never share one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_s_categories_are_a_data_file_beside_its_skill()
     {
         var skill = SkillPack.Find("responder");
@@ -457,6 +471,7 @@ public partial class RoleSkillTests
     /// mirror, and the answer in the item's shape.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_goes_through_the_loop_in_order()
     {
         var skill = Flattened("responder");
@@ -491,6 +506,7 @@ public partial class RoleSkillTests
     /// never waits on the responder: it answers or parks the draft in the same run. Said without the provider's name.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_or_parks_at_once_because_a_follow_up_can_be_lost()
     {
         var skill = Flattened("responder");
@@ -509,6 +525,7 @@ public partial class RoleSkillTests
     /// read it names, which the responder was created waiting on and never waits on again.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_reads_its_brief_as_the_inbound_reply_the_runtime_wrote()
     {
         var skill = Flattened("responder");
@@ -529,6 +546,7 @@ public partial class RoleSkillTests
     /// classifying, and an open draft that already answers a verdict on this message ends the run with nothing done.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_one_verdict_per_reply_and_drafts_once_per_verdict()
     {
         var skill = Flattened("responder");
@@ -578,6 +596,7 @@ public partial class RoleSkillTests
     /// under an id of its own, and one of them is a refinement that always escalates.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_classifies_by_the_data_file_and_the_person_s_reply_categories()
     {
         var skill = Flattened("responder");
@@ -606,6 +625,7 @@ public partial class RoleSkillTests
 
     /// <summary>A campaign's goals are what a draft steers to; with none, the default goal is a demo and the verdict names none.</summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_drafts_toward_the_campaign_s_goals()
     {
         var skill = Flattened("responder");
@@ -620,6 +640,7 @@ public partial class RoleSkillTests
     /// and never the reply; a reply is always a draft, released by the runtime and never by the role.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_the_verdict_before_it_reacts_and_never_releases_its_own_draft()
     {
         var skill = Flattened("responder");
@@ -651,6 +672,7 @@ public partial class RoleSkillTests
     /// reply: the person reads the reply in the thread, never in the question, and no identifier in its text.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_in_the_category_s_words_and_points_at_the_thread_by_reference()
     {
         var skill = Flattened("responder");
@@ -684,6 +706,7 @@ public partial class RoleSkillTests
     /// the skill and the code cannot name different outcomes.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_in_the_result_format_the_runtime_holds_it_to()
     {
         var skill = Flattened("responder");

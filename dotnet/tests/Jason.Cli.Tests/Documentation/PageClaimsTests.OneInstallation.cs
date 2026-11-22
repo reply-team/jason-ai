@@ -2,6 +2,7 @@ using Jason.Cli.Status;
 using Jason.Contracts.Api;
 using Jason.Contracts.Hosts;
 using Jason.Cli.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -15,6 +16,7 @@ public partial class PageClaimsTests
     /// the check itself prints.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_s_install_by_hand_ends_where_the_agent_s_does()
     {
         var readme = Page("README.md");
@@ -47,6 +49,7 @@ public partial class PageClaimsTests
     internal const string AfterTheWaiter = "Once that process has ended, and only if Jason is then still listed in Installed apps in Settings, uninstall Jason there; do not start that uninstall before then, since two at once can leave part of the folder behind.";
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task What_follows_jason_uninstall_on_Windows_waits_for_the_process_the_report_names()
     {
         using var dir = new TempPaths();
@@ -76,6 +79,7 @@ public partial class PageClaimsTests
     /// platform has is held to the desktop's code by <c>desktop/test/uninstall-pages.test.ts</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_pages_take_Jason_off_every_system_by_the_one_uninstall()
     {
         var install = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
@@ -124,6 +128,7 @@ public partial class PageClaimsTests
     /// no build for an Intel Mac is published, and the pages that list the Intel image keep listing it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void An_Intel_Mac_is_refused_by_the_script_s_choice_and_its_image_is_published()
     {
         var workflow = Page(".github", "workflows", "release.yml");
@@ -155,6 +160,7 @@ public partial class PageClaimsTests
     /// account on every system; the pages that install Jason name the two places, as the script chooses them.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_name_where_the_application_goes_on_a_Mac()
     {
         var script = Page("install", "install.sh");
@@ -185,6 +191,7 @@ public partial class PageClaimsTests
     /// are the routine's own, read from its help; the hosts said to read Codex's folder are the table's.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_pages_name_the_two_hosts_the_install_gives_skills()
     {
         using var dir = new TempPaths();
@@ -236,6 +243,7 @@ public partial class PageClaimsTests
     /// handbook, the desktop's page, the release and update page and every release's notes.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/INSTALL.md")]
     [InlineData("docs/handbook.md")]
     [InlineData("docs/desktop.md")]
@@ -256,6 +264,7 @@ public partial class PageClaimsTests
     /// the Windows half is held, and the desktop's tests hold the first start (<c>desktop/test/one-installation-pages.test.ts</c>).
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_pages_say_a_package_installed_by_hand_sets_the_machine_up_at_its_first_start()
     {
         var installer = Page("desktop", "installer", "uninstall.nsh");
@@ -276,6 +285,7 @@ public partial class PageClaimsTests
     /// refusals the lock itself raises say to let that one end and run it again, and the pages say so in the same sense.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_pages_say_the_carried_update_goes_through_Jason_Desktop_and_a_held_lock_means_later()
     {
         using var dir = new TempPaths();
@@ -311,6 +321,7 @@ public partial class PageClaimsTests
     /// install page names that note by the path the command line writes it to.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_install_page_names_the_note_of_a_start_that_is_owed_and_both_ways_it_goes()
     {
         using var dir = new TempPaths();
@@ -341,6 +352,7 @@ public partial class PageClaimsTests
     /// command of its own on Linux. The desktop's own split is held by <c>desktop/test/one-installation-pages.test.ts</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_what_the_command_line_item_is_on_each_system()
     {
         var readme = Flat(Page("README.md"));
@@ -357,6 +369,7 @@ public partial class PageClaimsTests
     /// section on going back from 0.49, which is there.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_pages_say_how_a_command_line_install_moves_into_Jason_Desktop()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -409,6 +422,7 @@ public partial class PageClaimsTests
     /// the release's package for a command-line install made by hand and for a later <c>jason skills install</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_the_role_skills_come_with_the_application_on_macOS_and_Windows()
     {
         var setup = Page("dotnet", "src", "Jason.Cli", "Installation", "MachineSetup.cs");
@@ -425,6 +439,7 @@ public partial class PageClaimsTests
     /// install.ps1 in an elevated PowerShell, both before the feed; on Linux root installs. §2 of the install page says so.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_install_page_says_the_line_runs_as_you()
     {
         var sh = Page("install", "install.sh");
@@ -446,6 +461,7 @@ public partial class PageClaimsTests
     /// previous release's package; <c>update/previous</c> there holds what a move retired.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Restoring_a_database_by_hand_names_the_version_before_for_each_kind_of_install()
     {
         Assert.Contains("the copy Jason Desktop kept under its rollback folder", Page("dotnet", "src", "Jason.Cli", "Update", "UpdateRollback.cs"), StringComparison.Ordinal);
@@ -461,6 +477,7 @@ public partial class PageClaimsTests
     /// every account of the Mac: §9 says, in the row that deletes it, that taking it off takes it from all of them.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Taking_the_application_off_says_one_in_Applications_is_every_account_s()
     {
         var off = Flat(Section(Page("docs", "release-and-update.md"), "## 9. "));

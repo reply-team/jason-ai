@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -12,6 +13,7 @@ public partial class InteractiveSkillTests
     /// chat of Jason Desktop links a project too, with the folder named, since its turns run in a folder of their own.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_moves_the_root_by_the_setting_and_then_a_link_per_project()
     {
         var skill = Flattened("operating-the-installation");
@@ -39,6 +41,7 @@ public partial class InteractiveSkillTests
     /// the request for the yes, judged a runtime with nothing in flight safe to restart, and went to run it without a word.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_once_that_a_stop_it_runs_is_asked_first()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -89,6 +92,7 @@ public partial class InteractiveSkillTests
     /// so the sentence's ten seconds is held to the setting's default.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_a_stop_does_in_one_sentence()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -123,6 +127,7 @@ public partial class InteractiveSkillTests
     /// paragraph is held whole, so a fifth use added to it is as red as one taken away.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_sends_a_person_to_the_provider_s_web_app_for_four_things_only()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -150,6 +155,7 @@ public partial class InteractiveSkillTests
     /// knows which of the two cases it is in.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_an_update_does_for_the_skills()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -226,6 +232,7 @@ public partial class InteractiveSkillTests
     /// notification about the others cannot have come from Jason.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_a_failed_protective_action_and_a_span_not_read_are_told_as_well()
     {
         var skill = Flattened("operating-the-installation");
@@ -247,6 +254,7 @@ public partial class InteractiveSkillTests
     /// not do, so that a session neither promises a reply was sent nor runs it on its own judgement because a gap showed.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_reads_an_account_s_record_and_reads_a_span_again_only_on_a_yes()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -279,6 +287,7 @@ public partial class InteractiveSkillTests
     /// that stopped to ask, or took the walk for the job, would keep the person from the work they came for.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_hands_a_ready_installation_to_quick_start()
     {
         var skill = Flattened("operating-the-installation");
@@ -313,6 +322,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_a_session_cannot_do_and_what_is_not_released_yet()
     {
         var skill = Flattened("operating-the-installation");
@@ -493,6 +503,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>The list of what a notification says names a provider block, and where its pointer sends the person.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_a_notification_points_at_a_provider_block()
     {
         var skill = Flattened("operating-the-installation");
@@ -506,6 +517,7 @@ public partial class InteractiveSkillTests
     /// verdicts it counts, where they are read beside the ones it does not, and the one line that turns replies off alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_where_an_agent_reads_the_replies_a_pointer_counts_and_how_they_are_turned_off()
     {
         var skill = Flattened("operating-the-installation");
@@ -520,6 +532,7 @@ public partial class InteractiveSkillTests
     /// read and that the one list that shows them shows other events beside them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_where_an_agent_reads_the_bounces_a_pointer_counts()
     {
         var skill = Flattened("operating-the-installation");
@@ -536,6 +549,7 @@ public partial class InteractiveSkillTests
     /// person for, and says what to do when npm refuses a global install.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_the_four_acts_that_connect_a_provider_and_the_refused_global_install()
     {
         var skill = Flattened("operating-the-installation");
@@ -566,6 +580,7 @@ public partial class InteractiveSkillTests
     /// registration records, and the repair, whose restart is a stop and asked first like every other.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_search_path_a_macos_logon_start_has_and_the_repair()
     {
         var skill = Flattened("operating-the-installation");
