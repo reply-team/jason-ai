@@ -123,7 +123,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     assert.deepEqual(r.jason(), ['campaign get cmp_01ABC', 'campaign get cmp_01ABC', 'project get prj_01STUB', 'runtime status']);
     assert.equal(flagValue(host?.args ?? [], '--add-dir'), folder);
     const [head, , words] = (host?.stdin ?? '').split('\n');
-    assert.match(head ?? '', /^Jason, not the person, wrote this first paragraph\. This conversation is about the campaign cmp_01ABC\. Its name, .* is "Spring"\. Its folder is ".*spring"\.$/);
+    assert.match(head ?? '', /^Jason, not the person, wrote this first paragraph\. This conversation is about the campaign cmp_01ABC\. Its name, .* is "Spring"\. Its folder is ".*spring"\. This turn runs in Full access: [^\n]*$/);
     assert.equal(words, 'How is it doing?');
     assert.ok(!(host?.stdin ?? '').includes('cmp_99OTHER'));
     assert.deepEqual(listed(r), [], 'a campaign\'s conversation reads no campaign list');

@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions, type TurnEnded } from '../src/chat.ts';
 import { readConversations } from '../src/chat-conversations.ts';
 import { instructionsFile, readFence } from '../src/chat-deny.ts';
-import { header, turnInput } from '../src/chat-header.ts';
+import { header, turnInput, type TurnStart } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { codexFloor, codexFloorSentence, floorSentence, versionLimitMs } from '../src/host-version.ts';
 import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
@@ -22,8 +22,13 @@ import { NamedChat } from './named-chat.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const words = 'Which campaigns are waiting on me?';
-/** What a set-up chat's turn writes on the host's standard input: the desktop's header, then the person's words. */
-const asked = (text: string) => turnInput(header({ campaign: null }), null, text);
+/**
+ * What a set-up chat's turn writes on the host's standard input: the desktop's header, ending with what the start is (by
+ * default a Claude Code start in Ask first, the rig's mode, sealed), then the person's words.
+ */
+const asked = (text: string, start: TurnStart = { mode: 'ask_first', program: 'claude', sealed: true, fullAccess: true }) => turnInput(header({ campaign: null }, undefined, start), null, text);
+/** A Codex start in Ask first, as the rig's Codex turns run. */
+const codexAsked = (text: string) => asked(text, { mode: 'ask_first', program: 'codex', sealed: false, fullAccess: true });
 
 interface Rig {
     b: Bench;
@@ -337,7 +342,7 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     // The words carry the moment the desktop kept them (the test below holds it), which is not what this one is about.
     assert.deepEqual(unchecked(said).map((event) => (event.kind === 'text' ? { kind: 'text', text: event.text } : event)), [
         { kind: 'step', text: 'Ran a jason command', detail: 'jason campaign list --json' },
-        { kind: 'text', text: `heard ${asked(words).length} characters` },
+        { kind: 'text', text: `heard ${codexAsked(words).length} characters` },
         { kind: 'done', error: null },
     ]);
     await r.turn('c1', words, { host: 'codex' });
@@ -346,7 +351,7 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     const kind = process.platform === 'win32' ? ['-c', codexWindowsSandbox] : [];
     assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
     assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
-    assert.equal(first?.stdin, asked(words));
+    assert.equal(first?.stdin, codexAsked(words));
     assert.ok(same(first?.cwd ?? '', join(r.b.paths.chats, r.chat.idOf('c1') as string)));
     // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
     await r.chat.idle();
