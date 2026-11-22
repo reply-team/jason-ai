@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Configuration;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Tests.Documentation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -131,6 +132,58 @@ public class RuntimeTimeZoneTests
 
     /// <summary>A settings file that names <paramref name="zone"/> and nothing else.</summary>
     private static string Settings(string zone) => """{"Runtime":{"TimeZone":""" + "\"" + zone + "\"}}";
+
+    /// <summary>
+    /// An IANA id resolves to that zone, under its own IANA name, on this system. The same test runs on Windows, macOS and
+    /// Linux in CI. On Windows an IANA id resolves only through ICU, which .NET loads from the system (icu.dll, Windows 10
+    /// 1903 and later); a self-contained single-file publish loads it the same way, since no app-local ICU is carried.
+    /// </summary>
+    [Theory]
+    [InlineData("Asia/Tokyo", 9)]
+    [InlineData("Asia/Kolkata", 5.5)]
+    [InlineData("America/New_York", -5)]
+    [InlineData("Europe/Berlin", 1)]
+    public void An_iana_id_resolves_to_its_zone_on_this_system(string id, double januaryHours)
+    {
+        var zone = InstallationDay.ZoneOf(id);
+
+        Assert.NotNull(zone);
+        Assert.Equal(id, InstallationDay.NameOf(zone));
+        Assert.Equal(TimeSpan.FromHours(januaryHours), zone.GetUtcOffset(new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc)));
+    }
+
+    /// <summary>
+    /// Nothing switches the executable's globalization away from the system's: invariant mode, or NLS on Windows, would
+    /// stop IANA ids resolving there, and every Runtime:TimeZone would then be refused on Windows alone. The projects,
+    /// the shared build properties, any runtime configuration template and the release's package action name neither
+    /// switch, and the process these tests run in is not invariant.
+    /// </summary>
+    [Fact]
+    public void The_build_keeps_the_system_s_globalization_so_iana_ids_resolve_on_windows()
+    {
+        var root = RepositoryTree.Root();
+        var read = Directory.EnumerateFiles(Path.Combine(root, "dotnet"), "*", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Where(file => file.EndsWith(".csproj", StringComparison.Ordinal) || file.EndsWith(".props", StringComparison.Ordinal)
+                || file.EndsWith(".targets", StringComparison.Ordinal) || file.EndsWith("runtimeconfig.template.json", StringComparison.Ordinal))
+            .Append(Path.Combine(root, ".github", "actions", "package", "action.yml"))
+            .ToList();
+        Assert.Contains(read, file => file.EndsWith("Jason.App.csproj", StringComparison.Ordinal));
+
+        foreach (var file in read)
+        {
+            var text = File.ReadAllText(file);
+            foreach (var word in (string[])["InvariantGlobalization", "System.Globalization.Invariant", "UseNls", "System.Globalization.UseNls"])
+            {
+                Assert.False(text.Contains(word, StringComparison.OrdinalIgnoreCase), $"{Path.GetRelativePath(root, file)} names {word}.");
+            }
+        }
+
+        Assert.False(
+            AppContext.TryGetSwitch("System.Globalization.Invariant", out var invariant) && invariant,
+            "The test process runs with invariant globalization.");
+    }
 
     /// <summary>The names a refused setting may print as typed: the section's and the setting's own.</summary>
     [Fact]
