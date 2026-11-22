@@ -29,6 +29,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("`counts.blocks` is how many provider blocks were first said in the same window")]
     [InlineData("`counts.held` is how many items waited on a daily limit when this notification was sent, read as it was sent")]
     [InlineData("**an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a campaign, and the claim set the item aside until the installation's next midnight")]
+    [InlineData("A hold also says the way out for today, straight after its count: \"To go on today, tell your agent: ignore the limit, or run jason launches lift.\"")]
     [InlineData("It wakes a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.")]
     [InlineData("Whether a block is the account's or one sending account's, and what lifts it, is read at `jason block list`; the pointer says only how many.")]
     [InlineData("A block is said while it is open, whatever it holds, because it is still the person's to fix and the next item parks on it.")]
@@ -65,6 +66,11 @@ public sealed partial class NotificationsDocTests
     [Fact]
     public void The_page_shows_where_a_pointer_about_a_hold_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, held: 2).Text, Page(), StringComparison.Ordinal);
+
+    /// <summary>The way out the page quotes is the one the composer says, word for word.</summary>
+    [Fact]
+    public void The_page_quotes_the_hold_s_way_out_as_the_composer_says_it() =>
+        Assert.Contains($"\"{Jason.Runtime.Notifications.NotificationComposer.LiftHold}\"", Regex.Replace(Page(), @"\s+", " "), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about emails that bounced sends a person, as the composer writes it.</summary>
     [Fact]

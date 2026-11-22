@@ -499,6 +499,27 @@ public class ResponderLaunchLimitTests
         Assert.Equal(await PublicIdAsync(harness, queued), work.WorkItemPublicId);
     }
 
+    /// <summary>
+    /// A role the shipped defaults newly limit is held like the responder: with the harness's own, untouched settings the
+    /// eleventh analyst run of the installation's day waits with no attempt and the limit's code.
+    /// </summary>
+    [Fact]
+    public async Task The_eleventh_analyst_run_of_the_day_is_held_by_the_shipped_default()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "analyst", Enumerable.Range(1, 10).Select(hour => Today.AddHours(hour % 11)).ToArray());
+        var held = await QueuedAsync(harness, campaign, "analyst");
+
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await using var db = harness.Open();
+        var item = await db.WorkItems.AsNoTracking().Include(w => w.Attempts).SingleAsync(w => w.Id == held, Ct);
+        Assert.Equal(WorkItemStatus.Waiting, item.Status);
+        Assert.Empty(item.Attempts);
+        Assert.Equal(AttemptErrors.LaunchesSpent, item.LastError!.Code);
+    }
+
     /// <summary>The ways out hold for every role: a person's resume lets a held planner go past its limit.</summary>
     [Fact]
     public async Task A_held_role_a_person_resumes_is_claimed_though_its_day_is_spent()

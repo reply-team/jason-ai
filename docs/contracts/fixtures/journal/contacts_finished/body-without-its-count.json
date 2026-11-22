@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_finished",
+  "version": 1,
+  "case": "a line without the count of lines ended already",
+  "body": { "key": null, "old": null, "new": { "finished": 1, "not_member": 0, "excluded": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"] } },
+  "expect": { "invalid": [{ "pointer": "/new/already_finished", "reason": "required" }] }
+}

@@ -173,7 +173,7 @@
         "id": "journal-forwarder",
         "state": "not_installed",
         "released": {
-          "version": "1.7.0",
+          "version": "1.8.0",
           "digest": "sha256:recorded-1"
         },
         "installed": null

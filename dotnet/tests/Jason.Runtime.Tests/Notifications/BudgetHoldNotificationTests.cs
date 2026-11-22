@@ -37,7 +37,7 @@ public sealed class BudgetHoldNotificationTests
         var line = await Sender(harness, toast).SendAsync(request, Ct);
 
         Assert.Equal(1, line!.Held);
-        Assert.Equal("1 item waits on a budget. Ask your agent what is held, or run jason workitem list --status waiting.", Assert.Single(toast.Messages).Text);
+        Assert.Equal("1 item waits on a daily limit. To go on today, tell your agent: ignore the limit, or run jason launches lift. Ask your agent what is held, or run jason workitem list --status waiting.", Assert.Single(toast.Messages).Text);
         Assert.Equal(1, (await LastLineAsync(harness))["counts"]!["held"]!.GetValue<int>());
     }
 

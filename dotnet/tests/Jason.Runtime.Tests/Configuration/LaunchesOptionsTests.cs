@@ -25,27 +25,73 @@ public class LaunchesOptionsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void The_default_limits_the_responder_to_twenty_five_and_no_other_role()
+    public void The_default_limits_each_shipped_role_by_one_table()
     {
         var options = new LaunchesOptions();
 
-        Assert.Equal(new KeyValuePair<string, int>("responder", 25), Assert.Single(options.MaxPerDay));
+        Assert.Equal(
+            [
+                new KeyValuePair<string, int>("analyst", 10),
+                new KeyValuePair<string, int>("copywriter", 10),
+                new KeyValuePair<string, int>("critic", 240),
+                new KeyValuePair<string, int>("deliverability-specialist", 10),
+                new KeyValuePair<string, int>("manager", 25),
+                new KeyValuePair<string, int>("personalizer", 120),
+                new KeyValuePair<string, int>("planner", 10),
+                new KeyValuePair<string, int>("researcher", 40),
+                new KeyValuePair<string, int>("responder", 25),
+            ],
+            options.MaxPerDay.OrderBy(limit => limit.Key, StringComparer.Ordinal));
+        Assert.Equal(
+            ShippedRoles.Names.OrderBy(name => name, StringComparer.Ordinal),
+            options.MaxPerDay.Keys.OrderBy(name => name, StringComparer.Ordinal));
         Assert.Same(StringComparer.Ordinal, options.MaxPerDay.Comparer);
         Assert.True(Validator().Validate(null, options).Succeeded);
     }
 
-    /// <summary>The binder adds to the map the runtime ships: naming one role keeps the responder's limit.</summary>
+    /// <summary>A person's one entry changes that role's number and keeps the other eight.</summary>
     [Fact]
-    public void Adding_a_role_keeps_the_responder_s_limit()
+    public void Setting_one_role_keeps_the_other_eight_defaults()
     {
-        using var provider = Limits("""{"manager":5}""");
+        using var provider = Limits("""{"planner":30}""");
 
         var limits = Current(provider).MaxPerDay;
 
-        Assert.Equal(
-            [new KeyValuePair<string, int>("manager", 5), new KeyValuePair<string, int>("responder", 25)],
-            limits.OrderBy(limit => limit.Key, StringComparer.Ordinal));
+        Assert.Equal(9, limits.Count);
+        Assert.Equal(30, limits["planner"]);
+        var expected = new LaunchesOptions().MaxPerDay;
+        foreach (var (role, limit) in expected.Where(entry => entry.Key != "planner"))
+        {
+            Assert.Equal(limit, limits[role]);
+        }
+    }
+
+    /// <summary>A person who already set the responder's number keeps it, and the other eight stand.</summary>
+    [Fact]
+    public void A_person_s_responder_number_is_kept_beside_the_other_defaults()
+    {
+        using var provider = Limits("""{"responder":40}""");
+
+        var limits = Current(provider).MaxPerDay;
+
+        Assert.Equal(40, limits["responder"]);
+        Assert.Equal(240, limits["critic"]);
+        Assert.Equal(9, limits.Count);
+    }
+
+    /// <summary>The binder adds to the map the runtime ships: naming a role of one's own keeps every shipped role's limit.</summary>
+    [Fact]
+    public void Adding_a_custom_role_keeps_every_shipped_limit_and_gives_it_none_of_its_own()
+    {
+        using var provider = Limits("""{"a-role-of-their-own":5}""");
+
+        var limits = Current(provider).MaxPerDay;
+
+        Assert.Equal(10, limits.Count);
+        Assert.Equal(5, limits["a-role-of-their-own"]);
+        Assert.Equal(25, limits["responder"]);
         Assert.Same(StringComparer.Ordinal, limits.Comparer);
+        Assert.False(new LaunchesOptions().MaxPerDay.ContainsKey("a-role-of-their-own"));
     }
 
     [Fact]

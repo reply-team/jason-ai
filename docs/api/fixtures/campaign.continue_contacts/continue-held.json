@@ -1,0 +1,41 @@
+{
+  "operation": "campaign.continue_contacts",
+  "case": "continue-held",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contact_ids": [
+      "cnt_2",
+      "cnt_1"
+    ],
+    "reason": "The reply was answered.",
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "continued": 1,
+      "not_paused": 1,
+      "not_member": 0,
+      "excluded": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "continued",
+        "contact_id": "cnt_2",
+        "error": null
+      },
+      {
+        "index": 1,
+        "status": "not_paused",
+        "contact_id": "cnt_1",
+        "error": null
+      }
+    ]
+  }
+}

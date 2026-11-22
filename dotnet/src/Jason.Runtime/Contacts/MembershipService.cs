@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -227,6 +229,370 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
 
             return new RemoveContactsResult(campaign.PublicId, new RemoveContactsSummary(removed, notMember, alreadyExcluded, rejected), results);
         }
+    }
+
+    /// <summary>
+    /// Ends the line with each person named: an enrolled or a held member becomes <c>finished</c>, which the claim refuses a
+    /// touch, and in the same save their open touches in this campaign are cancelled — the operations
+    /// <see cref="OperationCatalog.Touches"/> names, and nothing else, so a responder and its read, a reply and a cancel of
+    /// a send go on. Any named actor may, a role inside a run among them: ending a line is the manager's judgement, and the
+    /// reason it gives is required, because the line records why.
+    /// </summary>
+    public async Task<FinishContactsResult> FinishAsync(FinishContactsRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var actor = Actors.Resolve(request.Actor);
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw new ValidationException([new ErrorDetail("reason", "required", "reason is required: ending a line is a judgement, and the line records why.")]);
+        }
+
+        var (campaign, ids) = await LineRequestAsync(request.CampaignId, request.ContactIds, cancellationToken).ConfigureAwait(false);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            var results = new List<FinishContactsItemResult>(ids.Count);
+            var finishedIds = new List<string>();
+            var ended = new List<int>();
+            foreach (var named in await NamedAsync(campaign, ids, cancellationToken).ConfigureAwait(false))
+            {
+                var status = named switch
+                {
+                    { Rejection: not null } => FinishContactsItemStatus.Rejected,
+                    { Membership: null } => FinishContactsItemStatus.NotMember,
+                    { Membership.State: MembershipState.Excluded } => FinishContactsItemStatus.Excluded,
+                    { Membership.State: MembershipState.Finished } => FinishContactsItemStatus.AlreadyFinished,
+                    _ => FinishContactsItemStatus.Finished,
+                };
+
+                if (status == FinishContactsItemStatus.Finished)
+                {
+                    named.Membership!.State = MembershipState.Finished;
+                    named.Membership.UpdatedAt = now;
+                    finishedIds.Add(named.Contact!.PublicId);
+                    ended.Add(named.Contact.Id);
+                }
+
+                results.Add(new FinishContactsItemResult(named.Index, status, named.ContactId, named.Error));
+            }
+
+            // A finished line is "no more touches here": the person's touches still open would contradict it if left to run.
+            // Their conversation is theirs, so it goes on.
+            foreach (var contactId in ended)
+            {
+                await canceller.CancelOpenAsync(db, campaign.Id, contactId, actor, "line finished in campaign", cancellationToken, OperationCatalog.Touches).ConfigureAwait(false);
+            }
+
+            var summary = new FinishContactsSummary(
+                results.Count(item => item.Status == FinishContactsItemStatus.Finished),
+                results.Count(item => item.Status == FinishContactsItemStatus.AlreadyFinished),
+                results.Count(item => item.Status == FinishContactsItemStatus.NotMember),
+                results.Count(item => item.Status == FinishContactsItemStatus.Excluded),
+                results.Count(item => item.Status == FinishContactsItemStatus.Rejected));
+            journal.Append(
+                db,
+                actor,
+                JournalKinds.ContactsFinished,
+                campaign,
+                updated: new JsonObject
+                {
+                    ["finished"] = summary.Finished,
+                    ["already_finished"] = summary.AlreadyFinished,
+                    ["not_member"] = summary.NotMember,
+                    ["excluded"] = summary.Excluded,
+                    ["rejected"] = summary.Rejected,
+                    ["contact_ids"] = Ids(finishedIds),
+                },
+                reason: request.Reason.Trim());
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            canceller.StopCancelled();
+
+            return new FinishContactsResult(campaign.PublicId, summary, results);
+        }
+    }
+
+    /// <summary>
+    /// Continues the line with each person held: a <c>paused</c> member is enrolled again, and their held touches are
+    /// candidates again by that alone. Any named actor may, a role inside a run among them.
+    /// </summary>
+    public async Task<ContinueContactsResult> ContinueAsync(ContinueContactsRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var actor = Actors.Resolve(request.Actor);
+        var (campaign, ids) = await LineRequestAsync(request.CampaignId, request.ContactIds, cancellationToken).ConfigureAwait(false);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            var results = new List<ContinueContactsItemResult>(ids.Count);
+            var continuedIds = new List<string>();
+            foreach (var named in await NamedAsync(campaign, ids, cancellationToken).ConfigureAwait(false))
+            {
+                var status = named switch
+                {
+                    { Rejection: not null } => ContinueContactsItemStatus.Rejected,
+                    { Membership: null } => ContinueContactsItemStatus.NotMember,
+                    { Membership.State: MembershipState.Excluded } => ContinueContactsItemStatus.Excluded,
+                    { Membership.State: MembershipState.Paused } => ContinueContactsItemStatus.Continued,
+                    _ => ContinueContactsItemStatus.NotPaused,
+                };
+
+                if (status == ContinueContactsItemStatus.Continued)
+                {
+                    named.Membership!.State = MembershipState.Enrolled;
+                    named.Membership.UpdatedAt = now;
+                    continuedIds.Add(named.Contact!.PublicId);
+                }
+
+                results.Add(new ContinueContactsItemResult(named.Index, status, named.ContactId, named.Error));
+            }
+
+            var summary = new ContinueContactsSummary(
+                results.Count(item => item.Status == ContinueContactsItemStatus.Continued),
+                results.Count(item => item.Status == ContinueContactsItemStatus.NotPaused),
+                results.Count(item => item.Status == ContinueContactsItemStatus.NotMember),
+                results.Count(item => item.Status == ContinueContactsItemStatus.Excluded),
+                results.Count(item => item.Status == ContinueContactsItemStatus.Rejected));
+            journal.Append(
+                db,
+                actor,
+                JournalKinds.ContactsContinued,
+                campaign,
+                updated: new JsonObject
+                {
+                    ["continued"] = summary.Continued,
+                    ["not_paused"] = summary.NotPaused,
+                    ["not_member"] = summary.NotMember,
+                    ["excluded"] = summary.Excluded,
+                    ["rejected"] = summary.Rejected,
+                    ["contact_ids"] = Ids(continuedIds),
+                },
+                reason: request.Reason);
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            return new ContinueContactsResult(campaign.PublicId, summary, results);
+        }
+    }
+
+    /// <summary>
+    /// Reopens the line with each person named: a <c>finished</c> member is enrolled again. It is the person's decision,
+    /// carried one of two ways. Their own word: a named <c>human</c>, from outside any run. Or a run that carries their
+    /// answer: the request names, in <c>decision_id</c>, a question of this campaign that a named person answered and that
+    /// names among its references the <c>contacts_finished</c> line of this campaign that ended those lines — checked here
+    /// and only here, and each person reopened must be one that line ended (<c>not_in_decision</c> otherwise). The answer's
+    /// words are never read: what the person chose is the run's to read before it asks.
+    /// </summary>
+    /// <remarks>
+    /// The refusals come in one order: no named actor (<c>actor_required</c>); then, with no question named, a request from
+    /// inside a run (<c>decided_inside_a_run</c>, the gate's code, decided here because a run naming a question is the
+    /// second way) and an actor that is not a person (<c>reopen_not_human</c>); then the question's checks. Touches counted
+    /// before the line ended stay counted: the line's ceiling counts work items, never a state.
+    /// </remarks>
+    public async Task<ReopenContactsResult> ReopenAsync(ReopenContactsRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Actor is null || string.IsNullOrWhiteSpace(request.Actor.Id))
+        {
+            throw DomainErrors.ReopenActorRequired();
+        }
+
+        var actor = Actors.Resolve(request.Actor);
+        if (request.DecisionId is not null && request.DecisionId.Trim().Length == 0)
+        {
+            throw new ValidationException([new ErrorDetail("decision_id", "invalid", "decision_id names the campaign's question whose answer this reopen carries, by its id, or is left out.")]);
+        }
+
+        var decisionId = request.DecisionId?.Trim();
+        if (decisionId is null)
+        {
+            if (RunScope.Attempt is { } run)
+            {
+                throw DomainErrors.ReopenInsideARun(run);
+            }
+
+            if (actor.Type != ActorType.Human)
+            {
+                throw DomainErrors.ReopenNotHuman(actor.Type);
+            }
+        }
+
+        var (campaign, ids) = await LineRequestAsync(request.CampaignId, request.ContactIds, cancellationToken).ConfigureAwait(false);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            var decided = decisionId is null ? null : await DecidedAsync(decisionId, campaign, cancellationToken).ConfigureAwait(false);
+            var results = new List<ReopenContactsItemResult>(ids.Count);
+            var reopenedIds = new List<string>();
+            foreach (var named in await NamedAsync(campaign, ids, cancellationToken).ConfigureAwait(false))
+            {
+                var status = named switch
+                {
+                    { Rejection: not null } => ReopenContactsItemStatus.Rejected,
+                    _ when decided is not null && !decided.Contains(named.Contact!.PublicId) => ReopenContactsItemStatus.NotInDecision,
+                    { Membership: null } => ReopenContactsItemStatus.NotMember,
+                    { Membership.State: MembershipState.Excluded } => ReopenContactsItemStatus.Excluded,
+                    { Membership.State: MembershipState.Finished } => ReopenContactsItemStatus.Reopened,
+                    _ => ReopenContactsItemStatus.NotFinished,
+                };
+
+                if (status == ReopenContactsItemStatus.Reopened)
+                {
+                    named.Membership!.State = MembershipState.Enrolled;
+                    named.Membership.UpdatedAt = now;
+                    reopenedIds.Add(named.Contact!.PublicId);
+                }
+
+                results.Add(new ReopenContactsItemResult(named.Index, status, named.ContactId, named.Error));
+            }
+
+            var summary = new ReopenContactsSummary(
+                results.Count(item => item.Status == ReopenContactsItemStatus.Reopened),
+                results.Count(item => item.Status == ReopenContactsItemStatus.NotFinished),
+                results.Count(item => item.Status == ReopenContactsItemStatus.NotMember),
+                results.Count(item => item.Status == ReopenContactsItemStatus.Excluded),
+                results.Count(item => item.Status == ReopenContactsItemStatus.NotInDecision),
+                results.Count(item => item.Status == ReopenContactsItemStatus.Rejected));
+            journal.Append(
+                db,
+                actor,
+                JournalKinds.ContactsReopened,
+                campaign,
+                updated: new JsonObject
+                {
+                    ["reopened"] = summary.Reopened,
+                    ["not_finished"] = summary.NotFinished,
+                    ["not_member"] = summary.NotMember,
+                    ["excluded"] = summary.Excluded,
+                    ["not_in_decision"] = summary.NotInDecision,
+                    ["rejected"] = summary.Rejected,
+                    ["contact_ids"] = Ids(reopenedIds),
+                    ["decision_id"] = decisionId,
+                },
+                reason: request.Reason);
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            return new ReopenContactsResult(campaign.PublicId, summary, results);
+        }
+    }
+
+    /// <summary>
+    /// The people whose lines the person's answered question is about: the question is of this campaign, answered, by a
+    /// person who gave their name, and names among its references at least one <c>contacts_finished</c> line of this
+    /// campaign; the people are those lines' own. The lookup reads the journal's own columns and the ids a line lists,
+    /// never a word of the question or its answer.
+    /// </summary>
+    private async Task<HashSet<string>> DecidedAsync(string id, Campaign campaign, CancellationToken cancellationToken)
+    {
+        var decision = await db.Decisions.AsNoTracking().SingleOrDefaultAsync(row => row.PublicId == id, cancellationToken).ConfigureAwait(false);
+        if (decision is null || decision.CampaignId != campaign.Id)
+        {
+            throw DomainErrors.ReopenDecisionNotFound(id);
+        }
+
+        if (decision.Status != DecisionStatus.Answered)
+        {
+            throw DomainErrors.ReopenDecisionNotAnswered(decision.PublicId, decision.Status);
+        }
+
+        if (decision.AnsweredByType != ActorType.Human || string.IsNullOrWhiteSpace(decision.AnsweredById))
+        {
+            throw DomainErrors.ReopenDecisionNotHuman(decision.PublicId);
+        }
+
+        var entries = (DecisionMapper.FromJson<DecisionReference>(decision.References) ?? [])
+            .Where(reference => reference.Kind == DecisionReferenceKind.JournalEntry)
+            .Select(reference => reference.Id)
+            .ToList();
+        var lines = await db.Journal.AsNoTracking()
+            .Where(entry => entries.Contains(entry.PublicId) && entry.CampaignId == campaign.Id && entry.Kind == JournalKinds.ContactsFinished)
+            .Select(entry => entry.New)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (lines.Count == 0)
+        {
+            throw DomainErrors.ReopenDecisionNotAboutFinish(decision.PublicId);
+        }
+
+        return lines
+            .SelectMany(line => line?["contact_ids"] as JsonArray ?? [])
+            .OfType<JsonValue>()
+            .Select(node => node.TryGetValue<string>(out var value) ? value : null)
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>The campaign a line's verb names, which is not archived, and the people it names, within the batch's bound.</summary>
+    private async Task<(Campaign Campaign, IReadOnlyList<string> Ids)> LineRequestAsync(
+        string? campaignId, IReadOnlyList<string>? contactIds, CancellationToken cancellationToken)
+    {
+        var campaign = await CampaignService.LoadAsync(db, campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign.ArchivedAt is not null)
+        {
+            throw DomainErrors.CampaignArchived(campaign.PublicId);
+        }
+
+        var ids = contactIds ?? throw DomainErrors.Required("contact_ids");
+        if (ids.Count > MaxBatch)
+        {
+            throw DomainErrors.BatchTooLarge(MaxBatch);
+        }
+
+        return (campaign, ids);
+    }
+
+    /// <summary>
+    /// Each item of a line's verb, in the request's order: the person it names and their membership of this campaign, or the
+    /// reason the item is refused — a blank id, or one no contact has — as <c>campaign.remove_contacts</c> refuses one.
+    /// </summary>
+    private async Task<List<NamedMember>> NamedAsync(Campaign campaign, IReadOnlyList<string> ids, CancellationToken cancellationToken)
+    {
+        var wanted = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).Distinct(StringComparer.Ordinal).ToList();
+        var contacts = await db.Contacts
+            .Where(contact => wanted.Contains(contact.PublicId))
+            .ToDictionaryAsync(contact => contact.PublicId, cancellationToken)
+            .ConfigureAwait(false);
+        var found = contacts.Values.Select(contact => contact.Id).ToList();
+        var memberships = await db.CampaignContacts
+            .Where(membership => membership.CampaignId == campaign.Id && found.Contains(membership.ContactId))
+            .ToDictionaryAsync(membership => membership.ContactId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var named = new List<NamedMember>(ids.Count);
+        for (var index = 0; index < ids.Count; index++)
+        {
+            var id = ids[index]?.Trim();
+            if (string.IsNullOrEmpty(id))
+            {
+                named.Add(new NamedMember(index, null, null, null, DomainErrors.Required(string.Create(CultureInfo.InvariantCulture, $"contact_ids[{index}]"))));
+            }
+            else if (!contacts.TryGetValue(id, out var contact))
+            {
+                named.Add(new NamedMember(index, id, null, null, DomainErrors.ContactNotFound(id)));
+            }
+            else
+            {
+                named.Add(new NamedMember(index, contact.PublicId, contact, memberships.GetValueOrDefault(contact.Id), null));
+            }
+        }
+
+        return named;
+    }
+
+    /// <summary>One item of a line's verb, read: whom it names and their membership here, or why it is refused.</summary>
+    private sealed record NamedMember(int Index, string? ContactId, Contact? Contact, CampaignContact? Membership, DomainException? Rejection)
+    {
+        public ErrorBody? Error => Rejection is null ? null : ErrorOf(Rejection);
     }
 
     public async Task<Page<MembershipItemDto>> ListAsync(ListContactsRequest request, CancellationToken cancellationToken)
