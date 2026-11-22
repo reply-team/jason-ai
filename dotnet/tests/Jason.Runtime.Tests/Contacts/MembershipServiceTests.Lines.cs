@@ -11,7 +11,7 @@ namespace Jason.Runtime.Tests.Contacts;
 
 /// <summary>
 /// A person's line in a campaign, ended, continued and reopened: <c>campaign.finish_contacts</c> ends it with a reason and
-/// cancels the person's open touches there and nothing else, <c>campaign.continue_contacts</c> enrols a held person again,
+/// cancels the person's open touches there and nothing else, <c>campaign.continue_contacts</c> enrols a paused person again,
 /// and <c>campaign.reopen_contacts</c> enrols a finished one again on the person's decision — their own word outside a
 /// run, or a run naming the question they answered about the line that ended it.
 /// </summary>
@@ -132,7 +132,7 @@ public partial class MembershipServiceTests
     }
 
     [Fact]
-    public async Task Continuing_enrols_a_held_person_again_and_nobody_else()
+    public async Task Continuing_enrols_a_paused_person_again_and_nobody_else()
     {
         using var database = new TestDatabase();
         using var db = database.Open();
@@ -276,6 +276,39 @@ public partial class MembershipServiceTests
         Assert.Equal(decision.PublicId, (string?)reopened.New!["decision_id"]);
         Assert.Equal(1, (int)reopened.New["not_in_decision"]!);
         Assert.Equal("she said yes", reopened.Reason);
+    }
+
+    /// <summary>
+    /// One answer reopens one end: a question answered about the line that ended a person's line in the campaign holds only
+    /// while that line is the latest that ended it. Reopened on it, then ended again for a new reason, the person is
+    /// <c>not_in_decision</c> for the same question, and the line stays ended. Named again before any new end, the same
+    /// question finds the person enrolled, and answers <c>not_finished</c>.
+    /// </summary>
+    [Fact]
+    public async Task One_answered_question_reopens_the_end_it_is_about_and_not_a_later_one()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var clock = new FixedClock(Noon);
+        var campaign = NewCampaign(db);
+        var ada = Member(db, campaign, "Ada", MembershipState.Enrolled);
+        var service = NewService(db, clock);
+        await service.FinishAsync(new FinishContactsRequest(campaign.PublicId, [ada.PublicId], null, "no answer in a month"), Ct);
+        var line = await db.Journal.SingleAsync(e => e.Kind == JournalKinds.ContactsFinished, Ct);
+        var (decision, attempt) = Asked(db, campaign, [new DecisionReference(DecisionReferenceKind.JournalEntry, line.PublicId)]);
+        await db.SaveChangesAsync(Ct);
+
+        using var run = RunScope.Open(attempt.PublicId);
+        var actor = new ActorRef(ActorType.Attempt, attempt.PublicId);
+        var first = await service.ReopenAsync(new ReopenContactsRequest(campaign.PublicId, [ada.PublicId], decision.PublicId, actor, "she said yes"), Ct);
+        var again = await service.ReopenAsync(new ReopenContactsRequest(campaign.PublicId, [ada.PublicId], decision.PublicId, actor, "she said yes"), Ct);
+        await service.FinishAsync(new FinishContactsRequest(campaign.PublicId, [ada.PublicId], actor, "she asked us to stop"), Ct);
+        var later = await service.ReopenAsync(new ReopenContactsRequest(campaign.PublicId, [ada.PublicId], decision.PublicId, actor, "she said yes"), Ct);
+
+        Assert.Equal(ReopenContactsItemStatus.Reopened, Assert.Single(first.Items).Status);
+        Assert.Equal(ReopenContactsItemStatus.NotFinished, Assert.Single(again.Items).Status);
+        Assert.Equal(ReopenContactsItemStatus.NotInDecision, Assert.Single(later.Items).Status);
+        Assert.Equal(MembershipState.Finished, await StateOf(db, campaign, ada));
     }
 
     public static TheoryData<string, string> DecisionRefusals() => new()

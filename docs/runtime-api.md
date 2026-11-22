@@ -290,8 +290,9 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   campaign's, `decision_not_found`; not answered, `decision_not_answered`; not answered by a named person,
   `decision_not_human`; referencing no `contacts_finished` line of the campaign, `decision_not_about_finish`. Each item
   is `reopened`, `not_finished`, `not_member`, `excluded`, `not_in_decision` — a person the line the question is about
-  does not name — or `rejected`, and the request writes one `contacts_reopened` line, with the reason and, from a run,
-  the question's id. Touches counted before the line ended stay counted.
+  does not name, or whose line a later `contacts_finished` line ended again, since one answer reopens the end it is
+  about and never a later one — or `rejected`, and the request writes one `contacts_reopened` line, with the reason
+  and, from a run, the question's id. Touches counted before the line ended stay counted.
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
   the search and when they landed; every row carries `touches`, the touches the person has had in the row's campaign as
