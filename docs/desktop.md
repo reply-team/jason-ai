@@ -302,6 +302,15 @@ would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notificati
 lists each key and each card's grant. The desktop writes no key there of its own: `Roles:DefaultExecutionProfile` is
 written by the runtime, which the desktop asks to name the default ([What it does at a start](#what-it-does-at-a-start)).
 
+## A plugin your routes name that cannot run
+
+While a plugin a route names is unavailable, for instance because the program it runs is older than its package asks
+for, your own installation's top bar says so as an alert: the plugin by the name the Accounts screen gives it, that its
+work does not run, and the runtime's own problem with the repair, with a link to **Accounts**. Up to two plugins get a
+line each; more are counted in one line. It is read as the window opens and again whenever the plugins are loaded
+again, and it goes by itself once the plugin can run; nothing closes it while the cause stands. A plugin no route names
+is never said there, and [the demo](#the-demo) never says it.
+
 ## Open in
 
 The top bar has an **Open in** split button in your own installation; [the demo](#the-demo) has none. Its main part

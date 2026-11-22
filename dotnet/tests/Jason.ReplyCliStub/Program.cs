@@ -21,10 +21,11 @@ Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush 
 Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
 
 // Answered before anything else: a manifest that declares a minimum version makes a reload run this on whatever it
-// resolved, long before any account is involved. reply-cli prints the bare version.
+// resolved, before any command reaches an account. reply-cli prints the bare version: the release's, or the one a test's
+// own store names, read only beside the store's marker, so a test can make a reload find this stand-in too old.
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    await Console.Out.WriteLineAsync(Jason.ReplyCliStub.ReplyCliRelease.Version);
+    await Console.Out.WriteLineAsync(Account.ReportedVersion() ?? Jason.ReplyCliStub.ReplyCliRelease.Version);
     return 0;
 }
 

@@ -377,6 +377,7 @@ import decisionGetCardNeedsQuestion from '../../../docs/api/fixtures/decision.ge
 // What the accounts card reads of the runtime: the official Reply package as it lists it, and the global route to it.
 import pluginListCardAccountsReply from '../../../docs/api/fixtures/plugin.list/card-accounts-reply.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
+import pluginListReplyUnavailable from '../../../docs/api/fixtures/plugin.list/reply-unavailable.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
 import replyCountPeriodNone from '../../../docs/api/fixtures/reply.count/period-none.json';
@@ -1454,6 +1455,7 @@ export const fixtures = {
     >,
     'plugin.list/card-accounts-reply': pluginListCardAccountsReply satisfies Exchange<object, object>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
+    'plugin.list/reply-unavailable': pluginListReplyUnavailable satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/period-none': replyCountPeriodNone satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,

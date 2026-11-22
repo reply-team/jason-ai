@@ -2270,6 +2270,33 @@ body,
 .jc-console .mode-strip-refusal {
     font-weight: 600;
 }
+/* A plugin a route names held back: the refusal's weight, one line, its words cut where the strip ends. */
+.jc-console .mode-strip-unavailable {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--red);
+    -webkit-app-region: no-drag;
+}
+.jc-console .mode-strip-unavailable .mode-strip-said {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.jc-console .mode-strip-link {
+    flex: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
 /* The demo's sample being made: a quiet mark, gone once it is ready. */
 .jc-console .mode-preparing {
     flex: none;

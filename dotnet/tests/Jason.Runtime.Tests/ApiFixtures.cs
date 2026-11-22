@@ -506,6 +506,7 @@ public static class ApiFixtures
         "plugin.list/card-accounts",
         "plugin.list/card-accounts-reply",
         "plugin.list/none",
+        "plugin.list/reply-unavailable",
         "preference.list/mode-automatic-voice-unset",
         "preference.list/modes-every-message",
         "preference.list/none",

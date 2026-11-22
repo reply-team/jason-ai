@@ -42,6 +42,7 @@ import {
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
+import { readUnavailable, resetUnavailable, unavailableRead } from './unavailable';
 import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
@@ -606,9 +607,14 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void campaigns.reload();
         void connect.reload();
         void reloadConversations();
+        // The plugins a route names that the runtime holds back, said in the mode strip (`unavailable.ts`).
+        resetUnavailable();
+        void readUnavailable(api);
         // The Feed's id comes with the desktop's first answer, which a link to the Feed waits for.
         const feedAsked = askFeed();
         let pending: ReturnType<typeof setTimeout> | null = null;
+        // Whether the stream has been open: its first open follows the read made above, a later one a gap in it.
+        let wasOpen = false;
         const journal =
             stream ??
             pageStream(
@@ -679,10 +685,18 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     catchUpFeed();
                     readActsAgain(api);
                 }
+                // The stream open again after it closed may have missed a restart's load of the plugins, which a resume
+                // does not send; and a first open reads what the start could not.
+                if (state.status === 'open' && before.status !== 'open') {
+                    if (wasOpen || !unavailableRead()) void readUnavailable(api);
+                    wasOpen = true;
+                }
                 streamState.value = state;
             }),
             journal.onLine((line) => {
                 keepLine(line);
+                // A load of the plugins may have made one available again, or held one back.
+                if (line.kind === 'plugins_reloaded') void readUnavailable(api);
                 handLine(line);
                 // A person's act on an agent locks its chat's open choice at once, before any list is read again.
                 heardLine(line);

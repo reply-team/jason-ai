@@ -6,7 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
-import { FakeApi, watch } from '../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import * as consoleCampaigns from './campaigns';
 import { cardReads } from './card-frame';
@@ -677,7 +677,7 @@ describe('Plan only’s plan card', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         const id = calls(desktop, 'chat.send')[0]!.args[0] as string;
-        const routeReads = () => fake.calls.filter((each) => each.operation === 'route.list');
+        const routeReads = () => callsBeyondStart(fake, 'route.list');
         // The words arrive while the turn runs, and their plan card reads; the turn's end marks them the plan.
         flush(() => desktop.emit(id, { kind: 'text', text: block }));
         await waitFor(() => screen.getByText('No agent is created yet.'));
@@ -705,7 +705,7 @@ describe('Plan only’s plan card', () => {
         const id = calls(desktop, 'chat.send')[0]!.args[0] as string;
         flush(() => desktop.emit(id, { kind: 'text', text: block }));
         await waitFor(() => screen.getByText('No agent is created yet.'));
-        return { desktop, id, reads: () => fake.calls.filter((each) => each.operation === 'route.list').length };
+        return { desktop, id, reads: () => callsBeyondStart(fake, 'route.list').length };
     }
     const drawn = () => screen.queryByRole('group', { name: 'Jason’s proposal' });
     /** Lets what the page queued once it drew again run: a read a card asked for starts there. */

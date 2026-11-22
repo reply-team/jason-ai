@@ -1422,7 +1422,7 @@ what became of each part:
 | `data_dir_found` | whether it exists; `false` means nothing was done or made, and every part is `not_done` with the reason saying so |
 | `installation_found` | whether an installation is there; `false` where no data directory exists or it holds nothing but Jason Desktop's own, as above: nothing was done, read or made, every part is `not_done` with the reason saying so, and nothing is left to finish; `true` in every other answer |
 | `complete` | whether every part is `done` or `already_there` |
-| `parts` | `plugins`, `skills`, `ui`, always in that order |
+| `parts` | `plugins`, `skills`, `ui`, always in that order; after the reload's line, the plugins part has one line for each plugin the reload reports unavailable, `<id> unavailable: <its problem's message>`, and its state and the exit code stay as they were |
 | `parts[].state` | `done` — it changed something and is the installed version's now; `already_there` — nothing needed changing, or nothing of it is installed; `not_done` — it could not be brought up, and nothing of it was left half changed |
 | `parts[].reason` | at `not_done`, one sentence why; `null` otherwise |
 | `parts[].lines` | what the part did and left, one line each, as an update's step lines say them; a line that left something to do ends with `run:` and the command that does it |
