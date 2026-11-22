@@ -116,7 +116,8 @@ type ConversationsAreTheSeam = [
 
 // A turn names the conversation and the host, the model, the effort and the mode it was approved for, and whether its
 // words were typed in the message box, the only ones an /export is taken from; never a campaign, which the
-// conversation's record decides. The mark of a send a browser tab made is the bridge's own, never the page's.
+// conversation's record decides. The mark of a send a browser tab made was the tab's bridge's own, never the page's;
+// unreachable since 0.49.3, which removed the tab and its bridge.
 type SendIsTheSeam = [
     Holds<Equal<Omit<ChatSendOptions, 'fromTab'>, DesktopChatOptions>>,
     Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode' | 'typed'>>,

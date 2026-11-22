@@ -291,8 +291,8 @@ export function claudeSealed(mode: ChatMode, keyed: boolean): boolean {
  * named every time overrides their `defaultMode` (https://code.claude.com/docs/en/cli-reference, read 2026-11-20:
  * `--permission-mode` "Overrides `defaultMode` from settings files"). Every other turn keeps the sealed command line whole:
  * a turn on a provider's key in every mode, Full access included, beside the desktop's own Claude Code folder
- * (`keyedFolder`); Plan only, Ask first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access, from a
- * browser tab, as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
+ * (`keyedFolder`); Plan only, Ask first and Auto-edit, and the turn of a Full access chat that runs in Ask first, below the floor of Full access,
+ * as root, started again after Claude Code refused its bypass or started the turn in another mode, or once
  * the hook was found filtered out: which line a turn gets follows the mode it runs in (`turnMode`, and `running.mode`
  * once a start is narrowed), never the one the chat shows. The sealed line is `--setting-sources project`,
  * `--strict-mcp-config`, and from `noChromeFrom` on `--no-chrome`, so none of the person's settings, servers, connectors

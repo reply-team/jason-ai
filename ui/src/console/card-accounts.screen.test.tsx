@@ -24,8 +24,7 @@ import { forgetWaiting } from './waiting';
 // provider's part as the desktop reads Reply now (the sign-in, the accounts with Reply's own words for their state, the
 // channels Reply did not list and why) and, under "On record now", the plugin the runtime routes sends to and its state
 // as the runtime answers it. It reads once when drawn and again only on its Refresh, never on a journal line or a change
-// the desktop reports; it acts on nothing, and in a browser tab it draws the runtime's part and says where connecting is
-// done.
+// the desktop reports; it acts on nothing.
 
 const setupChat = 'conv_01JDACCOUNTS00000000000000S';
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;

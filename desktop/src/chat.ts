@@ -16,8 +16,7 @@
  * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn and kept on its record:
  * Full access where the record names none, which every new chat starts in with no box, and Ask first, Auto-edit or Plan
  * only once the person chose one from the menu, through a restart and Start fresh alike. A turn the mode cannot apply to
- * (Full access while this version does not offer it, on a Claude Code below its floor or sent from a browser tab;
- * Auto-edit on Codex) runs in Ask
+ * (Full access while this version does not offer it or on a Claude Code below its floor; Auto-edit on Codex) runs in Ask
  * first, the chat says why once, and the record keeps the mode. Leaving Full access stops the turn that runs in it. The
  * first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes back to Ask
  * first. Every turn of a conversation runs in its own folder, `<data>/desktop/chats/<id>/` beside the shared chat folder,
@@ -185,8 +184,8 @@ export interface ChatSendOptions {
      */
     typed?: true;
     /**
-     * Present, and true, on a send a browser tab made, which the bridge marks (`browser-bridge.ts`): a turn of a
-     * conversation in Full access then runs in Ask first.
+     * Present, and true, on a send a browser tab made, which the tab's bridge marked: a turn of a conversation in Full
+     * access then runs in Ask first. Unreachable since 0.49.3, which removed the tab and its bridge.
      */
     fromTab?: boolean;
 }
@@ -1511,8 +1510,8 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
         // A turn its conversation's mode cannot apply to runs in Ask first, and the record keeps the mode for the turns that
-        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab or while this version
-        // does not offer it, Full access on Claude Code where its bypass is not available, and Auto-edit on Codex. Full
+        // can (`turnMode`, which the status hands the page too): Full access sent from a browser tab (unreachable since
+        // 0.49.3) or while this version does not offer it, Full access on Claude Code where its bypass is not available, and Auto-edit on Codex. Full
         // access on a Claude Code below its floor is found once the version is read, below; on Codex Full access runs as
         // itself.
         const recorded = this.#modeOf(conversation);

@@ -8,8 +8,8 @@
 // allow list's verbs and the acts of the person's word (`modeFence`). Plan only reads and proposes and changes nothing.
 // Auto-edit is Ask first, except that the six file commands run with no card on paths in the chat's own folder, read by
 // Jason's literal reader and never by the host's accept-edits mode; it is chosen on Claude Code only. A turn the
-// conversation's mode cannot apply to (Full access on a Claude Code below its floor, sent from a browser tab, while it is
-// not offered, or where Claude Code's bypass is not available; Auto-edit on Codex) runs in Ask first, the chat says why
+// conversation's mode cannot apply to (Full access on a Claude Code below its floor, while it is not offered, or where
+// Claude Code's bypass is not available; Auto-edit on Codex) runs in Ask first, the chat says why
 // once, and the record keeps the mode. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
@@ -108,7 +108,10 @@ export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot a
  */
 export const fullAccessCurrent = `Claude Code is now ${fullAccessFloor} or newer, so this turn runs in Full access, the chat's mode.`;
 
-/** Why a message a browser tab sent to a chat in Full access runs in Ask first: the default is for the desktop's window. */
+/**
+ * Why a message a browser tab sent to a chat in Full access runs in Ask first: the default is for the desktop's window.
+ * Unreachable since 0.49.3, which removed the tab.
+ */
 export const tabFullAccess = "Full access is for Jason Desktop's own window, and this message came from a browser tab.";
 
 /**
@@ -215,7 +218,10 @@ export type AskFirstWhy = 'floor' | 'not_offered' | 'tab' | 'codex_auto_edit' | 
 
 /** Where a turn is sent from and what is known of the host, which `turnMode` reads beside the mode and the program. */
 export interface TurnPlace {
-    /** Whether it is sent from a browser tab, which the bridge marks, rather than from the desktop's own window. */
+    /**
+     * Whether it is sent from a browser tab, which the tab's bridge marked, rather than from the desktop's own window;
+     * unreachable since 0.49.3, which removed the tab and its bridge.
+     */
     fromTab: boolean;
     /** Whether this version offers Full access (`fullAccessOffered`). */
     offered: boolean;
@@ -232,8 +238,8 @@ export interface TurnPlace {
  * The mode a turn of a conversation in `recorded` runs in on a host of `program`, sent from `place`, and why when that is
  * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
  * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
- * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab,
- * while this version does not offer it, where Claude Code's bypass is not available (`bypass`, as `bypassLeadsTo`
+ * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab
+ * (unreachable since 0.49.3), while this version does not offer it, where Claude Code's bypass is not available (`bypass`, as `bypassLeadsTo`
  * decides it), and on a Claude Code below its floor of Full access or whose version could not be read, the first of
  * these that holds being the one said;
  * on Codex it runs as itself, with no sandbox, held to neither Claude Code's bypass nor its floor. Auto-edit runs in Ask
