@@ -34,6 +34,12 @@ public partial class RoleSkillTests
         // edited the failed item, or copied its input, would ask nobody about the number that is actually there.
         Assert.Contains("with both numbers in the failed attempt's `trace`. Read the count again and create a new item for the new number", skill, StringComparison.Ordinal);
         Assert.Contains("a different population is a different decision, never an edit of the old one", skill, StringComparison.Ordinal);
+
+        // And the start of a provider's campaign is never the planner's to propose: it is prepared only on the person's
+        // direct word. A planner that prepared one for every campaign would put a sequence at the provider beside the
+        // letters Jason's roles write.
+        Assert.Contains("**Starting a provider's campaign is a person's decision over a population, and only on their direct word.** You never propose it.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("plan the horizon from that", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -105,13 +111,26 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("planner");
 
-        // The fact the judgement about pilots rests on: a send is approved one person at a time, so it fits a few people
-        // and a population is a campaign's. A planner that believed one approval covered a batch of sends would put two
-        // hundred people behind a single question, or build a one-person campaign to send one message.
+        // The fact the judgement about pilots rests on: a send is approved one person at a time, so each batch is that
+        // many sends, each with its own approval. A planner that believed one approval covered a batch of sends would put
+        // two hundred people behind a single question, or build a one-person campaign to send one message.
         Assert.Contains(
             "Each send is one work item for one person, and each waits for a person to approve exactly what it would send",
             skill,
             StringComparison.Ordinal);
+
+        // And one message at a time is how a campaign's people are written to, every batch of them: a provider's sequence
+        // is never proposed, and a campaign linked to one gets no letters of Jason's own. A planner told that a population
+        // is a provider campaign's would build a sequence at the provider for every campaign past its pilot, and one that
+        // planned sends in a linked campaign would send beside the sequence's own steps.
+        Assert.Contains("**A person is reached one message at a time.**", skill, StringComparison.Ordinal);
+        Assert.Contains("That is how a campaign's people are written to, its first batch and the batches after it alike.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A provider's sequence is never part of that, and never proposed: a campaign linked to one gets no letters of Jason's own, so you create no send in it, and a person who asks for one directly is answered as `managed-campaign-work` says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("is used only where the person asks for one by name.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("a population is a campaign's", skill, StringComparison.Ordinal);
 
         // The runtime never repeats an attempt whose send ended without knowing whether it went out, but a planner that
         // creates a new work item for the same message has made a second message, and nothing else stops it. The only safe
@@ -206,7 +225,12 @@ public partial class RoleSkillTests
             $"The planner names the pilot's steps at [{string.Join(", ", at)}] for [{string.Join(", ", steps)}]: each must be there, in that order.");
 
         Assert.Contains("each run raises the next step's work, waits for it with `jason workitem wait`, and ends", skill, StringComparison.Ordinal);
-        Assert.Contains("Raise a researcher's item for each of the ten, and wait on all ten.", skill, StringComparison.Ordinal);
+        Assert.Contains("A pilot is the campaign's first batch: twenty people, unless the campaign's context names another number as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
+        Assert.Contains("Raise a researcher's item for each person of the batch, and wait on all of them.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("For a pilot of ten people", skill, StringComparison.Ordinal);
+
+        // The judgement both seats share says the same number where it names the pilot.
+        Assert.Contains("The deep work per person and the first outreach go to a pilot, the campaign's first batch: twenty people, or the number the person named, which the campaign's context keeps as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
         Assert.Contains("Each send goes to its claim: it parks for a person to approve what it would send, unless they have chosen that this kind of contact goes automatically", skill, StringComparison.Ordinal);
         Assert.Contains("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
         Assert.Contains("A reply that arrives meanwhile is the manager's and the responder's, never yours.", skill, StringComparison.Ordinal);

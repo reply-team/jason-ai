@@ -105,8 +105,10 @@ export function modesInForce(
 /** A count of people in words. */
 export const people = (count: number): string => (count === 1 ? '1 person' : `${count} people`);
 
-/** A count's one word, as the Campaigns screen words it. */
-const standingWord = (key: string): string => summaryColumns.find((column) => column.key === key)?.label ?? key;
+/** A count's one word, as the Campaigns screen words it; nothing for a count this build has no word for. */
+const standingLabel = (key: string): string | undefined => summaryColumns.find((column) => column.key === key)?.label;
+
+const standingWord = (key: string): string => standingLabel(key) ?? key;
 
 /**
  * A people list's footer: with a campaign and no search, how many people the agent holds (or how many stand so, under
@@ -154,7 +156,7 @@ export function personRow(contact: Contact, campaignId?: string): PersonRow {
         company: contact.company,
         title: contact.title,
         channel: primary === undefined ? null : channelWords(primary.channel),
-        standing: (membership?.standing ?? []).map(standingWord),
+        standing: (membership?.standing ?? []).flatMap((key) => standingLabel(key) ?? []),
     };
 }
 

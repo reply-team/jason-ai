@@ -70,7 +70,9 @@
               "decision_id": "dec_1"
             }
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -132,7 +134,9 @@
               "decision_id": "dec_2"
             }
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

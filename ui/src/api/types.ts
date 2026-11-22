@@ -367,6 +367,10 @@ export type CampaignSummaryRow = {
     idle: number;
     sequence: number;
     out: number;
+    /** The members whose line is held. Absent from a runtime that does not count it. */
+    paused?: number;
+    /** The members whose line is ended; new and idle leave them out. Absent from a runtime that does not count it. */
+    finished?: number;
     removed: number;
     sequence_linked: boolean;
 };
@@ -436,6 +440,10 @@ export type MembershipItem = {
     updated_at: string;
     why?: MembershipWhy;
     counted: CountedIn[];
+    /** The touches the person has had in the first campaign, as the ceiling of touches counts them. */
+    touches?: number;
+    /** When the last of them was; null with none. Both absent from a runtime that does not count touches. */
+    last_touch_at?: string | null;
 };
 export type ListContactsRequest = {
     campaign_id?: string;

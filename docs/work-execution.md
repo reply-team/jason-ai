@@ -860,7 +860,13 @@ not archived, each person once with the campaigns that list them under `counted`
 `--activity <count>` and the same period, it lists exactly
 the people one count counts, each with why it counts them in each of those campaigns: the approval or question waiting,
 how their latest work ended, or when in the period it happened, the latest first. Under `--activity people` the why is
-the latest of what happened to them, its `text` naming the count it was. Work about a person is work in that campaign
+the latest of what happened to them, its `text` naming the count it was. Each row also says how many touches the
+person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
+exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
+shows is the number the ceiling stops at, and its moment is the item's finish where it succeeded, else the end of the
+latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
+(`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
 line of each campaign it reaches ([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such
 as the reply to a direct email or a message outside a sequence, reaches every campaign not archived that the person is a
@@ -886,12 +892,19 @@ Now:
   finish, so the person is no longer `failed`.
 - `working` — Work about them is planned or running. Work waiting for an approval is `waiting`'s.
 - `new` — Nothing has been done or planned for them yet: no work about them was created by a person, a role, an
-  attempt or a plugin. Work the runtime made about them by itself, the read of their thread and the responder a reply
-  woke, does not count. A campaign's reserve is this count ([docs/campaign-manager.md](campaign-manager.md) §9).
-- `idle` — Their work finished without failing, nothing is planned, and they were never put into the sequence.
+  attempt or a plugin, and their line is not finished. Work the runtime made about them by itself, the read of their
+  thread and the responder a reply woke, does not count. A campaign's reserve is this count
+  ([docs/campaign-manager.md](campaign-manager.md) §9), so a person whose line is ended is no longer someone still to
+  start on; a paused person still is.
+- `idle` — Their work finished without failing, nothing is planned, they were never put into the sequence, and their
+  line is not finished; a paused person can be idle.
 - `sequence` — They were put into the provider's sequence and are not out of it.
 - `out` — They replied, opted out, were stopped in the sequence, or hard-bounced. A reply is one the inbound read or
   the provider's events observed; opted out means on the do-not-contact register now; a soft bounce takes nobody out.
+- `paused` — Their line in the campaign is held (membership state `paused`). A held line is not ended, so they stay
+  in every other count they stand in, `new` and `idle` included.
+- `finished` — Their line in the campaign is ended (membership state `finished`). They are still members, so `people`
+  and `out` count them as before, but `new` and `idle` leave them out.
 - `removed` — They were taken out of the campaign. They count in nothing else now, and stay listed, so a re-import
   never adds them back.
 

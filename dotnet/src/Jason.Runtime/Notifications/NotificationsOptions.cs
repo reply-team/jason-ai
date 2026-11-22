@@ -35,6 +35,12 @@ public sealed class NotificationsOptions
     /// <summary>The operating system's own notification, shown by a runtime that has a desktop to show it on.</summary>
     public bool Toast { get; set; } = true;
 
+    /// <summary>
+    /// Whether a reply a role judged a person's own is said: on unless written <c>false</c>, a line of the settings file with
+    /// no verb, as <see cref="Enabled"/> is. Off, no reply wakes a pointer and none is counted.
+    /// </summary>
+    public bool Replies { get; set; } = true;
+
     /// <summary>How long the newest line of a burst must have been quiet before the burst is said.</summary>
     public int QuietSeconds { get; set; } = 60;
 

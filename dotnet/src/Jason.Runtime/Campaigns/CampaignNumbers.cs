@@ -33,9 +33,9 @@ public sealed class CampaignNumbers(JasonDbContext db)
         var t = await CampaignPeople.SummaryTotalAsync(db, ids, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
         return new CampaignSummaryResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
-                ? new CampaignSummaryRow(campaign.PublicId, c.People, c.Waiting, c.Failed, c.Working, c.New, c.Idle, c.Sequence, c.Out, c.Removed, pinned.Contains(campaign.Id))
-                : new CampaignSummaryRow(campaign.PublicId, 0, 0, 0, 0, 0, 0, 0, 0, 0, pinned.Contains(campaign.Id)))],
-            new CampaignSummaryTotal(t.People, t.Waiting, t.Failed, t.Working, t.New, t.Idle, t.Sequence, t.Out, t.Removed));
+                ? new CampaignSummaryRow(campaign.PublicId, c.People, c.Waiting, c.Failed, c.Working, c.New, c.Idle, c.Sequence, c.Out, c.Paused, c.Finished, c.Removed, pinned.Contains(campaign.Id))
+                : new CampaignSummaryRow(campaign.PublicId, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, pinned.Contains(campaign.Id)))],
+            new CampaignSummaryTotal(t.People, t.Waiting, t.Failed, t.Working, t.New, t.Idle, t.Sequence, t.Out, t.Paused, t.Finished, t.Removed));
     }
 
     public async Task<CampaignActivityResponse> ActivityAsync(CampaignActivityRequest request, CancellationToken cancellationToken)

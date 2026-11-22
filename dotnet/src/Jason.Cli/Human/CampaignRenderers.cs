@@ -154,7 +154,7 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED");
+        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "PAUSED", "FINISHED", "REMOVED");
         foreach (var row in summary.Campaigns)
         {
             table.Row(
@@ -168,6 +168,8 @@ public static class CampaignRenderers
                 Count(row.Idle),
                 row.SequenceLinked ? Count(row.Sequence) : "-",
                 row.SequenceLinked ? Count(row.Out) : "-",
+                Count(row.Paused),
+                Count(row.Finished),
                 Count(row.Removed));
         }
 
@@ -177,7 +179,7 @@ public static class CampaignRenderers
             var linked = summary.Campaigns.Any(row => row.SequenceLinked);
             table.Row(
                 "TOTAL", null, Count(total.People), Count(total.Waiting), Count(total.Failed), Count(total.Working), Count(total.New), Count(total.Idle),
-                linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Removed));
+                linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Paused), Count(total.Finished), Count(total.Removed));
         }
 
         return table.Render();

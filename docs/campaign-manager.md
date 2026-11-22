@@ -510,14 +510,17 @@ field beside the review pace rather than a key in the context for the same reaso
 **Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about
 somebody by itself, the read of a thread that moved and the responder it woke, does not touch them. The step counts by
-the summary's own definition, so the number it says is the number `jason campaign summary` shows. A person on the
+the summary's own definition, so the number it says is the number `jason campaign summary` shows. A member whose line
+is ended, whom the summary counts under `finished`, is not untouched and is left out; one whose line is only held,
+`paused`, still counts. A person on the
 do-not-contact register lands and counts like any other: the register keeps a send from reaching them, not them from the
 campaign, so a reserve may hold fewer people a send can reach than its number says.
 
 **The reserve step** runs in every scan, for each active campaign that has a threshold, after the respond step and
 before the summon, so a line saying the reserve is low summons a review in the same scan. It counts only when something
 that can change the number was written since its last look: a member added or removed (`contacts_added`,
-`contacts_removed`), a page of a search's people landed (`audience_people_landed`, §10), work created about somebody (`workitem_created`), or a setting of the campaign changed
+`contacts_removed`), a line ended or reopened (`contacts_finished`, `contacts_reopened`; a line continued changes
+nothing, a paused person being still untouched), a page of a search's people landed (`audience_people_landed`, §10), work created about somebody (`workitem_created`), or a setting of the campaign changed
 (`campaign_updated`, the threshold among them). It keeps its place in the chronicle as a watermark on the campaign,
 moved at every look that found new lines, so a scan with nothing new costs one read and counts nobody.
 
@@ -709,7 +712,9 @@ their own: who was worked on, contacted, replied or opted out since they landed.
   anything.
 - **Knowing what a reply says.** The runtime records that a thread moved (`inbound_reply_observed`,
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
-  campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
-  one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
+  campaign's own, and wakes the manager; it never reads or classifies the reply itself. A person is told one came only
+  once a role, inside a run, has judged it a person's own, by a pointer at the end of that run
+  ([notifications](notifications.md) §1). Reading it, and answering it, is the responder's; what it means for the
+  campaign is the manager's.
 - **Allowing in Jason Desktop.** The approval panel in Jason Desktop approves or rejects a search; allowing more people under its
   audience is `jason approval approve --allow` or `jason approval set-standing` for now.

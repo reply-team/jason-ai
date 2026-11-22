@@ -525,10 +525,10 @@ public class CampaignCommandsTests
         var summary = JsonSerializer.Serialize(
             new CampaignSummaryResponse(
             [
-                new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Paused: 1, Finished: 2, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
-            new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1)),
+            new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Paused: 1, Finished: 2, Removed: 1)),
             JasonJson.Options);
         using var cli = new FolderRun(null, Answer(summary, Campaigns(("cmp_A", "Spring outreach"), ("cmp_B", "Partners"))));
 
@@ -536,21 +536,21 @@ public class CampaignCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
-        Assert.Equal(["Spring outreach", "cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
-        Assert.Equal(["Partners", "cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
-        Assert.Equal(["TOTAL", "-", "22", "3", "3", "2", "3", "7", "2", "6", "1"], Cells(lines[^1]));
+        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "PAUSED", "FINISHED", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["Spring outreach", "cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1", "2", "1"], Cells(lines[2]));
+        Assert.Equal(["Partners", "cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0", "0", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "-", "22", "3", "3", "2", "3", "7", "2", "6", "1", "2", "1"], Cells(lines[^1]));
 
         // With no campaign linked to a sequence, the total has none to count either.
         var unlinked = JsonSerializer.Serialize(
             new CampaignSummaryResponse(
-                [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Removed: 0, SequenceLinked: false)],
-                new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Removed: 0)),
+                [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false)],
+                new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Paused: 0, Finished: 0, Removed: 0)),
             JasonJson.Options);
         using var alone = new FolderRun(null, Answer(unlinked, Campaigns(("cmp_B", "Partners"))));
         Assert.Equal(ExitCodes.Success, await alone.RunAsync("campaign", "summary", "cmp_B", "--human"));
         var only = alone.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["TOTAL", "-", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(only[^1]));
+        Assert.Equal(["TOTAL", "-", "2", "0", "0", "0", "1", "1", "-", "-", "0", "0", "0"], Cells(only[^1]));
     }
 
     [Fact]
@@ -810,8 +810,8 @@ public class CampaignCommandsTests
     private static string Counts(string verb, params string[] ids) => verb == "summary"
         ? JsonSerializer.Serialize(
             new CampaignSummaryResponse(
-                [.. ids.Select(id => new CampaignSummaryRow(id, 1, 0, 0, 0, 1, 0, 0, 0, Removed: 0, SequenceLinked: false))],
-                new CampaignSummaryTotal(ids.Length, 0, 0, 0, ids.Length, 0, 0, 0, Removed: 0)),
+                [.. ids.Select(id => new CampaignSummaryRow(id, 1, 0, 0, 0, 1, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false))],
+                new CampaignSummaryTotal(ids.Length, 0, 0, 0, ids.Length, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0)),
             JasonJson.Options)
         : JsonSerializer.Serialize(
             new CampaignActivityResponse(

@@ -152,13 +152,14 @@ public sealed class NotificationSender(
         var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
         var held = await HeldAsync(ct).ConfigureAwait(false);
         var bounces = await BouncesAsync(request, ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0 && bounces == 0)
+        var replies = await RepliesAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0 && bounces == 0 && replies == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held, bounces);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held, bounces, replies);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -185,7 +186,8 @@ public sealed class NotificationSender(
             gaps,
             blocks.Blocks,
             held,
-            bounces);
+            bounces,
+            replies);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -293,6 +295,32 @@ public sealed class NotificationSender(
         }
 
         return await BounceLines.Count(db, after.Value, upTo.Value).SingleAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The replies a role judged a person's own in a run, in the same window as failed protective work: after the line the
+    /// last notification that reached anybody covered, through the line this one covers. Counted by reply — the key every
+    /// verdict on one reply carries, in each campaign that judged it — less the replies a verdict of the same marks said at or
+    /// before the window's start, so a reply judged again later is not said again. The database counts them. With
+    /// <c>Notifications:Replies</c> off, none is counted.
+    /// </summary>
+    private async Task<int> RepliesAsync(NotificationRequest request, CancellationToken ct)
+    {
+        if (request.CoveredThrough is null || !settings.Current.Replies)
+        {
+            return 0;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            return 0;
+        }
+
+        return await ReplyLines.Count(db, after.Value, upTo.Value).SingleAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>

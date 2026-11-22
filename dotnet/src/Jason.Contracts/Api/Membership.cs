@@ -108,8 +108,10 @@ public sealed record ListContactsRequest(
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>
 /// names each campaign asked that lists them, with what it counts them for when a filter asked: the latest first under an
-/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c> and
-/// <c>source</c> are the first of those memberships.
+/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c>,
+/// <c>source</c>, <c>touches</c> and <c>last_touch_at</c> are the first of those memberships. <c>touches</c> is how
+/// many touches the person has had in that campaign, counted as the ceiling of touches counts them, and
+/// <c>last_touch_at</c> the latest of them, null with none.
 /// </summary>
 public sealed record MembershipItemDto(
     ContactDto Contact,
@@ -118,7 +120,9 @@ public sealed record MembershipItemDto(
     DateTimeOffset UpdatedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipWhy? Why = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null,
+    int Touches = 0,
+    DateTimeOffset? LastTouchAt = null);
 
 /// <summary>
 /// Where a member came from, when a search brought them: the campaign's audience it ran under (<c>audience</c>, its id and

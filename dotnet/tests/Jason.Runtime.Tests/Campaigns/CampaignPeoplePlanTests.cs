@@ -26,7 +26,7 @@ public partial class CampaignPeoplePlanTests
         var scans = new StringBuilder();
 
         string[] why = [CampaignWhy.FirstReplies, CampaignWhy.Bounces, CampaignWhy.Sends, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
-        foreach (var sql in CampaignPeople.Everyone.All.Concat(CampaignPeople.OneAudience.All).Append(CampaignPeople.UntouchedCountSql).Append(CampaignPeople.StandingSql).Concat(why))
+        foreach (var sql in CampaignPeople.Everyone.All.Concat(CampaignPeople.OneAudience.All).Append(CampaignPeople.UntouchedCountSql).Append(CampaignPeople.StandingSql).Append(CampaignPeople.TouchesSql).Concat(why))
         {
             // {0} is the campaigns asked (or the one campaign), {1} and {2} the period, or {1} the page's people and {2}
             // and {3} the period; one audience's reads take the audience last, as {1} or {3}. Finished work read by status

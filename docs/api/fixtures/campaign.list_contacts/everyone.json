@@ -98,7 +98,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -144,7 +146,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -215,7 +219,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -260,7 +266,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -305,7 +313,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -350,7 +360,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -395,7 +407,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -450,7 +464,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -517,7 +533,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-12T10:00:00.000Z"
       },
       {
         "contact": {
@@ -545,11 +563,12 @@
             {
               "campaign_id": "cmp_1",
               "campaign_name": "Spring",
-              "state": "enrolled",
+              "state": "finished",
               "added_at": "2026-10-01T10:00:00.000Z",
               "updated_at": "2026-10-01T10:00:00.000Z",
               "standing": [
-                "out"
+                "out",
+                "finished"
               ]
             },
             {
@@ -595,14 +614,16 @@
             "actor_role": null
           }
         },
-        "state": "enrolled",
+        "state": "finished",
         "added_at": "2026-10-01T10:00:00.000Z",
         "updated_at": "2026-10-01T10:00:00.000Z",
         "counted": [
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -647,7 +668,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -692,7 +715,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -769,7 +794,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -846,7 +873,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -892,7 +921,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -937,7 +968,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -965,11 +998,12 @@
             {
               "campaign_id": "cmp_1",
               "campaign_name": "Spring",
-              "state": "enrolled",
+              "state": "paused",
               "added_at": "2026-10-01T10:00:00.000Z",
               "updated_at": "2026-10-01T10:00:00.000Z",
               "standing": [
-                "out"
+                "out",
+                "paused"
               ]
             }
           ],
@@ -1005,14 +1039,16 @@
             "actor_role": null
           }
         },
-        "state": "enrolled",
+        "state": "paused",
         "added_at": "2026-10-01T10:00:00.000Z",
         "updated_at": "2026-10-01T10:00:00.000Z",
         "counted": [
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -1087,7 +1123,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-02T10:00:00.000Z"
       },
       {
         "contact": {
@@ -1132,7 +1170,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-12T10:00:00.000Z"
       },
       {
         "contact": {
@@ -1177,7 +1217,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -1222,7 +1264,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-14T10:00:00.000Z"
       },
       {
         "contact": {
@@ -1267,7 +1311,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

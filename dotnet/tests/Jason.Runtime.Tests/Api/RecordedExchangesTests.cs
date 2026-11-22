@@ -690,9 +690,9 @@ public class RecordedExchangesTests
         var all = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all", new { campaign_ids = listed, exclude_archived_contacts = true }, Ct);
         Assert.Equal(
             [
-                new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow(seed.Autumn, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
-                new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Paused: 1, Finished: 1, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(seed.Autumn, 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
             all.Campaigns);
         Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring }, exclude_archived_contacts = true }, Ct)).Campaigns);

@@ -56,7 +56,7 @@ public static class SettingsVocabulary
         "CheckEnabled", "FeedUrl", "InitialDelayMinutes", "IntervalHours",
 
         // Notifications; a named plugin's entry is Enabled and Binding, both above.
-        "Toast", "QuietSeconds", "MaxWaitSeconds", "MinIntervalMinutes",
+        "Toast", "Replies", "QuietSeconds", "MaxWaitSeconds", "MinIntervalMinutes",
 
         // Inbound; its switch is Enabled, above.
         "SyncSeconds", "LookbackSeconds",

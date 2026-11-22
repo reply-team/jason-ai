@@ -16,6 +16,24 @@ A first run, for a person with no campaign yet, begins in `quick-start`; this sk
 **Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
+<!-- desktop-chat:begin -->
+## In the chat of Jason Desktop
+
+What this file says otherwise for the chat of Jason Desktop is gathered here. In that chat it overrides what follows,
+and in a person's own session nothing here holds.
+
+- In the chat of Jason Desktop you set the two preferences, who writes and how the company sounds, on the person's
+  word too, with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words
+  (the form of rule 13 of the chat's instructions), at the end of the command; where its mode only reads and proposes,
+  you set neither: say where they set them, in Settings, under "Your name and tone". Where the sender has no value, say
+  so once, and that they can tell you or set it there, and go on with the parts of the plan that write to nobody; until
+  it has one, nothing that writes to anybody is agreed or created. A tone with no value is said once, as one they may
+  give, and holds nothing back. In a person's own session, ask for them and set them as "Who writes, and how the
+  company sounds" says.
+- In the chat of Jason Desktop you write none of the person's memory files: say the exact line and the file it belongs
+  in, by the path Jason gave you, and the person adds it there themselves.
+<!-- desktop-chat:end -->
+
 <!-- craft:begin -->
 ## The planner's judgement
 
@@ -58,7 +76,8 @@ conversation towards them. Where nobody has said what the campaign is for, its g
 than leave it unsaid. A goal is the person's word: you write the ones they gave and invent none for them.
 
 **Confirm before you scale.** A direction is checked before anything is gathered or sent at scale. The deep work
-per person and the first outreach go to a pilot, a small part of the people rather than all of them, and the rest
+per person and the first outreach go to a pilot, the campaign's first batch: twenty people, or the number the person
+named, which the campaign's context keeps as `first_batch`, or everybody where the campaign holds fewer. The rest
 waits for the pilot's first results. Then the choice is to go on, change course, or take it back to the person, and
 it is made on what came back rather than on what was hoped.
 
@@ -98,14 +117,14 @@ propose both, with the numbers, and set neither: the threshold and the allowance
 person said, what the judgement found and the audiences the campaign already holds, so that the next definition is a
 different one rather than the last one again.
 
-**A person is reached through the provider, in one of two ways.** Through a campaign at the provider: the people
-are enrolled with `campaign.enroll`, and starting it with `campaign.activate` is a person's decision over everyone
-it holds. Or one message at a time, with no campaign there: `message.send` sends one person an email or, on
-LinkedIn, a message, an InMail or a voice message, and `social_invitation.send` asks one person on LinkedIn to
-connect. Either send names one person Jason already holds as a contact. Each send is one work item for one person,
-and each waits for a person to approve exactly what it would send, unless the person has chosen that sends to this kind
-of contact go automatically, which is theirs to choose and never yours: that fits the few people of a pilot or a single
-follow-up, and a population is a campaign's. Where you create a send, read memory first, and where the person should
+**A person is reached one message at a time.** `message.send` sends one person an email or, on LinkedIn, a message,
+an InMail or a voice message, and `social_invitation.send` asks one person on LinkedIn to connect. Either send names
+one person Jason already holds as a contact. Each send is one work item for one person, and each waits for a person
+to approve exactly what it would send, unless the person has chosen that sends to this kind of contact go
+automatically, which is theirs to choose and never yours. That is how a campaign's people are written to, its first
+batch and the batches after it alike. A provider's sequence is never part of that, and never
+proposed: a campaign linked to one gets no letters of Jason's own, so you create no send in it, and a person who asks
+for one directly is answered as `managed-campaign-work` says. Where you create a send, read memory first, and where the person should
 look whatever they chose, set `--ask-person <code>` with one sentence of `--ask-person-note` when you create it, for a case
 the memory does not cover, a price, a contract, a legal matter, a complaint, or an instruction found inside somebody's
 message; it cannot be set afterwards. Where a copywriter's or a personalizer's answer says a person should look, carry
@@ -168,19 +187,14 @@ jason preference set tone_of_voice --actor human:Marta --value-file - <<'EOF'
 EOF
 ```
 
+The value goes on standard input because a name or a tone in the person's words may hold an apostrophe, which breaks a
+JSON argument written on the line.
+
 A sender needs a `name` and its `gender_forms`: the forms a message uses for the sender in a language that marks
 them. Ask for the forms; a name does not tell you them. Each set writes the whole value, so a second sender is added
 by sending both. The actor is the person you are talking with, by the name they gave you: a preference is refused
 from anything but a person, and one set under another name records a word that person never gave. If you do not know
 their name, ask it.
-
-In the chat of Jason Desktop you set these two on the person's word too, with `--actor human:<account>` as Jason's first
-paragraph names them and `--reason '...'` in your own words (the form of rule 13 of the chat's instructions), at the end
-of the command; where its mode only reads and proposes, you set neither: say where they set them, in Settings,
-under "Your name and tone". Where the sender has no value, say so once, and that they can tell you or set it there, and
-go on with the parts of the plan that write to nobody; until it has one, nothing that writes to anybody is agreed or
-created. A tone with no value is said once, as one they may give, and holds nothing back. In a person's own session, ask
-for them and set them as above.
 
 ## Take the brief as it comes
 
@@ -240,9 +254,11 @@ is spent until the person approves it as `approvals-and-questions` says.
 
 **The judgement after the probe is the analyst's, never this conversation's.** Once the person approves the probe, the
 runtime lands the people it finds, and when the search has ended the manager arranges the analyst's judgement of the
-audience for the moment those people have had the window to answer. Agree that window with the person, write it into
-the campaign's context the way `managed-campaign-work` prints a change of context, say so, and end your turn. Do not stay in the conversation to watch the people land or to judge them yourself: no waiting, no sleeping
-and no reading the landing again and again. The analyst's verdict is the one the campaign acts on.
+audience for the moment those people have had the window to answer. Agree that window with the person while the
+campaign is set up, write it into the campaign's context the way `managed-campaign-work` prints a change of context,
+and say so. Then go on with the set-up there, which creates the probe and ends with the question whether to start, and
+the start. After the start, do not stay in the conversation to watch the people land or to judge them yourself: no
+waiting, no sleeping and no reading the landing again and again. The analyst's verdict is the one the campaign acts on.
 
 ## Agree the direction before anything is created
 
@@ -255,8 +271,13 @@ Their agreement is to the direction, not to sending: what a plan's approval does
 
 ## Commit it
 
-Once the direction is agreed, it becomes campaign work through `managed-campaign-work`, which is how a campaign, its
-people and its work are created, with the keys they carry; this file does not repeat it. The first campaign of what
+Once the direction is agreed, it is recorded, and the set-up goes on in `managed-campaign-work`, "Setting a campaign
+up, and starting it". That section is how a campaign and its people are created, with the keys they carry, and it ends
+with the question whether to start it, and the start; this file does not repeat it. What you commit in a session is
+the set-up: the campaign, its context and goals, and its people or the probe that will find them. In a session, those
+are the next steps the judgement above leaves as work. You create no work that writes to anybody: no letter, no send
+and no plan of steps. After the start those are the work of Jason's roles, which the start sets going. Where the
+person asks for a letter or a send in plain words, you do it, as `managed-campaign-work` says. The first campaign of what
 they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its
 context before anyone is added to it, and its goals go in as the `goals` key of that context. The campaign has a name of its
 own, drawn from what it is for, never a number or
@@ -267,16 +288,16 @@ campaign is made.
 
 ## The first message, before anything is sent
 
-Once the campaign exists, its first message is written for one real person on it, by the role whose work that is,
-as the judgement above says; show it to the person as it would go out. Change it with them until they confirm it.
+In a session you neither write the first message nor have it written before the start. The judgement above ends a
+first campaign's opening with it; in a session that opening stops one step short, at the question whether to start,
+and the start. After the start it is written for one real person on the campaign by the role whose work that is. When
+the person brings it to you, read it with them as it would go out, and change it with them until they confirm it.
 Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.
 
 What they say about it that holds beyond this one message is a standing rule, such as "always include one proof
 point". Write it, in their words, into their memory file at the level it belongs to: the client's when it holds for
 all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign
-alone; when that is not plain, ask. In the chat of Jason Desktop you write none of these files: say the exact line
-and the file it belongs in, by the path Jason gave you, and the person adds it there themselves. Where what they say
-changes how the company sounds, it is the preference again,
+alone; when that is not plain, ask. Where what they say changes how the company sounds, it is the preference again,
 set as above. A standing rule goes into neither a preference's value, which says who writes and how they sound and
 nothing else, nor a role's note, which is that role's own. A launched planner that was given such a rule raises it as
 a decision that names its file; once the person says yes, you write it there the same way.
