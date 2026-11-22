@@ -53,7 +53,8 @@
         "20261114190252_ProviderBlockChannels",
         "20261114215710_BounceStep",
         "20261116022841_ProviderSends",
-        "20261116053811_DecisionThread"
+        "20261116053811_DecisionThread",
+        "20261122055752_LaunchLimitLifts"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -97,7 +98,8 @@
         "20261114190252_ProviderBlockChannels",
         "20261114215710_BounceStep",
         "20261116022841_ProviderSends",
-        "20261116053811_DecisionThread"
+        "20261116053811_DecisionThread",
+        "20261122055752_LaunchLimitLifts"
       ],
       "backup_file": null
     },

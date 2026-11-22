@@ -28,7 +28,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("A failure that outlasts the 30 days leaves a gap, which the first read that succeeds says, and which is counted like any other.")]
     [InlineData("`counts.blocks` is how many provider blocks were first said in the same window")]
     [InlineData("`counts.held` is how many items waited on a daily limit when this notification was sent, read as it was sent")]
-    [InlineData("**an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a campaign, and the claim set the item aside until the next UTC day")]
+    [InlineData("**an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a campaign, and the claim set the item aside until the installation's next midnight")]
     [InlineData("It wakes a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.")]
     [InlineData("Whether a block is the account's or one sending account's, and what lifts it, is read at `jason block list`; the pointer says only how many.")]
     [InlineData("A block is said while it is open, whatever it holds, because it is still the person's to fix and the next item parks on it.")]

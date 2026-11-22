@@ -153,12 +153,13 @@ so in one line on stderr, naming the variable and never its value.
   `system` is refused because it is the runtime's own. The type `plugin` is refused the same way to every caller but a
   handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
-  `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  `launches.lift`, `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that
+  names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume`, `workitem.review` and
-  `report.submit` take no such default: given no actor, the CLI refuses all twelve itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  `report.submit` take no such default: given no actor, the CLI refuses all thirteen itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
@@ -398,6 +399,18 @@ that is not that attempt does not call them.
 - `block.list`: what is blocked, newest first; open blocks by default.
 - `block.get`: the block, or `block_not_found`.
 - `block.clear`: a person's clear; the open block is cleared now, under their name.
+
+### `launches`
+
+- `launches.lift`: a person's word that today's daily limits of launches (`Launches:MaxPerDay`) do not hold, in every
+  campaign and for every role, until the installation's next midnight in `Runtime:TimeZone`, or the system's own zone.
+  The request is `actor` and an optional `reason`; nothing names a campaign or a role. In one transaction it lets go
+  every item held at a daily limit, each as the person's `workitem.resume` would, and writes one `launch_limit_lifted`
+  line. The answer is `{"until", "time_zone", "released", "already_lifted"}`: the next local midnight as a UTC moment,
+  the zone, how many held items it let go, and whether the day was lifted already — a second lift the same day writes
+  nothing and still lets go a hold that appeared since. A role or an attempt is refused with `lift_not_human`, no named
+  person with `actor_required`, and a request from inside a run `403` `decided_inside_a_run`.
+  [`docs/work-execution.md`](work-execution.md), "The claim rule", is the contract.
 
 ### `decision`
 
@@ -756,7 +769,9 @@ interrupted.
   since no person is in a run to state one. That is a higher bar, not a
   boundary: a run that dropped the header and named a person would not be told apart.
   `campaign.start` is refused there the same way, whatever actor it names, though it takes any actor outside a run: a
-  role may pause a campaign, and only a person, or their own session on their word, starts or resumes one.
+  role may pause a campaign, and only a person, or their own session on their word, starts or resumes one. So is
+  `launches.lift`, which needs a person by name: a run that lifted the daily limits would let every role in every
+  campaign past them for the rest of the day on no person's word.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it

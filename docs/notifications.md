@@ -30,7 +30,7 @@ Seven things, and only these:
   `jason block get` and `jason workitem list --block` agree. Whether a block is the account's or one sending account's,
   and what lifts it, is read at `jason block list`; the pointer says only how many.
 - **an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a
-  campaign, and the claim set the item aside until the next UTC day ([work-execution.md](work-execution.md)). It wakes
+  campaign, and the claim set the item aside until the installation's next midnight ([work-execution.md](work-execution.md)). It wakes
   a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits
   on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.
 - **an email that bounced** — a provider event of the kind `bounce` that a read of an account found and the events
