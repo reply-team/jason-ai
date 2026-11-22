@@ -258,7 +258,7 @@ public sealed class WorkItemService(
     /// <summary>
     /// The critic the runtime creates for <paramref name="send"/>, composed into the create's own save; null where it
     /// creates none. It creates one for a send a person decides each one of, about a contact, that does not ask the person
-    /// itself and was not written in the desktop's chat, where the send mode in force for the contact's temperature would
+    /// itself and was not written under the chat's mark, where the send mode in force for the contact's temperature would
     /// release it (either mode, for a contact who waits on a verdict) and a critic could be launched. The critic is the runtime's own work: a <c>critic</c> item of the send's
     /// campaign, contact, priority, due date and lineage, whose context names the send under <see cref="SendReview.Key"/>
     /// and nothing else. The modes are read here only to decide whether to create it; the claim reads them again when it
@@ -266,7 +266,9 @@ public sealed class WorkItemService(
     /// </summary>
     private async Task<WorkItem?> CriticAsync(WorkItem send, Campaign campaign, Contact? contact, LineageRecord record, DateTime now, CancellationToken cancellationToken)
     {
-        // A send written in the desktop's chat always waits for the person, so a critic would be a run for nothing.
+        // No critic for what is not a send to a person, for a send about nobody, for one that asks the person itself, for one
+        // created under the chat's mark (a request that carried the Jason-Confined header, whose send parks for the person
+        // whatever the send mode), or where no role settings were given: each would be a run for nothing, or none could run.
         if (!ReviewSubject.IsReviewable(send) || contact is null || Doubts.AskPersonCode(send) is not null || ConfinedScope.Confined || roles is null)
         {
             return null;
