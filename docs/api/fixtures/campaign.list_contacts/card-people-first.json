@@ -78,7 +78,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -162,7 +164,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 1,
+        "last_touch_at": "2026-10-16T09:00:00.000Z"
       },
       {
         "contact": {
@@ -237,7 +241,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -307,7 +313,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -374,7 +382,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -441,7 +451,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -508,7 +520,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -575,7 +589,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -642,7 +658,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -709,7 +727,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": "Y250XzEw"

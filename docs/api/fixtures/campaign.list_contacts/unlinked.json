@@ -98,7 +98,9 @@
           {
             "campaign_id": "cmp_2"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -153,7 +155,9 @@
           {
             "campaign_id": "cmp_2"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

@@ -20,6 +20,8 @@
         "idle": 6,
         "sequence": 2,
         "out": 6,
+        "paused": 1,
+        "finished": 1,
         "removed": 1,
         "sequence_linked": true
       }
@@ -33,6 +35,8 @@
       "idle": 6,
       "sequence": 2,
       "out": 6,
+      "paused": 1,
+      "finished": 1,
       "removed": 1
     }
   }
