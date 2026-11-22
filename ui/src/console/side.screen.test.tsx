@@ -639,6 +639,27 @@ describe('the sidebar where the window is narrow', () => {
         await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000M1'));
     });
 
+    it('keeps the drawer open for a rename from a row menu, with the field in place in it and focused', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000M1', title: 'Mailboxes' });
+        renderConsole(desktop);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = () => document.querySelector<HTMLElement>('.jc-console .side')!;
+        fireEvent.click(screen.getByRole('button', { name: 'Sidebar' }));
+        fireEvent.click(await waitFor(() => side().getByRole('button', { name: 'More for Mailboxes' })));
+        const opened = await screen.findByRole('menu', { name: 'Mailboxes' });
+        fireEvent.click(within(opened).getByRole('menuitem', { name: 'Rename conversation' }));
+        const field = await waitFor(() => side().getByRole('textbox', { name: 'Conversation name' }));
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(aside().contains(field)).toBe(true);
+        expect(document.activeElement).toBe(field);
+        // Escape in the field closes the field alone: the drawer stays open, with the focus back on the row.
+        fireEvent.keyDown(field, { key: 'Escape' });
+        await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(document.activeElement).toBe(side().getByRole('button', { name: 'Mailboxes' }));
+    });
+
     it('keeps the drawer open for a row menu its three dots open, and Escape gives the focus back inside it', async () => {
         renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });

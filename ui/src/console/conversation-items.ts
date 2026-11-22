@@ -121,7 +121,19 @@ export function rowItems(
     gates: Gates,
     people?: number | null,
 ): MenuItem[] {
-    const own = conversationItems(facts, gates);
+    // An agent's row renames the agent, its campaign, through the runtime, with or without a conversation: never held.
+    // A chat's row renames its conversation, as the chat's own bar does.
+    const conversation = conversationItems(facts, gates);
+    const renameAgent: MenuItem = { kind: 'rename', label: t('agent.menu.renameAgent'), disabled: false };
+    const kept = conversation.filter((each) => each.kind !== 'rename');
+    // In the place of the conversation's Rename: before its other acts, after the folder and the host.
+    const at = kept.findIndex((each) => each.kind === 'fresh' || each.kind === 'remove');
+    const own: MenuItem[] =
+        facts.campaignId === null
+            ? conversation
+            : at === -1
+              ? [...kept, renameAgent]
+              : [...kept.slice(0, at), renameAgent, ...kept.slice(at)];
     const groups: MenuItem[][] = [
         [
             { kind: 'open', label: t('agent.menu.open') },

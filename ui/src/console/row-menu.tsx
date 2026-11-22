@@ -10,6 +10,7 @@ import { setVariable } from './html';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { openFolder, openSession } from './open-folder';
 import { closeRowMenu, dotsElement, drawnRow, focusOpener, rowDrawn, rowElement, rowMenu } from './recent';
+import { beginRowRename } from './row-rename';
 import { openAgentRow, openRow } from './side';
 import { conversations, here, sideAway } from './state';
 
@@ -125,9 +126,9 @@ export function RowMenu() {
         closeRowMenu();
         // The focus goes back to what opened the menu, where the act shows nothing that takes it: never to the page.
         focusOpener(at);
-        // An act that shows something in the area puts a narrow window's drawer away, as the row's own click does.
-        if (item.kind === 'open' || item.kind === 'rename' || item.kind === 'fresh' || item.kind === 'remove')
-            sideAway.value += 1;
+        // An act that shows something in the area puts a narrow window's drawer away, as the row's own click does. Rename
+        // shows its field in the row, in the drawer, so the drawer stays.
+        if (item.kind === 'open' || item.kind === 'fresh' || item.kind === 'remove') sideAway.value += 1;
         if (item.kind === 'open') (unspoken(row) ? openAgentRow : openRow)(row);
         else if (item.kind === 'folder' || item.kind === 'session') {
             const campaign = campaignOf(row);
@@ -137,7 +138,17 @@ export function RowMenu() {
             setDialog({ row, ...(dots ? { dots } : {}), agent, kind: 'move', move: item.move });
         else if (item.kind === 'archive' && agent)
             setDialog({ row, ...(dots ? { dots } : {}), agent, kind: 'archive' });
-        else if (item.kind === 'rename' || item.kind === 'fresh' || item.kind === 'remove')
+        else if (item.kind === 'rename') {
+            // The name becomes a field in its row, an agent's renaming its campaign and a chat's its conversation.
+            const drawn = drawnRow(row);
+            if (drawn !== undefined)
+                beginRowRename({
+                    id: row,
+                    title: drawn.title,
+                    campaignId: drawn.campaignId,
+                    conversationId: drawn.conversationId,
+                });
+        } else if (item.kind === 'fresh' || item.kind === 'remove')
             void begin(row, item.kind, (held) => here().dock.showChat(held));
     };
     const ended = (open: Open, done: boolean) => {

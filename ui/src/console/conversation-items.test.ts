@@ -27,7 +27,8 @@ const said = (items: MenuItem[]) =>
 
 describe('Open in the file manager', () => {
     const agent: ConversationFacts = { ...kept, campaignId: 'cmp_1' };
-    const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
+    // An agent's row renames the agent itself; its conversation's other acts follow.
+    const rest = ['-', 'Rename', 'Start conversation fresh', '-', 'Remove conversation'];
 
     it('stands right after Open on the row of a chat about an agent, read or not', () => {
         expect(said(rowItems({ status: 'active' }, agent, everything))).toEqual([
@@ -56,7 +57,7 @@ describe('Open in the file manager', () => {
             'Pause',
             'Archive…',
             '-',
-            'Rename conversation',
+            'Rename',
         ]);
         expect(said(conversationItems(agent, { ...everything, folder: null }))).toEqual([
             'Rename conversation',
@@ -118,6 +119,39 @@ describe('Open the host in terminal', () => {
         expect(sessionOf(conversationItems(agent, everything))).toBeUndefined();
         // It stands on its own where the place names no file manager.
         expect(said(conversationItems(agent, { ...both, folder: null }))[0]).toBe('Open Claude Code in terminal');
+    });
+});
+
+describe('Rename on an agent’s row', () => {
+    const unspoken: ConversationFacts = {
+        kept: undefined,
+        id: undefined,
+        campaignId: 'cmp_1',
+        running: false,
+        removing: false,
+        host: null,
+    };
+    const renameOf = (items: MenuItem[]) => items.find((each) => each.kind === 'rename');
+
+    it('renames the agent, and is never held: not for a conversation not kept, nor where the place makes no chat', () => {
+        expect(renameOf(rowItems({ status: 'draft' }, unspoken, everything))).toEqual({
+            kind: 'rename',
+            label: 'Rename',
+            disabled: false,
+        });
+        expect(said(rowItems({ status: 'draft' }, unspoken, { ...everything, create: false }))).toEqual([
+            'Open',
+            'Start',
+            'Archive…',
+            '-',
+            'Rename',
+        ]);
+    });
+
+    it('leaves the agent’s own “…” its conversation’s Rename', () => {
+        expect(renameOf(conversationItems({ ...kept, campaignId: 'cmp_1' }, everything))).toMatchObject({
+            label: 'Rename conversation',
+        });
     });
 });
 

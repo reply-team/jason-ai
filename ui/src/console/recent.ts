@@ -1,7 +1,7 @@
 import { computed, effect, signal, untracked } from '@preact/signals-react';
 import type { Api } from '../api/client';
 import type { Campaign, CampaignSummary } from '../api/types';
-import { act, define, parseArgs } from './actions';
+import { act, argsOf, define, parseArgs } from './actions';
 import { agentFacts } from './agent-facts';
 import { shownAgent } from './agent-place';
 import { campaigns, read } from './campaigns';
@@ -12,6 +12,7 @@ import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
 import { needsInput } from './needs';
+import { rowRename, typedName } from './row-rename';
 import {
     agentRows,
     chatRows,
@@ -193,7 +194,35 @@ function inFront(row: RecentRow): boolean {
     return agent !== null && row.campaignId === agent.id;
 }
 
+/**
+ * A row whose name is a field in place (`row-rename.ts`), with what was refused under it and named as the field's
+ * description. The refusal is announced by the sidebar's one region (`RowRenameSaid`), which keeps its node however
+ * often the rows are painted, so a repaint never says it again.
+ */
+function renamingView(row: RecentRow, said: string | null, busy: boolean): Html {
+    const name = row.campaignId !== null ? t('side.rename.agent') : t('side.rename.chat');
+    return html`<div class="rrow renaming">
+        <input
+            class="rrename"
+            type="text"
+            aria-label="${name}"
+            value="${typedName()}"
+            ${said === null ? null : html`aria-invalid="true"`}
+            ${busy ? html`aria-busy="true" readonly` : null}
+            ${said === null ? null : html`aria-describedby="rrename-said"`}
+            data-input="side.renameType"
+            data-enter="side.renameKeep"
+            data-escape="side.renameDrop"
+            data-blur="side.renameBlur"
+            ${argsOf(row.id)}
+        />
+        ${said === null ? null : html`<div class="rrename-said" id="rrename-said">${said}</div>`}
+    </div>`;
+}
+
 function rowView(row: RecentRow): Html {
+    const renaming = rowRename.value;
+    if (renaming !== null && renaming.id === row.id) return renamingView(row, renaming.said, renaming.busy);
     const menu = rowMenu.value?.id === row.id;
     const agent = row.campaignId !== null;
     const said = [

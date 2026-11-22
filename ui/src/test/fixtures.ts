@@ -202,6 +202,8 @@ import campaignListInbox from '../../../docs/api/fixtures/campaign.list/inbox.js
 import campaignListNewAgent from '../../../docs/api/fixtures/campaign.list/new-agent.json';
 import campaignGetNewAgent from '../../../docs/api/fixtures/campaign.get/new-agent.json';
 import campaignGetNewAgentBrief from '../../../docs/api/fixtures/campaign.get/new-agent-brief.json';
+import campaignUpdateNewAgentRename from '../../../docs/api/fixtures/campaign.update/new-agent-rename.json';
+import campaignUpdateNewAgentNameTooLong from '../../../docs/api/fixtures/campaign.update/new-agent-name-too-long.json';
 import campaignSummaryNewAgent from '../../../docs/api/fixtures/campaign.summary/new-agent.json';
 import campaignListIncludeArchived from '../../../docs/api/fixtures/campaign.list/include-archived.json';
 import campaignListQuery from '../../../docs/api/fixtures/campaign.list/query.json';
@@ -968,6 +970,14 @@ export const fixtures = {
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.update/new-agent-rename': campaignUpdateNewAgentRename satisfies Exchange<
+        { campaign_id: string; name: string },
+        Campaign
+    >,
+    'campaign.update/new-agent-name-too-long': campaignUpdateNewAgentNameTooLong satisfies Exchange<
+        { campaign_id: string; name: string },
+        ErrorEnvelope
+    >,
     'campaign.list/card-chips': campaignListCardChips satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/campaigns-for-picker': campaignListCampaignsForPicker satisfies Exchange<
         CampaignListRequest,

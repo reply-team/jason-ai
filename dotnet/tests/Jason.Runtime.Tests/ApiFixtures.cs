@@ -379,6 +379,8 @@ public static class ApiFixtures
         "campaign.summary/unlinked",
         "campaign.summary/unlinked-archived-not-left-out",
         "campaign.summary/with-archived",
+        "campaign.update/new-agent-name-too-long",
+        "campaign.update/new-agent-rename",
         "contact.get/archived",
         "contact.get/imported",
         "contact.get/no-campaign",

@@ -196,6 +196,7 @@ describe('The menu on a row of AGENTS or CHATS', () => {
             'agent.menu.move.pause': 'Pausieren',
             'agent.menu.archive': 'Archivieren…',
             'agent.menu.rename': 'Unterhaltung umbenennen',
+            'agent.menu.renameAgent': 'Umbenennen',
             'agent.menu.renameTitle': 'Dieser Unterhaltung einen eigenen Namen geben',
             'agent.menu.fresh': 'Unterhaltung neu beginnen',
             'agent.menu.freshTitle': 'Die nächste Runde beginnt ohne Erinnerung an diese Unterhaltung',
@@ -218,12 +219,11 @@ describe('The menu on a row of AGENTS or CHATS', () => {
                 'Pausieren',
                 'Archivieren…',
                 '-',
-                'Unterhaltung umbenennen',
+                'Umbenennen',
                 'Unterhaltung neu beginnen',
                 '-',
                 'Unterhaltung entfernen',
             ]);
-            expect(item('Unterhaltung umbenennen').title).toBe('Dieser Unterhaltung einen eigenen Namen geben');
             expect(item('Unterhaltung neu beginnen').title).toBe(
                 'Die nächste Runde beginnt ohne Erinnerung an diese Unterhaltung',
             );
@@ -284,7 +284,9 @@ describe('The menu on a row of AGENTS or CHATS', () => {
         await renderConsole((fake) => {
             readWinter = holdAgent(fake, 'cmp_4');
         });
-        const rest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
+        // An agent's row renames the agent; a chat's row its conversation.
+        const rest = ['-', 'Rename', 'Start conversation fresh', '-', 'Remove conversation'];
+        const chatRest = ['-', 'Rename conversation', 'Start conversation fresh', '-', 'Remove conversation'];
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => expect(words(menu()!)).toEqual(['Open', folder, hostItem, 'Pause', 'Archive…', ...rest]));
         closeMenus();
@@ -299,7 +301,7 @@ describe('The menu on a row of AGENTS or CHATS', () => {
         await waitFor(() => expect(menu()).toBeNull());
         expect(within(recent()).queryByRole('button', { name: 'Winter' })).toBeNull();
         fireEvent.contextMenu(await row('Set-up'));
-        await waitFor(() => expect(words(menu()!)).toEqual(['Open', ...rest]));
+        await waitFor(() => expect(words(menu()!)).toEqual(['Open', ...chatRest]));
     });
 
     it('opens the row’s agent’s folder in the file manager through Open in, and says a refusal beside the sidebar until closed', async () => {
@@ -628,14 +630,17 @@ describe('The menu on a row of AGENTS or CHATS', () => {
         });
     });
 
-    it('shows the row’s chat first for a conversation act, and acts there as the agent’s “…” does', async () => {
+    it('shows the row’s chat first for a conversation act, and acts there as the agent’s “…” does; Rename stays in the row', async () => {
         const desktop = await renderConsole();
+        const before = activePanel.value;
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => menu()!);
-        fireEvent.click(item('Rename conversation'));
-        await waitFor(() => expect(activePanel.value).toBe(`chat:${spring}`));
-        await waitFor(() => expect(chats.value[spring]?.renaming).toBe('Spring'));
-        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+        fireEvent.click(item('Rename'));
+        // Rename is no act of the chat: the row's name becomes a field in place, and no chat is shown.
+        await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('Agent name'));
+        expect(activePanel.value).toBe(before);
+        expect(chats.value[spring]?.renaming ?? null).toBeNull();
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         // Start fresh on a row not shown: the chat is shown, then it begins afresh.
         fireEvent.contextMenu(await row('Set-up'));
         await waitFor(() => menu()!);
@@ -764,7 +769,7 @@ describe('The menu on a row of AGENTS or CHATS', () => {
         await renderConsole();
         const acts = [
             ['Spring', 'Open'],
-            ['Autumn', 'Rename conversation'],
+            ['Autumn', 'Rename'],
             ['Set-up', 'Start conversation fresh'],
             ['Spring', 'Remove conversation'],
         ] as const;
@@ -780,14 +785,14 @@ describe('The menu on a row of AGENTS or CHATS', () => {
     it('lets an act a later one overtook while it waited show nothing', async () => {
         const desktop = await renderConsole();
         const open = holdAnswer(desktop, 'open', spring);
-        await pick('Spring', 'Rename conversation');
+        await pick('Spring', 'Remove conversation');
         await waitFor(() => expect(open.asked()).toBe(1));
         fireEvent.click(await row('Autumn'));
         await waitFor(() => expect(activePanel.value).toBe(`chat:${autumn}`));
         await open.release();
         expect(activePanel.value).toBe(`chat:${autumn}`);
         expect(location.hash).toBe('#/campaigns/cmp_2/chat');
-        expect(chats.value[spring]?.renaming ?? null).toBeNull();
+        expect(chats.value[spring]?.removing ?? false).toBe(false);
     });
 
     it('takes no second act on a conversation while one is under way', async () => {

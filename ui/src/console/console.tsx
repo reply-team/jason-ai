@@ -55,6 +55,7 @@ import { agentFailure, agentMaking, forgetAgentFailure, tryAgentAgain } from './
 import { folderRefusal, readFileManager } from './open-folder';
 import { closeMark } from './icons';
 import { readUnlisted } from './recent';
+import { RowRenameSaid } from './row-rename-said';
 import { forgetPlace, rememberPlace } from '../screens/settings/way-out';
 import { chosenSection } from '../screens/settings/chosen';
 import { followUpdates } from '../screens/settings/update-state';
@@ -742,6 +743,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         >
                             <Painted className="side-body" view={sideView} />
                             <SideFailure />
+                            <RowRenameSaid />
                         </aside>
                         {sideOpen && (
                             <button

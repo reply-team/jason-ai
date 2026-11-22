@@ -2523,6 +2523,45 @@ body,
 .jc-console .rdots:hover {
     color: var(--ink);
 }
+/* A row whose name is a field in place, with what was refused under it. */
+.jc-console .rrow.renaming {
+    padding: 2px 4px;
+}
+.jc-console .rrename {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+}
+.jc-console .rrename:focus {
+    outline: 2px solid var(--accent, var(--ink));
+    outline-offset: -1px;
+}
+.jc-console .rrename[aria-invalid='true'] {
+    border-color: var(--red);
+}
+/* The region a refusal of a row's rename is heard from: in the page, never on the screen. */
+.jc-console .rrename-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+.jc-console .rrename[aria-busy='true'] {
+    opacity: 0.7;
+    cursor: progress;
+}
+.jc-console .rrename-said {
+    margin: 4px 2px 2px;
+    font-size: 12px;
+    color: var(--red);
+}
 .jc-console .recent-row .rt {
     flex: 1;
     min-width: 0;
