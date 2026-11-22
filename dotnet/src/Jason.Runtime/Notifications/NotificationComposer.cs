@@ -47,6 +47,12 @@ public static class NotificationComposer
     /// <summary>The command that shows the provider blocks, the work each holds and where a person clears it.</summary>
     public const string LookAtBlocksCommand = "jason block list";
 
+    /// <summary>
+    /// What a hold says beside its count, where it fits: the way out for today, in the words a person gives their agent or
+    /// types. Fixed words, no count and no name, so a pointer about a hold stays counts and where to look.
+    /// </summary>
+    public const string LiftHold = "To go on today, tell your agent: ignore the limit, or run jason launches lift.";
+
     /// <summary>Where to look when items wait on a daily limit and nothing else is said.</summary>
     public const string LookAtHeld = "Ask your agent what is held, or run " + LookAtHeldCommand + ".";
 
@@ -130,9 +136,11 @@ public static class NotificationComposer
             sentences.Add(Failed(failed!, held == 0 ? (blocked > 0 ? 1 : MaxCampaignsNamed) : (blocked > 0 ? 0 : 1)));
         }
 
+        var holdAt = -1;
         if (held > 0)
         {
-            sentences.Add($"{Count(held, "item", "items")} {(held == 1 ? "waits" : "wait")} on a budget.");
+            sentences.Add($"{Count(held, "item", "items")} {(held == 1 ? "waits" : "wait")} on a daily limit.");
+            holdAt = sentences.Count;
         }
 
         if (blocked > 0)
@@ -156,10 +164,24 @@ public static class NotificationComposer
 
         // Either alone, never their sum: two counts near the largest an int holds would add up to less than nothing.
         var waiting = approvals > 0 || decisions > 0;
-        var look = eventGaps > 0 || blocked > 0 || held > 0 || bounces > 0 ? Pointing(summary, waiting, failures > 0, held > 0, blocked > 0, eventGaps > 0, bounces > 0)
+        string Looking(string said) => eventGaps > 0 || blocked > 0 || held > 0 || bounces > 0 ? Pointing(said, waiting, failures > 0, held > 0, blocked > 0, eventGaps > 0, bounces > 0)
             : failures == 0 ? Look
             : waiting ? LookAtBoth
             : LookAtFailures;
+        var look = Looking(summary);
+
+        // A hold says the way out for today straight after its count, but only where nothing else gives way: the pointer
+        // must still fit the message the delivery contract takes and still name every command it named without it.
+        if (held > 0)
+        {
+            var lifted = string.Join(" ", sentences.Take(holdAt).Append(LiftHold).Concat(sentences.Skip(holdAt)));
+            var liftedLook = Looking(lifted);
+            if (liftedLook == look && lifted.Length + 1 + liftedLook.Length <= MessageBound)
+            {
+                summary = lifted;
+            }
+        }
+
         return new NotificationMessage(Title, summary, look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item), held, bounces);
     }
 

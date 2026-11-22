@@ -110,7 +110,7 @@ And where items wait on a daily limit of launches:
 
 ```text
 Jason
-2 items wait on a budget.
+2 items wait on a daily limit. To go on today, tell your agent: ignore the limit, or run jason launches lift.
 Ask your agent what is held, or run jason workitem list --status waiting.
 ```
 
@@ -132,6 +132,13 @@ provider block, an account whose events were not read or an email that bounced m
 each thing alone, in the order they are said — "Ask your agent, or run jason approval list, jason decision list, jason
 workitem list --status failed --status expired, jason block list and jason events sources." — and failed protective
 work and a hold share one command, jason workitem list --status failed --status expired --status waiting.
+A hold also says the way out for today, straight after its count: "To go on today, tell your agent: ignore the limit, or run
+jason launches lift." — the person's word that the day's limits do not hold, until the installation's next midnight
+([work-execution.md](work-execution.md)). It is fixed words with no count, role or name in them, so the pointer stays
+counts and where to look. It is said beside failed protective work and beside the other things too, but only where the
+pointer still fits the message the delivery contract takes and still names every command it would have named without
+it: a pointer crowded with every thing at once keeps the hold's count and its command and leaves the sentence to the
+agent.
 A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations
 accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named
 in the order the things are said until the next would not fit the message the delivery contract takes, and the things
