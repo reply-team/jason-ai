@@ -133,7 +133,8 @@ async function begin(text: string): Promise<void> {
     const pick = startPick.value;
     const wanted = startMode.value;
     try {
-        id = await startChat();
+        // Start asks who the person wants to reach: the chat is marked begun here, and the AI sets an agent up at once.
+        id = await startChat(undefined, 'start');
     } finally {
         startMaking.value = null;
     }

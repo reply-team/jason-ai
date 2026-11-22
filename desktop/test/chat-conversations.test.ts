@@ -274,6 +274,26 @@ test('a name a person gave is kept with its mark, and a record without the mark 
     }
 });
 
+test('a chat begun from Start keeps its mark, and a record without it, one a desktop before the mark wrote among them, is the plain chat', () => {
+    const begun = record({ from_start: true });
+    const text = serialize(begun);
+    assert.deepEqual(Object.keys(JSON.parse(text) as object), ['id', 'campaign_id', 'title', 'from_start', 'created_at', 'updated_at', 'sessions', 'entries', 'dropped', 'shape']);
+    assert.deepEqual(parseConversation(text, begun.id), begun);
+    // A record with no mark, as every record written before it was: the plain chat the Chats plus makes.
+    const plain = record();
+    assert.equal('from_start' in (JSON.parse(serialize(plain)) as object), false);
+    assert.equal(parseConversation(serialize(plain), plain.id)?.from_start, undefined);
+    // Anything but true is no mark; and a campaign's record, or the Feed's, takes none.
+    for (const value of [false, 'yes', 1, null]) {
+        const planted = JSON.stringify({ ...JSON.parse(serialize(plain)), from_start: value });
+        assert.equal(parseConversation(planted, plain.id)?.from_start, undefined, JSON.stringify(value));
+    }
+    const handed = record({ campaign_id: 'cmp_01ABC' });
+    assert.equal(parseConversation(JSON.stringify({ ...JSON.parse(serialize(handed)), from_start: true }), handed.id)?.from_start, undefined);
+    const feed = record({ main: true });
+    assert.equal(parseConversation(JSON.stringify({ ...JSON.parse(serialize(feed)), from_start: true }), feed.id)?.from_start, undefined);
+});
+
 test('a plan\'s mark on the agent\'s words is kept, read back only as true, and dropped when the words are cut to fit', () => {
     const kept = record({ entries: [{ kind: 'user', text: 'Plan the follow-ups' }, { kind: 'text', text: 'First, read the replies.', plan: true }] });
     assert.deepEqual(parseConversation(serialize(kept), kept.id), kept);

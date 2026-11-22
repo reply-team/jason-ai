@@ -230,9 +230,11 @@ async function hold(id: string): Promise<string> {
 
 /**
  * The conversation to show: the campaign's one, made on first use and opened with what it kept, or with no campaign
- * a new set-up chat. Resolves with its id, or with null when the desktop refused, which the sidebar says.
+ * a new chat about no campaign: marked begun from Start's box where `begun` says `start`, which the desktop's header for
+ * it says is where a campaign is set up, else a plain chat about no agent, as the Chats plus makes. Resolves with its id,
+ * or with null when the desktop refused, which the sidebar says.
  */
-export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
+export async function startChat(campaign?: { id: string; name: string }, begun?: 'start'): Promise<string | null> {
     try {
         const { desktop } = here();
         let id: string;
@@ -240,7 +242,9 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
             const made = unless(await desktop.chat.create(campaign.id));
             id = await hold(made.id);
         } else {
-            const made = unless(await desktop.chat.create());
+            const made = unless(
+                await (begun === 'start' ? desktop.chat.create(undefined, 'start') : desktop.chat.create()),
+            );
             // The mode the desktop made it in: its line shows at once.
             chats.value = {
                 ...chats.value,

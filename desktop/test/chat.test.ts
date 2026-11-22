@@ -1324,11 +1324,12 @@ test('the instruction text holds the twenty-three rules in plain words, and says
     assert.match(rules[5]!, /first paragraph of a message, written by Jason, says which campaign this conversation is about\. Work on that campaign only, unless/);
     assert.match(rules[5]!, /asks about another without naming an act on it, say so and tell them to open that campaign's conversation/);
     assert.match(rules[5]!, /The person's screen calls a campaign an agent, so a person who says agent means a campaign\./);
-    // A chat about no campaign is a plain chat about no agent: no set-up is offered, any campaign may be spoken of, and an
-    // agent is made, at most one, only when the person asks; the hand-over after it is the desktop's, as before.
+    // A chat about no campaign the Chats plus makes is a plain chat about no agent: no set-up is offered, and an agent is made,
+    // at most one, only when the person asks; one begun from Start's box sets one up at once. Either may speak of any campaign,
+    // and the hand-over after it is the desktop's, as before.
     assert.equal(
         rules[6],
-        "7. A conversation about no campaign that is not the Feed is a chat about no agent: answer what the person asks, and do not offer to set one up, in your words or on a card. In it you may speak of any campaign, as in the Feed, and rule 6 does not hold you to one. When the person asks you to make an agent, create at most one campaign in it; Jason then makes this conversation that campaign's, or asks the person which.",
+        "7. A conversation about no campaign that is not the Feed is of one of two kinds, and Jason's first paragraph says which. A chat about no agent, the one the Chats plus makes, is a plain chat: answer what the person asks, and do not offer to set one up, in your words or on a card. A conversation begun from Start, which Jason's first paragraph says is where a campaign is set up, asks for an agent, and so does a chat about no agent once the person asks you to make one: set it up as your skills say, and create at most one campaign in it; Jason then makes this conversation that campaign's, or asks the person which. In either you may speak of any campaign, as in the Feed, and rule 6 does not hold you to one.",
     );
     // Both forms of handing content, exactly: a quoted here-document closed by EOF alone, and a file in the chat folder.
     assert.ok(rules[7]!.includes("For short content write `--file - <<'EOF'` with the quotes, then the body, then `EOF` alone on the last line and nothing after it."), rules[7]);
@@ -1568,6 +1569,27 @@ test('prints the instructions a turn is given, the memory file and the words on 
     assert.match(printed.join('\n'), /This conversation is about the campaign cmp_01ABC\./);
     assert.match(printed.join('\n'), /This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\./);
     process.stdout.write(`${printed.join('\n')}\n`);
+});
+
+test('a conversation begun from Start\'s box is where an agent is set up, and one the Chats plus made is a chat about no agent, its record saying which', async (t) => {
+    const r = rig(t);
+    const begun = await r.chat.made('begun', undefined, 'start');
+    const plain = await r.chat.made('plain');
+    // Anything but the one word is no mark: a host's name, as a page once sent beside the campaign, among them.
+    const other = await r.chat.made('other', null, 'claude');
+    const said: Record<string, string> = {};
+    for (const chatId of ['begun', 'plain', 'other']) {
+        const before = r.hosts().length;
+        assert.deepEqual(doneOf(await r.turn(chatId, words, { host: 'claude' })), { kind: 'done', error: null });
+        said[chatId] = r.hosts()[before]?.stdin ?? '';
+    }
+    assert.match(said.begun!, /This conversation is about no campaign yet: it is where a campaign is set up\./);
+    for (const chatId of ['plain', 'other']) {
+        assert.match(said[chatId]!, /This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\./, chatId);
+        assert.doesNotMatch(said[chatId]!, /it is where a campaign is set up/, chatId);
+    }
+    const kept = new Map(readConversations(r.b.paths.conversations).kept.map((each) => [each.id, each.from_start]));
+    assert.deepEqual([kept.get(begun), kept.get(plain), kept.get(other)], [true, undefined, undefined]);
 });
 
 test('without the instruction text in the application the turn still runs, no memory file is written, and the gap is said once', async (t) => {

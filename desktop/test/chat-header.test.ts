@@ -13,7 +13,18 @@ const campaign = (name: string | null, fields: { status?: string; folder?: strin
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
 });
 
-test('a chat about no campaign is said to be a chat about no agent, in one paragraph of the desktop\'s words, and nothing in it sets one up', () => {
+test('a conversation begun from Start\'s box keeps the set-up sentence, and the Feed\'s and a campaign\'s headers take no such mark', () => {
+    // Start asks who the person wants to reach: what is sent there asks for an agent, so rule 7's set-up holds at once.
+    const said = header({ campaign: null, fromStart: true });
+    assert.match(said, /^Jason, not the person, wrote this first paragraph\./);
+    assert.match(said, / This conversation is about no campaign yet: it is where a campaign is set up\.$/);
+    assert.doesNotMatch(said, /no agent|\n/);
+    // The mark speaks only for a conversation about no campaign that is not the Feed.
+    assert.equal(header({ main: true, campaign: null, fromStart: true }), header({ main: true, campaign: null }));
+    assert.equal(header({ ...campaign('Spring'), fromStart: true }), header(campaign('Spring')));
+});
+
+test('a chat about no campaign the Chats plus made is said to be a chat about no agent, in one paragraph of the desktop\'s words, and nothing in it sets one up', () => {
     const said = header({ campaign: null });
     assert.match(said, /^Jason, not the person, wrote this first paragraph\./);
     assert.match(said, / This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\.$/);

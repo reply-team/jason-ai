@@ -26,7 +26,8 @@ const desktop = {
         onEvent: (handler: Handler) => subscribe('jason:chat.event', handler),
         list: () => ipcRenderer.invoke('jason:chat.list'),
         open: (chatId: string) => ipcRenderer.invoke('jason:chat.open', chatId),
-        create: (campaignId?: string) => ipcRenderer.invoke('jason:chat.create', campaignId),
+        // Start's box adds the one word that marks a chat begun there; the Chats plus and a campaign send the campaign alone.
+        create: (campaignId?: string | null, begun?: 'start') => (begun === undefined ? ipcRenderer.invoke('jason:chat.create', campaignId) : ipcRenderer.invoke('jason:chat.create', campaignId, begun)),
         createAgent: (clickId: string) => ipcRenderer.invoke('jason:chat.createAgent', clickId),
         remove: (chatId: string) => ipcRenderer.invoke('jason:chat.remove', chatId),
         restart: (chatId: string) => ipcRenderer.invoke('jason:chat.restart', chatId),
