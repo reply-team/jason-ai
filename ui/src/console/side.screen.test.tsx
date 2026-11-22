@@ -498,16 +498,16 @@ describe('the sidebar’s look', () => {
         expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
     });
 
-    it('draws each plus as the header’s small quiet button, as the filter is drawn', async () => {
+    it('draws each plus as the header’s small bordered square, where the filter stays quiet', async () => {
         renderConsole(stubDesktop(), 'live');
         await settled();
         for (const each of [newAgent(), newChat()])
             expect(styleOf(each), each.getAttribute('aria-label') ?? '').toMatchObject({
-                width: '25px',
-                height: '25px',
-                border: '0',
-                background: 'none',
-                color: 'var(--mute)',
+                width: 'var(--plus-size)',
+                height: 'var(--plus-size)',
+                border: '1px solid var(--plus-border)',
+                background: 'var(--plus-bg)',
+                color: 'var(--plus-fg)',
             });
         // Neither is marked: a plus makes its kind, it brings no page forward.
         expect(newAgent().getAttribute('aria-current')).toBeNull();
@@ -522,7 +522,7 @@ describe('the sidebar’s look', () => {
         expect(dots === null || dots.closest('.rrow') !== null).toBe(true);
         expect(rule('.jc-console .rdots')).toMatchObject({ position: 'absolute', opacity: '0' });
         expect(rule('.jc-console .rrow:hover .rdots')).toMatchObject({ opacity: '1' });
-        expect(rule('.jc-console .rrow:focus-within .rdots')).toMatchObject({ opacity: '1' });
+        expect(rule('.jc-console .rrow:has(:focus-visible) .rdots')).toMatchObject({ opacity: '1' });
         // A row with no age keeps the dots' room, so they never cover an amber count; a busy plus looks off.
         expect(rule('.jc-console .recent-row .t:empty')).toMatchObject({ flex: 'none', width: '22px' });
         expect(rule('.jc-console .rbtn[disabled]')).toMatchObject({ color: 'var(--faint)', cursor: 'default' });
