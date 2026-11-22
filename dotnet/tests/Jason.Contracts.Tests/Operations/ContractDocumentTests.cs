@@ -16,7 +16,7 @@ public class ContractDocumentTests
         "id", "version", "l1", "intent",
         "reach", "reversibility", "approval", "approval_artefact", "approval_departs", "protective_floor",
         "approval_reason", "before_repeating", "idempotency_key", "per_item_results", "accepts_collection", "cost",
-        "cost_basis", "meter", "invariants", "preflight", "channel_arguments", "channel_templates", "route_channel_argument", "dispatch",
+        "cost_basis", "meter", "invariants", "preflight", "channel_arguments", "channel_templates", "route_channel_argument", "dispatch", "touch",
         "contact_projection",
         "precondition", "preview",
         "input_schema", "output_schema", "external_ids",

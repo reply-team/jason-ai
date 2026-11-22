@@ -25,6 +25,7 @@
   "channel_templates": null,
   "route_channel_argument": null,
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" },
+  "touch": false,
   "contact_projection": null,
   "precondition": "none",
   "preview": null,
