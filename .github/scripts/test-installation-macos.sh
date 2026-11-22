@@ -321,7 +321,10 @@ read_terminal_before() {
     say "before open: a new login shell of $shell answers the PATH '$answered', which $(if [ -s "$OUT/terminal-before-names-local-bin.txt" ]; then echo names; else echo 'does not name'; fi) ~/.local/bin; the profiles: $(tr '\t\n' ' ;' < "$OUT/terminal-before-profiles.txt")"
 }
 # The terminal command as the account's own new terminal finds it, after a start of this build's application: the
-# account's login shell as a login shell finds ~/.local/bin/jason saying the version $1, alone by that name. Then the
+# account's login shell as a login shell finds ~/.local/bin/jason first, saying the version $1, and alone by that name;
+# or, for an application Homebrew placed ($4, its carried jason), beside Homebrew's link to that same carried jason, which
+# the cask puts in Homebrew's bin by design: there every jason the shell lists, each place once (a runner's PATH may name
+# Homebrew's bin twice), is the wrapper or leads to $4 itself. Then the
 # profiles, by the PATH a new login shell answered before the open (read_terminal_before):
 #  - where it named ~/.local/bin already, the product writes none: the profiles the set-up's report says it wrote (the
 #    file $2) are none, every profile's hash is its hash before the open, and the report's done says no profile was
@@ -331,7 +334,7 @@ read_terminal_before() {
 # file: there the profiles the report says it wrote are said, and the leg fails only where that login shell does not find
 # jason.
 hold_account_terminal() {
-    local version="$1" written="${2:-}" record="${3:-}" shell found every profile listed name hashed now done_list said_done
+    local version="$1" written="${2:-}" record="${3:-}" homebrew_carried="${4:-}" shell found every profile listed name hashed now done_list said_done entry other
     shell="$(account_shell)"
     [ -n "$shell" ] || fail "the account's login shell could not be read (dscl . -read /Users/$USER UserShell)"
     found="$(within 60 "a new login shell of $shell finding jason" fresh_in "$shell" 'command -v jason; jason --version')" || true
@@ -340,7 +343,20 @@ hold_account_terminal() {
         zsh|bash)
             [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell of $shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
             [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell of $shell does not say $version: $found"
-            [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell of $shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+            if [ -z "$homebrew_carried" ]; then
+                [ "$(printf '%s\n' "$every" | grep -c .)" = 1 ] || fail "a new login shell of $shell finds more than one jason by that name: $(printf '%s\n' "$every" | tr '\n' ' ')"
+            else
+                # Each place once, in the shell's order; the first is the wrapper (held above), every other leads to the
+                # carried jason of the application Homebrew placed, by its real path, and none to anything else.
+                every="$(printf '%s\n' "$every" | awk 'NF && !seen[$0]++')"
+                other=""
+                while IFS= read -r entry; do
+                    [ -n "$entry" ] && [ "$entry" != "$WRAPPER" ] || continue
+                    [ "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$entry")" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$homebrew_carried")" ] || fail "a new login shell of $shell finds a jason at $entry that does not lead to $homebrew_carried, this build's carried jason: $(printf '%s\n' "$every" | tr '\n' ' ')"
+                    other="$other $entry"
+                done <<< "$every"
+                say "a new login shell of $shell lists $(printf '%s\n' "$every" | tr '\n' ' ')- the wrapper first, then${other:- nothing else}, which leads to $homebrew_carried, as Homebrew's link to an application it placed does"
+            fi
             [ -f "$OUT/terminal-before-profiles.txt" ] || fail "the PATH a new login shell answered before the open was not read (read_terminal_before)"
             if [ -s "$OUT/terminal-before-names-local-bin.txt" ]; then
                 [ -z "$written" ] || [ ! -s "$written" ] || [ -z "$(grep . "$written" || true)" ] || fail "a new login shell's PATH named ~/.local/bin before the open, and the set-up's report says it wrote the profiles $(tr '\n' ' ' < "$written")"
@@ -2633,7 +2649,8 @@ print(str(command.get("finds_this")).lower())' "$record" > "$OUT/by-hand-report.
     if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
     report_profiles "$record" "$OUT/by-hand-report-profiles.txt" || fail "the profiles in the set-up record at $record could not be read"
-    hold_account_terminal "$version" "$OUT/by-hand-report-profiles.txt" "$record"
+    # An application Homebrew placed (--placed: the cask's leg) has Homebrew's link to its carried jason as well.
+    hold_account_terminal "$version" "$OUT/by-hand-report-profiles.txt" "$record" "$(if [ "$built" = --placed ]; then printf '%s' "$carried"; fi)"
     say "~/.local/bin/jason is the application's wrapper running $carried"
 
     # The skills of the hosts found, recorded; the person's own quick-start left alone and named by jason status.
