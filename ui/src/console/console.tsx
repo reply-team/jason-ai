@@ -74,6 +74,7 @@ import {
     feedUnseen,
     here,
     keepLine,
+    sideAway,
     streamState,
     type Dock,
     type PanelName,
@@ -84,7 +85,7 @@ import {
 consoleShell.loaded = true;
 consoleShell.settingsSections = LiveSettingsSections;
 
-// The desktop's shell: a sidebar and one area. The sidebar's menu, its Recent and the palette are the only way about, and
+// The desktop's shell: a sidebar and one area. The sidebar's menu, its two sections (Agents, Chats) and the palette are the only way about, and
 // the area shows exactly one thing: Start, one chat, one of the panels the console draws itself from the Runtime API, or
 // one of the browser shell's screens. Nothing is closed, only chosen; every window opens on Start.
 
@@ -495,6 +496,15 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const [bound, setBound] = useState(false);
     // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
     const [sideOpen, setSideOpen] = useState(false);
+    // An act that shows something in the area from a menu over the drawer puts it away too.
+    useEffect(() => {
+        let first = true;
+        return effect(() => {
+            void sideAway.value;
+            if (first) first = false;
+            else setSideOpen(false);
+        });
+    }, []);
     // While it is over the area the page behind is out of reach, the sidebar takes the focus, Escape puts it away and gives
     // the focus back to its button, and a window that grows past the narrow edge leaves nothing of it standing.
     useEffect(() => {
@@ -562,7 +572,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             void conversations.value;
             untracked(retireShadowed);
         });
-        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Recent.
+        // The agent of a conversation the list of agents does not hold is read on its own, so an archived one leaves Agents.
         const unlisted = readUnlisted(api);
         return () => {
             updatesFollowed();
@@ -724,8 +734,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                         <aside
                             className={sideOpen ? 'side open' : 'side'}
                             onClickCapture={(event) => {
-                                if ((event.target as HTMLElement).closest('[data-action], a, button'))
-                                    setSideOpen(false);
+                                // A row's three dots open its menu over the drawer, as a right-click does: it stays open.
+                                const target = event.target as HTMLElement;
+                                if (target.closest('.rdots')) return;
+                                if (target.closest('[data-action], a, button')) setSideOpen(false);
                             }}
                         >
                             <Painted className="side-body" view={sideView} />

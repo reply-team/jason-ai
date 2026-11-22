@@ -1324,6 +1324,7 @@ public partial class PageClaimsTests
     /// fragment per family. When a count moves, the page changes, never this row.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "the README's counts are the tree's")]
     public void Every_count_the_readme_states_is_the_tree_s_own()
     {
         var root = Root();

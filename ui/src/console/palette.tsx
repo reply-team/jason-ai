@@ -132,7 +132,7 @@ function pages(): Built {
 }
 
 /**
- * Agents and chats the console already holds: each conversation as a Recent row opens it, found by its title and, for a
+ * Agents and chats the console already holds: each conversation as its row in the sidebar opens it, found by its title and, for a
  * campaign's, the campaign's name; and each agent of the Agents panel that has no conversation yet, opened as that
  * panel's row opens it.
  */

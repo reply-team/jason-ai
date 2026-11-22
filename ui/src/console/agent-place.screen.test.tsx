@@ -346,7 +346,12 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
             expect(within(shown()).getByRole('heading', { name: 'What should Jason do in Autumn?' })).toBeTruthy();
         });
     const autumnApi = () => api().answerAnyRequest('route.resolve', 'route.resolve/no-route');
-    const noAutumnRow = () => expect(within(recent()).queryByRole('button', { name: 'Autumn' })).toBeNull();
+    // Its row in AGENTS stands from the start, as the agent's, with no conversation behind it: drawing it makes none.
+    const noAutumnRow = () => {
+        const row = within(recent()).getByRole('button', { name: 'Autumn' });
+        expect(row.getAttribute('data-action')).toBe('side.agent');
+        expect(row.querySelector('.t')?.textContent).toBe('');
+    };
 
     it.each(['#/campaigns/cmp_2', '#/campaigns/cmp_2/chat'])(
         'at %s, by a reload or a deep link, draws its Chat with an empty thread and the composer, and makes nothing',

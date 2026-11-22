@@ -17,6 +17,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { resetRecent } from './recent';
 import { chats, conversations, here } from './state';
+import { sideRow } from '../test/side-rows';
 
 // The console's one area beside the sidebar: no tab strip and no right column, exactly one thing shown at a time, chosen
 // from the menu, Recent, the palette, a desktop command or a link, and marked in the sidebar. Read against the recorded
@@ -59,8 +60,7 @@ async function renderConsole(
 
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const menu = () => within(side().getByRole('navigation', { name: 'Menu' }));
-const recentRow = (name: string) =>
-    within(side().getByRole('navigation', { name: 'Conversations' })).getByRole('button', { name });
+const recentRow = (name: string) => sideRow(name);
 /** The sidebar's controls that say they stand for what is shown. */
 const marked = () =>
     Array.from(document.querySelectorAll<HTMLElement>('.side [aria-current="true"]'), (each) =>
@@ -146,11 +146,11 @@ describe('the one area', () => {
         expect(document.querySelectorAll('.area > .pane:not([hidden])')).toHaveLength(1);
     });
 
-    it('keeps a chat left and chosen again from Recent as it was: the words typed, what arrived meanwhile and the message that waits', async () => {
+    it('keeps a chat left and chosen again from its row as it was: the words typed, what arrived meanwhile and the message that waits', async () => {
         const desktop = await renderConsole(seedSpring);
-        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        fireEvent.click(await waitFor(() => recentRow('Spring')));
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
-        expect(recentRow('Q4 push').getAttribute('aria-current')).toBe('true');
+        expect(recentRow('Spring').getAttribute('aria-current')).toBe('true');
         expect(marked()).toHaveLength(1);
         type('Go');
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -162,11 +162,11 @@ describe('the one area', () => {
         // The person goes to Needs you: the chat is out of sight, and Recent marks nothing.
         fireEvent.click(menu().getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(shown()).toBe('needs'));
-        expect(recentRow('Q4 push').getAttribute('aria-current')).toBeNull();
+        expect(recentRow('Spring').getAttribute('aria-current')).toBeNull();
         expect(screen.queryByRole('textbox', { name: 'Your message' })).toBeNull();
         flush(() => desktop.emit('conv_s', { kind: 'text', text: 'Arrived while you were away' }));
         // Chosen again, it has all of it.
-        fireEvent.click(recentRow('Q4 push'));
+        fireEvent.click(recentRow('Spring'));
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
         expect(box().value).toBe('Half a thought');
         expect(within(shownPane()!).getByText('Arrived while you were away')).toBeTruthy();
@@ -176,7 +176,7 @@ describe('the one area', () => {
 
     it('keeps drawn only the chat shown and the two before it, and a chat chosen again after that still has all it had', async () => {
         const desktop = await renderConsole(seedFour);
-        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        fireEvent.click(await waitFor(() => recentRow('Spring')));
         await waitFor(() => expect(shown()).toBe('chat:conv_1'));
         type('Go');
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -194,7 +194,7 @@ describe('the one area', () => {
         expect(document.querySelector('[data-pane="chat:conv_1"]')).toBeNull();
         expect(document.querySelectorAll('.area > .pane[data-pane^="chat:"]')).toHaveLength(3);
         expect(repeatedIds()).toEqual([]);
-        fireEvent.click(recentRow('Q4 push'));
+        fireEvent.click(recentRow('Spring'));
         await waitFor(() => expect(shown()).toBe('chat:conv_1'));
         expect(box().value).toBe('Half a thought');
         for (const title of fourTitles.slice(1))
@@ -220,7 +220,7 @@ describe('the one area', () => {
 
     it('shows Start when the chat shown is taken away', async () => {
         const desktop = await renderConsole(seedSpring);
-        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        fireEvent.click(await waitFor(() => recentRow('Spring')));
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
         // An agent's conversation is removed from the "…" of the agent's header over it.
         const header = await waitFor(() => document.querySelector<HTMLElement>('.agent-head')!);

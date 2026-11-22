@@ -82,7 +82,7 @@ beforeEach(() => {
 });
 
 describe('the Feed', () => {
-    it('is asked of the desktop once as the console opens, and drawn in the sidebar under Needs you, above Recent and apart from the list', async () => {
+    it('is asked of the desktop once as the console opens, and drawn in the sidebar under Needs you, above AGENTS and CHATS and apart from them', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(feedButton().textContent?.trim()).toBe('Feed'));
         // The first ask of the page's load also has the desktop read back what was written while no page followed.
@@ -90,8 +90,8 @@ describe('the Feed', () => {
         const order = Array.from(side().querySelectorAll('button')).map((each) => each.textContent?.trim());
         // Directly under Needs you.
         expect(order.indexOf('Feed')).toBe(order.findIndex((each) => each?.startsWith('Needs you')) + 1);
-        const recent = within(side()).getByText('Recent');
-        expect(feedButton().compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const sections = within(side()).getByRole('navigation', { name: 'Conversations' });
+        expect(feedButton().compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         // The window opens on Start, and no chat is made before the person sends one.
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(calls(desktop, 'chat.create')).toEqual([]);

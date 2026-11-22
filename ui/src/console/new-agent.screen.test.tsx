@@ -24,7 +24,8 @@ import { startWaiting } from './start';
 import { forgetWaiting } from './waiting';
 import { activePanel, chats, conversations, feedId, here, lines, setup, setupError } from './state';
 
-// New GTM agent makes the agent at the click: the desktop makes its campaign and its conversation, and the agent's place
+// The plus over AGENTS (New agent; the palette's New GTM agent takes the same road) makes the agent at the click: the
+// desktop makes its campaign and its conversation, its row comes at the top of AGENTS, marked, and the agent's place
 // opens on its Chat, where the empty chat asks Start's question with Start's box, pickers and chips. A draft with no
 // brief and no one in it offers no Start yet. A click the desktop refused says why in the sidebar, with Try again, which
 // sends the same click.
@@ -97,7 +98,8 @@ const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const head = () => document.querySelector<HTMLElement>('.agent-head');
 const made = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.createAgent');
 const shownPane = () => document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
-const click = () => fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
+const click = () => fireEvent.click(side().getByRole('button', { name: 'New agent' }));
+const agentsList = () => within(side().getByRole('group', { name: 'Agents' }));
 
 /** The agent's place once the click made it: its header, and its Chat asking Start's question. */
 async function opened(): Promise<{ header: HTMLElement; opening: HTMLElement }> {
@@ -165,14 +167,15 @@ describe.each<Place>(['window', 'tab'])('New GTM agent in the %s', (place) => {
         expect(opening.compareDocumentPosition(shownPane().querySelector('.sugs')!)).toBe(
             Node.DOCUMENT_POSITION_FOLLOWING,
         );
-        // The conversation is kept from the click: Recent lists it at once.
-        await waitFor(() =>
-            expect(
-                within(side().getByRole('navigation', { name: 'Conversations' })).getByRole('button', {
-                    name: 'New agent 1',
-                }),
-            ).toBeTruthy(),
-        );
+        // The conversation is kept from the click: AGENTS lists it at once, at the top, marked as the place in front.
+        await waitFor(() => expect(agentsList().getByRole('button', { name: 'New agent 1' })).toBeTruthy());
+        const first = side().getByRole('group', { name: 'Agents' }).querySelector('.recent-row')!;
+        expect(first.getAttribute('aria-label')).toBe('New agent 1');
+        expect(first.getAttribute('aria-current')).toBe('true');
+        // An agent's conversation is no chat of CHATS.
+        expect(
+            within(side().getByRole('group', { name: 'Chats' })).queryByRole('button', { name: 'New agent 1' }),
+        ).toBeNull();
     });
 
     it('sends the first message from the question into the agent’s own conversation, and the chat takes its place', async () => {
@@ -439,11 +442,11 @@ describe('The bar’s rule in its other places, on the recorded draft', () => {
 });
 
 describe('The agent made at the click, everywhere the console lists agents', () => {
-    it('is a plain draft in Agents, one draft row in Recent, not among the Dashboard’s running agents, and nothing in Needs you', async () => {
+    it('is a plain draft in Agents, one draft row in AGENTS, not among the Dashboard’s running agents, and nothing in Needs you', async () => {
         await renderAt('window');
         click();
         await opened();
-        const recent = within(side().getByRole('navigation', { name: 'Conversations' }));
+        const recent = agentsList();
         await waitFor(() => expect(recent.getAllByRole('button', { name: 'New agent 1' })).toHaveLength(1));
         // Its row's dot is the draft's, once the list of agents holds it.
         await waitFor(() =>

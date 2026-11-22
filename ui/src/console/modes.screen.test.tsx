@@ -13,8 +13,9 @@ import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
 import { openConversation } from './chat';
 import { Console } from './console';
-import { chats, conversations } from './state';
+import { chats, conversations, currentChat } from './state';
 import { choicesOf, chooseIn, currentOf, menuButton, waitForMenus } from '../test/menus';
+import { sideRow } from '../test/side-rows';
 
 // A chat's access mode: the menu beside the composer, Full access disabled where the desktop says it cannot be chosen,
 // and the line under the composer, drawn from the mode the next turn runs in as the desktop hands it, and from nothing
@@ -1043,9 +1044,10 @@ describe('the empty chat’s sentence about approval', () => {
                 .answerAnyRequest('approval.list', () => 'approval.list/empty')
                 .answerAnyRequest('decision.list', () => 'decision.list/empty'),
         );
-        const nav = () => document.querySelector<HTMLElement>('.side nav[aria-label="Conversations"]')!;
-        await waitFor(() => within(nav()).getByRole('button', { name: 'Autumn' }));
-        fireEvent.click(within(nav()).getByRole('button', { name: 'Autumn' }));
+        // C1's row shows its agent's name, Summer referrals.
+        await waitFor(() => sideRow('Summer referrals', 'agents'));
+        fireEvent.click(sideRow('Summer referrals', 'agents'));
+        await waitFor(() => expect(currentChat.value).toBe('conv_01JDKEPT0000000000000000C1'));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Autumn?' }));
         expect(said('What should Jason do in Autumn?')).toBeNull();
     });
@@ -1070,13 +1072,13 @@ describe('the empty chat’s sentence about approval', () => {
                 .answerAnyRequest('approval.list', () => 'approval.list/empty')
                 .answerAnyRequest('decision.list', () => 'decision.list/empty'),
         );
-        const nav = () => document.querySelector<HTMLElement>('.side nav[aria-label="Conversations"]')!;
-        const open = (name: string) => fireEvent.click(within(nav()).getByRole('button', { name }));
-        await waitFor(() => within(nav()).getByRole('button', { name: 'Spring' }));
+        const open = (name: string) => fireEvent.click(sideRow(name));
+        await waitFor(() => sideRow('Spring'));
         open('Spring');
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         expect(said('What should Jason do in Spring?')).not.toBeNull();
-        open('Summer');
+        // Summer's row shows its agent's name, Autumn.
+        open('Autumn');
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Summer?' }));
         expect(said('What should Jason do in Summer?')).toBeNull();
         // Spring's mode moves while it is out of sight; it is drawn from the new mode the moment it is back.

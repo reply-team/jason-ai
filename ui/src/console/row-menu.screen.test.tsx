@@ -110,7 +110,8 @@ async function renderConsole(
 }
 
 const side = () => document.querySelector<HTMLElement>('.side')!;
-const recent = () => within(side()).getByRole('navigation', { name: 'Conversations' });
+/** AGENTS and CHATS, which scroll together with the menu above them. */
+const recent = () => side().querySelector<HTMLElement>('.sscroll')!;
 const row = (name: string) => waitFor(() => within(recent()).getByRole('button', { name }));
 const menu = () => document.querySelector<HTMLElement>('.row-menu');
 const words = (at: HTMLElement) =>
@@ -184,7 +185,7 @@ afterEach(() => {
     mode.value = 'live';
 });
 
-describe('The menu on a row of Recent', () => {
+describe('The menu on a row of AGENTS or CHATS', () => {
     it('draws its words, titles and the header’s “…” from the locale table, as another language would give them', async () => {
         // No second language ships yet: this stands one in, by the table's own keys, for the length of the test.
         const table = en as unknown as Record<string, string>;
@@ -864,7 +865,7 @@ describe('The menu on a row of Recent', () => {
         }
     });
 
-    it('closes when Recent scrolls or the window changes size', async () => {
+    it('closes when the sections scroll or the window changes size', async () => {
         await renderConsole();
         fireEvent.contextMenu(await row('Spring'));
         await waitFor(() => menu()!);

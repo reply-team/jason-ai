@@ -130,8 +130,10 @@ beforeEach(() => {
 /** Opens the Campaigns panel and the chat of the campaign named, from its row, as a person does. */
 async function openCampaignChat(desktop: StubDesktop, name: string): Promise<void> {
     flush(() => desktop.command('navigate.campaigns'));
-    await waitFor(() => screen.getByText(name));
-    fireEvent.click(within(screen.getByText(name).closest('tr')!).getByRole('button', { name: 'Chat' }));
+    // The Agents page's row: the sidebar's row of the agent shows the same name.
+    const row = () => screen.getAllByText(name).find((each) => each.closest('tr') !== null);
+    await waitFor(() => expect(row()).toBeTruthy());
+    fireEvent.click(within(row()!.closest('tr')!).getByRole('button', { name: 'Chat' }));
     await waitFor(() => screen.getByRole('form', { name: 'Message' }));
 }
 

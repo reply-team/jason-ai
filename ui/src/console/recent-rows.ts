@@ -3,20 +3,27 @@ import type { DesktopConversation } from '../platform/desktop';
 import { ageOf } from './live';
 import { countWords, needsCount, type ChatWait } from './needs-model';
 
-// Pure: the rows under "Recent" from what the console already holds. Nothing here reads the runtime or draws markup.
+// Pure: the rows of the sidebar's two sections, AGENTS and CHATS, from what the console already holds. Nothing here
+// reads the runtime or draws markup. A conversation is in exactly one section: an agent's in AGENTS, as that agent's
+// row, and one about no agent in CHATS.
 
-/** The entries of the filter, in the order its menu lists them. */
+/** The entries of AGENTS' filter, in the order its menu lists them. */
 export const recentFilters = ['all', 'needs', 'live', 'paused', 'draft'] as const;
 export type RecentFilter = (typeof recentFilters)[number];
 
-/** How many rows are shown at first, and how many each "Load more" adds. */
+/** How many rows of CHATS are shown at first, and how many each "Load more" adds. */
 export const pageSize = 10;
 
 /** What a row's dot says: something waits on the person, else the agent's state; `none` for a chat with no agent. */
 export type RecentDot = 'waiting' | 'active' | 'paused' | 'draft' | 'none';
 
 export interface RecentRow {
+    /** The row's key: its conversation's id, or the agent's own for an agent with no conversation yet. */
     id: string;
+    /** The agent the row is about; null for a chat with no agent. */
+    campaignId: string | null;
+    /** The row's conversation; null for an agent with no conversation yet. */
+    conversationId: string | null;
     title: string;
     /** The name of the agent the chat is about; null for a chat with no agent. */
     agent: string | null;
@@ -38,6 +45,12 @@ export interface RecentInput {
     conversations: readonly DesktopConversation[];
     /** The title a chat the console holds says now, by conversation id. */
     titles: (id: string) => string | undefined;
+    /**
+     * The agent a chat the console holds is about now, by conversation id: a hand-over reaches the chat before the
+     * desktop's list says so. Null for a chat it holds about no agent, undefined for one it does not hold; absent for
+     * none held.
+     */
+    campaignOf?: (id: string) => string | null | undefined;
     /** Whether a chat the console holds has a turn running now; undefined for one it does not hold. */
     running?: (id: string) => boolean | undefined;
     campaigns: readonly CampaignSummary[];
@@ -58,6 +71,17 @@ export interface RecentInput {
 
 const states = ['active', 'paused', 'draft'] as const;
 
+/** An agent as the list of agents holds it, else as it was read on its own; else none. */
+function agentOf(input: RecentInput, id: string): CampaignSummary | undefined {
+    return input.campaigns.find((each) => each.id === id) ?? input.agentRead?.(id);
+}
+
+/** A moment as milliseconds, 0 for none or one that cannot be read. */
+function msOf(moment: string | undefined): number {
+    const ms = moment === undefined ? NaN : Date.parse(moment);
+    return Number.isNaN(ms) ? 0 : ms;
+}
+
 /**
  * Every conversation except the Feed and those whose agent is archived, newest first as the desktop listed them, with its
  * agent's state and what waits. An archived agent's conversation is reached from that agent's own place; one whose agent
@@ -73,17 +97,14 @@ export function recentRows(input: RecentInput): RecentRow[] {
     return input.conversations
         .filter((conversation) => conversation.main !== true)
         .flatMap((conversation) => {
-            const agent =
-                conversation.campaignId === null
-                    ? undefined
-                    : (input.campaigns.find((each) => each.id === conversation.campaignId) ??
-                      input.agentRead?.(conversation.campaignId));
+            const campaignId = input.campaignOf?.(conversation.id) ?? conversation.campaignId;
+            const agent = campaignId === null ? undefined : agentOf(input, campaignId);
             if (agent?.status === 'archived') return [];
             const count = agent
                 ? needsCount(waits, agent.id)
                 : {
                       n:
-                          conversation.campaignId === null
+                          campaignId === null
                               ? (waits.chats ?? []).filter((each) => each.conversationId === conversation.id).length
                               : 0,
                       more: false,
@@ -93,9 +114,11 @@ export function recentRows(input: RecentInput): RecentRow[] {
             return [
                 {
                     id: conversation.id,
+                    campaignId,
+                    conversationId: conversation.id,
                     title: input.titles(conversation.id) ?? conversation.title,
                     agent: agent?.name ?? null,
-                    aboutAgent: conversation.campaignId !== null,
+                    aboutAgent: campaignId !== null,
                     waiting,
                     waitingWords: countWords(count),
                     state: state ?? null,
@@ -105,6 +128,68 @@ export function recentRows(input: RecentInput): RecentRow[] {
                 } satisfies RecentRow,
             ];
         });
+}
+
+/**
+ * AGENTS: each agent once, by its campaign's name, the one active most recently first: by the later of its newest
+ * conversation's last activity and the agent's own last change, so an agent made anywhere, by the console, an AI's turn
+ * or the command line, stands on top. An agent's row opens its newest conversation, as its Chat does; its other
+ * conversations are its own, never a chat of CHATS. An agent with no conversation yet has a row of its own, by its name.
+ */
+export function agentRows(input: RecentInput): RecentRow[] {
+    const seen = new Set<string>();
+    const rows: { row: RecentRow; moment: number }[] = [];
+    const updated = new Map(input.conversations.map((each) => [each.id, msOf(each.updatedAt)]));
+    const changed = (id: string): number => {
+        const agent = agentOf(input, id);
+        return msOf(agent?.updated_at ?? agent?.created_at);
+    };
+    for (const row of recentRows(input)) {
+        if (row.campaignId === null || seen.has(row.campaignId)) continue;
+        seen.add(row.campaignId);
+        // An agent is named by its campaign's name wherever the console holds it: a title its conversation carries never
+        // masks a rename. One whose agent is not read yet keeps its conversation's title.
+        rows.push({
+            row: row.agent === null ? row : { ...row, title: row.agent },
+            moment: Math.max(updated.get(row.id) ?? 0, changed(row.campaignId)),
+        });
+    }
+    const waits = {
+        approvals: input.approvals,
+        questions: input.questions,
+        chats: input.chats ?? null,
+        more: input.more ?? { approvals: false, questions: false },
+    };
+    for (const agent of input.campaigns) {
+        if (agent.status === 'archived' || seen.has(agent.id)) continue;
+        seen.add(agent.id);
+        const count = needsCount(waits, agent.id);
+        const state = states.find((each) => each === agent.status) ?? null;
+        rows.push({
+            moment: changed(agent.id),
+            row: {
+                id: agent.id,
+                campaignId: agent.id,
+                conversationId: null,
+                title: agent.name,
+                agent: agent.name,
+                aboutAgent: true,
+                waiting: count.n,
+                waitingWords: countWords(count),
+                state,
+                running: false,
+                dot: count.n > 0 ? 'waiting' : (state ?? 'none'),
+                age: '',
+            },
+        });
+    }
+    // Most recent first; rows of one moment keep the order they were found in.
+    return rows.sort((one, two) => two.moment - one.moment).map((each) => each.row);
+}
+
+/** CHATS: the conversations about no agent, the newest first as the desktop listed them. */
+export function chatRows(input: RecentInput): RecentRow[] {
+    return recentRows(input).filter((row) => row.campaignId === null);
 }
 
 /** Whether a row belongs under a filter entry. A chat with no agent belongs under All alone. */
@@ -123,21 +208,14 @@ export function inFilter(row: RecentRow, filter: RecentFilter): boolean {
     }
 }
 
-/** Whether a row's title holds the text, whatever the case; no text matches every row. */
-export function matches(row: RecentRow, text: string): boolean {
-    const wanted = text.trim().toLowerCase();
-    if (wanted === '') return true;
-    return row.title.toLowerCase().includes(wanted);
-}
-
-/** The rows to draw: all that match while a search text or a filter is active, else the first `limit`. */
+/** The rows to draw: all that the filter keeps while it is not All, else the first `limit`. */
 export function shownRows(
     rows: readonly RecentRow[],
     filter: RecentFilter,
-    text: string,
     limit: number,
 ): { rows: RecentRow[]; more: boolean } {
-    const narrowed = filter !== 'all' || text.trim() !== '';
-    const found = rows.filter((row) => inFilter(row, filter) && matches(row, text));
-    return narrowed ? { rows: found, more: false } : { rows: found.slice(0, limit), more: found.length > limit };
+    const found = rows.filter((row) => inFilter(row, filter));
+    return filter !== 'all'
+        ? { rows: found, more: false }
+        : { rows: found.slice(0, limit), more: found.length > limit };
 }

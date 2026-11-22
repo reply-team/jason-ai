@@ -120,7 +120,7 @@
     margin: 4px 6px;
     background: var(--line);
 }
-/* The menu on a row of Recent stands where it was opened, inside the window (`row-menu.tsx`). */
+/* The menu on a row of AGENTS or CHATS stands where it was opened, inside the window (`row-menu.tsx`). */
 .jc-console .row-menu {
     position: fixed;
     top: var(--row-menu-y, 0);
