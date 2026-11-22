@@ -433,7 +433,8 @@ campaign, so a reserve may hold fewer people a send can reach than its number sa
 **The reserve step** runs in every scan, for each active campaign that has a threshold, after the respond step and
 before the summon, so a line saying the reserve is low summons a review in the same scan. It counts only when something
 that can change the number was written since its last look: a member added or removed (`contacts_added`,
-`contacts_removed`), a page of a search's people landed (`audience_people_landed`, §10), work created about somebody (`workitem_created`), or a setting of the campaign changed
+`contacts_removed`), a line ended or reopened (`contacts_finished`, `contacts_reopened`; a line continued changes
+nothing, a paused person being still untouched), a page of a search's people landed (`audience_people_landed`, §10), work created about somebody (`workitem_created`), or a setting of the campaign changed
 (`campaign_updated`, the threshold among them). It keeps its place in the chronicle as a watermark on the campaign,
 moved at every look that found new lines, so a scan with nothing new costs one read and counts nobody.
 

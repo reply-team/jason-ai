@@ -133,6 +133,40 @@ public class ReserveCounterTests
     }
 
     /// <summary>
+    /// Ending a line takes the person out of the reserve and reopening it puts them back, so each verb's line is one the
+    /// step recounts on by itself: a finish alone says the reserve is low, and the reopen alone that it recovered.
+    /// </summary>
+    [Fact]
+    public async Task A_finish_alone_recounts_the_reserve_and_a_reopen_alone_recounts_it_again()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness, people: 5, threshold: 5);
+        Assert.Equal(0, await harness.ReserveAsync(Ct));
+        var person = (await MembersAsync(harness, campaign))[0];
+
+        await using (var db = harness.Open())
+        {
+            await Lines(harness, db).FinishAsync(new FinishContactsRequest(campaign, [person], new ActorRef(ActorType.Role, "manager"), "ran its course"), Ct);
+        }
+
+        Assert.Equal(1, await harness.ReserveAsync(Ct));
+        Assert.Equal("""{"untouched":4,"threshold":5}""", Assert.Single(await ReserveLinesAsync(harness, campaign)).New!.ToJsonString());
+
+        await using (var db = harness.Open())
+        {
+            await Lines(harness, db).ReopenAsync(new ReopenContactsRequest(campaign, [person], null, new ActorRef(ActorType.Human, "Marta"), "she wrote again"), Ct);
+        }
+
+        Assert.Equal(1, await harness.ReserveAsync(Ct));
+        var lines = await ReserveLinesAsync(harness, campaign);
+        Assert.Equal([JournalKinds.AudienceReserveLow, JournalKinds.AudienceReserveRecovered], lines.Select(line => line.Kind));
+        Assert.Equal("""{"untouched":5,"threshold":5}""", lines[1].New!.ToJsonString());
+    }
+
+    private static MembershipService Lines(DispatchHarness harness, JasonDbContext db) =>
+        new(db, new JournalWriter(harness.Clock), harness.Clock, TestCanceller.New(harness.Clock));
+
+    /// <summary>
     /// Under is strictly under: a reserve at its threshold is said nothing. A campaign with no threshold, or one that is
     /// not live, is not counted at all.
     /// </summary>
