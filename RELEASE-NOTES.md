@@ -133,9 +133,9 @@ tab are gone. A web interface of your own keeps its door: the runtime serves you
   the window keeps its place unless `misc:focus_on_activate` is set.
 - **On macOS, a click on Jason's notification opens nothing of Jason's**, as before; `jason ui open` opens Jason
   Desktop at what waits.
-- **On Windows, a click on Jason's notification with no Jason Desktop installed opens nothing and says nothing.** Why
-  goes only to the output of the `jason` the click starts, which nobody reads; on Linux a second notification says it,
-  and `jason ui open` in a terminal refuses with `desktop_not_installed`.
+- **On Windows, with no Jason Desktop registered or its program gone, a click on Jason's notification opens nothing,
+  and nothing that stays on screen says why.** The reason goes only to the output of the `jason` the click starts; on
+  Linux a second notification says it, and `jason ui open` in a terminal refuses with `desktop_not_installed`.
 - **On Linux, a click reaches Jason only while its notification waits.** At most ten wait at once, a newer one ending
   the oldest one's wait; the runtime ends every wait when it stops, so a notification shown before a stop opens
   nothing; and notify-send before 0.7.10, or gdbus where there is no notify-send, shows a notification no click

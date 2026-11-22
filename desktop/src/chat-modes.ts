@@ -239,9 +239,9 @@ export interface TurnPlace {
  * not `recorded`: the one place this is decided. A send runs its turn by it (`Chat.send`), and each host in the status
  * hands the page its answers (`Setup.status`, `runs`), so the line under the composer and the menu's check show the
  * mode the next turn runs in, and the page works none of it out. Full access runs in Ask first from a browser tab
- * (unreachable since 0.49.3), while this version does not offer it, where Claude Code's bypass is not available (`bypass`, as `bypassLeadsTo`
- * decides it), and on a Claude Code below its floor of Full access or whose version could not be read, the first of
- * these that holds being the one said;
+ * (unreachable since 0.49.3), while this version does not offer it, where Claude Code's bypass is not available
+ * (`bypass`, as `bypassLeadsTo` decides it), and on a Claude Code below its floor of Full access or whose version could
+ * not be read, the first of these that holds being the one said;
  * on Codex it runs as itself, with no sandbox, held to neither Claude Code's bypass nor its floor. Auto-edit runs in Ask
  * first on Codex. Every other mode runs as itself.
  */

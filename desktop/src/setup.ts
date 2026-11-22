@@ -128,8 +128,9 @@ export interface HostState {
     /**
      * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
      * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`, unreachable since 0.49.3).
-     * A mode not named runs as itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this listing, so the page
-     * draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that does not drive the chat.
+     * A mode not named runs as itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this
+     * listing, so the page draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that
+     * does not drive the chat.
      */
     runs: { window: TurnSteps; tab: TurnSteps };
     /**
