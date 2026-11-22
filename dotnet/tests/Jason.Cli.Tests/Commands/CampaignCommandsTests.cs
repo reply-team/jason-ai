@@ -837,7 +837,8 @@ public class CampaignCommandsTests
         var campaign = JsonSerializer.Serialize(
             new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50,
                 SendModes: new SendModesDto(SendMode.Automatic, null),
-                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default))),
+                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default)),
+                DeepReviewDueAt: Moment.AddDays(1)),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -854,8 +855,9 @@ public class CampaignCommandsTests
         Assert.Contains("Profile:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
 
-        // So is the reserve it keeps, since the dispatcher counts against it.
+        // So is the reserve it keeps, since the dispatcher counts against it, and when its next deep review comes.
         Assert.Matches("(?m)^Reserve: +threshold 50 untouched\\r?$", cli.Text);
+        Assert.Matches("(?m)^Deep review: +2026-09-15 10:00:00 UTC\\r?$", cli.Text);
 
         // And how a send to each kind of contact goes now, with where that comes from.
         Assert.Matches("(?m)^Cold sends: +automatic, this campaign's own\\r?$", cli.Text);

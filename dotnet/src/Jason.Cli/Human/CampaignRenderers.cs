@@ -46,6 +46,12 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
+        // The next moment of the deep review's grid, where the campaign has one: it has been live.
+        if (campaign.DeepReviewDueAt is { } deep)
+        {
+            lines.Add(Line("Deep review:", RenderText.Moment(deep)));
+        }
+
         if (campaign.AudienceThreshold is { } threshold)
         {
             lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
