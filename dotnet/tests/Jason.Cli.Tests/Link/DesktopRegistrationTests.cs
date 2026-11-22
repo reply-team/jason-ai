@@ -9,6 +9,8 @@ namespace Jason.Cli.Tests.Link;
 /// </summary>
 public sealed class DesktopRegistrationTests : IDisposable
 {
+    private const string LinuxRow = "A Linux row: xdg-open finds a program by a bare name and an execute bit as Linux does, and an entry reads a backslash as an escape; CI's Linux leg runs it.";
+
     private readonly TempPaths _dir = new();
 
     private string Root => _dir.Paths.Root;
@@ -78,6 +80,7 @@ public sealed class DesktopRegistrationTests : IDisposable
     [InlineData("none", null, CliErrors.DesktopNotInstalled)]
     public void On_linux_the_desktop_is_what_xdg_open_would_run_for_the_scheme(string state, string? runs, string? refusal)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), LinuxRow);
         var xdg = new FakeXdg(Root);
         var deb = Executable(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
         var appImage = Executable(Path.Combine(Root, "home", "Applications", "jason-desktop-linux-x64.AppImage"));
@@ -161,6 +164,7 @@ public sealed class DesktopRegistrationTests : IDisposable
     [Fact]
     public void On_linux_links_that_go_elsewhere_are_refused_in_words_that_say_where_and_how_back()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), LinuxRow);
         var deb = Executable(Path.Combine(Root, "opt", "Jason", "jason-desktop-app"));
         var other = new FakeXdg(Root);
         Executable(Path.Combine(other.Bin, "firefox"));
@@ -198,6 +202,7 @@ public sealed class DesktopRegistrationTests : IDisposable
     [Fact]
     public void On_linux_an_entry_xdg_open_cannot_start_for_its_quoted_path_is_refused_in_its_own_words()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), LinuxRow);
         var xdg = new FakeXdg(Root);
         var appImage = Executable(Path.Combine(Root, "home", "My Apps", "jason-desktop-linux-x64.AppImage"));
         xdg.Own("jason-desktop.desktop", Entry($"Exec=\"{appImage}\" -- %U", "MimeType=x-scheme-handler/jason-desktop;")).OwnCache("jason-desktop.desktop");

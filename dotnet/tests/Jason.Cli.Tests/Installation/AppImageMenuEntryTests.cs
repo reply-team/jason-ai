@@ -60,6 +60,7 @@ public sealed class AppImageMenuEntryTests : IDisposable
     [InlineData("missing", "; update-desktop-database is not here to write the folder's cache, so GNOME may not find it until something does")]
     public async Task An_entry_in_0_49_1_s_form_is_brought_up_to_date_and_the_desktop_then_takes_its_links(string cache, string said)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A Linux row: an entry quotes a path that holds a backslash, as every Windows path does, and xdg-open starts no quoted program; CI's Linux leg runs it.");
         var file = Path.Combine(Root, "home", "Applications", "jason-desktop-linux-x64.AppImage");
         Executable(file);
         var applications = Directory.CreateDirectory(Path.Combine(Root, "home", ".local", "share", "applications")).FullName;

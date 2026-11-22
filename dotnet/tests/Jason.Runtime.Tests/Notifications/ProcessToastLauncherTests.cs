@@ -167,20 +167,36 @@ public sealed class ProcessToastLauncherTests
         var result = await new ProcessToastLauncher().LaunchAsync(launch, TimeSpan.FromSeconds(5), Ct);
 
         Assert.True(result.TimedOut);
-        using var child = Process.GetProcessById(int.Parse(File.ReadAllText(pidFile), CultureInfo.InvariantCulture));
+        using var child = Running(int.Parse(File.ReadAllText(pidFile), CultureInfo.InvariantCulture));
         try
         {
-            var ended = child.WaitForExit(TimeSpan.FromSeconds(3));
+            var ended = child is null || child.WaitForExit(TimeSpan.FromSeconds(3));
             Assert.Equal(killsTree, ended);
         }
         finally
         {
-            if (!child.HasExited)
+            if (child is { HasExited: false })
             {
                 child.Kill();
             }
 
             File.Delete(pidFile);
+        }
+    }
+
+    /// <summary>
+    /// The process of an id, or null where none runs by it any more: the tree's kill may have ended the child, and the system
+    /// reaped it, before the row looks it up.
+    /// </summary>
+    private static Process? Running(int id)
+    {
+        try
+        {
+            return Process.GetProcessById(id);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 
