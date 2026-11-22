@@ -19,6 +19,9 @@
   ],
   "layouts": {
     "1": {
+      "autostart_default_file": "autostart/default.json",
+      "autostart_directory": "autostart",
+      "autostart_off_file": "autostart/off.json",
       "backups_directory": "state/backups",
       "config_directory": "config",
       "database_file": "state/jason.db",
@@ -43,6 +46,9 @@
       "user_settings_file_holds_secrets": true
     },
     "2": {
+      "autostart_default_file": "autostart/default.json",
+      "autostart_directory": "autostart",
+      "autostart_off_file": "autostart/off.json",
       "backups_directory": "state/backups",
       "config_directory": "config",
       "database_file": "state/jason.db",

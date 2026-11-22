@@ -32,11 +32,29 @@ public interface IManagerRecords
     bool HomebrewReceipt(string keg);
 
     /// <summary>
+    /// Homebrew's cask: what <c>&lt;prefix&gt;/Caskroom/jason/.metadata</c> records of the cask <c>jason</c> it installed
+    /// under <paramref name="prefix"/>, or null where it records nothing (<see cref="ManagerRecords.ReadHomebrewCask"/>).
+    /// </summary>
+    HomebrewCaskRecord? HomebrewCask(string prefix);
+
+    /// <summary>
     /// winget: this account's uninstall entries whose names begin with <paramref name="packageIdentifier"/>, with the
     /// two values the rule reads from each.
     /// </summary>
     IReadOnlyList<WingetRegistration> WingetRegistrations(string packageIdentifier);
 }
+
+/// <summary>
+/// What Homebrew recorded when it installed the cask <c>jason</c>: the prefix it is under, the folder it put the
+/// application into where the install named one (<c>--appdir</c>), and whether its receipt names the application among
+/// what an uninstall takes off.
+/// </summary>
+/// <param name="Prefix">The Homebrew prefix whose <c>Caskroom</c> holds the record.</param>
+/// <param name="AppDir">The <c>appdir</c> the install was explicitly given, or null for Homebrew's default.</param>
+/// <param name="NamesTheApplication">
+/// False only where the receipt lists <c>uninstall_artifacts</c> and none of them is the <c>app</c> <c>Jason.app</c>.
+/// </param>
+public sealed record HomebrewCaskRecord(string Prefix, string? AppDir, bool NamesTheApplication);
 
 /// <summary>The records this build knows how to read.</summary>
 public static class ManagerRecords
@@ -82,9 +100,86 @@ public static class ManagerRecords
         }
     }
 
+    /// <summary>
+    /// What <c>&lt;prefix&gt;/Caskroom/jason/.metadata/INSTALL_RECEIPT.json</c> records, read as the keg's receipt is: a
+    /// JSON object naming <c>homebrew_version</c>, or no record. Its <c>uninstall_artifacts</c>, where it lists them, must
+    /// name the <c>app</c> <c>Jason.app</c>; <c>.metadata/config.json</c>'s <c>explicit.appdir</c>, where set, is the folder
+    /// the install was given. Homebrew writes both at <c>brew install --cask</c> and removes them at
+    /// <c>brew uninstall --cask</c>; a disk image or <c>install.sh</c> never writes them.
+    /// </summary>
+    public static HomebrewCaskRecord? ReadHomebrewCask(string prefix)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+
+        var metadata = Path.Combine(prefix, "Caskroom", HomebrewCaskToken, ".metadata");
+        try
+        {
+            var receipt = Path.Combine(metadata, "INSTALL_RECEIPT.json");
+            if (!File.Exists(receipt))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(receipt));
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("homebrew_version", out _))
+            {
+                return null;
+            }
+
+            var names = !root.TryGetProperty("uninstall_artifacts", out var artifacts)
+                || artifacts.ValueKind != JsonValueKind.Array
+                || artifacts.EnumerateArray().Any(NamesJasonApp);
+
+            return new HomebrewCaskRecord(prefix, ExplicitAppDir(Path.Combine(metadata, "config.json")), names);
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The cask's token in the tap, which is also the name of its folder under <c>Caskroom</c>.</summary>
+    public const string HomebrewCaskToken = "jason";
+
+    private static bool NamesJasonApp(JsonElement artifact) =>
+        artifact.ValueKind == JsonValueKind.Object
+        && artifact.TryGetProperty("app", out var app)
+        && app.ValueKind == JsonValueKind.Array
+        && app.EnumerateArray().Any(each => each.ValueKind == JsonValueKind.String && each.GetString() == "Jason.app");
+
+    /// <summary><c>explicit.appdir</c> of the cask's <c>config.json</c>, where it is an absolute path; anything else is none.</summary>
+    private static string? ExplicitAppDir(string config)
+    {
+        try
+        {
+            if (!File.Exists(config))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(config));
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("explicit", out var given)
+                && given.ValueKind == JsonValueKind.Object
+                && given.TryGetProperty("appdir", out var appdir)
+                && appdir.ValueKind == JsonValueKind.String
+                && appdir.GetString() is { Length: > 0 } folder
+                && Path.IsPathFullyQualified(folder)
+                ? folder
+                : null;
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private sealed class MachineRecords : IManagerRecords
     {
         public bool HomebrewReceipt(string keg) => ReadHomebrewReceipt(keg);
+
+        public HomebrewCaskRecord? HomebrewCask(string prefix) => ReadHomebrewCask(prefix);
 
         public IReadOnlyList<WingetRegistration> WingetRegistrations(string packageIdentifier)
         {

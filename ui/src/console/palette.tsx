@@ -8,6 +8,7 @@ import { parseRoute } from '../router';
 import { displayName, searchPeople } from '../pickers/search';
 import * as campaigns from './campaigns';
 import { openConversation } from './chat';
+import { newAgent } from './new-agent';
 import {
     hintFor,
     isShortcut,
@@ -118,13 +119,20 @@ function pages(): Built {
     screen('settings', 'settings', t('nav.settings'), '');
     // A place that cannot make a chat lists the ways to one, off, with the sentence.
     const off = can('chat.create') ? undefined : cannotHere();
-    add('action:agent', 'action', t('palette.action.agent'), '', () => here().dock.show('start'), off);
+    add(
+        'action:agent',
+        'action',
+        t('palette.action.agent'),
+        '',
+        () => void newAgent(),
+        can('chat.createAgent') ? undefined : cannotHere(),
+    );
     add('action:chat', 'action', t('palette.action.chat'), '', () => here().dock.chat(), off);
     return { entries, going };
 }
 
 /**
- * Agents and chats the console already holds: each conversation as a Recent row opens it, found by its title and, for a
+ * Agents and chats the console already holds: each conversation as its row in the sidebar opens it, found by its title and, for a
  * campaign's, the campaign's name; and each agent of the Agents panel that has no conversation yet, opened as that
  * panel's row opens it.
  */

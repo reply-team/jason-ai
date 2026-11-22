@@ -53,12 +53,14 @@ public static class SetupSessionOpener
         {
             return SessionOpener.Refuse(
                 env,
+                human,
                 CliErrors.FolderMissing,
                 $"The role skills folder {folder} is not there, so nothing was started; `jason skills install --roles-only` places the role skills there.");
         }
 
         var (chosenExit, chosen) = await SessionOpener.ChooseHostAsync(
             env,
+            human,
             named,
             $"The preference {SessionOpener.PreferenceKey} could not be read, so no host was chosen and nothing was started; --host <host> names one.",
             refusedFor: null,
@@ -79,11 +81,12 @@ public static class SetupSessionOpener
         var terminals = env.Terminals;
         var terminal = terminals is null
             ? null
-            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env));
+            : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "TERMINAL"), SessionOpener.SearchPath(env), terminals.WindowsAppsDirectory, terminals.AliasTarget);
         if (terminals is null || terminal is null)
         {
             return SessionOpener.Refuse(
                 env,
+                human,
                 CliErrors.TerminalNotFound,
                 $"No terminal was found to start {hostWord} in, so nothing was started; `jason session open --setup --dry-run` prints the command and its brief, to run in a terminal of your own.");
         }
@@ -93,14 +96,20 @@ public static class SetupSessionOpener
         {
             return SessionOpener.Refuse(
                 env,
+                human,
                 CliErrors.TerminalStartFailed,
                 $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started; to do the same by hand, run `{AgentHosts.Of(host).CommandWord}` in a terminal of your own at {folder} and ask it to use the skill {SetupBrief.SkillName}.");
         }
 
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder, program, "setup", SessionOpener.Own(env));
-        if (!dryRun && !terminals.Start(launch, out var problem))
+        if (!dryRun)
         {
-            return SessionOpener.Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
+            if (TerminalStarts.Start(terminals, launch, out var problem, out var passedOver) is not { } opened)
+            {
+                return SessionOpener.Refuse(env, human, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
+            }
+
+            launch = TerminalStarts.Said(env.Error, launch, opened, passedOver);
         }
 
         if (human)

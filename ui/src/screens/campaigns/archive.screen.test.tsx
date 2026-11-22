@@ -4,6 +4,7 @@ import { App } from '../../app';
 import { session } from '../../api/session';
 import { consoleShell } from '../../platform/console-shell';
 import { mode } from '../../platform/mode';
+import { setPlace } from '../../platform/places';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { firstCampaignTab, href, route, type Route } from '../../router';
@@ -52,7 +53,10 @@ function before(): FakeApi {
         .answer('route.resolve', 'route.resolve/archive-pause');
 }
 
-/** The app paired and opened at an address, inside the desktop (with a chat to open) or in a browser tab (without). */
+/**
+ * The app paired and opened at an address, inside the desktop's window (with a chat to ask in) or in a browser tab with
+ * no desktop (without one).
+ */
 function open(api: FakeApi, to: Route, { chat = true }: { chat?: boolean } = {}) {
     watch(api);
     activatePlugins(browserPlugins);
@@ -65,6 +69,7 @@ function open(api: FakeApi, to: Route, { chat = true }: { chat?: boolean } = {})
     api.answer('system.info', 'system.info/with-ui');
     location.hash = href(to);
     route.value = to;
+    setPlace(chat ? 'window' : 'none');
     const app = <App api={api} uiApiVersion="v1" />;
     render(chat ? <CampaignChat.Provider value={() => {}}>{app}</CampaignChat.Provider> : app);
 }

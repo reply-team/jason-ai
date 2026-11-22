@@ -68,8 +68,9 @@ On macOS it installs Jason Desktop into /Applications, or ~/Applications where t
 /Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
 already in either folder is kept as it is, never replaced; one before 0.49.0 is updated from its own menu first.
 This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.
-On a Mac this script is the way to install Jason; Homebrew's formula is the command line
-alone, without Jason Desktop.
+On a Mac this script is the way to install Jason, and Homebrew's cask installs the same Jason
+Desktop (brew install --cask reply-team/tap/jason); Homebrew's formula is the command line alone,
+without Jason Desktop.
 
 On Linux it installs Jason Desktop and opens nothing: with apt, the release's deb, installed by apt with your password
 (sudo in a terminal, your desktop's own dialog otherwise), which adds Jason's apt repository so updates come with the

@@ -32,6 +32,7 @@ import {
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
+import { agentMaking, newAgent } from './new-agent';
 import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
@@ -243,7 +244,8 @@ define('dash.trends', (_args, element) => {
     }
     void reloadTrends();
 });
-define('dash.new', () => here().dock.show('start'));
+// The agent is made at the click, and its place opens on its Chat (`new-agent.ts`).
+define('dash.new', () => void newAgent());
 define('dash.needs', () => here().dock.show('needs'));
 define('dash.agents', () => here().dock.show('campaigns'));
 define('dash.item', ([kind, id]) => {
@@ -355,7 +357,7 @@ function header(waiting: Count): Html {
                 class="btn ${waiting.n > 0 ? '' : 'p'}"
                 type="button"
                 ${act('dash.new')}
-                ${offUnless('chat.create')}
+                ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
             >
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
@@ -621,7 +623,7 @@ export function dashboardView(): Html {
                 <div class="hd"><h3>${t('dash.empty.title')}</h3></div>
                 <div class="bd">
                     <p>${t('dash.empty.body')}</p>
-                    <button class="btn p" type="button" ${act('dash.new')} ${offUnless('chat.create')}>
+                    <button class="btn p" type="button" ${act('dash.new')} ${offUnless('chat.createAgent')}>
                         ${svg('plus', 14)}${t('dash.new')}
                     </button>
                 </div>

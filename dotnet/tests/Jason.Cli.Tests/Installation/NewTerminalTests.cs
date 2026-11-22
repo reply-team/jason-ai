@@ -149,13 +149,13 @@ public sealed class NewTerminalTests : IDisposable
     {
         const string Found = "/usr/local/bin/jason";
         const string Carried = "/Applications/Jason.app/Contents/Resources/bundle/jason";
-        var owner = new PackageOwner(PackageOwner.Homebrew, "jason", "/opt/homebrew/Cellar/jason/0.48.5/bin/jason", "/opt/homebrew/Cellar/jason/0.48.5/bin", Found, Found, "brew upgrade jason", "brew uninstall jason");
+        var owner = new PackageOwner(PackageOwner.Homebrew, "jason", "/opt/homebrew/Cellar/jason/0.48.5/bin/jason", "/opt/homebrew/Cellar/jason/0.48.5/bin", Found, Found, "brew upgrade jason", "brew uninstall --formula jason");
 
         Assert.Equal(
             $"A terminal opened from now on finds {Found} first by the name jason, not this jason ({Carried}): it is a command-line install of Jason, and its own `jason update apply` moves it into Jason Desktop. It was left as it is.",
             NewTerminal.Problem(Found, Carried, commandLineInstall: true, owner: null));
         Assert.Equal(
-            $"A terminal opened from now on finds {Found} first by the name jason, not this jason ({Carried}): Homebrew installed it, and `brew uninstall jason` takes it off. It was left as it is.",
+            $"A terminal opened from now on finds {Found} first by the name jason, not this jason ({Carried}): Homebrew installed it, and `brew uninstall --formula jason` takes it off. It was left as it is.",
             NewTerminal.Problem(Found, Carried, commandLineInstall: false, owner));
         Assert.Equal(
             $"A terminal opened from now on finds {Found} first by the name jason, not this jason ({Carried}). It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",

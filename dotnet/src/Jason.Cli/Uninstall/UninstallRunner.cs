@@ -198,6 +198,13 @@ public static class UninstallRunner
                 }
             }
 
+            // The start at logon's two records, where the data is kept, with the registration they are about taken off: a
+            // later install begins afresh. A purge takes them with the rest.
+            if (!purge)
+            {
+                StepRemoveAutostartRecords(env, done, problems);
+            }
+
             if (desktop is not null && !demoStopped && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);
@@ -216,10 +223,13 @@ public static class UninstallRunner
 
             // 5. The PATH entry, only where this installer wrote it; for the application's jason, the terminal command
             //    `jason install` placed and what an older command-line install left, then the application's other files.
+            //    ShipIt installing an update by now keeps what it installs: its own state, and the application last.
+            var shipItInstalling = false;
             if (desktop is not null && places is not null)
             {
                 DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
-                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
+                shipItInstalling = DesktopRemoval.TakeOutUpdaterJob(env, places, desktop, done, problems);
+                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, kept, problems, shipItInstalling);
             }
             else
             {
@@ -269,7 +279,7 @@ public static class UninstallRunner
             // 8. The application itself, last of all: everything above ran from the jason inside it.
             if (desktop is not null)
             {
-                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems);
+                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems, shipItInstalling);
             }
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
@@ -855,6 +865,38 @@ public static class UninstallRunner
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
             problems.Add(NotRemoved(env, parent, exception));
+        }
+    }
+
+    /// <summary>
+    /// The start at logon's two records in a data directory that is kept: the person's turn-off (<c>autostart/off.json</c>)
+    /// and the record that an update turned the start on once (<c>autostart/default.json</c>). Each that went is said, one
+    /// that would not go is a problem, and one that was not there is not mentioned.
+    /// </summary>
+    private static void StepRemoveAutostartRecords(CliEnvironment env, List<string> done, List<string> problems)
+    {
+        if (File.Exists(env.Paths.AutostartOffFile))
+        {
+            if (AutostartOff.Remove(env.Paths))
+            {
+                done.Add($"Removed {env.Paths.AutostartOffFile}, the record that you turned the start at logon off: with this installation taken off, a later install begins without it.");
+            }
+            else
+            {
+                problems.Add($"{env.Paths.AutostartOffFile}, the record that you turned the start at logon off, could not be removed: delete it, or a later install reads the start as turned off.");
+            }
+        }
+
+        if (File.Exists(env.Paths.AutostartDefaultFile))
+        {
+            if (AutostartOff.RemoveDefault(env.Paths))
+            {
+                done.Add($"Removed {env.Paths.AutostartDefaultFile}, the record that an update turned the start at logon on.");
+            }
+            else
+            {
+                problems.Add($"{env.Paths.AutostartDefaultFile}, the record that an update turned the start at logon on, could not be removed: delete it.");
+            }
         }
     }
 

@@ -256,7 +256,7 @@ public class OptOutLiftTests
     /// <summary>
     /// A line recorded under the desktop's confinement mark is the chat's, not the person's own. Through the door, a named
     /// person's verdict on the opted-out reply, saying a person wrote it, sent with <c>Jason-Confined</c> as the CLI sends it
-    /// on every chat turn, says <c>confined</c> on its line and leaves the lock standing; the same verdict sent from a
+    /// on a chat turn in Plan only, says <c>confined</c> on its line and leaves the lock standing; the same verdict sent from a
     /// terminal, with no mark and no attempt, lifts it.
     /// </summary>
     [Theory]

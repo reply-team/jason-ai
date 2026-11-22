@@ -1,0 +1,39 @@
+{
+  "operation": "campaign.get",
+  "case": "new-agent-brief",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "cmp_1",
+    "name": "New agent 1",
+    "status": "draft",
+    "project_id": "prj_1",
+    "project_slug": "default",
+    "context": {
+      "offer": "A two-week pilot of the reconciliation tool."
+    },
+    "external_ids": [],
+    "execution_profile": null,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "archived_at": null,
+    "folder_path": "~/Jason/projects/default/campaigns/2026-10-16-090000-cmp001",
+    "audience_threshold": null,
+    "send_modes": {
+      "cold": null,
+      "warm": null
+    },
+    "send_modes_in_force": {
+      "cold": {
+        "mode": "every_message",
+        "source": "default"
+      },
+      "warm": {
+        "mode": "every_message",
+        "source": "default"
+      }
+    }
+  }
+}

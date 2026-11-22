@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../../api/session';
 import type { NotificationChannel, NotificationsInfo } from '../../api/types';
 import { Console } from '../../console/console';
@@ -38,17 +38,48 @@ const report = (channels: NotificationChannel[], enabled = true, lastAt: string 
     last_at: lastAt,
 });
 
+/** The page's clock in the rows that read a time: noon, and a notification two hours before it. */
+const noon = '2026-10-01T12:00:00Z';
+const tenOClock = '2026-10-01T10:00:00Z';
+
+const toastChannel = (fields: Partial<NotificationChannel>): NotificationChannel =>
+    channel({ channel: 'toast', kind: 'toast', presence: 'available', ...fields });
+
 /** The recorded system.info with the notification section a test states; the recordings hold the toast alone. */
 class Reporting extends FakeApi {
-    constructor(private readonly notifications: NotificationsInfo | null) {
+    /** What the runtime says of the channels; a test changes it to see the page read it again. */
+    constructor(public notifications: NotificationsInfo | null) {
         super();
     }
+
+    /** Set, the runtime does not answer `system.info`: the read throws as a fetch to a stopped runtime does. */
+    infoGone = false;
+
+    /** Set, `system.info` answers what it read only once the gate opens, so a test can act while the read is going. */
+    infoHeld: Promise<void> | null = null;
 
     override async call<T>(operation: string, given: object = {}, kind: 'read' | 'write' = 'read'): Promise<T> {
         if (operation !== 'system.info') return super.call<T>(operation, given, kind);
         this.calls.push({ operation, body: given, kind });
-        return { ...fixtures['system.info/with-ui'].response, notifications: this.notifications } as T;
+        if (this.infoGone) throw new TypeError('Failed to fetch');
+        const answer = { ...fixtures['system.info/with-ui'].response, notifications: this.notifications } as T;
+        if (this.infoHeld) await this.infoHeld;
+        return answer;
     }
+
+    /** How many times the page asked `system.info`. */
+    get infoReads(): number {
+        return this.calls.filter((call) => call.operation === 'system.info').length;
+    }
+}
+
+/** A gate a test opens by hand. */
+function gate(): { promise: Promise<void>; open: () => void } {
+    let open = () => {};
+    const promise = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    return { promise, open };
 }
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -73,6 +104,36 @@ function inBrowser(notifications: NotificationsInfo | null): Reporting {
     const fake = new Reporting(notifications).answer('preference.list', 'preference.list/none');
     renderApp(fake);
     route.value = { screen: 'settings' };
+    return fake;
+}
+
+/** The console in Live, opened on Settings → Notifications, with `notifications` as the runtime's report. */
+async function inDesktop(notifications_: NotificationsInfo | null): Promise<Reporting> {
+    mode.value = 'live';
+    const fake = new Reporting(notifications_)
+        .answer('approval.list', 'approval.list/pending')
+        .answer('decision.list', 'decision.list/pending')
+        .answer('preference.list', 'preference.list/none')
+        .answer('campaign.list', 'campaign.list/screen')
+        .answer('campaign.summary', 'campaign.summary/all');
+    watch(fake);
+    activatePlugins(browserPlugins);
+    localStorage.clear();
+    location.hash = '';
+    route.value = { screen: 'attention' };
+    session.clear();
+    localStorage.setItem(
+        'jason.ui.session',
+        JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
+    );
+    render(<Console api={fake} desktop={stubDesktop(setupFound)} stream={stubStream().stream} />);
+    await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Settings' }));
+    await screen.findByRole('heading', { name: 'Settings', level: 1 });
+    fireEvent.click(
+        within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('button', { name: 'Notifications' }),
+    );
+    await waitFor(() => screen.getByText('Desktop toast'));
     return fake;
 }
 
@@ -380,6 +441,33 @@ describe('Notifications in Settings in a browser', () => {
         expect(fake.sent('notification.disable')).toEqual({ channel: 'toast' });
     });
 
+    it('says what Windows answered at the last notification and when, never the switch as it is now', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(noon));
+        try {
+            const said: Record<string, string> = {
+                disabled_for_application:
+                    'Not shown 2 h ago. At that notification, Windows answered that Jason was switched off in its notification settings. Windows is asked again at the next notification.',
+                disabled_for_user:
+                    'Not shown 2 h ago. At that notification, Windows answered that notifications were switched off for every app. Windows is asked again at the next notification.',
+                disabled_by_group_policy:
+                    'Not shown 2 h ago. At that notification, Windows answered that a group policy switched notifications off. Windows is asked again at the next notification.',
+                disabled_by_manifest:
+                    'Not shown 2 h ago. At that notification, Windows answered that the application’s manifest switched them off. Windows is asked again at the next notification.',
+            };
+            for (const [reason, sentence] of Object.entries(said)) {
+                inBrowser(report([toastChannel({ outcome: 'silenced', reason, at: tenOClock })]));
+                await waitFor(() => screen.getByText('Desktop toast'));
+                expect(words(notifications())).toContain(sentence);
+                expect(words(notifications())).not.toContain('Windows did not show it');
+                cleanup();
+                shell.info.value = null;
+            }
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('in the Demo, every switch is inert and says so', async () => {
         mode.value = 'demo';
         const fake = inBrowser(report([channel({ channel: 'toast', kind: 'toast' })]));
@@ -427,5 +515,87 @@ describe('Notifications in Settings inside the desktop', () => {
         expect(words(notifications())).toContain(
             'Turn one channel on or off with its switch, or with jason notification enable or disable; a provider’s channel is connected or disconnected on the Connect panel. A switch is made in your name. Every notification at once is switched in the settings file.',
         );
+    });
+
+    it('reads the channels again when the window takes the focus back', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(noon));
+        try {
+            const fake = await inDesktop(
+                report([toastChannel({ outcome: 'silenced', reason: 'disabled_for_application', at: tenOClock })]),
+            );
+            expect(words(notifications())).toContain('Not shown 2 h ago.');
+
+            fake.notifications = report([toastChannel({ outcome: 'delivered', at: noon })]);
+            fireEvent.focus(window);
+
+            await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
+            expect(words(notifications())).not.toContain('Not shown');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps the last answer, and the section it shows, when the focus read finds no runtime', async () => {
+        const fake = await inDesktop(report([toastChannel({ outcome: 'delivered', at: new Date().toISOString() })]));
+        const before = fake.infoReads;
+        fake.infoGone = true;
+
+        fireEvent.focus(window);
+
+        await waitFor(() => expect(fake.infoReads).toBe(before + 1));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(shell.info.value?.notifications?.channels[0]?.outcome).toBe('delivered');
+        expect(words(notifications())).toContain('Delivered');
+        const sections = within(screen.getByRole('navigation', { name: 'Settings' }))
+            .getAllByRole('button')
+            .map((each) => words(each));
+        expect(sections).toContain('Runtime');
+    });
+
+    it('drops a focus read that a switch answered after it began, and reads once at a time', async () => {
+        const fake = await inDesktop(
+            report([toastChannel({ outcome: 'delivered', at: new Date().toISOString(), on: true })]),
+        );
+        fake.answerAnyRequest('notification.disable', 'notification.disable/toast');
+        const before = fake.infoReads;
+        const held = gate();
+        fake.infoHeld = held.promise;
+
+        fireEvent.focus(window);
+        fireEvent.focus(window);
+        await waitFor(() => expect(fake.infoReads).toBe(before + 1));
+
+        const toast = () => within(notifications()).getByRole('switch', { name: 'Desktop toast' });
+        fireEvent.click(toast());
+        await waitFor(() => expect(toast().getAttribute('aria-checked')).toBe('false'));
+
+        fake.infoHeld = null;
+        held.open();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(fake.infoReads).toBe(before + 1);
+        expect(toast().getAttribute('aria-checked')).toBe('false');
+    });
+});
+
+describe('The page’s system.info', () => {
+    it('keeps the last answer when a load fails, and drops a load a switch’s answer overtook', async () => {
+        const fake = new Reporting(report([toastChannel({ outcome: 'delivered', at: noon })]));
+        await shell.load(fake);
+        expect(shell.info.value?.notifications?.channels[0]?.outcome).toBe('delivered');
+
+        fake.infoGone = true;
+        await shell.load(fake);
+        expect(shell.info.value?.notifications?.channels[0]?.outcome).toBe('delivered');
+
+        fake.infoGone = false;
+        fake.notifications = report([toastChannel({ outcome: 'silenced', reason: 'disabled_for_user', at: noon })]);
+        const held = gate();
+        fake.infoHeld = held.promise;
+        const loading = shell.load(fake);
+        shell.patchNotifications(report([toastChannel({ on: false })]));
+        held.open();
+        await loading;
+        expect(shell.info.value?.notifications?.channels[0]).toMatchObject({ on: false, outcome: null });
     });
 });

@@ -7,7 +7,6 @@ import * as campaigns from '../../console/campaigns';
 import * as connect from '../../console/connect';
 import { bind, changeChat, chats, conversations, conversationsFailure, type Dock } from '../../console/state';
 import { asDesktop, type Bridge } from '../../platform/bridge';
-import { followStanding } from '../../platform/full-access';
 import { t } from '../../platform/i18n';
 import '../../console/console.css';
 import '../../console/composer.css';
@@ -47,7 +46,6 @@ export function TabChat({ bridge }: { bridge: Bridge }) {
         const unbind = bind({ api, desktop, dock: tabDock, tab: true });
         const unlisten = root.current ? listen(root.current) : noop;
         const stops = [
-            followStanding(desktop),
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
                 if (listChanged.has(event.kind)) void reloadConversations();

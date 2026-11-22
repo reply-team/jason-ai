@@ -30,7 +30,6 @@ describe('the members of the desktop', () => {
                 'openIn',
                 'pairing',
                 'chat',
-                'fullAccess',
                 'links',
                 'setup',
             ]),

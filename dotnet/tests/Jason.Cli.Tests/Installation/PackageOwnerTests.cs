@@ -37,7 +37,7 @@ public sealed class PackageOwnerTests : IDisposable
         Assert.Equal("Homebrew", owner.Manager);
         Assert.Equal("jason", owner.Package);
         Assert.Equal("brew upgrade jason", owner.UpgradeCommand);
-        Assert.Equal("brew uninstall jason", owner.UninstallCommand);
+        Assert.Equal("brew uninstall --formula jason", owner.UninstallCommand);
         Assert.Equal(brew.Executable, owner.Executable);
         Assert.Equal(Path.GetDirectoryName(brew.Executable), owner.Directory);
         Assert.Equal(brew.Link, owner.Link);

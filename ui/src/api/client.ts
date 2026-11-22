@@ -1,4 +1,4 @@
-import type { ErrorEnvelope } from './types';
+import type { ErrorDetail, ErrorEnvelope } from './types';
 import type { Session } from './session';
 
 export interface Api {
@@ -19,6 +19,8 @@ export class ApiError extends Error {
         message: string,
         public readonly retryable: boolean,
         public readonly status: number,
+        /** What the runtime said of each field it refused, where it said it: data only, read by the place that asked. */
+        public readonly details?: readonly ErrorDetail[],
     ) {
         super(message);
     }
@@ -48,7 +50,7 @@ export class HttpApi implements Api {
                 message: text,
                 retryable: false,
             };
-            throw new ApiError(error.code, error.message, error.retryable, response.status);
+            throw new ApiError(error.code, error.message, error.retryable, response.status, error.details);
         }
         return json as T;
     }

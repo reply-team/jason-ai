@@ -194,12 +194,19 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
                 Problem = new ManifestProblem(
                     ProblemCodes.ExecutableIncompatible,
                     path,
-                    $"'{resolved.Name}' reports {version}; the manifest asks for {request.MinVersion} or later."),
+                    $"'{resolved.Name}' reports {version}; the manifest asks for {request.MinVersion} or later. {IncompatibleRepair(resolved.Name, request.MinVersion)}"),
             };
         }
 
         return resolved with { Version = version };
     }
+
+    /// <summary>
+    /// What a person does about a program older than the manifest asks for, in <see cref="MissingRepair"/>'s style: the
+    /// program and the version, then the reload. It names no package manager, since the runtime knows no vendor's.
+    /// </summary>
+    private static string IncompatibleRepair(string name, string minVersion) =>
+        $"Install '{name}' {minVersion} or later where the runtime can see it and run `jason plugin reload`.";
 
     private static ResolvedExecutable Failed(ResolvedExecutable resolved, string path, string message) =>
         resolved with { Problem = new ManifestProblem(ProblemCodes.ExecutableVersionCheckFailed, path, message) };

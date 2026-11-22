@@ -102,7 +102,12 @@ export function CampaignPanel({ campaign, at, counted, onAct, onMoved, onClose }
                     Add people
                 </button>
                 {/* Each move named in its class, so a sheet can tell Start and Resume from Pause. */}
-                <CampaignMoves campaign={campaign} buttonClass={(move) => `btn agent-move-${move}`} onDone={onMoved} />
+                <CampaignMoves
+                    campaign={campaign}
+                    people={people}
+                    buttonClass={(move) => `btn agent-move-${move}`}
+                    onDone={onMoved}
+                />
             </ActionsRow>
             {row && (
                 <div className="stats">

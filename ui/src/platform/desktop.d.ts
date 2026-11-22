@@ -96,7 +96,8 @@ export type DesktopCommand =
     | 'navigate.people'
     | 'navigate.system'
     | 'navigate.settings'
-    | 'navigate.connect';
+    | 'navigate.connect'
+    | 'navigate.update';
 
 /**
  * How hard the model thinks, as the host's own flag: one of five levels, the same words on every host. The desktop
@@ -121,20 +122,29 @@ export interface DesktopChatOptions {
      * in the mode the conversation is in.
      */
     mode?: DesktopChatMode;
+    /**
+     * Present, and true, when the words are the ones the person typed in the message box. A message whose first word is
+     * `/export` is written to a file only with it; without it the desktop answers a `done` saying to type it there.
+     * The page sends it with such a message alone.
+     */
+    typed?: true;
 }
 
 /**
- * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
- * chat out of the box: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads
- * and proposes, and changes nothing. `auto_edit`: Ask first, except that the six file commands (mkdir, touch, mv, cp, rm,
- * rmdir) run with no card on paths in the chat's own folder; no confirmation, held for that conversation only until the
- * window closes, Claude Code only, never the Feed. `full_access`: it acts on this computer without asking; the desktop asks the person
- * to confirm each time it is chosen, unless they answered that box with Always (`DesktopFullAccessStanding`), and holds
- * it for that conversation only until the window closes. Codex has no Full access.
+ * A chat's access mode, chosen per conversation from the menu beside the composer and kept on its record. `full_access`,
+ * the mode of every new chat, the Feed's included, and of one whose record names none: it acts on this computer without
+ * asking, with no confirmation; a turn on Codex, on a Claude Code below its floor or sent from a browser tab runs in Ask
+ * first instead, said once, and the chat keeps the mode. `ask_first`: the agent asks on a card before anything the
+ * desktop does not settle itself. `plan_only`: it reads and proposes, and changes nothing. `auto_edit`: Ask first, except
+ * that the six file commands (mkdir, touch, mv, cp, rm, rmdir) run with no card on paths in the chat's own folder; no
+ * confirmation, Claude Code only.
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
-/** `updates.item()`: the desktop's version, its update item as the menu shows it, and what the last check found. */
+/**
+ * `updates.item()`: the desktop's version, its update item as the menu shows it, what the last check found, and the
+ * version it knows of and has not installed.
+ */
 export interface DesktopUpdateItem {
     /** The desktop's own version, as its About says it. */
     version: string;
@@ -146,16 +156,12 @@ export interface DesktopUpdateItem {
      * by itself never writes one. A desktop of an earlier version answers without it.
      */
     said?: string | null;
-}
-
-/**
- * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
- * the menu enters Full access without the box, and with `newChats` a new chat on a host that can take Full access starts
- * in it. `givenAt` is when it was given, ISO-8601 UTC.
- */
-export interface DesktopFullAccessStanding {
-    givenAt: string;
-    newChats: boolean;
+    /**
+     * The version the desktop knows of and has not installed: from the look that found it, its own or the person's, until
+     * it is installed; for the deb, the one the system installed until the restart that finishes it. Null where there is
+     * none. The page marks Settings with it. A desktop of an earlier version answers without it.
+     */
+    newer?: string | null;
 }
 
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
@@ -203,6 +209,24 @@ export interface DesktopConversation {
      * from `chat.setMode`'s answer and from `mode` events, never from what the page asked for.
      */
     mode: DesktopChatMode;
+    /**
+     * Present, and true, when its turns run in a folder of its own, `<data>/desktop/chats/<id>/`: removing the
+     * conversation moves that folder to `<data>/desktop/chat-full-ended/`, where it is kept seven days and then removed.
+     * Absent for a conversation an earlier desktop made, whose turns run in the shared chat folder, and from an earlier
+     * desktop.
+     */
+    ownFolder?: true;
+    /**
+     * Present, and true, for an agent's conversation the desktop made with its campaign at a click on New GTM agent
+     * (`chat.createAgent`): while it is empty, its chat asks Start's question. Absent from an earlier desktop.
+     */
+    madeAtClick?: true;
+}
+
+/** What `chat.createAgent` answers: the agent's conversation, kept, and its campaign as the runtime made it. */
+export interface DesktopAgentMade {
+    conversation: DesktopConversation;
+    campaign: { id: string; name: string };
 }
 
 /**
@@ -214,9 +238,10 @@ export interface DesktopRefusal {
 }
 
 /**
- * Why a card of a Full access turn asks: a shell command by the reason it was held for (`command.*`), any other request
- * by Ask first's card for it (`request.*`), and `host_asked` where Full access would have run it and the host asked all
- * the same. The two codes that name a tool carry its name, and nothing else of the request comes with any of them.
+ * Why a card of a Full access turn asks: `host_asked`, where Full access would have run it and the host asked all the
+ * same; a card kept from an earlier desktop may carry a shell command's reason it was held for (`command.*`), or any
+ * other request's by Ask first's card for it (`request.*`). The two codes that name a tool carry its name, and nothing
+ * else of the request comes with any of them.
  */
 export type DesktopFullAccessWhy =
     | {
@@ -386,6 +411,9 @@ export type DesktopChatEvent =
      */
     | { kind: 'done'; error: string | null; plan?: true };
 
+/** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
+export type DesktopTurnSteps = Partial<Record<DesktopChatMode, { mode: DesktopChatMode; why: string }>>;
+
 /** An agent host or a key provider the chat's dropdown lists, found on this machine or not. */
 export interface DesktopHost {
     /**
@@ -420,6 +448,13 @@ export interface DesktopHost {
      * shows the item disabled with this.
      */
     autoEdit: string | null;
+    /**
+     * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`); a mode not named runs as
+     * itself. The desktop decides it as it decides the turn, so the page draws the mode the next turn runs in, and why,
+     * and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is read as handing nothing.
+     */
+    runs: { window: DesktopTurnSteps; tab: DesktopTurnSteps };
     /**
      * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
      * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
@@ -504,34 +539,33 @@ export interface DesktopReplyPending {
 /**
  * A link the Reply CLI made, opened in the person's browser by the desktop's main process. The page learns that it was
  * opened, when it stops working and its pending entry, where the CLI said; never the link, which is the person's secret.
- * A `shared_page` link is the account's shared mailbox page, which does not expire.
  */
 export interface DesktopReplyOpened {
     opened: true;
     channel: DesktopReplyChannel;
     kind: 'connect' | 'reconnect';
-    linkKind: 'connection_link' | 'shared_page';
+    linkKind: 'connection_link';
     expiresAt: string | null;
     pendingId: number | null;
 }
 
 /**
  * An act on a Reply account that ended without its effect: the desktop's sentence; the Reply CLI's code where it gave
- * one, which an unknown code carries in the sentence too; what the card may offer next (the shared mailbox page after
- * `email_link.not_available`, a forced delete after `linkedin.account_in_use`, Reconnect after
- * `linkedin.invalid_cookie`); and whether the card reads the list again to show where things stand.
+ * one, which an unknown code carries in the sentence too; what the card may offer next (a forced delete after
+ * `linkedin.account_in_use`, Reconnect after `linkedin.invalid_cookie`); and whether the card reads the list again to
+ * show where things stand.
  */
 export interface DesktopReplyRefusal {
     refused: string;
     code: string | null;
-    offer: 'shared_page' | 'force' | 'reconnect' | null;
+    offer: 'force' | 'reconnect' | null;
     reread: boolean;
 }
 
 /**
  * A link the Reply CLI made that expires and connects one account, written to the clipboard by the desktop's main process
  * for the person to hand on to whoever owns the account. The page learns that it was copied, when it stops working and
- * its pending entry; never the link. The shared mailbox page is never copied.
+ * its pending entry; never the link.
  */
 export interface DesktopReplyCopied {
     copied: true;
@@ -761,9 +795,14 @@ export interface JasonDesktop {
          * Opens that folder in the place `target` names, which the desktop holds against its own list; `campaignId` is the
          * campaign of the chat that is open, or absent. The page never sends a path. Null once opened (or copied); a refusal
          * for a place not on this computer, a campaign whose folder is not there, or a program that could not be started. The
-         * place is kept as the next default, Copy path excepted.
+         * place is kept as the next default, Copy path excepted, unless `options` says `keep: false`: an agent's Open folder,
+         * which leaves the window's Open in where it was.
          */
-        open(target: DesktopOpenInPlace, campaignId?: string): Promise<DesktopRefusal | null>;
+        open(
+            target: DesktopOpenInPlace,
+            campaignId?: string,
+            options?: { keep?: boolean },
+        ): Promise<DesktopRefusal | null>;
         /**
          * Continues the chat `chatId` names in a new terminal, with the host's own conversation: the desktop reads the host
          * and the session from its own record of the chat and opens the terminal in the folder the chat's turns run in. The
@@ -803,22 +842,32 @@ export interface JasonDesktop {
         answer(chatId: string, requestId: string, decision: { allow: boolean; always: boolean }): Promise<void>;
         /** Calls `handler` with every event of every chat; the function it returns stops that. */
         onEvent(handler: (chatId: string, event: DesktopChatEvent) => void): () => void;
-        /** The conversations the desktop keeps, the one changed last first; one never sent to is not kept. */
+        /**
+         * The conversations the desktop keeps, the one changed last first; one never sent to is not kept, but for an
+         * agent's made at a click on New GTM agent, kept from the click.
+         */
         list(): Promise<DesktopConversation[]>;
         /** One conversation with what the page drew; an id the desktop does not keep is refused. */
         open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
         /**
          * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
-         * without one, a new set-up chat. `host` is the `DesktopHost.id` the next turn runs on: a conversation newly made
-         * starts in Full access, its `mode` saying so in this answer, when the standing choice says new chats do and that
-         * host can take Full access; otherwise in Ask first, with nothing said.
+         * without one, a new set-up chat. A conversation newly made is in Full access, its `mode` saying so in this answer.
          */
-        create(campaignId?: string, host?: string): Promise<DesktopConversation | DesktopRefusal>;
+        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * New GTM agent's click: the desktop makes a campaign in the default project, "New agent N" after the highest
+         * number such a name carries, archived agents included, under the key `clickId` gives it, and its conversation,
+         * kept from now. `clickId` is the page's `crypto.randomUUID()` for that click: the same id again asks the same
+         * create, by the same name, so a retry never makes a second agent. Clicks are made one after another. Refused, in
+         * the desktop's words, while the runtime is away or when the create made nothing; nothing is made then. A desktop
+         * before 0.49.4 has no such member.
+         */
+        createAgent(clickId: string): Promise<DesktopAgentMade | DesktopRefusal>;
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
-         * "Start fresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
-         * while its turn runs.
+         * "Start fresh": the hosts' sessions are dropped, and the entries, the campaign and the mode kept; null once done.
+         * Refused while its turn runs.
          */
         restart(chatId: string): Promise<DesktopRefusal | null>;
         /**
@@ -835,11 +884,11 @@ export interface JasonDesktop {
          */
         rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
         /**
-         * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
-         * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
-         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time while no
-         * standing choice stands, and their no answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
-         * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
+         * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on, and keeps it on the
+         * conversation's record. `full_access` is given with no confirmation, and refused where it cannot apply (Codex, a
+         * host that does not drive the chat, a Claude Code too old for it), in the desktop's words. A change to a narrower
+         * mode stops a turn that runs in a wider one. A `mode` event comes before this answers whenever the mode changed.
+         * Refused for a conversation the desktop does not keep.
          */
         setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
         /**
@@ -862,18 +911,13 @@ export interface JasonDesktop {
          * desktop's log, a tab or none, refuses it in its own words.
          */
         cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
-    };
-    fullAccess: {
-        /** The standing choice of Full access, or null when none stands. */
-        standing(): Promise<DesktopFullAccessStanding | null>;
         /**
-         * Takes the standing choice back: the box is asked again at the next entry, and new chats start in Ask first. A
-         * chat in Full access now stays in it. Null once done, or a refusal when its file could not be changed. No call
-         * gives the choice: only the person's answer to the desktop's own box does.
+         * Where a file dropped on the message box is on this computer, read by the desktop's preload from the file itself
+         * (Electron's `webUtils.getPathForFile`), so the box can put the path in as a terminal does: answered at once,
+         * with no call to the desktop's main process. Empty for a file that is not on this computer, one a page made, and
+         * in a place with no desktop's window, a tab or none.
          */
-        takeBack(): Promise<DesktopRefusal | null>;
-        /** Calls `handler` with the standing choice each time it changes, wherever; the function it returns stops that. */
-        onChanged(handler: (standing: DesktopFullAccessStanding | null) => void): () => void;
+        pathOf(file: File): string;
     };
     links: {
         /**
@@ -937,23 +981,20 @@ export interface JasonDesktop {
         disconnectPlugin(pluginId: string): Promise<void>;
         /**
          * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
-         * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `sharedPage`
-         * asks for the account's shared mailbox page instead, and only after this ask answered the offer
-         * `shared_page`; the desktop then asks the person in a box of its own, with the CLI's warning, first.
-         * `copy` asks the desktop to put a link that expires on the clipboard instead of opening it, for the person to
-         * hand on; the shared mailbox page is never copied, whatever the page asks.
+         * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `copy` asks the
+         * desktop to put the link on the clipboard instead of opening it, for the person to hand on.
          */
         replyConnect(
             channel: DesktopReplyChannel,
-            options: ({ name: string } | { provider: 'gmail' | 'office365'; sharedPage?: boolean }) & {
+            options: ({ name: string } | { provider: 'gmail' | 'office365' }) & {
                 copy?: boolean;
             },
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
-        /** Reconnects an account `accounts` lists, the same way; `sharedPage` for a mailbox only, and `copy`, as above. */
+        /** Reconnects an account `accounts` lists, the same way, with `copy` as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
             accountId: string,
-            options?: { sharedPage?: boolean; copy?: boolean },
+            options?: { copy?: boolean },
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /**
          * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's

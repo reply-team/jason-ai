@@ -182,6 +182,21 @@ public class ExecutableResolverTests
     }
 
     [Fact]
+    public async Task An_incompatible_program_s_problem_says_the_repair_in_the_runtime_s_own_words()
+    {
+        var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
+        var request = new ExecutableRequest(FakeProviderCli.ExecutableName, "2.0.0", ["--version"]);
+
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, HostEnvironment, TimeSpan.FromSeconds(30), Ct);
+
+        // The program's name, the version asked for, then the reload; no package manager is named.
+        Assert.Equal(
+            $"'{FakeProviderCli.ExecutableName}' reports 1.2.3; the manifest asks for 2.0.0 or later. "
+            + $"Install '{FakeProviderCli.ExecutableName}' 2.0.0 or later where the runtime can see it and run `jason plugin reload`.",
+            result.Problem!.Message);
+    }
+
+    [Fact]
     public async Task A_program_new_enough_passes()
     {
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });

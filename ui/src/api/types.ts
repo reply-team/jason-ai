@@ -318,7 +318,14 @@ export type JournalListRequest = {
     limit?: number;
     cursor?: string;
 };
-export type CampaignSummary = { id: string; name: string; status: string };
+export type CampaignSummary = {
+    id: string;
+    name: string;
+    status: string;
+    /** When the agent was made and last changed, as `campaign.list` says them; absent where only the state was read. */
+    created_at?: string;
+    updated_at?: string;
+};
 export type CampaignListRequest = { query?: string; include_archived?: boolean; limit?: number; cursor?: string };
 export type Campaign = CampaignSummary & {
     project_id: string;

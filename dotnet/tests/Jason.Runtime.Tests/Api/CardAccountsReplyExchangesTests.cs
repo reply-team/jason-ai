@@ -41,4 +41,25 @@ public class CardAccountsReplyExchangesTests
             Operations.SenderList, "card-accounts-reply", new { campaign_id = campaign, owners = "team", sender_channel = "email", limit = 100 }, Ct);
         Assert.Equal(["12", "13"], senders.Items.Select(item => (string?)item!["external_id"]));
     }
+
+    /// <summary>
+    /// The Reply package held back by a Reply CLI older than its manifest asks for: listed <c>unavailable</c> with the
+    /// one environmental problem, whose message ends on the runtime's own repair, while the global route still names it.
+    /// </summary>
+    [Fact]
+    public async Task The_reply_package_is_listed_unavailable_while_its_cli_is_older_than_it_asks_for()
+    {
+        using var account = new ReplyAccount().WithCliVersion("0.21.0");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct, prepare: paths => TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId)), clock: new FixedClock(new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero)));
+
+        var plugins = await api.RecordAsync<JsonObject>(Operations.PluginList, "reply-unavailable", new { }, Ct);
+        var listed = Assert.Single(plugins["plugins"]!.AsArray())!;
+        Assert.Equal("unavailable", (string?)listed["status"]);
+        var problem = Assert.Single(listed["problems"]!.AsArray())!;
+        Assert.Equal("executable_incompatible", (string?)problem["code"]);
+        Assert.Equal(
+            "'reply' reports 0.21.0; the manifest asks for 0.22.0 or later. Install 'reply' 0.22.0 or later where the runtime can see it and run `jason plugin reload`.",
+            (string?)problem["message"]);
+    }
 }

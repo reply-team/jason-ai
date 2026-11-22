@@ -123,9 +123,9 @@ line your terminal and your agents use. It is removed once, by `jason uninstall`
 Windows, or by Uninstall Jason… in the Jason menu on macOS and Linux. The uninstall stops the runtime first, and removes nothing
 when that runtime does not stop. On Linux it then takes the deb's package off, with an administrator's password asked
 once, and removes nothing of yours when that is refused. It then takes off what Jason placed - the `jason` command, the skills it recorded in agent
-hosts' folders, Open Jason at Login, the runtime's start at logon, an older command-line install and the updater's cache - and
-last the application, and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root
-(`~/Jason`) always, saying so.
+hosts' folders, Open Jason at Login, the runtime's start at logon, an older command-line install, the updater's cache and,
+on macOS, the job its updater leaves loaded in launchd - and last the application, and leaves the data directory
+(`~/.jason`) unless you say otherwise and the harness root (`~/Jason`) always, saying so.
 
 ## Installing
 

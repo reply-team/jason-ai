@@ -89,7 +89,16 @@ if (args[0] === 'status') {
         print({ error: { code: 'campaign_not_found', message: 'No campaign has that id.', retryable: false } });
         process.exit(1);
     }
-    print({ id: args[2], name: process.env.STUB_CAMPAIGN_NAME || 'Spring', status: process.env.STUB_CAMPAIGN_STATUS || 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+    // A campaign STUB_CAMPAIGNS_FILE holds answers with its own name, as the runtime would; any other id as before.
+    let stored = null;
+    if (process.env.STUB_CAMPAIGNS_FILE) {
+        try {
+            stored = JSON.parse(readFileSync(process.env.STUB_CAMPAIGNS_FILE, 'utf8')).find((each) => each.id === args[2]) ?? null;
+        } catch {
+            stored = null;
+        }
+    }
+    print({ id: args[2], name: stored?.name ?? (process.env.STUB_CAMPAIGN_NAME || 'Spring'), status: process.env.STUB_CAMPAIGN_STATUS || 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
 } else if (verb === 'campaign list') {
     // Every campaign STUB_CAMPAIGNS_FILE holds, in pages of STUB_PAGE_SIZE (else --limit), the cursor the index of the
     // next page; STUB_LIST_FAIL_PAGE names a page (from 1) that is refused, 'all' every page.
@@ -106,6 +115,45 @@ if (args[0] === 'status') {
     }
     const next = from + size < items.length ? String(from + size) : null;
     print({ items: items.slice(from, from + size), next_cursor: next });
+} else if (verb === 'campaign create') {
+    // Adds the campaign to STUB_CAMPAIGNS_FILE, as a draft of the default project, unless one was made under the same
+    // --idempotency-key, which is answered again, as the runtime does. STUB_CREATE_FAILS=1 answers the runtime's refusal
+    // (STUB_CREATE_SAYS its message), 3 an unreachable runtime; STUB_CREATE_LOST=yes makes the campaign and then loses the
+    // answer, as a timeout does.
+    if (process.env.STUB_CREATE_FAILS === '3') {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    if (process.env.STUB_CREATE_FAILS === '1') {
+        print({ error: { code: 'validation_failed', message: process.env.STUB_CREATE_SAYS || 'The name is not valid.', retryable: false } });
+        process.exit(1);
+    }
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(process.env.STUB_CAMPAIGNS_FILE, 'utf8'));
+    } catch {}
+    const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+    const key = flag('--idempotency-key');
+    let made = key === null ? undefined : items.find((each) => each.idempotency_key === key);
+    // As the CLI does: with no --project, the project is the one the nearest marker above the working folder names,
+    // else the default.
+    let project = flag('--project');
+    for (let dir = process.cwd(); project === null; ) {
+        try {
+            const marker = JSON.parse(readFileSync(join(dir, '.jason', 'marker.json'), 'utf8'));
+            if (marker.kind === 'project') project = marker.id;
+        } catch {}
+        const up = join(dir, '..');
+        if (up === dir) break;
+        dir = up;
+    }
+    if (made === undefined) {
+        made = { id: `cmp_MADE${items.length + 1}`, name: flag('--name'), status: 'draft', created_at: new Date().toISOString(), idempotency_key: key, project_id: project || 'prj_01STUB' };
+        items.push(made);
+        writeFileSync(process.env.STUB_CAMPAIGNS_FILE, JSON.stringify(items));
+    }
+    if (process.env.STUB_CREATE_LOST === 'yes') process.exit(1);
+    print({ id: made.id, name: made.name, status: made.status, project_id: made.project_id, folder_path: null });
 } else if (verb === 'journal list') {
     // The lines STUB_JOURNAL_FILE holds, as one page: newest first, as the runtime answers; STUB_JOURNAL_MORE=yes says
     // there is a next page, and STUB_JOURNAL_FAILS=yes answers as an unreachable runtime does.
@@ -248,7 +296,9 @@ if (args[0] === 'status') {
 } else if (verb === 'project get') {
     // STUB_PROJECT_GET_FAILS=yes: the runtime does not answer, as when it is down for a moment.
     if (process.env.STUB_PROJECT_GET_FAILS === 'yes') process.exit(3);
-    print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
+    // By --slug the default project answers by its own id, prj_01STUB, as every installation's default does.
+    const bySlug = args.includes('--slug');
+    print({ id: bySlug ? 'prj_01STUB' : args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
     // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
     // STUB_SKILLS_FAIL_HOST names a host whose deployment fails.

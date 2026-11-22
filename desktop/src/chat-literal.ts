@@ -1,7 +1,8 @@
-// Pure: the literal reading of one shell command, for Full access. A word runs only if it is literal for its shell, made
-// of the characters a shell passes on as they are, with quotes as the only change it undergoes. Anything else anywhere
-// in the command makes the whole command held, with a closed reason; nothing is re-spelled, so what is read is exactly
-// what the shell passes on. Ask first and Plan only never read a command this way: their cards show the text as written.
+// Pure: the literal reading of one shell command. A word is read only if it is literal for its shell, made of the
+// characters a shell passes on as they are, with quotes as the only change it undergoes. Anything else anywhere in the
+// command makes the whole command held, with a closed reason; nothing is re-spelled, so what is read is exactly what the
+// shell passes on. Auto-edit reads its six file commands this way, the turn's hook reads the places a literal command's
+// words name, and "always" never covers a command that follows links; a card shows the text as written.
 
 import { posix, win32 } from 'node:path';
 import type { Platform } from './chat-permission-model.ts';
@@ -80,6 +81,13 @@ export interface LiteralContext {
      * held stays held.
      */
     relativeDirectories?: boolean;
+    /**
+     * Whether a letter outside ASCII, or a mark that joins one, is read in a single-quoted body of the Bash tool's
+     * command, which the shell passes on as it is written: a reason or a name in the person's own language. Any other
+     * character outside ASCII and any control character stays held there, and so does every character outside ASCII
+     * elsewhere. Only the reading of what runs with no card where the hook rides the turn takes it.
+     */
+    lettersInSingleQuotes?: boolean;
 }
 
 const held = (reason: HeldReason): LiteralReading => ({ held: true, reason });
@@ -98,7 +106,7 @@ class Held {
 export function readLiteral(tool: string, command: string, context: LiteralContext): LiteralReading {
     try {
         let commands: Parsed[];
-        if (tool === 'Bash') commands = readPosix(command, context.home);
+        if (tool === 'Bash') commands = readPosix(command, context.home, context.lettersInSingleQuotes === true);
         else if (tool === 'PowerShell') commands = readPowerShell(command);
         else return held('unknown_shell');
         if (commands.length === 0) return held('syntax');
@@ -235,8 +243,22 @@ function asciiOnly(text: string): void {
     }
 }
 
+/**
+ * As `asciiOnly`, but a letter outside ASCII, or a mark that joins one, is read as it is written; a letter whose
+ * compatibility form, upper case or lower case holds an ASCII character stays held, since a file system that folds case
+ * or forms may open it as that character.
+ */
+function lettersOnly(text: string): void {
+    for (const character of text) {
+        const code = character.codePointAt(0) ?? 0;
+        if (code > 0x7e && !/^[\p{L}\p{M}]$/u.test(character)) throw new Held('non_ascii');
+        if (code > 0x7e && /[\x00-\x7f]/.test(character.normalize('NFKC') + character.toUpperCase() + character.toLowerCase())) throw new Held('non_ascii');
+        if (code < 0x20 && character !== '\n' && character !== '\t') throw new Held('control_character');
+    }
+}
+
 /** The POSIX grammar: the Bash tool's shell. */
-function readPosix(text: string, home: string | null): Parsed[] {
+function readPosix(text: string, home: string | null, letters = false): Parsed[] {
     const builder = new Builder((b, word) => {
         // zsh rewrites an unquoted word that starts with `=` to the path of the program it names.
         if (b.raw.startsWith('=')) throw new Held('expansion');
@@ -274,7 +296,8 @@ function readPosix(text: string, home: string | null): Parsed[] {
             if (end < 0) throw new Held('quote');
             const body = text.slice(at + 1, end);
             if (body.includes('\n')) throw new Held('quote');
-            asciiOnly(body);
+            if (letters) lettersOnly(body);
+            else asciiOnly(body);
             builder.append(body, text.slice(at, end + 1), true);
             at = end + 1;
             continue;
@@ -661,9 +684,8 @@ const runners = new Set(
  * a remote control, a window that is typed into): what they start runs outside this process's environment, so outside
  * the fence the chat's host is given, the data directory it names included. Windows', macOS' and Linux's. This is a
  * list, not a rule: a program it does not name is not recognised as one. A literal reading holds them as runners
- * (`heldByWhatRuns`), the permission model never lets "always" cover one (`runsAnotherProgram`), and a script the chat
- * writes that starts one is refused (`writtenRefusal`). A few programs do it only with an option and are held by it in
- * `handsToRunning`.
+ * (`heldByWhatRuns`), and the permission model never lets "always" cover one (`runsAnotherProgram`). A few programs do it
+ * only with an option and are held by it in `handsToRunning`.
  */
 export const systemLaunchers: ReadonlySet<string> = new Set(
     ('start start-process saps invoke-item ii explorer pcalua scriptrunner msiexec cmstp control hh infdefaultinstall wt '
@@ -730,8 +752,8 @@ export function linkOperands(words: readonly string[]): string[] | null {
 }
 
 /**
- * True when a command, its program first, walks a folder tree following the links in it (`followsLinks`): held in
- * Full access, and never covered by "always".
+ * True when a command, its program first, walks a folder tree following the links in it (`followsLinks`): never
+ * covered by "always".
  */
 export function followsLinksIn(words: readonly string[]): boolean {
     return followsLinks(programName(words[0] ?? ''), words.slice(1));

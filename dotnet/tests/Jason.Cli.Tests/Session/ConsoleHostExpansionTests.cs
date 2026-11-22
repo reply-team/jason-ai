@@ -91,9 +91,10 @@ public sealed class ConsoleHostExpansionTests
     [Fact]
     public void The_confinement_variable_is_not_in_the_block()
     {
-        var inherited = new Dictionary<string, string> { [Confinement.Variable] = "1" };
+        var inherited = new Dictionary<string, string> { [Confinement.Variable] = "1", [Confinement.ChatTurnVariable] = "1" };
 
         Assert.Null(TerminalPlan.Uncarried(TerminalPlatform.Windows, ["C:/Tools/claude.exe", $"%{Confinement.Variable}%"], Own, inherited));
+        Assert.Null(TerminalPlan.Uncarried(TerminalPlatform.Windows, ["C:/Tools/claude.exe", $"%{Confinement.ChatTurnVariable}%"], Own, inherited));
     }
 
     /// <summary>

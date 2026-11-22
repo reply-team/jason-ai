@@ -144,7 +144,7 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - **The hand-over.** The install prompt's "Ready" is `jason status` answering with `ready` true in its body. When it
   is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's
   files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying
-  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and,
+  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now:
   where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question
   about what comes next: its question goes in a message of its own. The last line of that first message names Jason
   Desktop once, as part of what was just installed, the window onto this installation with its
@@ -373,8 +373,19 @@ skills step and by `jason skills`.
 
 ### With a package manager
 
-This page names no package for a new install: on macOS, Windows and Linux the route is the install script above, which
-installs Jason Desktop.
+On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon
+Mac, Homebrew's cask installs the same Jason Desktop, from the same release, once the tap carries it; until then the
+install script is the way:
+
+```sh
+brew install --cask reply-team/tap/jason
+```
+
+If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again. If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does,
+and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and
+the harness root stay. Homebrew's older formula is the command line alone, without Jason Desktop: where it is
+installed, `jason runtime stop` and then `brew uninstall --formula jason` take it off first, or its `jason` stays in the
+way.
 
 Where a package manager installed Jason, it is under the same MIT licence, and the package manager owns that
 installation: it updates it and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
@@ -714,8 +725,10 @@ given as a path is looked up in its own directory and reads no PATH, so the answ
 exception: an npm shim given as a path takes its `node.exe` from the PATH when none stands beside it, and then the answer
 says whose PATH that was.
 
-Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CONFINED` set, so the program is
-named by name and found on the search path, and a name with a directory in it is neither looked up nor started. Run a
+Under Jason Desktop's chat the check is held tighter: the chat runs `jason` with `JASON_CHAT_TURN` set, which a Claude
+Code turn cannot clear and a Codex turn in Full access can ([desktop](desktop.md)), and on a turn that can only read and
+propose with `JASON_CONFINED` too, so the program is named by name and found on the search path, and a name with a directory in
+it is neither looked up nor started. Run a
 path from a terminal.
 
 **When something does not work**, run `jason doctor --dry-run`, then `jason doctor`, and open an
@@ -740,13 +753,13 @@ after a backup.
 
 Nothing is registered until you ask.
 
-**Not done at install.** An agent that installs Jason does not register this: it says at the end that the runtime can
-start when the person logs on, gives the command, and runs it only on the person's word. To have the runtime start
-when you log on:
+**Done at install.** The set-up an install ends in registers the runtime to start when you log on, and starts nothing
+now: the runtime runs from the next logon, from Jason Desktop, or from `jason runtime start`. A person who does not want it turns it off for good, and turns it on again:
 
 ```sh
-jason runtime autostart enable
 jason runtime autostart status
+jason runtime autostart disable
+jason runtime autostart enable
 ```
 
 The registration carries the data directory it was made under, and nothing supervises it afterwards: a
@@ -791,6 +804,12 @@ skills it recorded in agent hosts' folders — and an older command-line install
 [release-and-update.md](release-and-update.md) §9 adds for the application. It is also reached from Installed apps in
 Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS and Linux (*Jason Desktop*, below). Run from a
 terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.
+On macOS, while Jason Desktop's updater installs an update, it refuses with `update_in_progress` before anything is
+removed: wait for the update to end, then run it again. If the update never ends,
+`launchctl print gui/$(id -u)/ai.jasonharness.desktop.ShipIt` shows the job and
+`launchctl bootout gui/$(id -u)/ai.jasonharness.desktop.ShipIt` takes it out. An account with no login session,
+reached over ssh or run by a management tool while it is not signed in at the screen, has no login domain and so no
+such job.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no
@@ -831,8 +850,10 @@ could be started, that copy is a problem and the verb exits 1.
 
 Where Homebrew or winget installed Jason, the executable, its directory and the PATH entry that reaches it are the
 package manager's: the dry run and the report list them as left to it, with the command that takes them off —
-`brew uninstall jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above, the
-runtime stopped first.
+`brew uninstall --formula jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above,
+the runtime stopped first. Where Homebrew's cask placed Jason Desktop, `jason uninstall` takes off what Jason set up and
+leaves the application, its link and its state under `~/Library` to Homebrew: `brew uninstall --zap --cask jason` takes
+them off.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
@@ -959,7 +980,8 @@ written), when the runtime did not start (the files are in place; start it with 
 project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
 one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
 `jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
-not register it, and `jason status`.
+not register it, and `jason status`. A turn-off made with `jason runtime autostart disable` does not travel: the archive
+leaves `data/autostart/` out, and an import is a new machine, where the default holds.
 
 ---
 

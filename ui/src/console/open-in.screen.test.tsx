@@ -511,7 +511,10 @@ describe('Open in with an agent in front', () => {
         const desktop = await renderConsole('live');
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         bringForward('Agents');
-        const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
+        // The Agents page's row: the sidebar's row of the agent shows the same name.
+        const row = (
+            await waitFor(() => screen.getAllByText('Spring').find((each) => each.closest('tr') !== null)!)
+        ).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
         const header = await waitFor(() => {
             const found = document.querySelector<HTMLElement>('.agent-head');
@@ -536,7 +539,10 @@ describe('Open in with an agent in front', () => {
         const desktop = await renderConsole('live');
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         bringForward('Agents');
-        const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
+        // The Agents page's row: the sidebar's row of the agent shows the same name.
+        const row = (
+            await waitFor(() => screen.getAllByText('Spring').find((each) => each.closest('tr') !== null)!)
+        ).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
         const header = await waitFor(() => {
             const found = document.querySelector<HTMLElement>('.agent-head');

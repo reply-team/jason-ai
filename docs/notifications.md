@@ -299,8 +299,12 @@ jason journal list --kind notification_sent
   installation unready. On Windows it also reads Windows' own switches as they stand when it runs, read only, since the
   runtime reads them only when it sends a toast: a switch off now — the runtime's own entry, every app, or a group
   policy — is said as it is now, whether the last toast was shown or not, and after a toast that failed, which it still
-  says first and as `failed`; a switch on now never promises a toast reaches you, and after one Windows did not show
-  it says only that the switches read as on now and when the last one was not shown. The entry is the runtime's: Jason
+  says first and as `failed`; a switch on now after a toast Windows did not show because a switch was off then counts
+  the toast again, and the check is `ok`, saying that the switches read as on now, that none has been shown since they
+  came on, when the toast before they came on was not shown, and that the next one will tell. Where the switches
+  cannot be read, or on another system, a toast Windows did not show is said as what Windows answered when the toast
+  was last sent, and when that was; so is one the program's own manifest silenced, even where the switches read fine,
+  since no switch a person reads in Settings changes it. The entry is the runtime's: Jason
   Desktop has an entry of its own under the same name, which changes nothing here.
 - The runtime's log (`~/.jason/logs/`, compact JSON, one line per event) has a line for each failed channel. It keeps
   the message template and the values apart, so the line to look for is the one whose `"@mt"` is

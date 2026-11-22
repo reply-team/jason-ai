@@ -24,6 +24,8 @@
     <Compile Include="../Jason.Cli.Tests/Documentation/ShellWords.cs" Link="Skills/ShellWords.cs" />
     <!-- The suite's one disposable temporary directory, rather than a second copy of the same idea. -->
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="Skills/TempTree.cs" />
+    <!-- The one start of a test's PowerShell 7, with a start cache of its own: children that share one can break every later start. -->
+    <Compile Include="../Jason.Runtime.Tests/ChildPwsh.cs" Link="ChildPwsh.cs" />
     <!-- The process table that launches nothing: a null seam falls back to the one that starts real processes. -->
     <Compile Include="../Jason.Cli.Tests/Process/FakeProcessControl.cs" Link="Skills/FakeProcessControl.cs" />
 

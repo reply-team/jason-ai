@@ -11,7 +11,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { FakeApi, watch } from '../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
@@ -167,7 +167,8 @@ describe('the card that opens Accounts', () => {
         expect(within(shown).queryByText(/^As of /)).toBeNull();
         // It reads nothing: none of the accounts card's reads is made.
         await new Promise((resolve) => setTimeout(resolve, 50));
-        expect(fake.calls.filter((each) => ['route.list', 'plugin.list'].includes(each.operation))).toEqual([]);
+        // The console's own read at its start, for the mode strip, is not the card's.
+        expect([...callsBeyondStart(fake, 'route.list'), ...callsBeyondStart(fake, 'plugin.list')]).toEqual([]);
     });
 
     it('opens the Accounts page, where Reply’s card is, and acts on nothing', async () => {

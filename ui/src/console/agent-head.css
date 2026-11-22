@@ -115,6 +115,21 @@
 .jc-console .agent-menu button:disabled {
     color: var(--faint);
 }
+.jc-console .agent-menu .menu-separator {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--line);
+}
+/* The menu on a row of AGENTS or CHATS stands where it was opened, inside the window (`row-menu.tsx`). */
+.jc-console .row-menu {
+    position: fixed;
+    top: var(--row-menu-y, 0);
+    left: var(--row-menu-x, 0);
+    right: auto;
+    /* Over the narrow sidebar it opens from, under a dialog's overlay (50). */
+    z-index: 45;
+    margin-top: 0;
+}
 .jc-console .agent-head .tabs {
     display: flex;
     gap: 22px;

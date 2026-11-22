@@ -17,6 +17,7 @@ import {
     noteMemoryGiven,
     parseConversation,
     readConversations,
+    recordShape,
     recordLimit,
     removeConversation,
     serialize,
@@ -69,7 +70,7 @@ test('a record is written and read back field for field, and nothing is left bes
     });
     writeConversation(folder, kept);
     assert.deepEqual(readdirSync(folder), [`${kept.id}.json`]);
-    assert.deepEqual(readConversations(folder), { kept: [kept], unreadable: 0 });
+    assert.deepEqual(readConversations(folder), { kept: [kept], unreadable: 0, listed: true, unstamped: [] });
     if (process.platform !== 'win32') assert.equal(statSync(join(folder, `${kept.id}.json`)).mode & 0o777, 0o600, 'readable by this account alone');
 });
 
@@ -96,7 +97,7 @@ test('a link at a record\'s name is replaced by a regular file, and what it name
         t.skip(`this platform made no link here (${(error as NodeJS.ErrnoException).code})`);
         return;
     }
-    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 1 }, 'a link is never read as a record');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 1, listed: true, unstamped: [] }, 'a link is never read as a record');
     writeConversation(folder, kept);
     assert.ok(lstatSync(join(folder, `${kept.id}.json`)).isFile());
     assert.equal(readFileSync(elsewhere, 'utf8'), 'not the desktop\'s\n');
@@ -112,7 +113,17 @@ test('a conversations folder that is a link to another folder is refused, and no
     symlinkSync(elsewhere, folder, 'junction');
     assert.throws(() => writeConversation(folder, record()), (error) => error instanceof ConversationUnwritten && error.code === 'ENOTDIR');
     assert.deepEqual(readdirSync(elsewhere), []);
-    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0 }, 'nor is it read');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false, unstamped: [] }, 'nor is it read, nor listed');
+});
+
+test('a conversations folder that is not there, or is no folder, is not listed: nothing in it is known, so no folder is said to be no record\'s', (t) => {
+    const { folder } = folderOf(t);
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false, unstamped: [] }, 'not there');
+    writeFileSync(folder, 'not a folder');
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: false, unstamped: [] }, 'a file');
+    rmSync(folder);
+    mkdirSync(folder);
+    assert.deepEqual(readConversations(folder), { kept: [], unreadable: 0, listed: true, unstamped: [] }, 'an empty folder is listed, with nothing in it');
 });
 
 test('a file that is not a record is counted, never read as one, and left byte for byte as it was', (t) => {
@@ -130,7 +141,7 @@ test('a file that is not a record is counted, never read as one, and left byte f
         'notes.txt': 'not a record, and not counted',
     };
     for (const [name, text] of Object.entries(planted)) writeFileSync(join(folder, name), text);
-    assert.deepEqual(readConversations(folder), { kept: [good], unreadable: 5 });
+    assert.deepEqual(readConversations(folder), { kept: [good], unreadable: 5, listed: true, unstamped: [] });
     for (const [name, text] of Object.entries(planted)) assert.equal(readFileSync(join(folder, name), 'utf8'), text, name);
 });
 
@@ -224,10 +235,33 @@ test('a record whose id is not its file\'s name, or not a conversation id, is no
     assert.throws(() => writeConversation(tmpdir(), { ...kept, id: '../escape' }), ConversationUnwritten);
 });
 
+test('every record this desktop writes carries its shape last; one read with no shape, as an earlier desktop writes it, is read all the same and named among those with none', (t) => {
+    const { folder } = folderOf(t);
+    const kept = record();
+    writeConversation(folder, kept);
+    const written = JSON.parse(readFileSync(join(folder, `${kept.id}.json`), 'utf8')) as Record<string, unknown>;
+    assert.equal(written.shape, recordShape);
+    assert.equal(Object.keys(written).at(-1), 'shape');
+    assert.deepEqual(parseConversation(serialize(kept), kept.id), kept, 'the shape is the file\'s, never a field of the conversation');
+    const earlier = record();
+    const without = JSON.parse(serialize(earlier)) as Record<string, unknown>;
+    delete without.shape;
+    writeFileSync(join(folder, `${earlier.id}.json`), JSON.stringify(without));
+    // A later desktop's shape is a shape all the same; anything but a whole number is none.
+    const later = record();
+    writeFileSync(join(folder, `${later.id}.json`), JSON.stringify({ ...JSON.parse(serialize(later)), shape: recordShape + 1 }));
+    const odd = record();
+    writeFileSync(join(folder, `${odd.id}.json`), JSON.stringify({ ...JSON.parse(serialize(odd)), shape: '1' }));
+    const read = readConversations(folder);
+    assert.deepEqual(read.unstamped.sort(), [earlier.id, odd.id].sort());
+    assert.equal(read.kept.length, 4);
+    assert.equal(read.unreadable, 0);
+});
+
 test('a name a person gave is kept with its mark, and a record without the mark is one the desktop named', () => {
     const named = record({ title: 'Spring plan', named_by_person: true });
     const text = serialize(named);
-    assert.deepEqual(Object.keys(JSON.parse(text) as object), ['id', 'campaign_id', 'title', 'named_by_person', 'created_at', 'updated_at', 'sessions', 'entries', 'dropped']);
+    assert.deepEqual(Object.keys(JSON.parse(text) as object), ['id', 'campaign_id', 'title', 'named_by_person', 'created_at', 'updated_at', 'sessions', 'entries', 'dropped', 'shape']);
     assert.deepEqual(parseConversation(text, named.id), named);
     // A record an earlier desktop wrote carries no mark, and is written again without one.
     const plain = record({ title: 'Help me start' });

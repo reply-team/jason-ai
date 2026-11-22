@@ -2,7 +2,6 @@ import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@test
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
-import { fullAccessStanding } from '../platform/full-access';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
@@ -147,7 +146,6 @@ beforeEach(() => {
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
     classicCampaigns.campaign.value = null;
-    fullAccessStanding.value = null;
     forgetWaiting();
 });
 
@@ -348,7 +346,12 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
             expect(within(shown()).getByRole('heading', { name: 'What should Jason do in Autumn?' })).toBeTruthy();
         });
     const autumnApi = () => api().answerAnyRequest('route.resolve', 'route.resolve/no-route');
-    const noAutumnRow = () => expect(within(recent()).queryByRole('button', { name: 'Autumn' })).toBeNull();
+    // Its row in AGENTS stands from the start, as the agent's, with no conversation behind it: drawing it makes none.
+    const noAutumnRow = () => {
+        const row = within(recent()).getByRole('button', { name: 'Autumn' });
+        expect(row.getAttribute('data-action')).toBe('side.agent');
+        expect(row.querySelector('.t')?.textContent).toBe('');
+    };
 
     it.each(['#/campaigns/cmp_2', '#/campaigns/cmp_2/chat'])(
         'at %s, by a reload or a deep link, draws its Chat with an empty thread and the composer, and makes nothing',
@@ -525,18 +528,29 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(creates(desktop)).toHaveLength(1);
     });
 
-    it('closes its “…”, whose acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
+    it('closes its “…”, whose conversation’s acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
         await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
         const more = within(head()!).getByRole('button', { name: "More for this agent's conversation" });
         more.focus();
         fireEvent.click(more);
         const menu = within(head()!).getByRole('menu');
+        // The agent's folder is there before its conversation is, in the window; a tab opens no folder.
         expect(
             within(menu)
                 .getAllByRole('menuitem')
-                .every((each) => (each as HTMLButtonElement).disabled),
-        ).toBe(true);
+                .map((each) => [each.textContent, (each as HTMLButtonElement).disabled]),
+        ).toEqual(
+            place === 'window'
+                ? [
+                      ['Open in File manager', false],
+                      ['Open Claude Code in terminal', false],
+                      ['Rename conversation', true],
+                      ['Start conversation fresh', true],
+                      ['Remove conversation', true],
+                  ]
+                : [['Rename conversation', true]],
+        );
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more);
@@ -647,6 +661,21 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
+describe('An archived agent’s “…”', () => {
+    it('keeps the host in a terminal beside its folder', async () => {
+        const { desktop } = await renderAt('window', '#/campaigns/cmp_4/chat');
+        const header = await headOf('Winter');
+        await waitFor(() => expect(within(header).getByText('Archived')).toBeTruthy());
+        fireEvent.click(within(head()!).getByRole('button', { name: "More for this agent's conversation" }));
+        fireEvent.click(within(head()!).getByRole('menuitem', { name: 'Open Claude Code in terminal' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['claude', 'cmp_4', { keep: false }],
+            ]),
+        );
+    });
+});
+
 describe.each<Place>(['window', 'tab'])('An archived agent with no conversation, in the %s', (place) => {
     it('says on its Chat tab that it is archived, and draws nothing that could make a conversation', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_4/chat');
@@ -670,8 +699,15 @@ describe.each<Place>(['window', 'tab'])('An archived agent with no conversation,
             expect(within(shownPane).queryByRole('button')).toBeNull();
             expect(area.querySelector('[data-pane^="chat:"]')).toBeNull();
             expect(shownPane.querySelector('.sug, .crow, [aria-haspopup="menu"]')).toBeNull();
+            // Open in the file manager opens the agent's folder, which is there, and the host in a terminal opens a
+            // session there: neither makes a conversation.
             expect(
-                [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some((each) => !each.disabled),
+                [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some(
+                    (each) =>
+                        !each.disabled &&
+                        each.textContent !== 'Open in File manager' &&
+                        each.textContent !== 'Open Claude Code in terminal',
+                ),
             ).toBe(false);
         };
         nothingToMake();
@@ -750,7 +786,7 @@ describe('An agent the runtime no longer knows', () => {
 describe('The conversation’s acts in the agent’s “…”', () => {
     const more = () => within(head()!).getByRole('button', { name: "More for this agent's conversation" });
 
-    it('names the conversation in each, from the keyboard, and Escape gives the focus back', async () => {
+    it('opens on the agent’s folder, names the conversation in each of its own acts, from the keyboard, and Escape gives the focus back', async () => {
         await renderAt('window');
         await openSpring();
         more().focus();
@@ -760,13 +796,67 @@ describe('The conversation’s acts in the agent’s “…”', () => {
             within(menu)
                 .getAllByRole('menuitem')
                 .map((each) => each.textContent),
-        ).toEqual(['Rename conversation', 'Start conversation fresh', 'Remove conversation']);
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Rename conversation' }));
+        ).toEqual([
+            'Open in File manager',
+            'Open Claude Code in terminal',
+            'Rename conversation',
+            'Start conversation fresh',
+            'Remove conversation',
+        ]);
+        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Open in File manager' }));
         fireEvent.keyDown(menu, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Start conversation fresh' }));
+        expect(document.activeElement).toBe(
+            within(menu).getByRole('menuitem', { name: 'Open Claude Code in terminal' }),
+        );
         fireEvent.keyDown(menu, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more());
+    });
+
+    it('opens the agent’s folder in the file manager through Open in, and nothing else', async () => {
+        const { desktop } = await renderAt('window');
+        await openSpring();
+        fireEvent.click(more());
+        fireEvent.click(within(head()!).getByRole('menuitem', { name: 'Open in File manager' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['files', 'cmp_1', { keep: false }],
+            ]),
+        );
+        expect(within(head()!).queryByRole('menu')).toBeNull();
+        // The window's Open in keeps the place it had: one agent's item never moves it.
+        expect(desktop.openInKept.default).toBe('claude');
+    });
+
+    it('opens the host the chat is set to use in a terminal at the agent’s folder, silently, leaving Open in where it was', async () => {
+        const { desktop } = await renderAt('window');
+        desktop.openInKept.default = 'vscode';
+        await openSpring();
+        fireEvent.click(more());
+        const offered = within(head()!).getByRole('menuitem', { name: 'Open Claude Code in terminal' });
+        expect(offered.title).toBe("Opens a new Claude Code session in a terminal at this agent's folder");
+        // The chat is set to Codex now, which is found here: the item follows the host the chat runs on.
+        await flush(async () => {
+            setup.value = {
+                ...setup.value!,
+                hosts: setup.value!.hosts.map((each) =>
+                    each.id === 'codex' ? { ...each, found: true, version: '0.130.0', install: null } : each,
+                ),
+            };
+            chats.value = { ...chats.value, [spring]: { ...chats.value[spring]!, host: 'codex' } };
+        });
+        const codex = await waitFor(() => within(head()!).getByRole('menuitem', { name: 'Open Codex in terminal' }));
+        fireEvent.click(codex);
+        await waitFor(() =>
+            expect(desktop.calls.filter((each) => each.name === 'openIn.open').map((each) => each.args)).toEqual([
+                ['codex', 'cmp_1', { keep: false }],
+            ]),
+        );
+        expect(within(head()!).queryByRole('menu')).toBeNull();
+        expect(desktop.openInKept.default).toBe('vscode');
+        await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(document.querySelector('.side [role="alert"]')).toBeNull();
+        expect(document.querySelector('.open-in-toast')).toBeNull();
     });
 
     it('in a tab the desktop opened holds Rename conversation alone', async () => {

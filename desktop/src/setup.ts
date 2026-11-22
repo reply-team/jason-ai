@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
+import { chatModes, codexAutoEdit, fullAccessNotYet, fullAccessOffered, fullAccessSentence, turnMode, type Bypass, type ChatMode } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -47,7 +47,6 @@ import {
     refusalOf,
     replyAccountSentences as said,
     replyActLimitMs,
-    sharedPageBox,
     type ReplyAct,
     type ReplyBox,
     type ReplyRefusal,
@@ -96,6 +95,9 @@ import {
     type ReplyAccount,
 } from './setup-model.ts';
 
+/** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
+export type TurnSteps = Partial<Record<ChatMode, { mode: ChatMode; why: string }>>;
+
 export interface HostState {
     id: string;
     label: string;
@@ -112,9 +114,10 @@ export interface HostState {
      */
     belowFloor: string | null;
     /**
-     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: Codex has none, and a Claude Code
-     * older than the oldest version a Full access turn runs on, or whose version could not be read, says so
-     * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
+     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: while this version does not offer
+     * it (`fullAccessNotYet`), and on a Claude Code older than the oldest version a Full access turn runs on, or whose
+     * version could not be read (`fullAccessSentence`). Null where it can be chosen, on Codex with no floor of it, and for
+     * a host that does not drive the chat.
      */
     fullAccess: string | null;
     /**
@@ -122,6 +125,13 @@ export interface HostState {
      * (`codexAutoEdit`). Null where it can be chosen, and for a host that does not drive the chat.
      */
     autoEdit: string | null;
+    /**
+     * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`). A mode not named runs as
+     * itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this listing, so the page
+     * draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that does not drive the chat.
+     */
+    runs: { window: TurnSteps; tab: TurnSteps };
     /**
      * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
      * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
@@ -179,15 +189,14 @@ export interface ReplyOpened {
     opened: true;
     channel: ReplyCliChannel;
     kind: 'connect' | 'reconnect';
-    linkKind: 'connection_link' | 'shared_page';
+    linkKind: 'connection_link';
     expiresAt: string | null;
     pendingId: number | null;
 }
 
 /**
  * A connection link the Reply CLI made, written to the clipboard by the main process for the person to hand on: what the
- * page learns of it. Only a link that expires and connects one account is copied, never the shared mailbox page, and the
- * link itself never reaches the page.
+ * page learns of it. The link itself never reaches the page.
  */
 export interface ReplyCopied {
     copied: true;
@@ -262,6 +271,11 @@ export interface SetupDeps {
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
+    /**
+     * Why Claude Code's bypass, which Full access runs in, is not available here, as the chat knows it
+     * (`Chat.bypassUnavailable`); absent, nothing is known, and a turn finds it.
+     */
+    bypass?(): Bypass | null;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**
@@ -423,12 +437,14 @@ export class Setup {
     #acts = false;
     /** The accounts the last listing gave: an act names only one of them, and its box names it as the list does. */
     #listed: ReplyAccount[] = [];
-    /** The offers a refusal opened, each for the one ask it answered: the shared page, and a forced delete. */
+    /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
     #own: OwnServers;
     /** The kind each program's file was last logged as unread with; absent while it lists. */
     #unread = new Map<string, UnreadKind>();
+    /** Claude Code's version as the last listing read it (`handedClaudeVersion`); undefined before one read it. */
+    #handedClaude: string | null | undefined = undefined;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -499,31 +515,59 @@ export class Setup {
         return [];
     }
 
+    /**
+     * Claude Code's version as the last listing of the hosts read it, from which the page drew the mode a turn runs in
+     * (`runs`): null when it could not be read, undefined before a listing read it or when Claude Code was not found. A turn
+     * holds the version it reads itself to it (`Chat.send`), and asks the page to read the hosts again when the two differ
+     * across the floor of Full access. The window and a browser tab are handed the one version, so a listing whose version
+     * stands across that floor from the last listing's asks every page to read the hosts again itself.
+     */
+    handedClaudeVersion(): string | null | undefined {
+        return this.#handedClaude;
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
+        const before = this.#handedClaude;
+        this.#handedClaude = claude === null ? undefined : claude.version;
+        // A page may have drawn its turns from the last listing, which another page asked for: across the floor of Full
+        // access, every page is asked to draw them again.
+        if (before !== undefined && claude !== null && (fullAccessSentence(before) === null) !== (claude.fullAccess === null)) this.#changed();
         const kept = this.#deps.models?.lists() ?? new Map();
         const offered = (id: string, label: string) => {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
             return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
-        // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
-        // While this version does not offer it, every host that drives the chat says so.
+        // Codex has Full access with no floor; Claude Code has it from its floor of Full access. A Claude Code not found offers
+        // nothing yet. While this version does not offer it, every host that drives the chat says so.
         const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
+        const bypass = this.#deps.bypass?.() ?? null;
         const fullAccessOn = (program: string, drives: boolean) =>
             !drives
                 ? null
                 : !offeredHere
                     ? fullAccessNotYet
-                    : program === 'codex'
-                      ? codexFullAccess
-                      : program === 'claude'
+                    : program === 'claude'
                         ? claude === null
                             ? null
                             : claude.fullAccess
                         : null;
         const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
+        // What a turn on the host runs in, by the record's mode, from the window and from a tab: the turn's own rule.
+        const runsOn = (program: string, drives: boolean): HostState['runs'] => {
+            const steps = (fromTab: boolean): TurnSteps => {
+                const out: TurnSteps = {};
+                if (!drives) return out;
+                for (const recorded of chatModes) {
+                    const turn = turnMode(recorded, program, { fromTab, offered: offeredHere, claudeVersion: program === 'claude' ? claude?.version : undefined, bypass });
+                    if (turn.why !== null) out[recorded] = { mode: turn.mode, why: turn.why.text };
+                }
+                return out;
+            };
+            return { window: steps(false), tab: steps(true) };
+        };
 
         let settings: unknown = {};
         let settingsRefused = this.#reloadRefusal;
@@ -550,6 +594,7 @@ export class Setup {
                 belowFloor: own?.belowFloor ?? null,
                 fullAccess: fullAccessOn(host.program, host.drivesChat),
                 autoEdit: autoEditOn(host.program, host.drivesChat),
+                runs: runsOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
                 ownServers: await this.#ownServers(host.program, found),
                 // Said only under a host the chat can use, as the page counts it connected: found, and at its floor.
@@ -567,6 +612,7 @@ export class Setup {
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
             fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             autoEdit: autoEditOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
+            runs: runsOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
             ownServers: [],
             runsRoles: null,
@@ -715,20 +761,19 @@ export class Setup {
      * Runs one verb. The log says the act, the channel, the exit and the CLI's code, never what the verb printed or
      * wrote on stderr: a link's stdout is never logged, recorded or put into an error.
      */
-    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; sharedPage?: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
+    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
         const result = await this.#run('reply', `account ${act}`, args, { timeoutMs: replyActLimitMs });
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
         if (ending.kind === 'done') return { stdout: ending.stdout };
-        return refusalOf(ending, { verb: act, channel, write: options.write, sharedPage: options.sharedPage, force: options.force });
+        return refusalOf(ending, { verb: act, channel, write: options.write, force: options.force });
     }
 
     /**
-     * A link verb's ending: the link checked and handed to the system opener, or, where the person asked for a copy and
-     * the link is one that expires and connects one account, written to the clipboard; the page is told only which,
-     * when it expires and its pending entry. The shared mailbox page is never copied, whatever the page asked. The link
-     * is kept nowhere and logged nowhere.
+     * A link verb's ending: the link checked and handed to the system opener, or, where the person asked for a copy,
+     * written to the clipboard; the page is told only which, when it expires and its pending entry. The link is kept
+     * nowhere and logged nowhere.
      */
     async #open(answer: { stdout: string } | ReplyRefusal, copy: boolean): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         if ('refused' in answer) return answer;
@@ -736,7 +781,6 @@ export class Setup {
         if (printed === null) return refusal(said.outcomeUnknown, true);
         if (!isOpenableLink(printed.link)) return refusal(said.badLink, true);
         if (copy) {
-            if (printed.linkKind !== 'connection_link') return refusal(said.sharedPageNotCopied);
             if (this.#deps.copyLink === undefined) return refusal(said.notCopied, true);
             try {
                 this.#deps.copyLink(printed.link);
@@ -754,72 +798,40 @@ export class Setup {
         return { opened: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
     }
 
-    /**
-     * The shared page's door: open only after the CLI answered `email_link.not_available` to the same ask made without
-     * it, and gone through only on the person's yes to the box that carries the CLI's warning.
-     */
-    async #sharedPage(door: string): Promise<ReplyRefusal | null> {
-        if (!this.#doors.has(door)) return refusal(said.notOffered);
-        if (!(await this.#confirmed(sharedPageBox()))) return refusal(said.notConfirmed);
-        this.#doors.delete(door);
-        return null;
-    }
-
-    /** Keeps the door a refusal opened: the shared page after `not_available`, a forced delete after `account_in_use`. */
-    #keepDoor(door: string, answer: { stdout: string } | ReplyRefusal, offer: 'shared_page' | 'force'): void {
+    /** Keeps the door a refusal opened: a forced delete after `account_in_use`. */
+    #keepDoor(door: string, answer: { stdout: string } | ReplyRefusal, offer: 'force'): void {
         if ('refused' in answer && answer.offer === offer) this.#doors.add(door);
     }
 
     /**
      * Connects a new account by a link the CLI makes (`reply account connect`): LinkedIn under the name typed for it, a
-     * mailbox for its provider. With `sharedPage`, only after the CLI said one-mailbox links are not available here, and
-     * only on the person's yes, the same ask is made again with `--allow-shared-page`. With `copy`, the link is copied
-     * instead of opened, as `#open` says.
+     * mailbox for its provider. With `copy`, the link is copied instead of opened, as `#open` says. `sharedPage`, the
+     * shared mailbox page an earlier desktop offered, is no option any more and is refused.
      */
     replyConnect(channel: unknown, options: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
+        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
         if (channel === 'linkedin') {
             const problem = linkedInNameProblem(asked['name']);
             if (problem !== null) return Promise.resolve(refusal(problem));
-            if (asked['sharedPage'] === true || asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+            if (asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
             const name = (asked['name'] as string).trim();
             return this.#acting(async () => this.#open(await this.#verb('connect', 'linkedin', connectArguments({ channel: 'linkedin', name }), { write: true }), copy));
         }
         const provider = asked['provider'];
         if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
-        const shared = asked['sharedPage'] === true;
-        const door = `connect:email:${provider}`;
-        return this.#acting(async () => {
-            if (shared) {
-                const closed = await this.#sharedPage(door);
-                if (closed !== null) return closed;
-            }
-            const answer = await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider, allowSharedPage: shared }), { write: true, sharedPage: shared });
-            this.#keepDoor(door, answer, 'shared_page');
-            return this.#open(answer, copy);
-        });
+        return this.#acting(async () => this.#open(await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider }), { write: true }), copy));
     }
 
-    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; the shared page as above. */
+    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
     replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
-        const shared = asked['sharedPage'] === true;
-        if (shared && channel !== 'email') return Promise.resolve(refusal(said.badRequest));
+        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
         const account = this.#account(channel, accountId);
         if (account === null) return Promise.resolve(refusal(said.badId));
-        const door = `reconnect:email:${account.id}`;
-        return this.#acting(async () => {
-            if (shared) {
-                const closed = await this.#sharedPage(door);
-                if (closed !== null) return closed;
-            }
-            const answer = await this.#verb('reconnect', channel, reconnectArguments(channel, account.id, shared), { write: true, sharedPage: shared });
-            if (channel === 'email') this.#keepDoor(door, answer, 'shared_page');
-            return this.#open(answer, copy);
-        });
+        return this.#acting(async () => this.#open(await this.#verb('reconnect', channel, reconnectArguments(channel, account.id), { write: true }), copy));
     }
 
     /**

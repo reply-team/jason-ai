@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import * as store from './store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
@@ -1548,6 +1548,25 @@ describe('What the panel does', () => {
             .queryAllByRole('button')
             .map((each) => each.textContent?.trim())
             .filter((name) => moves.includes(name ?? ''));
+
+    it('holds Start for the draft New GTM agent made where its count of no one is read, and offers it where it is not', async () => {
+        // Summary reads the draft's count, zero, beside its empty brief; Activity's people are the period's, so no count
+        // of the agent is read there and nothing holds Start back.
+        const shown: Record<string, string[]> = {};
+        for (const view of ['summary', 'activity'] as const) {
+            const api = startedAgents()
+                .answerAnyRequest('campaign.list', 'campaign.list/new-agent')
+                .answerAnyRequest('campaign.summary', 'campaign.summary/new-agent')
+                .answerAnyRequest('campaign.activity', 'campaign.activity/all-7-days')
+                .answerAnyRequest('campaign.get', 'campaign.get/new-agent');
+            open(api, { ...table, view, id: 'cmp_1', tab: 'settings' });
+            await screen.findByRole('heading', { level: 2, name: 'New agent 1' });
+            await waitFor(() => expect(actions()).not.toBeNull());
+            shown[view] = offered(actions()) as string[];
+            cleanup();
+        }
+        expect(shown).toEqual({ summary: [], activity: ['Start'] });
+    });
 
     /** Chooses a person in the open Add people dialog, searching for them first when the first page does not offer them. */
     async function choose(dialog: HTMLElement, name: string, search?: string) {

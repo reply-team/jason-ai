@@ -32,7 +32,7 @@ API fields, file names, test ids and fixtures keep `campaign`. The AI that runs 
 
 The page mounts the console, in one of three places that differ by what each can do (`src/main.tsx`, chosen by
 `src/start.ts` once as the page loads). The console (`src/console/`) is a sidebar and one area that shows exactly one
-thing at a time, chosen from the sidebar's menu, its Recent or the palette: Start, one chat, what needs the person
+thing at a time, chosen from the sidebar's menu, its two sections, Agents and Chats, or the palette: Start, one chat, what needs the person
 (approvals and questions), the agents, the journal's activity, Connect, which shows the AI hosts found on the computer,
 the model keys, the Reply connection and the notification channels, or one of the screens under `src/screens/`. Nothing
 in it is closed, only chosen. A chat chosen again has the words typed and not sent, what arrived meanwhile and the

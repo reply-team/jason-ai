@@ -366,8 +366,11 @@ public partial class InteractiveSkillTests
             .Where(line => line.Contains(" workitem resume ", StringComparison.Ordinal))
             .ToList();
         Assert.True(
-            resumes.Count == 1 && resumes[0].StartsWith("jason --actor human:", StringComparison.Ordinal),
-            $"The troubleshooting skill prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person.");
+            resumes.Count == 1
+                && resumes[0].StartsWith("jason workitem resume wi_", StringComparison.Ordinal)
+                && Regex.IsMatch(resumes[0], " --actor human:\\S+ --reason '[^']*'$"),
+            $"The troubleshooting skill prints [{string.Join(" | ", resumes)}] to end a wait; it prints one, naming the person, its "
+            + "options at the end of the command, where a host's rule for the verb still matches.");
     }
 
     /// <summary>
@@ -492,7 +495,7 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains("jason workitem list --block blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human", skill, StringComparison.Ordinal);
-        Assert.Contains("jason --actor human:ada block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason", skill, StringComparison.Ordinal);
+        Assert.Contains("jason block clear blk_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason '", skill, StringComparison.Ordinal);
         Assert.Contains("A clear is their word that the cause is gone, not a mute, and where the provider still refuses, the next call opens a new block.", skill, StringComparison.Ordinal);
         Assert.Contains("Do not cancel, recreate or resume a parked item", skill, StringComparison.Ordinal);
         Assert.Contains("Work a block holds does not end here: it waits on the block, which is state 11.", skill, StringComparison.Ordinal);

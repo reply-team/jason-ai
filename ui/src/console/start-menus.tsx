@@ -11,14 +11,16 @@ import {
     type RefObject,
 } from 'react';
 import { can, cannotHere } from '../platform/places';
-import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
-import { fullAccessStanding, readStandingAgain, takeBackWords } from '../platform/full-access';
+import type { DesktopChatMode, DesktopEffort, DesktopHost } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { hostOf, heldHostOf } from './chat';
 import { setVariable } from './html';
 import { accessMarks } from './icons';
 import {
     anotherModel,
+    codexHosts,
+    codexModeSays,
+    drawnMode,
     effortChosen,
     hostChosen,
     modeChoices,
@@ -29,7 +31,7 @@ import {
     type Chat,
 } from './chat-model';
 import { chatHosts } from './live';
-import { here, setup } from './state';
+import { inTab, setup } from './state';
 
 // The two buttons in a composer's row, each opening a menu: the access mode a chat works in, and what it runs on (host,
 // model, effort). The start screen's box and a chat's own composer draw the same two; `change` and `choose` say where a
@@ -53,8 +55,15 @@ export const modeSays: Readonly<Record<DesktopChatMode, string>> = {
     ask_first: 'Asks on a card before anything Jason does not settle itself.',
     plan_only: 'Reads and proposes, and changes nothing.',
     auto_edit: "Works on files in the chat's own folder without asking; everything else is as in Ask first.",
-    full_access: 'Runs commands on this computer without asking, except those Jason cannot read.',
+    full_access:
+        "Runs commands on this computer without asking, except those that name Jason's own settings, data or variables.",
 };
+
+/** What a mode does on the host the next turn runs on: Codex's own words where they differ (`codexModeSays`). */
+export function modeSaysOn(host: DesktopHost | null, mode: DesktopChatMode): string | undefined {
+    const codex = host !== null && codexHosts.has(host.id) ? codexModeSays[mode] : undefined;
+    return codex ?? (modeSays as Partial<Record<string, string>>)[mode];
+}
 
 type Mark = keyof typeof accessMarks;
 
@@ -317,34 +326,38 @@ function Item({
     );
 }
 
-/** The access button: the current mode's name, and a menu of the modes with what each does or why it is refused. */
+/**
+ * The access button: the name of the mode the next turn runs in, as the desktop hands it (`drawnMode`), and a menu of the
+ * modes with what each does or why it is refused, that mode checked. A choice is of the mode the chat keeps: every mode
+ * but that one is asked for, the one checked included, so Ask first chosen where Full access does not run stays the
+ * chat's on the hosts where it does.
+ */
 export function AccessButton({
     chat,
     choose,
-    takeBack,
     buttonRef,
     header,
     order,
 }: {
     chat: Chat;
     choose: (mode: DesktopChatMode) => void;
-    takeBack: () => void;
     buttonRef: RefObject<HTMLButtonElement>;
     /** The words over the modes, which say whose mode it is. */
     header: string;
     /** The order the menu lists the modes in; absent, `modeChoices`'s own. */
     order?: readonly DesktopChatMode[];
 }) {
-    const feed = chat.main === true;
-    const listed = modeChoices(hostOf(chat), feed);
+    const host = hostOf(chat);
+    const listed = modeChoices(host);
     const choices = order ? [...listed].sort((a, b) => order.indexOf(a.mode) - order.indexOf(b.mode)) : listed;
-    const current = choices.find((each) => each.mode === chat.mode)?.label ?? chat.mode;
-    const tone = chat.mode === 'full_access' ? ' acc-full' : chat.mode === 'plan_only' ? ' acc-plan' : '';
+    const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
+    const current = choices.find((each) => each.mode === drawn)?.label ?? drawn;
+    const tone = drawn === 'full_access' ? ' acc-full' : drawn === 'plan_only' ? ' acc-plan' : '';
     return (
         <MenuButton
             label={
                 <>
-                    <ModeMark mode={chat.mode} />
+                    <ModeMark mode={drawn} />
                     {current}
                 </>
             }
@@ -353,7 +366,6 @@ export function AccessButton({
             menuClassName="accmenu"
             buttonRef={buttonRef}
             disabled={chat.removing}
-            onOpen={() => readStandingAgain(here().desktop)}
         >
             {(close) => (
                 <>
@@ -361,7 +373,7 @@ export function AccessButton({
                         {header}
                     </div>
                     {choices.map((each) => {
-                        const elsewhere = each.mode !== chat.mode && !can('chat.setMode');
+                        const elsewhere = each.mode !== drawn && !can('chat.setMode');
                         return (
                             <Item
                                 key={each.mode}
@@ -370,11 +382,11 @@ export function AccessButton({
                                 kind="mode"
                                 label={each.label}
                                 value={each.mode}
-                                checked={each.mode === chat.mode}
+                                checked={each.mode === drawn}
                                 disabled={each.disabled !== null || elsewhere}
                                 small={
                                     each.disabled?.replaceAll('`', '') ??
-                                    (elsewhere ? cannotHere() : modeSays[each.mode])
+                                    (elsewhere ? cannotHere() : modeSaysOn(host, each.mode))
                                 }
                                 onChoose={() => {
                                     close();
@@ -383,25 +395,6 @@ export function AccessButton({
                             />
                         );
                     })}
-                    {fullAccessStanding.value !== null && (
-                        <>
-                            <hr />
-                            <Item
-                                className="accmi"
-                                kind="mode"
-                                label={takeBackWords}
-                                value="take_back"
-                                checked={false}
-                                command
-                                disabled={!can('fullAccess.takeBack')}
-                                small={can('fullAccess.takeBack') ? undefined : cannotHere()}
-                                onChoose={() => {
-                                    close();
-                                    takeBack();
-                                }}
-                            />
-                        </>
-                    )}
                 </>
             )}
         </MenuButton>
@@ -420,12 +413,10 @@ const whyNot = (host: { belowFloor?: string | null }): string =>
 export function ModelButton({
     chat,
     change,
-    choose,
     header,
 }: {
     chat: Chat;
     change: (next: (each: Chat) => Chat) => void;
-    choose: (mode: DesktopChatMode) => void;
     /** The words over the models, which say whose model it is. */
     header: string;
 }) {
@@ -477,13 +468,8 @@ export function ModelButton({
                     data-value={each.id}
                     onClick={() => {
                         if (each.id === host?.id) return;
+                        // The chat keeps its mode: a turn on a host that cannot take it runs in Ask first, the desktop says.
                         change((chosen) => hostChosen(chosen, each.id));
-                        // A host that cannot take Full access or Auto-edit takes the chat back to Ask first.
-                        if (
-                            (chat.mode === 'full_access' && each.fullAccess !== null) ||
-                            (chat.mode === 'auto_edit' && each.autoEdit !== null)
-                        )
-                            choose('ask_first');
                     }}
                 >
                     {each.label}

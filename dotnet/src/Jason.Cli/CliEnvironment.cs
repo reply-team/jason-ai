@@ -182,6 +182,22 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
                 : Environment.GetEnvironmentVariable(Confinement.Variable));
 
     /// <summary>
+    /// Whether this call is a chat turn's (<see cref="Confinement.ChatTurnVariable"/>): <c>JASON_CHAT_TURN</c> holds a value
+    /// that is not empty, read as <see cref="Confined"/> reads its variable.
+    /// </summary>
+    public bool ChatTurn() =>
+        Confinement.Confines(
+            Variables is { } variables
+                ? variables.GetValueOrDefault(Confinement.ChatTurnVariable)
+                : Environment.GetEnvironmentVariable(Confinement.ChatTurnVariable));
+
+    /// <summary>
+    /// The variable that holds this call's file half, a file option to standard input and the provider check to a bare
+    /// name: <c>JASON_CONFINED</c> where it is set, else <c>JASON_CHAT_TURN</c> where it is, else null.
+    /// </summary>
+    public string? FileHalfVariable() => Confined() ? Confinement.Variable : ChatTurn() ? Confinement.ChatTurnVariable : null;
+
+    /// <summary>
     /// The folder the command was typed in, or null where the platform cannot name it — on Linux and macOS, a folder
     /// deleted under the shell standing in it — which finds nothing, as everywhere a verb is given no folder: a verb that
     /// does not need one, <c>jason status</c> above all, is never ended by it before it starts.

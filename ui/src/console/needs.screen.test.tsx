@@ -227,16 +227,19 @@ describe('Needs you', () => {
     });
 
     it('starts a new agent from the card, as the sidebar’s New GTM agent does', async () => {
-        await renderConsole(
+        const desktop = await renderConsole(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        // The desktop refuses the agent, so Needs you stays: the card asked what the sidebar's button asks.
+        desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
         fireEvent.click(
             within(needs().querySelector<HTMLElement>('.card.needs-empty')!).getByRole('button', {
                 name: 'New GTM agent',
             }),
         );
-        await waitFor(() => expect(screen.getByRole('form', { name: 'Start' })).toBeTruthy());
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'chat.createAgent')).toHaveLength(1));
+        expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
     });
 
     it('lists what waits on the left and shows the first, whole, on the right; choosing a line shows that one', async () => {
@@ -699,6 +702,50 @@ describe('Needs you', () => {
             );
             fireEvent.click(row('apr_2'));
             await waitFor(() => expect(needs().querySelector('.needs-left')).toBeNull());
+        });
+
+        it('says nothing of an item that left while the panel was not open', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            const desktop = await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+            const section = () => document.querySelector<HTMLElement>('section[data-pane="needs"]')!;
+            // The person goes to Agents: Needs you is kept, hidden, and the item it showed is decided elsewhere.
+            flush(() => desktop.command('navigate.campaigns'));
+            await waitFor(() => expect(section().hidden).toBe(true));
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_2');
+            await waitFor(() => expect(section().querySelector('[data-row="apr_1"]')).toBeNull());
+            // Back in Needs you: the next item is shown, and no word is said of one the person never saw leave.
+            fireEvent.click(
+                within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }),
+            );
+            await waitFor(() => expect(section().hidden).toBe(false));
+            await settle();
+            expect(pane().dataset['id']).toBe('apr_2');
+            expect(needs().querySelector('.needs-left')).toBeNull();
+        });
+
+        it('says again what left once the panel is back in sight', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            const desktop = await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+            const section = () => document.querySelector<HTMLElement>('section[data-pane="needs"]')!;
+            // Away to Agents and back, with nothing leaving meanwhile.
+            flush(() => desktop.command('navigate.campaigns'));
+            await waitFor(() => expect(section().hidden).toBe(true));
+            fireEvent.click(
+                within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }),
+            );
+            await waitFor(() => expect(section().hidden).toBe(false));
+            // Now the item shown is decided elsewhere, in the person's sight: the pane says so.
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_2');
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            expect(words(needs().querySelector('.needs-left')!)).toBe(
+                'What you had open is no longer waiting: it was decided or withdrawn elsewhere. This is the next one.',
+            );
         });
 
         it('stays on the question shown when an approval arrives above it', async () => {

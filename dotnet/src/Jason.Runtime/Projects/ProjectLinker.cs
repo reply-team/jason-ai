@@ -31,7 +31,7 @@ namespace Jason.Runtime.Projects;
 /// database back, and what it marked already names the right project or campaign, so the next link uses it again.
 /// </para>
 /// </remarks>
-public sealed class ProjectLinker(JasonDbContext db, JournalWriter journal, HarnessFolders folders, JasonPaths paths)
+public sealed class ProjectLinker(JasonDbContext db, JournalWriter journal, HarnessFolders folders, JasonPaths paths, TimeProvider clock)
 {
     public async Task<ProjectLinkResult> LinkAsync(ProjectLinkRequest request, CancellationToken cancellationToken)
     {
@@ -138,7 +138,7 @@ public sealed class ProjectLinker(JasonDbContext db, JournalWriter journal, Harn
             {
                 result = LinkCampaignOutcome.Made;
                 Record(campaign, await folders
-                    .MakeCampaignFolderAsync(folder, campaign.PublicId, campaign.Name, HoldsAsync)
+                    .MakeCampaignFolderAsync(folder, campaign.PublicId, CampaignLeaf.Of(campaign.PublicId, campaign.CreatedAt, clock.LocalTimeZone), HoldsAsync)
                     .ConfigureAwait(false));
             }
 

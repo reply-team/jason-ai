@@ -137,24 +137,12 @@ public class ApplicationManifestTests
 
     private static (int Exit, string Said) Check(string what, string path)
     {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it.");
-
-        var start = new ProcessStartInfo(pwsh!)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-
-        // PowerShell reports telemetry over the network unless told not to, and no test here reaches the network.
-        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
+        using var tree = new TempTree();
+        var start = ChildPwsh.StartInfo(tree.Root);
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
+        start.StandardErrorEncoding = Encoding.UTF8;
         foreach (var argument in new[]
         {
             "-NoProfile", "-NonInteractive", "-File",

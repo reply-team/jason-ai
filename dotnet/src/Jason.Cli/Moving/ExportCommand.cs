@@ -146,6 +146,7 @@ public static class ExportCommand
             "data/state/backups/", "data/run/", "data/work/", "data/skills/.staging/", "data/skills/staged/", "data/ui/default/",
             "a replaced-<stamp>/ directory at the data directory's top, which an import moved aside",
             "data/desktop/, the desktop application's own files, the conversations of its chat among them",
+            "data/autostart/, the start at logon's own files, a turn-off you made with jason runtime autostart disable among them: an import is a new machine",
         ];
 
     /// <summary>

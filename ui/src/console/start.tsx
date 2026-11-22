@@ -2,13 +2,13 @@ import { effect, signal } from '@preact/signals-react';
 import { can } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
-import { takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, type Mode } from '../platform/mode';
 import { ChatNotes, hostOf, isRefusal, newChatMode, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
+import { useDroppedPaths } from './dropped-paths';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
@@ -38,19 +38,14 @@ export const startMaking = signal<string | null>(null);
 /** What the controls beside the start screen's box have chosen: the host, model and effort the chat's first turn names. */
 export const startPick = signal<Chat>(newChat('', null));
 
-/** The access mode the person chose beside the box; null while none was chosen, which leaves the standing default. */
+/**
+ * The access mode the person chose beside the box; null while none was chosen, which leaves the chat in the mode the
+ * desktop makes it in.
+ */
 export const startMode = signal<DesktopChatMode | null>(null);
 
-/**
- * The mode a chat made now would start in when the person chose none: Full access when the standing choice says new
- * chats start in it and the host that chat would run on can take it, Ask first otherwise.
- */
-function defaultMode(): DesktopChatMode {
-    return newChatMode(startPick.value);
-}
-
 /** The mode the start screen shows and the chat it makes ends up in. */
-const shownMode = (): DesktopChatMode => startMode.value ?? defaultMode();
+const shownMode = (): DesktopChatMode => startMode.value ?? newChatMode;
 
 /** The choices on the start screen as a chat, so the chat's own controls draw them. */
 const startChatNow = (): Chat => ({ ...startPick.value, mode: shownMode() });
@@ -134,11 +129,11 @@ const aiConnected = (): boolean | null => {
 async function begin(text: string): Promise<void> {
     startMaking.value = text;
     let id: string | null;
-    // What the start screen showed decides: a chat it did not say starts in Full access never does.
+    // A mode the person chose beside the box is asked of the desktop once the chat is made; none chosen asks for none.
     const pick = startPick.value;
-    const wanted = shownMode();
+    const wanted = startMode.value;
     try {
-        id = await startChat(undefined, { askFirst: !(wanted === 'full_access' && defaultMode() === 'full_access') });
+        id = await startChat();
     } finally {
         startMaking.value = null;
     }
@@ -148,7 +143,8 @@ async function begin(text: string): Promise<void> {
     }
     startPick.value = newChat('', null);
     startMode.value = null;
-    // A tab sends to a chat only in Ask first or Plan only: a chat made in another mode keeps the words in the box.
+    // A tab sends to a chat only in Ask first, Plan only or Full access: a chat made in another mode keeps the words in
+    // the box.
     if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) {
         startDraft.value = text;
         changeChat(id, (each) => told(each, tabLockedSentence(chats.value[id]?.mode ?? '')));
@@ -163,7 +159,7 @@ async function begin(text: string): Promise<void> {
         effort: pick.effort,
         typing: pick.typing,
     }));
-    if (chats.value[id]?.mode !== wanted && can('chat.setMode')) {
+    if (wanted !== null && chats.value[id]?.mode !== wanted && can('chat.setMode')) {
         try {
             const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
             if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));
@@ -173,7 +169,7 @@ async function begin(text: string): Promise<void> {
         }
     }
     here().dock.showChat(id);
-    sendTurn(id, text, true);
+    sendTurn(id, text, true, undefined, true);
 }
 
 // The message goes as soon as an AI is there to take it, once: it is taken out of waiting before the chat is made.
@@ -224,6 +220,8 @@ function StartChat() {
     // unread it is there for the reason it could not be read.
     const card = connected === false || (unread && setupError.value !== null);
     const box = useRef<HTMLTextAreaElement>(null);
+    // A file dropped on the box puts its path in at the caret, as in a chat (`dropped-paths.ts`).
+    const drop = useDroppedPaths(box, 'start', startDraft.value, (next) => (startDraft.value = next));
     const held = waiting !== null || making !== null;
     // The note about name and tone waits for a first message, in Live only, and for a read that holds neither.
     const askable = mode.value === 'live' && !voiceNoteClosed.value && messageWasSent();
@@ -249,6 +247,8 @@ function StartChat() {
     useFit(box, startDraft.value);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
+        // What the box said of a drop goes with the words it was said beside.
+        drop.reset();
         submitStart(startDraft.value);
     };
     const enter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -301,6 +301,11 @@ function StartChat() {
                 )}
                 <form className="cform" onSubmit={send} aria-label="Start">
                     <div className="composer">
+                        {drop.said !== null && (
+                            <div className="note am" role="status">
+                                {drop.said}
+                            </div>
+                        )}
                         <textarea
                             ref={box}
                             rows={2}
@@ -308,14 +313,18 @@ function StartChat() {
                             aria-label="Who do you want to reach?"
                             value={startDraft.value}
                             disabled={held}
-                            onChange={(event) => (startDraft.value = event.target.value)}
+                            onChange={(event) => {
+                                drop.reset();
+                                startDraft.value = event.target.value;
+                            }}
                             onKeyDown={enter}
+                            onDragOver={drop.draggedOver}
+                            onDrop={drop.dropped}
                         />
                         <div className="crow">
                             <AccessButton
                                 chat={startChatNow()}
                                 choose={(chosen) => (startMode.value = chosen)}
-                                takeBack={() => void takeBackStanding(here().desktop).catch(() => undefined)}
                                 buttonRef={modeMenu}
                                 header={t('start.access.header')}
                                 order={['full_access', 'ask_first', 'auto_edit', 'plan_only']}
@@ -324,7 +333,6 @@ function StartChat() {
                             <ModelButton
                                 chat={startChatNow()}
                                 change={(next) => (startPick.value = next(startPick.value))}
-                                choose={(chosen) => (startMode.value = chosen)}
                                 header={t('start.model.header')}
                             />
                             <button

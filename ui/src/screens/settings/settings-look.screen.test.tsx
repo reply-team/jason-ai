@@ -34,7 +34,7 @@ const body = (selector: string) =>
 const scope = '.jc-console .harness .settings';
 // The exact selectors the two panes add: the rule that lets the bar stay, the rules on the chosen page, and the one that hides.
 const contentRule = '.jc-console .harness .content:has(> .settings[data-chosen])';
-const hiding = ['appearance', 'voice', 'modes', 'notifications', 'models', 'runtime'].map(
+const hiding = ['appearance', 'voice', 'modes', 'notifications', 'models', 'runtime', 'update'].map(
     (name) => `${scope}[data-chosen='${name}'] > [data-section]:not([data-section='${name}'])`,
 );
 const panes = [
@@ -175,6 +175,7 @@ describe('Settings drawn in the console', () => {
             'Notifications',
             'Models',
             'Runtime',
+            'Update',
         ]);
         for (const heading of headings) {
             let at: Element | null = heading;

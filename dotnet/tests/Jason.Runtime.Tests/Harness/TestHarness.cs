@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Persistence;
@@ -31,6 +32,16 @@ public static class TestHarness
 
     /// <summary>The root <see cref="FoldersFor"/> makes its folders under.</summary>
     public static string RootFor(JasonDbContext db) => FoldersFor(db).Root;
+
+    /// <summary>
+    /// The leaf a campaign the runtime made has (<see cref="CampaignLeaf"/>): its moment read in <paramref name="zone"/>,
+    /// the zone the runtime's clock keeps — this computer's for the system clock, which is the default.
+    /// </summary>
+    public static string LeafOf(CampaignDto campaign, TimeZoneInfo? zone = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return CampaignLeaf.Of(campaign.Id, campaign.CreatedAt.UtcDateTime, zone ?? TimeZoneInfo.Local);
+    }
 
     /// <summary>The harness seam over options the test holds.</summary>
     public static LiveSettings<HarnessOptions> Settings(HarnessOptions options) =>

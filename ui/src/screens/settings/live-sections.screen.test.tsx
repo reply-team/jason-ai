@@ -11,7 +11,7 @@ import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
 import type { DesktopHost, DesktopSetup } from '../../platform/desktop';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../../test/desktop';
-import { FakeApi, watch } from '../../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../../test/fake-api';
 
 // Settings in Live gains Models, what Connect holds for the AI hosts and keys, and Runtime, what System holds of the
 // runtime, beside the sections it has. Both are the same cards over the same answers; Connect and System keep them.
@@ -183,7 +183,8 @@ describe('Settings in Live', () => {
         for (const label of ['Version', 'Started', 'Address', 'Data directory', 'Database'])
             expect(within(runtime).getByText(label, { selector: 'dt' }), label).toBeTruthy();
         expect(fake.calls.filter((each) => each.operation === 'system.info').length).toBeGreaterThan(0);
-        expect(fake.calls.filter((each) => each.operation === 'plugin.list')).toEqual([]);
+        // The console's own read at its start, for the mode strip, is not the section's.
+        expect(callsBeyondStart(fake, 'plugin.list')).toEqual([]);
     });
 
     it('has neither in the demo, which keeps Connect and System in its sidebar', async () => {

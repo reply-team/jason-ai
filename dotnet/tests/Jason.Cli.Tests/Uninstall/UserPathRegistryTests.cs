@@ -289,17 +289,22 @@ public class UserPathRegistryTests
     private static string Run(string shell, string command, Dictionary<string, string>? environment = null)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The repair edits the Windows registry, so it runs where there is one.");
-        var executable = shell == "pwsh" ? OnPath("pwsh.exe") : shell;
-        Assert.SkipWhen(executable is null || !File.Exists(executable), $"{shell} is not on this machine.");
-
-        var start = new ProcessStartInfo(executable!)
+        // PowerShell 7 with a start cache of its own, gone with the child; Windows PowerShell keeps its own.
+        using var tree = new Jason.Runtime.Tests.TempTree();
+        ProcessStartInfo start;
+        if (shell == "pwsh")
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
+            start = Jason.Runtime.Tests.ChildPwsh.StartInfo(tree.Root);
+        }
+        else
+        {
+            Assert.SkipWhen(!File.Exists(shell), $"{shell} is not on this machine.");
+            start = new ProcessStartInfo(shell) { UseShellExecute = false, CreateNoWindow = true };
+        }
+
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.StandardOutputEncoding = Encoding.UTF8;
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command })
         {
             start.ArgumentList.Add(argument);
@@ -326,12 +331,6 @@ public class UserPathRegistryTests
         Assert.True(process.ExitCode == 0 && stderr.Result.Length == 0, $"{shell} exited {process.ExitCode}: {stderr.Result}");
         return stdout.Result;
     }
-
-    private static string? OnPath(string name) =>
-        (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(directory => Path.Combine(directory, name))
-            .FirstOrDefault(File.Exists);
 
     private static string RepositoryRoot()
     {

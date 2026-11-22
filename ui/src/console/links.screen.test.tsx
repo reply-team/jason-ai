@@ -160,8 +160,7 @@ describe('a link the desktop hands the console', () => {
         renderConsole(desktop, fake);
         await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));
         const side = within(document.querySelector<HTMLElement>('.side')!);
-        fireEvent.click(side.getByRole('button', { name: 'More to create' }));
-        fireEvent.click(side.getByRole('menuitem', { name: /^New chat/ }));
+        fireEvent.click(side.getByRole('button', { name: 'New chat' }));
         const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(box, { target: { value: 'Half a thought' } });
         const [id] = Object.keys(chats.value);

@@ -1,4 +1,5 @@
 import { ApiError, Unpaired, type Api } from '../api/client';
+import type { ErrorEnvelope } from '../api/types';
 import { fixtures, type FixtureName } from './fixtures';
 
 type Call = { operation: string; body: object; kind: 'read' | 'write' };
@@ -29,6 +30,18 @@ export function takeUnanswered(): { operation: string; body: object }[] {
     return unanswered;
 }
 
+/** The two reads the console makes once as it starts, for the mode strip (`console/unavailable.ts`). */
+const startReads: ReadonlySet<string> = new Set(['route.list', 'plugin.list']);
+
+/**
+ * The calls to an operation a screen made beyond the console's own read of it as it starts: the first `route.list` and
+ * the first `plugin.list` of a rendered console are the mode strip's, so a test about a card or a page counts the rest.
+ */
+export function callsBeyondStart(fake: FakeApi, operation: string): Call[] {
+    const all = fake.calls.filter((each) => each.operation === operation);
+    return startReads.has(operation) ? all.slice(1) : all;
+}
+
 /** Whether a request sent is the request a recording was made with. */
 export function matches(recorded: object, sent: object): boolean {
     return JSON.stringify(canonical(recorded)) === JSON.stringify(canonical(sent));
@@ -49,8 +62,15 @@ export class FakeApi implements Api {
     private readonly recorded = new Map<string, FixtureName | ((body: object) => FixtureName | undefined)>();
     private readonly fallbacks = new Map<string, (body: object) => FixtureName | undefined>();
 
-    /** The paired person the client puts on every write, as the recordings were made with. */
-    constructor(private readonly actorId = 'ada') {}
+    /**
+     * The paired person the client puts on every write, as the recordings were made with. The console reads the routes
+     * and the plugins when it starts, for the mode strip (`console/unavailable.ts`); a test that says nothing of them is
+     * answered as an installation with no route and no plugin, which says nothing there.
+     */
+    constructor(private readonly actorId = 'ada') {
+        this.otherwise('route.list', () => 'route.list/empty');
+        this.otherwise('plugin.list', () => 'plugin.list/none');
+    }
 
     /**
      * The cases an operation may answer with. A call takes the first whose recorded request it equals; when several
@@ -130,8 +150,8 @@ export class FakeApi implements Api {
         const exchange = fixtures[name];
         if (exchange.status === 401) throw new Unpaired();
         if (exchange.status >= 400) {
-            const { error } = exchange.response as { error: { code: string; message: string; retryable: boolean } };
-            throw new ApiError(error.code, error.message, error.retryable, exchange.status);
+            const { error } = exchange.response as ErrorEnvelope;
+            throw new ApiError(error.code, error.message, error.retryable, exchange.status, error.details);
         }
         return exchange.response as T;
     }

@@ -3,21 +3,20 @@
 // else. Each request is answered once. "Always" is kept in memory for one chat and is gone with the window.
 //
 // A turn runs in its chat's mode. Ask first is the above. Auto-edit is Ask first with its own judgement
-// (`autoEditJudgement`), which allows the six file commands in the chat folder with no card; it has no hook. Plan only
-// refuses every request but a read, which the model settles, and the two cards left to it: reading a file outside the
-// chat's folders and opening a web page. Full access runs in the host's default mode: the turn's hook (`hook`) answers
-// each tool use by one judgement (`fullAccessJudgement`): allow what runs, deny what is refused, and ask about what is
-// held, which Claude Code then puts to the prompt tool. A request that reaches the prompt tool in Full access, held, one
-// the host asks about whatever the hook said, or one the hook never saw, is judged and carded as in Ask first, under its
-// own title, after Full access's own refusals. The tool uses the hook saw are kept by id; each refusal and each hold is
-// said to the log.
+// (`autoEditJudgement`), which allows the six file commands in the chat folder with no card. Plan only refuses every
+// request but a read, which the model settles, and the two cards left to it: reading a file outside the chat's folders and
+// opening a web page. Full access runs in the host's own bypass mode, so the host asks the prompt tool only what it asks
+// about in that mode too: its own question about a deletion, a question the AI puts to the person, an ask rule of the
+// person's. Each is a card titled for Full access, after Full access's three refusals; nothing is allowed or refused
+// there by Ask first's judgement. In every mode but Plan only the turn's hook (`hook`) answers each tool use before the
+// host's own rules by one judgement (`fullAccessJudgement`): it refuses the three kinds and answers nothing else, never
+// allow and never ask. The tool uses the hook saw are kept by id; each refusal is said to the log.
 
 import { randomUUID } from 'node:crypto';
-import { fullAccessWhy, whyOrNone, type FullAccessWhy } from './chat-full-access-why.ts';
-import type { HeldReason } from './chat-literal.ts';
+import { hostAsked, type FullAccessWhy } from './chat-full-access-why.ts';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
 import type { HookAnswer } from './chat-permission-endpoint.ts';
-import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
+import { askedCard, autoEditJudgement, fullAccessJudgement, judge, type ChatScope } from './chat-permission-model.ts';
 
 /** What the permission prompt tool answers, in the shape Claude Code reads. */
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
@@ -25,20 +24,17 @@ export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unkn
 export type BrokerEvent =
     /**
      * `remember` is what "always, in this chat" would cover, as the page prints it; null when it cannot be offered. `why`,
-     * on a card of a Full access turn only, is why Full access asks (`fullAccessWhy`).
+     * on a card of a Full access turn only, is why Full access asks (`hostAsked`).
      */
     | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null; why?: FullAccessWhy }
     | { kind: 'permission_gone'; request: string };
 
 /** How one request was settled, for the log: never its tool, its input or its words. */
 export interface Decided {
-    /** `held`: Full access's hook asked, so the request goes on to a card. */
-    outcome: 'allowed' | 'refused' | 'held' | 'timed_out' | 'withdrawn';
+    outcome: 'allowed' | 'refused' | 'timed_out' | 'withdrawn';
     by: 'model' | 'person' | 'host';
     /** The mode of the turn that asked. */
     mode: ChatMode;
-    /** A held shell command's closed reason; a hold of any other tool carries none. */
-    reason?: HeldReason;
 }
 
 export interface BrokerOptions {
@@ -53,7 +49,7 @@ interface Turn {
     chat: string;
     scope: ChatScope;
     mode: ChatMode;
-    /** Full access: the ids of the tool uses the turn's hook was asked about. */
+    /** The ids of the tool uses the turn's hook was asked about. */
     hooked: Set<string>;
 }
 
@@ -109,22 +105,27 @@ export class PermissionBroker {
     }
 
     /**
-     * The turn's hook, asked by Claude Code before each tool use of a turn in Full access: allow what runs, deny what is
-     * refused, ask about what is held (`HookAnswer`). The use's id is kept, so a tool that ran without the hook is known
-     * (`hooked`). A turn that is not open is refused.
+     * A turn that asked for Full access and runs in Ask first after all, its host having turned its bypass off: what it
+     * asks from now on is judged and carded as in Ask first.
+     */
+    narrowTurn(turnId: string, mode: ChatMode): void {
+        const turn = this.#turns.get(turnId);
+        if (turn !== undefined) turn.mode = mode;
+    }
+
+    /**
+     * The turn's hook, asked by Claude Code before each tool use of a turn in every mode but Plan only: a refusal of the
+     * three kinds (`fullAccessJudgement`), or nothing (`HookAnswer`), never an allow and never a question. The use's id is
+     * kept, so a tool that ran without the hook is known (`hooked`). A turn that is not open is refused.
      */
     hook(turnId: string, tool: string, input: Record<string, unknown>, toolUseId: string | null): HookAnswer {
         const turn = this.#turns.get(turnId);
         if (turn === undefined) return { decision: 'deny', reason: notRunning };
         if (toolUseId !== null) turn.hooked.add(toolUseId);
         const judged = fullAccessJudgement(tool, input, turn.scope);
-        if (judged.outcome === 'runs') return { decision: 'allow' };
-        if (judged.outcome === 'refused') {
-            this.#options.decided?.({ outcome: 'refused', by: 'model', mode: turn.mode });
-            return { decision: 'deny', reason: judged.message };
-        }
-        this.#options.decided?.({ outcome: 'held', by: 'model', mode: turn.mode, ...(judged.reason === undefined ? {} : { reason: judged.reason }) });
-        return { decision: 'ask', reason: heldSentence };
+        if (judged.outcome === 'runs') return { decision: 'none' };
+        this.#options.decided?.({ outcome: 'refused', by: 'model', mode: turn.mode });
+        return { decision: 'deny', reason: judged.message };
     }
 
     /** Whether the turn's hook was asked about this tool use. */
@@ -143,16 +144,15 @@ export class PermissionBroker {
         const refused = (message: string) => Promise.resolve(this.#decided({ behavior: 'deny', message }, { outcome: 'refused', by: 'model', mode }));
         if (mode === 'plan_only' && tool === 'ExitPlanMode') return refused(planExitRefusal);
         if (mode === 'plan_only' && writers.has(tool)) return refused(planRefusal);
-        const judged = mode === 'auto_edit' ? autoEditJudgement(tool, input, turn.scope) : judge(tool, input, turn.scope);
-        // What Full access refuses is refused here too, whichever way the request came, before anything is allowed: a
-        // written file's own refusals among it (`writtenRefusal`). Anything else is judged and carded as in Ask first.
+        // In Full access the host asks only what it asks about in its bypass mode too: Full access's three refusals hold
+        // here as at the hook, whichever way the request came, and anything else is a card. Ask first's judgement neither
+        // allows nor refuses it, so an ask rule of the person's is the person's to answer.
         const full = mode === 'full_access' ? fullAccessJudgement(tool, input, turn.scope) : null;
         if (full?.outcome === 'refused') return refused(full.message);
+        const judged = mode === 'full_access' ? askedCard(tool, input, turn.scope) : mode === 'auto_edit' ? autoEditJudgement(tool, input, turn.scope) : judge(tool, input, turn.scope);
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
-        // What Full access holds the person answers each time: no "Always" covers it, and its card offers none.
-        let remember = judged.remember;
-        if (full?.outcome === 'held') remember = null;
+        const remember = judged.remember;
         if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
         if (remember !== null && this.#always.get(turn.chat)?.has(remember) === true) {
             return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person', mode }));
@@ -170,7 +170,7 @@ export class PermissionBroker {
             const forget = () => signal?.removeEventListener('abort', withdraw);
             this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember, timer, settle, forget });
             const title = mode === 'full_access' ? fullAccessCardTitle : judged.title;
-            const why = full === null ? {} : whyOrNone(() => fullAccessWhy(full, judged, tool));
+            const why = full === null ? {} : { why: hostAsked };
             this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers, ...why });
         });
     }

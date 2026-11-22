@@ -109,6 +109,21 @@ public sealed class JasonPaths
     /// removes it, <c>jason status</c> names it while no runtime answers, and Jason Desktop starts one when it finds it standing.
     /// </summary>
     public string StartOwedFile => Path.Combine(RunDirectory, "start-owed.json");
+
+    /// <summary>The start at logon's own files: on Windows the task document handed to the Task Scheduler, and the two records below.</summary>
+    public string AutostartDirectory => Path.Combine(Root, "autostart");
+
+    /// <summary>
+    /// The person's word that the runtime is not to start at logon: <c>jason runtime autostart disable</c> writes it,
+    /// <c>enable</c> takes it back, and <c>jason uninstall</c> removes it with the data kept. No archive carries it.
+    /// </summary>
+    public string AutostartOffFile => Path.Combine(AutostartDirectory, "off.json");
+
+    /// <summary>
+    /// The record that an update has turned the start at logon on once, so that it never does so again. <c>jason uninstall</c>
+    /// removes it with the data kept, and no archive carries it.
+    /// </summary>
+    public string AutostartDefaultFile => Path.Combine(AutostartDirectory, "default.json");
     public string LogsDirectory => Path.Combine(Root, "logs");
     public string WorkDirectory => Path.Combine(Root, "work");
 

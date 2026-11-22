@@ -5,7 +5,8 @@ namespace Jason.Cli.Tests.Status;
 
 /// <summary>
 /// jason status says how the installation's sends go, as the runtime reports it: for a contact who has not answered and
-/// for one who has, the mode in force and where it comes from, in a sentence and as fields. Every message waiting for a
+/// for one who has, the mode in force and where it comes from, in a sentence and as fields. The sentence says it speaks of
+/// the installation, which every campaign follows unless it sets a mode of its own, so it is never read as one campaign's. Every message waiting for a
 /// person is a way to work, so the check never decides readiness and is never a failure.
 /// </summary>
 public class SendModesCheckTests
@@ -18,12 +19,12 @@ public class SendModesCheckTests
     {
         {
             new SendModesInForce(Mode(SendMode.EveryMessage, SendModeSource.Default), Mode(SendMode.EveryMessage, SendModeSource.Default)),
-            "To a contact who has not answered: every message waits for a person, as nobody has chosen yet. To a contact who has: every message waits for a person, as nobody has chosen yet.",
+            "The installation's send modes, which every campaign follows unless it sets its own. To a contact who has not answered: every message waits for a person, as nobody has chosen yet. To a contact who has: every message waits for a person, as nobody has chosen yet.",
             "every_message", "default", "every_message", "default"
         },
         {
             new SendModesInForce(Mode(SendMode.Automatic, SendModeSource.Preference), Mode(SendMode.EveryMessage, SendModeSource.Preference)),
-            "To a contact who has not answered: released without asking unless something puts one to a person first, as the installation's preference says. To a contact who has: every message waits for a person, as the installation's preference says.",
+            "The installation's send modes, which every campaign follows unless it sets its own. To a contact who has not answered: released without asking unless something puts one to a person first, as the installation's preference says. To a contact who has: every message waits for a person, as the installation's preference says.",
             "automatic", "preference", "every_message", "preference"
         },
     };

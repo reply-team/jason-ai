@@ -5,6 +5,9 @@
     <!-- The suite's one disposable temporary directory, rather than a second copy of the same idea. -->
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
 
+    <!-- The one start of a test's PowerShell 7, with a start cache of its own: children that share one can break every later start. -->
+    <Compile Include="../Jason.Runtime.Tests/ChildPwsh.cs" Link="ChildPwsh.cs" />
+
     <!-- And the suite's one controllable clock, for the same reason: a rollback's waits are on the clock it is
          handed, and a test that let them run on the real one would spend a minute proving a message. -->
     <Compile Include="../Jason.Runtime.Tests/FixedClock.cs" Link="FixedClock.cs" />

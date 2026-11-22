@@ -434,29 +434,34 @@
     clip-path: inset(50%);
     white-space: nowrap;
 }
-/* The foot of the list in the desktop's window: its name and version, and its update item as the menu shows it. */
-.jc-console .harness .settings > .settings-list > .settings-update {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    margin-top: 14px;
-    padding: 12px 10px 0;
-    border-top: 1px solid var(--line);
-}
-.jc-console .harness .settings > .settings-list > .settings-update > .settings-version {
-    margin: 0;
+/* Update, in the desktop's window: its name and version, and its update item as the menu shows it. */
+.jc-console .harness .settings > .settings-update > .settings-version {
+    margin: 0 0 10px;
     color: var(--mute);
-    font-size: 12px;
+    font-size: 12.5px;
+}
+/* The item, and beside it the one quiet mark of a version known and not installed. */
+.jc-console .harness .settings > .settings-update > .settings-update-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+.jc-console .harness .settings > .settings-update > .settings-update-item > .dot {
+    margin-right: 0;
 }
 /* What the person's last check for updates found, under the item, in the desktop's words. */
-.jc-console .harness .settings > .settings-list > .settings-update > .settings-said {
-    margin: 0;
+.jc-console .harness .settings > .settings-update > .settings-said {
+    margin: 10px 0 0;
     max-width: 100%;
     color: var(--mute);
-    font-size: 12px;
+    font-size: 12.5px;
     line-height: 1.4;
     overflow-wrap: anywhere;
+}
+/* The Update row's mark, at the row's end. */
+.jc-console .harness .settings > .settings-list > button > .dot {
+    margin: 0 0 0 auto;
 }
 /* A section other than the one shown holds an error: its name carries a dot, and the error is its description. */
 .jc-console .harness .settings > .settings-list > button[data-flagged] {
@@ -477,7 +482,8 @@
 .jc-console .harness .settings[data-chosen='modes'] > [data-section]:not([data-section='modes']),
 .jc-console .harness .settings[data-chosen='notifications'] > [data-section]:not([data-section='notifications']),
 .jc-console .harness .settings[data-chosen='models'] > [data-section]:not([data-section='models']),
-.jc-console .harness .settings[data-chosen='runtime'] > [data-section]:not([data-section='runtime']) {
+.jc-console .harness .settings[data-chosen='runtime'] > [data-section]:not([data-section='runtime']),
+.jc-console .harness .settings[data-chosen='update'] > [data-section]:not([data-section='update']) {
     display: none;
 }
 
@@ -510,9 +516,6 @@
         flex-direction: row;
         flex-wrap: wrap;
         margin-bottom: 14px;
-    }
-    .jc-console .harness .settings > .settings-list > .settings-update {
-        flex-basis: 100%;
     }
     .jc-console .harness .settings[data-chosen] > [data-section] {
         margin-left: 0;

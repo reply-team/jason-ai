@@ -1,4 +1,5 @@
 import type { Plugin, Routes } from '../api/types';
+import { pluginLabel } from './unavailable-model';
 import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
 import { can } from '../platform/places';
 import { act, define } from './actions';
@@ -171,7 +172,7 @@ function outside(read: AccountsRead): Html {
  */
 function routed(where: string, pluginId: string, plugins: readonly Listed[]): Html {
     const plugin = plugins.find((each) => each.id === pluginId);
-    const name = typeof plugin?.name === 'string' && plugin.name !== '' ? `${plugin.name} (${pluginId})` : pluginId;
+    const name = pluginLabel(pluginId, plugin?.name);
     const sends = Array.isArray(plugin?.operations) && plugin.operations.includes('message.send');
     const label = sends ? `Plugin that sends messages ${where}` : `Plugin the route for messages names ${where}`;
     return html`<div class="card-fact">

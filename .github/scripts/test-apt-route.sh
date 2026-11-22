@@ -191,6 +191,44 @@ said=$(env -i HOME="$work/home" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/u
 [ "${said%%+*}" = "$built" ] || fail "A new login shell's jason says '$said', and this run's build is $built."
 echo "The deb placed Jason's source, its key and /usr/bin/jason; a new login shell runs jason $said."
 
+# The start at logon, which the set-up the install line ends in registers: a user unit naming the jason the package
+# carries where the runner's systemd user manager reads the leg's home, and otherwise the set-up's own sentence that the
+# system would not register it, logon refused in its report, never a failed install.
+"${person[@]}" /usr/bin/jason runtime autostart status > "$work/autostart.json" 2> "$work/autostart.err" || true
+if grep -qF '"registered":true' "$work/autostart.json"; then
+  grep -qF '"executable":"/opt/Jason/resources/bundle/jason"' "$work/autostart.json"     || fail "The start at logon names another jason than the package's: $(cat "$work/autostart.json")"
+  echo "Branch: registered. The set-up registered the start at logon, the user unit naming /opt/Jason/resources/bundle/jason."
+elif ! "${person[@]}" systemctl --user is-system-running > "$work/user-manager.txt" 2>&1; then
+  # Only a runner with no systemd user manager may end without the unit: the set-up's sentence names systemctl and what
+  # it could not reach, and nothing is registered.
+  said=$(grep -oE 'The start at logon could not be registered[^"]*' "$work/install.out" || true)
+  case "$said" in *systemctl*) ;; *) said="" ;; esac
+  printf '%s' "$said" | grep -qiE 'bus|manager' \
+    || { cat "$work/install.out" "$work/user-manager.txt"; fail "The runner has no systemd user manager, and the set-up did not say systemctl could not reach it: '$said'"; }
+  grep -qF '"registered":false' "$work/autostart.json" \
+    || { cat "$work/autostart.json" "$work/autostart.err"; fail "With no systemd user manager, jason runtime autostart status does not say registered false."; }
+  echo "Branch: no user manager. The runner has no systemd user manager ($(head -n 1 "$work/user-manager.txt")), and the set-up said so in its report, registered nothing and ended 0."
+elif ! "${person[@]}" systemctl --user show -p UnitPath --value 2> /dev/null | tr ' ' '\n' | grep -qxF "$work/home/.config/systemd/user"; then
+  # The leg's account is a home of its own under the runner's account, and the runner's user manager reads its units from
+  # the runner's home, not this one: the unit the set-up writes there is one the manager cannot see, so its enable is
+  # refused. The set-up must say that refusal under left, report logon refused, end 0, and put the unit file back.
+  "${person[@]}" systemctl --user show -p UnitPath --value > "$work/unit-path.txt" 2>&1 || true
+  said=$(grep -oE 'The start at logon could not be registered[^"]*' "$work/install.out" || true)
+  case "$said" in *"systemctl --user refused: Failed to enable unit: Unit jason.service does not exist. "*) ;; *)
+    cat "$work/install.out" "$work/unit-path.txt"
+    fail "The runner's user manager does not read the leg's home, and the set-up did not say systemctl refused the unit it cannot see: '$said'" ;;
+  esac
+  grep -qF '"logon":"refused"' "$work/install.out" \
+    || { cat "$work/install.out"; fail "The runner's user manager does not read the leg's home, and the set-up's report does not say logon refused."; }
+  grep -qF '"registered":false' "$work/autostart.json" \
+    || { cat "$work/autostart.json" "$work/autostart.err"; fail "With the unit refused, jason runtime autostart status does not say registered false."; }
+  [ ! -e "$work/home/.config/systemd/user/jason.service" ] \
+    || fail "The refused registration left $work/home/.config/systemd/user/jason.service behind."
+  echo "Branch: another home. The runner's user manager reads its units from $(cat "$work/unit-path.txt"), not the leg's home: the set-up said systemctl refused the unit, reported logon refused, left no unit file and ended 0."
+else
+  cat "$work/autostart.json" "$work/autostart.err" "$work/install.out"; fail "The runner has a systemd user manager, and the set-up registered no start at logon."
+fi
+
 # The repository's key, which the package placed, stands for the leg's from here on.
 trust_the_leg() { $SUDO cp "$work/key.gpg" /usr/share/keyrings/jason-desktop.gpg; }
 trust_the_leg
@@ -209,6 +247,14 @@ apt-cache policy jason-desktop | grep -qF '//get.jasonharness.ai/apt ./' || { ap
 # Only what apt asks from here on counts: the install line fetched the same deb through the same hops above.
 asked=$(wc -l < "$work/served.log")
 $SUDO apt-get install -y -q --reinstall jason-desktop > "$work/reinstall.log" 2>&1 || { cat "$work/reinstall.log"; fail "apt-get did not install jason-desktop from the repository."; }
+# apt and dpkg may write around a maintainer script's line when their output is a file, so the line is looked for in it,
+# and a miss prints the bytes of what came closest.
+grep -qF 'Open Jason Desktop to start Jason.' "$work/reinstall.log" || {
+  cat "$work/reinstall.log"
+  grep -F 'Open Jason' "$work/reinstall.log" | od -c | head -n 20 || true
+  fail "The deb installed by apt did not print its one line, Open Jason Desktop to start Jason."
+}
+echo "The deb installed by apt printed its line: Open Jason Desktop to start Jason."
 tail -n "+$((asked + 1))" "$work/served.log" \
   | grep -q "\"host\": \"assets.example.test\".*\"status\": 200, \"agent\": \"Debian APT[^\"]*\", \"served\": \"v$release/jason-desktop-linux-x64.deb\"" \
   || { cat "$work/served.log"; fail "apt's own download of the deb did not come through the chain from the release's asset address."; }

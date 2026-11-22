@@ -17,8 +17,6 @@ describe('the transport', () => {
         void seam.chat.setMode;
         // @ts-expect-error the window feeds
         void seam.chat.feed;
-        // @ts-expect-error Full access is taken back there
-        void seam.fullAccess.takeBack;
         // The members it has are the desktop's: their arguments and answers are the declaration's.
         const sent: Promise<unknown> = seam.chat.send('conv_1', 'hello', {
             host: 'claude_code',
@@ -26,7 +24,7 @@ describe('the transport', () => {
             effort: null,
         } as never);
         void sent.catch(() => undefined);
-        expect(Object.keys(seam).sort()).toEqual(['chat', 'fullAccess', 'mode', 'setup', 'theme']);
+        expect(Object.keys(seam).sort()).toEqual(['chat', 'mode', 'setup', 'theme']);
     });
 
     it('holds a table that is exactly the members its seam calls', async () => {
@@ -35,11 +33,11 @@ describe('the transport', () => {
         const seam = new Bridge(pair, stand.fetch).seam();
         await seam.mode.get();
         await seam.theme.get();
-        await seam.fullAccess.standing();
         await seam.setup.status();
         await seam.chat.list();
         await seam.chat.open('conv_none');
         await seam.chat.create();
+        await seam.chat.createAgent('0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10');
         await seam.chat.send('conv_none', 'hello', { host: 'claude_code' } as never);
         await seam.chat.stop('conv_none');
         await seam.chat.rename('conv_none', 'A name');
@@ -60,7 +58,6 @@ describe('the transport', () => {
             'chat.openFolder',
             'setup.replyDelete',
             'mode.set',
-            'fullAccess.takeBack',
             'openIn.open',
             'openIn.continueChat',
             'openIn.changeJason',
@@ -114,21 +111,17 @@ describe('the events', () => {
         expect(seen).toHaveLength(1);
     });
 
-    it('keeps one stream for all subscribers, and the setup and Full access changes come down it', async () => {
+    it('keeps one stream for all subscribers, and the setup changes come down it', async () => {
         const desktop = stubDesktop();
         const stand = standInBridge(desktop);
         const bridge = new Bridge(pair, stand.fetch);
         const seam = bridge.seam();
         const setup = vi.fn();
-        const standing = vi.fn();
         seam.chat.onEvent(() => undefined);
         seam.setup.onChanged(setup);
-        seam.fullAccess.onChanged(standing);
         await vi.waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
         stand.push({ channel: 'setup.changed', args: [] });
-        stand.push({ channel: 'fullAccess.changed', args: [null] });
         await vi.waitFor(() => expect(setup).toHaveBeenCalledTimes(1));
-        expect(standing).toHaveBeenCalledWith(null);
         expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(1);
         bridge.close();
     });

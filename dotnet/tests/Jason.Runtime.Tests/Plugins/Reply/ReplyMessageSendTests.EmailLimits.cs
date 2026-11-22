@@ -84,7 +84,10 @@ public partial class ReplyMessageSendTests
         Assert.Equal("""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit"}""", ReplyOperations.Blocked(error));
     }
 
-    /// <summary>Where reply-cli says how long to wait, either block clears that long after the answer, midnight or not.</summary>
+    /// <summary>
+    /// Where reply-cli says how long to wait, either block clears that long after the answer, the daily one no later than
+    /// the next midnight UTC, when Reply's day turns.
+    /// </summary>
     [Theory]
     [InlineData(DailyLimit)]
     [InlineData(ActiveContactsLimit)]
@@ -102,7 +105,61 @@ public partial class ReplyMessageSendTests
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
         ReplyOperations.Blocked(error);
-        ReplyOperations.ClearsAfter(error, before, after, Wait);
+        if (replyCode == DailyLimit && after.AddSeconds(Wait) >= NextMidnight(before))
+        {
+            // Run within the wait of a midnight: the daily block clears at that midnight instead.
+            var clears = DateTimeOffset.Parse((string?)error.Block!["clears_at"] ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+            Assert.True(clears >= NextMidnight(before) && clears <= NextMidnight(after), $"{clears:O} is not the next midnight UTC.");
+        }
+        else
+        {
+            ReplyOperations.ClearsAfter(error, before, after, Wait);
+        }
+    }
+
+    /// <summary>
+    /// An email whose due day is already full names a wait to the end of that day, weeks out, and the mailbox's daily block
+    /// still clears at the next midnight UTC: the mailbox is free tomorrow, and it is tried again then.
+    /// </summary>
+    [Fact]
+    public async Task A_far_due_day_already_full_clears_the_mailbox_at_the_next_midnight_utc()
+    {
+        const int Wait = 20 * 24 * 60 * 60;
+        using var account = ByEmail();
+        account.Refuses("contact send-email", "email.limit_reached", status: 429, replyCode: DailyLimit, ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 }, retryAfter: Wait);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var before = DateTimeOffset.UtcNow;
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001")));
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        var clears = DateTimeOffset.Parse((string?)error.Block!["clears_at"] ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        Assert.Contains(clears, new[] { NextMidnight(before), NextMidnight(after) });
+    }
+
+    /// <summary>
+    /// A mailbox Reply says cannot send direct emails at all, as reply-cli 0.22.0 prints it (`email.sending_disabled` at 403,
+    /// Reply's `contact.emailAccountSendingDisabled` carried, no wait), is the mailbox's block for its limit with no moment it
+    /// clears, never a sign-in: the message waits on it, and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_mailbox_that_cannot_send_is_its_block_and_the_message_waits()
+    {
+        using var account = new ReplyAccount().WithContact(1001, Address, "Marta").WithSender(12, "email", "Ann Owner", Mailbox, limit: "sending_disabled");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001")));
+
+        Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit"}""", ReplyOperations.Blocked(error));
+        Assert.Equal(("contact.emailAccountSendingDisabled", "email.sending_disabled"), ((string?)error.Details!["provider_code"], (string?)error.Details["cli_code"]));
+        Assert.Contains("cannot send direct emails now", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("sign in", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(account.Sent);
+        Assert.Empty(account.DirectSends);
     }
 
     /// <summary>

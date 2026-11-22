@@ -6,6 +6,9 @@
          delete, and this suite has paid for that once already. -->
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
 
+    <!-- The one start of a test's PowerShell 7, with a start cache of its own: children that share one can break every later start. -->
+    <Compile Include="../Jason.Runtime.Tests/ChildPwsh.cs" Link="ChildPwsh.cs" />
+
     <!-- The version this tree carries, read from the one file that says it, for the test that checks the stamp. -->
     <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
 

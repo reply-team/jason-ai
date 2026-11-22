@@ -17,6 +17,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { chats, conversations, feedId, feedUnseen } from './state';
 import { forgetWaiting } from './waiting';
+import { sideRow } from '../test/side-rows';
 
 // The chips as a person meets them: an empty chat draws its opening three; no chat draws any under an answer, whatever
 // the agent's counts, and neither do the Feed and a set-up chat; a click sends the chip's words as the person's first
@@ -78,10 +79,7 @@ function given(fake: FakeApi): FakeApi {
 
 async function openChat(title: string): Promise<HTMLElement> {
     await waitFor(() => {
-        const list = within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', {
-            name: 'Conversations',
-        });
-        fireEvent.click(within(list).getByRole('button', { name: title }));
+        fireEvent.click(sideRow(title));
         expect(document.querySelector('.area > .pane:not([hidden]) .chat-panel')).not.toBeNull();
     });
     return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
@@ -119,13 +117,13 @@ afterEach(() => {
 describe('under an agent’s last answer', () => {
     it('no chip stands, whatever the agent’s counts, before or after a turn', async () => {
         const { desktop } = renderConsole([spring(), summer(), winter(), autumn()]);
-        for (const title of ['Spring', 'Summer', 'Winter', 'Autumn']) {
+        for (const title of ['Spring launch', 'Summer reach', 'Winter plan', 'Autumn push']) {
             const pane = await openChat(title);
             await waitFor(() => within(pane).getByText('Hello.'));
             expect(pane.querySelector('.sugs'), title).toBeNull();
             expect(pane.querySelector('.thread .sug'), title).toBeNull();
         }
-        const pane = await openChat('Summer');
+        const pane = await openChat('Summer reach');
         flush(() => {
             desktop.emit(summer().id, { kind: 'text', text: 'Founders of small agencies.', at });
             desktop.emit(summer().id, { kind: 'done', error: null });
@@ -142,7 +140,7 @@ describe('the opening chips', () => {
 
     it('are drawn in an empty agent’s chat, still', async () => {
         renderConsole([agent('conv_01JDCHIPS0000000000000000H', 'cmp_1', 'Spring', [])]);
-        const pane = await openChat('Spring');
+        const pane = await openChat('Spring launch');
         await waitFor(() => expect(drawn(pane)).toEqual(opening));
     });
 

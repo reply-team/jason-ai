@@ -95,11 +95,16 @@ public class StatusCommandTests
 
     // The autostart check says what a logon registration does at the next sign-in, and nothing of whether the runtime runs now.
 
-    private static async Task<StatusCheck> AutostartCheckAsync(bool registered)
+    private static async Task<StatusCheck> AutostartCheckAsync(bool registered, bool turnedOff = false)
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
         Running(dir);
+        if (turnedOff)
+        {
+            Jason.Cli.Autostart.AutostartOff.Write(dir.Paths, DateTimeOffset.UtcNow, "0.49.4");
+        }
+
         var registrar = new RecordingRegistrar { State = new AutostartState(registered, registered ? ["jason", "runtime", "run"] : [], null) };
         var environment = Machine(dir, output) with { Autostart = registrar };
 
@@ -137,6 +142,21 @@ public class StatusCommandTests
 
         Assert.Equal(CheckState.Absent, check.State);
         Assert.Equal("No logon registration: the next time you sign in, the runtime stays off until it is started by hand.", check.Fact);
+        Assert.Equal("jason runtime autostart enable", check.Fix);
+    }
+
+    /// <summary>
+    /// A turn-off the person made is said as theirs, with what a restart then means; the check stays optional and absent,
+    /// and the repair is the verb that takes it back.
+    /// </summary>
+    [Fact]
+    public async Task A_turn_off_is_said_as_the_persons_own()
+    {
+        var check = await AutostartCheckAsync(registered: false, turnedOff: true);
+
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.False(check.Required);
+        Assert.Equal("No logon registration: you turned it off with `jason runtime autostart disable`, so after a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.", check.Fact);
         Assert.Equal("jason runtime autostart enable", check.Fix);
     }
 

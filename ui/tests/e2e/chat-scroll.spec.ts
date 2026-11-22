@@ -113,6 +113,14 @@ test('the chat keeps the end of its conversation in view above the cards that wa
         const id = (route.request().postDataJSON() as { approval_id?: string } | null)?.approval_id;
         return id !== undefined && ids.includes(id) ? route.fulfill({ json: { ...whole, id } }) : route.continue();
     });
+    // Where the campaign's enrolment goes is read again by the panel the send draws; that read is held a while here, so
+    // a card that went while it was read would be seen gone.
+    let reads = 0;
+    await page.route('**/v1/route.resolve', async (route) => {
+        reads += 1;
+        if (reads > 1) await new Promise((done) => setTimeout(done, 1500));
+        await route.continue();
+    });
     const { url } = await jason.uiOpen();
     await page.goto(url);
     await expect(page.getByRole('form', { name: 'Start' })).toBeVisible();
@@ -142,6 +150,20 @@ test('the chat keeps the end of its conversation in view above the cards that wa
     const opened = await layout();
     expect(opened.cardsHeight, 'the cards under the thread are taller than the view').toBeGreaterThan(opened.view);
 
+    // The Reply card under the conversation is drawn, and is watched from here on: it never goes while the chat is made.
+    await expect(pane.locator('.chat-reply')).toBeVisible();
+    await page.evaluate(() => {
+        const shown = () => document.querySelector('.jc-console .area > .pane:not([hidden]) .chat-reply') !== null;
+        const watch = window as unknown as { replyWent: boolean };
+        watch.replyWent = false;
+        new MutationObserver(() => (watch.replyWent ||= !shown())).observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['hidden'],
+        });
+    });
+
     // The person sends: their bubble is in view, the end of the conversation in the view, the first card under it.
     const composer = pane.getByRole('textbox', { name: 'Your message' });
     await composer.fill('Find me ten founders');
@@ -149,6 +171,12 @@ test('the chat keeps the end of its conversation in view above the cards that wa
     await page.waitForFunction(() => (window as unknown as { sentTo: string[] }).sentTo.length === 1);
     const id = await page.evaluate(() => (window as unknown as { sentTo: string[] }).sentTo[0]!);
     await expect(scroller.locator('.thread').getByText('Find me ten founders')).toBeInViewport();
+    await expect.poll(() => reads, 'the made chat reads the route again').toBe(2);
+    await page.waitForTimeout(1800);
+    expect(
+        await page.evaluate(() => (window as unknown as { replyWent: boolean }).replyWent),
+        'the Reply card stayed through the send',
+    ).toBe(false);
     await frames();
     const sent = await layout();
     expect(sent.end, 'the conversation ends in view').toBeGreaterThan(0);
@@ -175,6 +203,20 @@ test('the chat keeps the end of its conversation in view above the cards that wa
         ).toBeLessThanOrEqual(2);
         expect(now.cardsTop, `part ${n}: the first card shows under it`).toBeLessThan(now.view);
     }
+
+    // The window is made shorter, and so the box: nothing is added to it, and the end is kept half the view down.
+    const tall = (await layout()).view;
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await expect.poll(async () => (await layout()).view).toBeLessThan(tall);
+    await frames();
+    const shorter = await layout();
+    expect(
+        Math.abs(shorter.end - shorter.view / 2),
+        'a shorter box keeps the end half the view down',
+    ).toBeLessThanOrEqual(2);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(async () => (await layout()).view).toBe(tall);
+    await frames();
     expect(
         await scroller.evaluate((box) => box.querySelector('.thread')!.getBoundingClientRect().height),
         'the answer is taller than the view',
@@ -215,4 +257,49 @@ test('the chat keeps the end of its conversation in view above the cards that wa
     const again = await layout();
     expect(Math.abs(again.end - again.view / 2), 'the conversation ends half the view down').toBeLessThanOrEqual(2);
     expect(again.cardsTop).toBeLessThan(again.view);
+
+    // The person goes to Needs you while the answer comes, and back to the chat. What the box says as it goes out of
+    // sight and comes back is noted in the page, for a failure to show: its scroll events and its sizes, in order.
+    await scroller.evaluate((box) => {
+        box.dataset.probe = 'chat';
+        const noted: unknown[] = [];
+        (window as unknown as { boxNoted: unknown[] }).boxNoted = noted;
+        const at = (what: string) =>
+            noted.push({ what, top: box.scrollTop, view: box.clientHeight, height: box.scrollHeight });
+        box.addEventListener('scroll', () => at('scroll'));
+        new ResizeObserver(() => at('resized')).observe(box);
+    });
+    const noted = () => page.evaluate(() => JSON.stringify((window as unknown as { boxNoted: unknown[] }).boxNoted));
+    /** Needs you is shown, two parts of the answer come into the chat out of sight, and the chat is shown again. */
+    const awayWhile = async (first: number) => {
+        await page.evaluate(() => (location.hash = '#/attention'));
+        await expect(page.locator('.chat-scroll[data-probe="chat"]')).toBeHidden();
+        await page.evaluate(() => (window as unknown as { boxNoted: unknown[] }).boxNoted.push('hidden'));
+        for (const n of [first, first + 1]) {
+            await say({ kind: 'text', text: part(n) });
+            await expect(page.locator('.chat-scroll[data-probe="chat"]')).toContainText(`Part ${n}.`);
+        }
+        await frames();
+        await page.evaluate(() => (window as unknown as { boxNoted: unknown[] }).boxNoted.push('shown'));
+        await page.evaluate((id) => (location.hash = `#/campaigns/${id}/chat`), campaign);
+        await expect(pane.locator('.chat-scroll[data-probe="chat"]')).toBeVisible();
+        await frames();
+    };
+
+    // Left at the foot: back, the end of what came out of sight is half the view down.
+    await awayWhile(6);
+    const back = await layout();
+    expect(Math.abs(back.end - back.view / 2), `followed while out of sight: ${await noted()}`).toBeLessThanOrEqual(2);
+
+    // Left scrolled up well past the slack: back, the place is where it was left.
+    await scroller.hover();
+    await page.mouse.wheel(0, -600);
+    await expect.poll(async () => (await layout()).end).toBeGreaterThan(back.view / 2 + 400);
+    await frames();
+    const left = await scroller.evaluate((box) => box.scrollTop);
+    await awayWhile(8);
+    expect(
+        Math.abs((await scroller.evaluate((box) => box.scrollTop)) - left),
+        `the place left is kept: ${await noted()}`,
+    ).toBeLessThanOrEqual(1);
 });

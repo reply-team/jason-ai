@@ -60,7 +60,7 @@ public static class ApiFixtures
     //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
     //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
     //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
-    //                     campaign.archive archive-spring|-spring-again (the agent page's archive, its own story).
+    //                     campaign.archive archive-spring|-spring-again|-unknown (the agent page's archive, its own story).
     //
     // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
     // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
@@ -250,6 +250,7 @@ public static class ApiFixtures
         "campaign.add_contacts/to-archived",
         "campaign.archive/archive-spring",
         "campaign.archive/archive-spring-again",
+        "campaign.archive/archive-unknown",
         "campaign.audience/first-page",
         "campaign.audience/latest-search",
         "campaign.audience/next-page",
@@ -274,6 +275,8 @@ public static class ApiFixtures
         "campaign.get/inbox-quiet",
         "campaign.get/making",
         "campaign.get/many",
+        "campaign.get/new-agent",
+        "campaign.get/new-agent-brief",
         "campaign.get/one",
         "campaign.get/own-list",
         "campaign.get/own-list-archived",
@@ -295,6 +298,7 @@ public static class ApiFixtures
         "campaign.list/inbox",
         "campaign.list/include-archived",
         "campaign.list/move-targets",
+        "campaign.list/new-agent",
         "campaign.list/query",
         "campaign.list/screen",
         "campaign.list/screen-empty",
@@ -367,6 +371,7 @@ public static class ApiFixtures
         "campaign.summary/inbox-quiet",
         "campaign.summary/many",
         "campaign.summary/many-next",
+        "campaign.summary/new-agent",
         "campaign.summary/some",
         "campaign.summary/some-after",
         "campaign.summary/some-without-archived",
@@ -374,6 +379,8 @@ public static class ApiFixtures
         "campaign.summary/unlinked",
         "campaign.summary/unlinked-archived-not-left-out",
         "campaign.summary/with-archived",
+        "campaign.update/new-agent-name-too-long",
+        "campaign.update/new-agent-rename",
         "contact.get/archived",
         "contact.get/imported",
         "contact.get/no-campaign",
@@ -499,6 +506,7 @@ public static class ApiFixtures
         "plugin.list/card-accounts",
         "plugin.list/card-accounts-reply",
         "plugin.list/none",
+        "plugin.list/reply-unavailable",
         "preference.list/mode-automatic-voice-unset",
         "preference.list/modes-every-message",
         "preference.list/none",
@@ -820,6 +828,16 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
     private readonly Dictionary<string, int> _countByPrefix = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _digests = new(StringComparer.Ordinal);
 
+    private readonly Dictionary<string, string> _leaves = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// <see cref="FixedMoment"/> as a campaign folder's leaf writes a moment. Every leaf is written with it: it is fixed,
+    /// and is not the recorded campaign's own <c>created_at</c>, which the run's clock decides.
+    /// </summary>
+    public static readonly string FixedLeafMoment = DateTime
+        .Parse(FixedMoment, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+        .ToString("yyyy-MM-dd-HHmmss", CultureInfo.InvariantCulture);
+
     public JsonNode? Scrub(JsonNode? node, string? key = null)
     {
         switch (node)
@@ -838,7 +856,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
             case JsonArray array:
                 return new JsonArray([.. array.Select(child => Scrub(child))]);
             case JsonValue value when value.TryGetValue<string>(out var text):
-                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Text(text, key));
+                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Leaves(Text(text, key)));
             case JsonValue value when key == "pid" && value.TryGetValue<int>(out _):
                 return JsonValue.Create(4242);
             case JsonValue value when key is "port" or "configured_port" && value.TryGetValue<int>(out _):
@@ -903,6 +921,30 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
         return Ulid().Replace(text, match => Id(match.Value));
     }
 
+    /// <summary>
+    /// A campaign folder's leaf in a path — the segment after <c>campaigns/</c>, when the campaign was made and the end of
+    /// its id, which a run's clock and its ids decide — is written as one stable word: the fixed moment
+    /// (<see cref="FixedLeafMoment"/>, never the campaign's own), and the end of the campaign id it was scrubbed to
+    /// (<c>cmp001</c> for <c>cmp_1</c>), or a number of its own by first appearance where no campaign id seen ends so. A
+    /// text of the same shape anywhere else is left as it is.
+    /// </summary>
+    private string Leaves(string text) => Leaf().Replace(text, match =>
+    {
+        var tail = match.Groups["tail"].Value;
+        if (!_leaves.TryGetValue(tail, out var word))
+        {
+            var owner = _ids
+                .Where(pair => pair.Key.StartsWith("cmp_", StringComparison.Ordinal))
+                .FirstOrDefault(pair => pair.Key[^6..].Equals(tail, StringComparison.OrdinalIgnoreCase)).Value;
+            word = owner is not null
+                ? "cmp" + owner[(owner.IndexOf('_') + 1)..].PadLeft(3, '0')
+                : "leaf" + (_leaves.Count + 1).ToString(CultureInfo.InvariantCulture).PadLeft(2, '0');
+            _leaves[tail] = word;
+        }
+
+        return FixedLeafMoment + "-" + word + match.Groups["n"].Value;
+    });
+
     private string Cursor(string cursor)
     {
         if (!System.Buffers.Text.Base64Url.IsValid(cursor))
@@ -932,4 +974,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
 
     [GeneratedRegex("^sha256:[0-9a-f]{64}$")]
     private static partial Regex Digest();
+
+    [GeneratedRegex(@"(?<=campaigns[/\\])\d{4}-\d{2}-\d{2}-\d{6}-(?<tail>[0-9a-z]{6})(?<n>-\d+)?(?![0-9A-Za-z-])")]
+    private static partial Regex Leaf();
 }
