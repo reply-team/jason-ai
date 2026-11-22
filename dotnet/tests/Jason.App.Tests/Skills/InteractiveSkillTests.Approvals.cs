@@ -299,6 +299,19 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// Before a reopen the session reads the person's touches: a line whose touches stand at the ceiling sends nothing
+    /// more once reopened, since its next touch is refused and the line ends again. The agent says so and that the
+    /// ceiling is the installation's setting, then does as the person says.
+    /// </summary>
+    [Fact]
+    public void Before_a_reopen_the_session_says_what_a_line_at_the_ceiling_will_do_and_then_does_as_told()
+    {
+        var skill = Flattened("approvals-and-questions");
+
+        Assert.Contains("Before you reopen, read the person's touches. Where they stand at the ceiling, say that reopening alone sends nothing more, since the next touch is refused and the line ends again, and that the ceiling is the installation's setting; then do as they say.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A session reopens a line on the person's word: on a yes to the manager's question, it records the answer and then
     /// reopens as the person naming that question, since the runtime takes only an answered one; on the person's direct
     /// word, it reopens as the person with no question. A session that reopened first would be refused, and one that
