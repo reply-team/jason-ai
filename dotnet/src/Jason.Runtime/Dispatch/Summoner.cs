@@ -212,6 +212,10 @@ public sealed class Summoner(
         decision = decision with { Cause = await NameDecisionAsync(db, decision.Cause, ct).ConfigureAwait(false) };
         var due = decision.Cause is null
             && ReviewSchedule.IsDue(read.ManagerReviewAnchor, read.ManagerReviewSeconds, options.ReviewSeconds, now);
+        var entry = ManagerEntryChoice.Choose(new ManagerEntryInputs(
+            decision.Cause?.Kind,
+            await IsFirstStartAsync(db, campaignId, decision.Cause, ct).ConfigureAwait(false),
+            due));
 
         if (decision.Cause is null && !due && decision.Watermark == before)
         {
@@ -237,7 +241,7 @@ public sealed class Summoner(
             }
 
             var campaign = await db.Campaigns.FirstAsync(c => c.Id == campaignId, ct).ConfigureAwait(false);
-            await ManagerCheckIn.CreateAsync(items, db, campaign, decision.Cause, options, ct).ConfigureAwait(false);
+            await ManagerCheckIn.CreateAsync(items, db, campaign, decision.Cause, options, ct, entry).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await transaction.CommitAsync(ct).ConfigureAwait(false);
         }
@@ -290,6 +294,30 @@ public sealed class Summoner(
             .ConfigureAwait(false);
 
         return decision is null ? because : because with { DecisionId = decision };
+    }
+
+    /// <summary>
+    /// Whether a <c>campaign_started</c> cause is the campaign's first going live: one lookup of the smallest journal id
+    /// among the campaign's lines of that kind, compared with the cause line by identifier. It reads no line's
+    /// <c>old</c>, <c>new</c>, <c>key</c> or reason, and the cause holds the line's public id, which names the same row
+    /// as its id does. A cause of any other kind asks nothing.
+    /// </summary>
+    private static async Task<bool> IsFirstStartAsync(JasonDbContext db, int campaignId, ManagerCause? cause, CancellationToken ct)
+    {
+        if (cause is not { } because || !string.Equals(because.Kind, JournalKinds.CampaignStarted, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var first = await db.Journal
+            .AsNoTracking()
+            .Where(line => line.CampaignId == campaignId && line.Kind == JournalKinds.CampaignStarted)
+            .OrderBy(line => line.Id)
+            .Select(line => line.PublicId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        return string.Equals(first, because.JournalEntryId, StringComparison.Ordinal);
     }
 
     /// <summary>
