@@ -649,25 +649,32 @@
     white-space: pre-wrap;
     word-wrap: break-word;
 }
-.jc-console .bub p {
+.jc-console .bub p,
+.jc-console .plan-text p {
     margin: 0 0 10px;
 }
-.jc-console .bub p:last-child {
+.jc-console .bub p:last-child,
+.jc-console .plan-text p:last-child {
     margin-bottom: 0;
 }
 .jc-console .bub ul,
-.jc-console .bub ol {
+.jc-console .bub ol,
+.jc-console .plan-text ul,
+.jc-console .plan-text ol {
     margin: 4px 0 10px;
     padding-left: 22px;
 }
-.jc-console .bub li {
+.jc-console .bub li,
+.jc-console .plan-text li {
     margin: 3px 0;
 }
-.jc-console .bub h3 {
+.jc-console .bub h3,
+.jc-console .plan-text h3 {
     font-size: 15px;
     margin: 14px 0 6px;
 }
-.jc-console .bub code {
+.jc-console .bub code,
+.jc-console .plan-text code {
     background: var(--panel-2);
     border: 1px solid var(--line2);
     border-radius: 5px;
@@ -1348,6 +1355,11 @@ body,
 .jc-console .said {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+/* The plan card's words are the Markdown view's markup, which carries its own line breaks and indentation: left as
+   pre-wrap they would draw as blank lines; each block of it sets its own wrapping (`.chat-md`). */
+.jc-console .plan-text {
+    white-space: normal;
 }
 .jc-console .list {
     display: flex;
