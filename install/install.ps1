@@ -21,7 +21,7 @@ It ends non-zero, saying which act failed, when jason was not put in the termina
 full path of jason, for the terminal it ran in and an agent's session already running, which do not see the new Path.
 
     irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.49.2/install.ps1))) -Version 0.49.2
+    & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.50.0/install.ps1))) -Version 0.50.0
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the installer, manifest.json and checksums.txt - which is how CI runs it against what it has just built.
