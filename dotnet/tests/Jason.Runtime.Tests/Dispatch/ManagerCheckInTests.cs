@@ -213,6 +213,14 @@ public class ManagerCheckInTests
         Assert.Contains(Operations.CampaignPause, allowed);
         Assert.Contains(Operations.DecisionList, allowed);
         Assert.DoesNotContain(Operations.DecisionAnswer, allowed);
+
+        // The verbs the manager's entries make routine: ending, continuing and reopening a person's line, and a verdict
+        // on a reply. The list grants none of them, but a host that reads it as the job's scope sees the whole job.
+        Assert.Equal(
+            ["workitem.create", "workitem.update", "workitem.cancel", "campaign.update_context", Operations.CampaignFinishContacts,
+                Operations.CampaignContinueContacts, Operations.CampaignReopenContacts, "journal.append", "rolenote.set", "approval.list",
+                "report.list", Operations.ReplyRecord, Operations.DecisionRaise, Operations.DecisionList, Operations.CampaignPause],
+            allowed);
     }
 
     /// <summary>

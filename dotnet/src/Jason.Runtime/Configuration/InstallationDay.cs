@@ -30,18 +30,18 @@ public sealed class InstallationDay(TimeProvider clock, LiveSettings<RuntimeOpti
     /// The zone an id names, or null where it names none this system knows as an IANA zone: the rule a contact's zone is
     /// held to (<see cref="TimeZoneRules"/>), so a Windows id, which names a different vocabulary on every machine, is none.
     /// The id is held to the zone's own spelling, ordinal: Windows and macOS find <c>asia/tokyo</c> where Linux does not, so
-    /// a spelling another system would refuse is refused on every system, and a day is named the same everywhere.
+    /// a spelling another system would refuse is refused on every system, and a day is named the same everywhere. The text
+    /// is held as written, white space around it included, so it is taken only where the zone's resolved id equals it.
     /// </summary>
     public static TimeZoneInfo? ZoneOf(string id)
     {
         ArgumentNullException.ThrowIfNull(id);
-        var trimmed = id.Trim();
-        if (TimeZoneRules.IsUtc(trimmed))
+        if (id is "UTC" or "Etc/UTC")
         {
             return TimeZoneInfo.Utc;
         }
 
-        return TimeZoneInfo.TryFindSystemTimeZoneById(trimmed, out var zone) && zone.HasIanaId && string.Equals(zone.Id, trimmed, StringComparison.Ordinal)
+        return TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone) && zone.HasIanaId && string.Equals(zone.Id, id, StringComparison.Ordinal)
             ? zone
             : null;
     }

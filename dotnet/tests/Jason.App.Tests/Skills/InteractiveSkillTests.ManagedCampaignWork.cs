@@ -1265,6 +1265,12 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
 
+        // A review creates work, so a chat whose mode only reads and proposes asks for none, as it starts nothing.
+        Assert.Contains(
+            "(`launches_spent`). Where the chat's mode only reads and proposes, you ask for no review: say that this mode does not.",
+            skill,
+            StringComparison.Ordinal);
+
         Assert.Contains(
             SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("managed-campaign-work").File)),
             line => line.StartsWith("jason campaign review cmp_", StringComparison.Ordinal) && line.Contains(" --depth deep", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
