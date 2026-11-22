@@ -140,11 +140,14 @@ read, the responder and an `optout.record` go on. What becomes of the line is yo
 reply's verdict says which. Read the latest `reply_classified` line for the thread, as your skill's review says:
 
 - **A person wrote for themselves, or asked to stop** — nature `person` or `opt_out`: end their line in this campaign.
-  Their conversation goes on: an answer in their thread is no touch, and ending the line never reaches it.
+  Their conversation goes on: an answer in their thread is no touch, and ending the line never reaches it. Where they
+  asked to stop, ending the line is the whole of your part: the register's entry and the provider's opt-out are the
+  responder's, recorded with its verdict, or the person's own, and you put nothing on the register yourself.
 - **A notice a machine sent** — `out_of_office` or `auto_reply`, nature `automatic`: the line goes on. Continue it, and
-  push a touch still queued for them back to the day the responder's `returns` list gives under `back_at`, with a later
-  `not_before`. Where none is queued, their next touch is the deep review's, once it is due, counting the touches they
-  have had.
+  move a touch still queued for them to the day the reply names, which the responder's `returns` list gives under
+  `back_at`: give it that later `not_before`, or cancel it, with a reason, and the deep review creates the next touch
+  once the day has come. Where none is queued, their next touch is the deep review's, once it is due, counting the
+  touches they have had.
 - **`not_now`** — a person, who asked for later: leave the line held until the day its `back_at` gives, and say so in
   your note; the first review on or after that day continues it as an out-of-office notice is continued.
 - **A failed delivery** — nature `bounce`: end the line, with the bounce as the reason, unless the line goes on another
