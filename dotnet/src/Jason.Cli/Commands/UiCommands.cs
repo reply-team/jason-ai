@@ -124,9 +124,7 @@ public static class UiCommands
 
             if (NoItem(approvalId, questionId) is { } refused)
             {
-                env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, retryable: false));
-                env.Error.WriteLine(refused.Message);
-                return Task.FromResult(ExitCodes.ApiError);
+                return Task.FromResult(Refuse(env, parseResult.GetValue(human), refused));
             }
 
             if (parseResult.GetValue(web))
@@ -158,20 +156,32 @@ public static class UiCommands
 
     /// <summary>
     /// Jason Desktop at <paramref name="address"/>: the address on stdout where the desktop takes it, compact JSON or with
-    /// --human the address alone; where it does not, or the opener refused it, the refusal's envelope, as every local
-    /// refusal of the CLI's is said.
+    /// --human the address alone; where it does not, or the opener refused it, the refusal (<see cref="Refuse"/>).
     /// </summary>
     private static int OpenDesktop(CliEnvironment env, string address, bool noOpen, bool human)
     {
         if (DesktopLinks.Open(env, address, handOn: !noOpen) is { } refused)
         {
-            env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, retryable: false));
-            env.Error.WriteLine(refused.Message);
-            return ExitCodes.ApiError;
+            return Refuse(env, human, refused);
         }
 
         env.Out.WriteLine(human ? address : JsonSerializer.Serialize(new DesktopAddress(address), JasonJson.Options));
         return ExitCodes.Success;
+    }
+
+    /// <summary>
+    /// A refusal of <c>ui open</c>'s own, said as <c>session open</c>'s are: the error envelope on stdout and its sentence
+    /// again on stderr; under --human once, its <see cref="CliErrors.Sentence"/> on stdout alone. Exit 1.
+    /// </summary>
+    private static int Refuse(CliEnvironment env, bool human, DesktopRefusal refusal)
+    {
+        CliErrors.Print(env.Out, human, ExitCodes.ApiError, CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
+        if (!human)
+        {
+            env.Error.WriteLine(refusal.Message);
+        }
+
+        return ExitCodes.ApiError;
     }
 
     /// <summary>
@@ -186,10 +196,7 @@ public static class UiCommands
         var custom = env.Paths.UiCustomDirectory;
         if (!ServedFirst(custom))
         {
-            var message = $"No web UI of your own is installed ({custom}); Jason runs in Jason Desktop.";
-            env.Out.WriteLine(CliErrors.Serialize(CliErrors.CustomUiNotInstalled, message, retryable: false));
-            env.Error.WriteLine(message);
-            return ExitCodes.ApiError;
+            return Refuse(env, human, new(CliErrors.CustomUiNotInstalled, $"No web UI of your own is installed ({custom}); Jason runs in Jason Desktop."));
         }
 
         var (exit, response) = await OperationRunner.SendAsync(env, Operations.UiOpen, body, human, cancellationToken).ConfigureAwait(false);
