@@ -305,6 +305,14 @@ const unmadeMark = 'unmade:';
 /** Whether a chat is an agent's drawn before its conversation was made (`unmadeChat`). */
 export const isUnmade = (id: string): boolean => id.startsWith(unmadeMark);
 
+/**
+ * The name of the agent a chat is about as the console reads it now, so a rename shows at once; the chat's own title
+ * (what its conversation was called when it was made) where the console does not hold the agent, or for a chat of none.
+ */
+function agentNameOf(chat: Chat): string {
+    return campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
+}
+
 /** An unmade chat as it is drawn: named as the console's list names its agent, in the mode its conversation will take. */
 function unmadeAsDrawn(chat: Chat): Chat {
     const title = campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
@@ -737,7 +745,7 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
 }
 
 /**
- * A Plan only turn's plan, as a card: its words drawn as text, never as markup; a line saying what Approve and run does
+ * A Plan only turn's plan, as a card: its words drawn as the chat draws every answer, the Markdown subset and never the AI's own markup; a line saying what Approve and run does
  * on the host the go would go to now; and, while the card is live (`livePlan`), its two buttons. A card of the past,
  * approved or put aside, keeps the words and drops the buttons; one another host made says to ask for the plan again.
  */
@@ -767,8 +775,8 @@ function planCard(
                 : null;
     return html`<div class="ask chat-plan">
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
-        ${words.trim() === '' ? null : html`<div class="said plan-text">${words}</div>`} ${drawn}
-        ${line === null ? null : html`<div class="ask-w">${line}</div>`}
+        ${words.trim() === '' ? null : html`<div class="said plan-text">${markdownView(words, `${chat.id}:${chat.entries.indexOf(entry)}`)}</div>`}
+        ${drawn} ${line === null ? null : html`<div class="ask-w">${line}</div>`}
         ${drafts && (live || approving) ? html`<div class="ask-w plan-drafts">${planDrafts}</div>` : null}
         ${
             live || approving
@@ -1157,7 +1165,9 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
-                <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
+                <h2>
+                    ${chat.campaignId ? `What should Jason do in ${agentNameOf(chat)}?` : 'What should Jason work on?'}
+                </h2>
                 ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
@@ -2084,7 +2094,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     <div className="agent-opening">
                         <div className="start-title hero">
                             <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
-                            <h2>{t('agent.new.question', { name: chat.title })}</h2>
+                            <h2>{t('agent.new.question', { name: agentNameOf(chat) })}</h2>
                         </div>
                         {aiCard && <Painted className="start-ai" view={aiCardView} />}
                         {heldWords !== undefined && (

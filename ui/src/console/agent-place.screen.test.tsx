@@ -333,7 +333,8 @@ describe('An agent with no conversation yet', () => {
     const noAutumnRow = () => {
         const row = within(recent()).getByRole('button', { name: 'Autumn' });
         expect(row.getAttribute('data-action')).toBe('side.agent');
-        expect(row.querySelector('.t')?.textContent).toBe('');
+        // The agent's own last change is the time it shows, as the list sorts it by it.
+        expect(row.querySelector('.t')?.textContent).toMatch(/^[0-9]+ (min|h|d)$/);
     };
 
     it.each(['#/campaigns/cmp_2', '#/campaigns/cmp_2/chat'])(

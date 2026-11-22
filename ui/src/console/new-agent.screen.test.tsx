@@ -132,6 +132,24 @@ afterEach(() => {
 });
 
 describe('New GTM agent', () => {
+    it('names the agent in its question as the console names it now, so a rename shows at once', async () => {
+        await renderAt();
+        click();
+        const { opening } = await opened();
+        expect(within(opening).getByRole('heading', { level: 2 }).textContent).toBe('Who should New agent 1 reach?');
+        await waitFor(() => expect(consoleCampaigns.campaigns.value.some((each) => each.id === 'cmp_1')).toBe(true));
+        flush(() => {
+            consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) =>
+                each.id === 'cmp_1' ? { ...each, name: 'Renamed agent' } : each,
+            );
+        });
+        await waitFor(() =>
+            expect(within(opening).getByRole('heading', { level: 2 }).textContent).toBe(
+                'Who should Renamed agent reach?',
+            ),
+        );
+    });
+
     it("makes the agent at the click and opens its Chat, which asks Start's question with Start's box", async () => {
         const { desktop } = await renderAt();
         click();

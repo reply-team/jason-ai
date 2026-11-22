@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
+import { styleOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
@@ -547,6 +548,12 @@ describe('Plan only’s plan card', () => {
     const card = () => document.querySelector<HTMLElement>('.chat-plan');
     const approve = () => screen.queryByRole('button', { name: 'Approve and run' });
     const go = 'Go ahead with the plan in your last answer.';
+    /** A plan's words with the fences, line breaks and runs of space taken out, so a block drawn as code reads as written. */
+    const flat = (text: string | null) =>
+        (text ?? '')
+            .replace(/```(card)?/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
 
     /** Puts the chat in Plan only, sends a turn, and ends it as the desktop ends a Plan only turn with a plan. */
     const codexWords =
@@ -570,13 +577,25 @@ describe('Plan only’s plan card', () => {
         return id;
     }
 
-    it('shows the plan as text, never as markup, with the line for Claude Code and its two buttons', async () => {
+    it('draws the plan’s words as the chat draws every answer, a code fence as a code block and never a raw fence', async () => {
+        const desktop = renderConsole();
+        await planned(desktop, ['Run this:', '```', 'ls Downloads', '```'].join(String.fromCharCode(10)));
+        await waitFor(() => expect(card()).not.toBeNull());
+        const text = card()!.querySelector('.plan-text')!;
+        expect(text.querySelector('pre')?.textContent).toContain('ls Downloads');
+        expect(text.textContent).not.toContain('```');
+    });
+
+    it('draws the plan’s words as the chat’s Markdown, never as the AI’s own markup, with the line for Claude Code and its two buttons', async () => {
         const desktop = renderConsole();
         await planned(desktop);
         await waitFor(() => expect(card()).not.toBeNull());
         const text = card()!.querySelector('.plan-text')!;
-        expect(text.textContent).toBe(hostile);
-        expect(card()!.querySelector('strong, script, a, em, code')).toBeNull();
+        expect(text.textContent).toContain('Bold');
+        expect(text.textContent).toContain('<script>');
+        expect(card()!.querySelector('a, script')).toBeNull();
+        // The view's own line breaks are not the card's: it does not keep them as blank lines.
+        expect(styleOf(text)['white-space']).toBe('normal');
         expect((window as { hit?: number }).hit).toBeUndefined();
         expect(card()!.textContent).toContain(
             'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
@@ -650,7 +669,7 @@ describe('Plan only’s plan card', () => {
             const desktop = renderConsole();
             await planned(desktop, `Here is the plan.\n${other}`);
             await waitFor(() => expect(card()).not.toBeNull());
-            expect(card()!.querySelector('.plan-text')!.textContent).toBe(`Here is the plan.\n${other}`);
+            expect(flat(card()!.querySelector('.plan-text')!.textContent)).toBe(flat(`Here is the plan.\n${other}`));
             expect(within(card()!).queryByText(/its drafts included/)).toBeNull();
             expect(proposal()).toBeNull();
             expect(within(card()!).queryByRole('group', { name: 'Jason asks' })).toBeNull();
@@ -664,7 +683,9 @@ describe('Plan only’s plan card', () => {
         const earlier = '```card\n{"kind":"needs"}\n```';
         await planned(desktop, `First this.\n${earlier}\nThen the plan.\n${block}`);
         await waitFor(() => expect(proposal()).not.toBeNull());
-        expect(card()!.querySelector('.plan-text')!.textContent).toBe(`First this.\n${earlier}\nThen the plan.`);
+        expect(flat(card()!.querySelector('.plan-text')!.textContent)).toBe(
+            flat(`First this.\n${earlier}\nThen the plan.`),
+        );
     });
 
     it('reads what is on record once across the turn’s end that marks the words its plan, and again only on Refresh', async () => {
@@ -914,7 +935,7 @@ describe('Plan only’s plan card', () => {
         expect(approve()).toBeNull();
         expect(screen.queryByRole('button', { name: 'Keep planning' })).toBeNull();
         expect(card()!.textContent).not.toContain(codexWords);
-        expect(card()!.querySelector('.plan-text')!.textContent).toBe(hostile);
+        expect(card()!.querySelector('.plan-text')!.textContent).toContain('Bold');
         chooseHost('claude');
         await waitFor(() => expect(approve()).not.toBeNull());
         expect(card()!.textContent).not.toContain(otherHost);
@@ -959,7 +980,7 @@ describe('Plan only’s plan card', () => {
         const before = desktop.calls.length;
         fireEvent.click(screen.getByRole('button', { name: 'Keep planning' }));
         expect(approve()).toBeNull();
-        expect(card()!.querySelector('.plan-text')!.textContent).toBe(hostile);
+        expect(card()!.querySelector('.plan-text')!.textContent).toContain('Bold');
         expect(value()).toBe('plan_only');
         const asked = desktop.calls
             .slice(before)
@@ -1048,8 +1069,8 @@ describe('the empty chat’s sentence about approval', () => {
         await waitFor(() => sideRow('Summer referrals', 'agents'));
         fireEvent.click(sideRow('Summer referrals', 'agents'));
         await waitFor(() => expect(currentChat.value).toBe('conv_01JDKEPT0000000000000000C1'));
-        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Autumn?' }));
-        expect(said('What should Jason do in Autumn?')).toBeNull();
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Summer referrals?' }));
+        expect(said('What should Jason do in Summer referrals?')).toBeNull();
     });
 
     it('is drawn from the mode a reopened chat holds, never from an earlier drawing of it', async () => {
@@ -1079,8 +1100,8 @@ describe('the empty chat’s sentence about approval', () => {
         expect(said('What should Jason do in Spring?')).not.toBeNull();
         // Summer's row shows its agent's name, Autumn.
         open('Autumn');
-        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Summer?' }));
-        expect(said('What should Jason do in Summer?')).toBeNull();
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Autumn?' }));
+        expect(said('What should Jason do in Autumn?')).toBeNull();
         // Spring's mode moves while it is out of sight; it is drawn from the new mode the moment it is back.
         flush(() => desktop.emit('conv_01JDKEPT0000000000000000A1', { kind: 'mode', mode: 'full_access' }));
         // Every frame drawn from here on is watched: none may carry the sentence under Spring's heading.
