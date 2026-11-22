@@ -7,6 +7,7 @@ using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,7 +18,16 @@ namespace Jason.Runtime.Contacts;
 /// batch, because a thousand-line file with one broken address must not cost the caller the other 999.
 /// Removal is an exclusion rather than a deletion, so a re-import cannot quietly undo it.
 /// </summary>
-public sealed class MembershipService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
+/// <param name="heldSends">
+/// Takes back, in a removal's and a line's end's own save, what the provider still holds for the people they stop. Optional
+/// only for the tests that build this service by hand and hold no such send; the runtime always supplies it.
+/// </param>
+public sealed class MembershipService(
+    JasonDbContext db,
+    JournalWriter journal,
+    TimeProvider clock,
+    WorkItemCanceller canceller,
+    HeldSendCancels? heldSends = null)
 {
     public const int MaxBatch = 1000;
 
@@ -208,6 +218,9 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 await canceller.CancelOpenAsync(db, campaign.Id, contactId, actor, "contact removed from campaign", cancellationToken).ConfigureAwait(false);
             }
 
+            // And what the provider already holds for them is taken back: a letter it took cannot be cancelled here.
+            await TakeBackAsync(campaign, excludedContactIds, cancellationToken).ConfigureAwait(false);
+
             journal.Append(
                 db,
                 actor,
@@ -284,6 +297,8 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
             {
                 await canceller.CancelOpenAsync(db, campaign.Id, contactId, actor, "line finished in campaign", cancellationToken, OperationCatalog.Touches).ConfigureAwait(false);
             }
+
+            await TakeBackAsync(campaign, ended, cancellationToken).ConfigureAwait(false);
 
             var summary = new FinishContactsSummary(
                 results.Count(item => item.Status == FinishContactsItemStatus.Finished),
@@ -531,6 +546,15 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
     }
+
+    /// <summary>
+    /// Takes back what the provider still holds for the people a removal or a line's end stopped in the campaign, inside the
+    /// act's transaction (<see cref="HeldSendCancels"/>): one <c>message.cancel</c> for each such send, as the dispatcher.
+    /// </summary>
+    private Task TakeBackAsync(Campaign campaign, IReadOnlyCollection<int> stopped, CancellationToken cancellationToken) =>
+        heldSends is null || stopped.Count == 0
+            ? Task.CompletedTask
+            : heldSends.CancelForAsync(db, campaign.Id, campaign.PublicId, stopped, clock.GetUtcNow(), cancellationToken);
 
     /// <summary>The campaign a line's verb names, which is not archived, and the people it names, within the batch's bound.</summary>
     private async Task<(Campaign Campaign, IReadOnlyList<string> Ids)> LineRequestAsync(

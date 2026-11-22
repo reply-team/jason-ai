@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -53,6 +54,8 @@ public sealed class Responder(
     RouteRegistry routes,
     PluginRegistry plugins,
     ResponderSkips skips,
+    JournalWriter journal,
+    HeldSendCancels cancels,
     ILogger<Responder> logger)
 {
     /// <summary>The role a reply wakes.</summary>
@@ -170,7 +173,7 @@ public sealed class Responder(
             .Where(entry => entry.CampaignId == campaign.Id && entry.Id > before && entry.Kind == JournalKinds.InboundReplyObserved)
             .OrderBy(entry => entry.Id)
             .Take(LinesPerScan)
-            .Select(entry => new Line(entry.Id, entry.PublicId, entry.New))
+            .Select(entry => new Line(entry.Id, entry.PublicId, entry.New, entry.ContactId))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -252,6 +255,9 @@ public sealed class Responder(
                     return new Acted(LineOutcome.Moved);
                 }
 
+                // Before any skip and whether or not a responder is woken: a reply holds the person's line.
+                await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
+
                 var outcome = new Acted(LineOutcome.Read);
                 if (reply is not null)
                 {
@@ -276,7 +282,8 @@ public sealed class Responder(
 
         // Past the poisoned line alone, so it is not tried again on every scan and the lines after it are still read.
         // Only a refusal is the line's: a write that failed for any other reason, a disk or a lock, is rethrown above and
-        // fails the campaign for this scan, so the next scan reads the line again.
+        // fails the campaign for this scan, so the next scan reads the line again. The hold the rollback took back is set
+        // again here: a responder that could not be written is no reason to let the person's touches go on.
         await using var passing = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (await AccountForAsync(db, campaign.Id, before, line.Id, ct).ConfigureAwait(false) == 0)
         {
@@ -284,8 +291,42 @@ public sealed class Responder(
             return new Acted(LineOutcome.Moved);
         }
 
+        await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
         await passing.CommitAsync(ct).ConfigureAwait(false);
+        db.ChangeTracker.Clear();
         return new Acted(LineOutcome.Read);
+    }
+
+    /// <summary>
+    /// The hold a reply line sets (<see cref="LineHold"/>): the person the line names by its contact column, when they are
+    /// an enrolled member of the campaign, is held, and what the provider still holds for them there is taken back
+    /// (<see cref="HeldSendCancels"/>). A line that names nobody holds nobody. A take-back the domain refuses is said once
+    /// and costs neither the hold nor the line.
+    /// </summary>
+    private async Task HoldAsync(JasonDbContext db, Active campaign, Line line, CancellationToken ct)
+    {
+        if (line.ContactId is not { } contact)
+        {
+            return;
+        }
+
+        var now = clock.GetUtcNow();
+        if (!await LineHold.ApplyAsync(db, journal, now.UtcDateTime, campaign.Id, contact, line.PublicId, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        try
+        {
+            await cancels.CancelForAsync(db, campaign.Id, campaign.PublicId, [contact], now, ct).ConfigureAwait(false);
+        }
+        catch (DomainException refused)
+        {
+            if (skips.FirstTime(campaign.Id, refused.Code))
+            {
+                PassedOver(logger, campaign.PublicId, refused.Code, null);
+            }
+        }
     }
 
     private async Task<Acted> ActAsync(JasonDbContext db, Active campaign, Line line, Reply reply, ResponderOptions options, CancellationToken ct)
@@ -595,7 +636,7 @@ public sealed class Responder(
 
     private sealed record OpenResponder(int Id, string PublicId, JsonObject Context);
 
-    private sealed record Line(int Id, string PublicId, JsonNode? New);
+    private sealed record Line(int Id, string PublicId, JsonNode? New, int? ContactId);
 
     private sealed record Acted(LineOutcome Outcome, string? WorkItemId = null);
 

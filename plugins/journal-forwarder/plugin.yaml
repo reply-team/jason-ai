@@ -49,6 +49,7 @@ subscriptions:
   - contacts_added
   - contacts_continued
   - contacts_finished
+  - contacts_paused
   - contacts_removed
   - contacts_reopened
   - context_updated

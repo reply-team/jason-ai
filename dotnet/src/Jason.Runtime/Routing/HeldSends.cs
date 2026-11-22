@@ -68,6 +68,8 @@ internal static class HeldSends
             JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
                  AND a.number = (SELECT max(b.number) FROM attempts AS b WHERE b.work_item_id = s.id AND b.status = 'succeeded')
             WHERE s.status = 'succeeded'
+              AND ({7} IS NULL OR s.campaign_id = {7})
+              AND ({8} IS NULL OR s.contact_id IN (SELECT value FROM json_each({8})))
               AND s.operation IN (SELECT value FROM json_each({0}))
               AND json_type(s.result_json, '$.items[0].cancelable') = 'true'
               AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
@@ -108,13 +110,28 @@ internal static class HeldSends
     private static readonly string Unread = JsonSerializer.Serialize(NothingToRead);
 
     /// <summary>Every send the provider still holds for a moment after <paramref name="now"/>, in campaign order.</summary>
-    public static async Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, CancellationToken ct)
+    public static Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, CancellationToken ct) =>
+        ReadAsync(db, now, campaignId: null, contactIds: null, ct);
+
+    /// <summary>
+    /// The same read, narrowed to one campaign's sends to the people named, by their rows: what the provider still holds
+    /// for them there, by this one definition, so a take-back and a route change never disagree about what is held.
+    /// </summary>
+    public static Task<IReadOnlyList<HeldSend>> ReadForAsync(JasonDbContext db, int campaignId, IReadOnlyCollection<int> contactIds, DateTimeOffset now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contactIds);
+        return ReadAsync(db, now, campaignId, contactIds, ct);
+    }
+
+    private static async Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, int? campaignId, IReadOnlyCollection<int>? contactIds, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
 
         var at = now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
+        object campaign = campaignId is { } row ? row : DBNull.Value;
+        object people = contactIds is null ? DBNull.Value : JsonSerializer.Serialize(contactIds);
         var rows = await db.Database
-            .SqlQueryRaw<HeldSendRow>(Sql, Makers, at, Cancel, Status, Gone, Final, Unread)
+            .SqlQueryRaw<HeldSendRow>(Sql, Makers, at, Cancel, Status, Gone, Final, Unread, campaign, people)
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows

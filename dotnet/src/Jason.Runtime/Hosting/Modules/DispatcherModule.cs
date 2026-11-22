@@ -10,6 +10,7 @@ using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -58,6 +59,11 @@ public static class DispatcherModule
         // depends on but never names is one a smaller composition silently lacks.
         services.TryAddScoped<WorkItemService>();
         services.TryAddScoped<WorkItemCanceller>();
+
+        // The respond step takes back what the provider holds for a person it holds, through the one routine the end of a
+        // line and a removal take it back through too; the contact module names it as well, for the same reason.
+        services.TryAddScoped<HeldSendCancels>();
+        services.TryAddSingleton<HeldSendCancelSkips>();
 
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
