@@ -20,7 +20,9 @@ cadence came round and nothing in particular happened, and `triggered` when a li
 a review; then `trigger` names the kind of that line and `cause` names it by identifiers — the chronicle entry,
 the work item, the attempt, and `decision_id` when the answer to a question is what woke you.
 `cause.qualifying_count` says how many such lines were read in the same pass: ten failures in a burst are one
-review, and it is yours.
+review, and it is yours. `review_intent` is `requested` when a person asked for this review with
+`jason campaign review`; it names no trigger and no cause, and the `review_requested` line in the chronicle says
+who asked and why.
 
 The brief is identifiers and constants. It does not say what happened, because the runtime that wrote it read
 no meaning, and you should not take it for a summary either. It says where to look first.

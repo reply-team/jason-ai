@@ -56,6 +56,7 @@ public class ConfinedVerbsTests
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
         ["campaign start"] = ["campaign", "start", "cmp_A"],
         ["campaign archive"] = ["campaign", "archive", "cmp_A"],
+        ["campaign review"] = ["campaign", "review", "cmp_A"],
     };
 
     public static TheoryData<string> Entries() => [.. ConfinedVerbs.Table.Select(entry => entry.Command)];
@@ -108,6 +109,7 @@ public class ConfinedVerbsTests
     [InlineData("role add")]
     [InlineData("campaign start")]
     [InlineData("campaign archive")]
+    [InlineData("campaign review")]
     public async Task Unset_the_verb_reaches_the_runtime(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(WithActor(entry), new Dictionary<string, string>());

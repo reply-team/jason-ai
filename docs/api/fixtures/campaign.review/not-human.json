@@ -1,0 +1,19 @@
+{
+  "operation": "campaign.review",
+  "case": "not-human",
+  "request": {
+    "campaign_id": "cmp_1",
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "review_not_human",
+      "message": "An actor of type 'role' cannot ask a campaign's manager for a review; a review asked for is a person's word.",
+      "retryable": false
+    }
+  }
+}

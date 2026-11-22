@@ -391,6 +391,14 @@ public static partial class JournalKinds
     /// </summary>
     public const string LaunchLimitLifted = "launch_limit_lifted";
 
+    /// <summary>
+    /// A person asked a campaign's manager for a review now: keyed by the depth asked for, <c>quick</c> or <c>deep</c>, with
+    /// the check-in it made and that check-in's entry. Written by <c>campaign.review</c> only, as the person who asked, with
+    /// their reason, in the same save as the check-in. It is no manager trigger, so it summons nothing, and no program may
+    /// subscribe to it.
+    /// </summary>
+    public const string ReviewRequested = "review_requested";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -479,6 +487,7 @@ public static partial class JournalKinds
         SubscriptionFailed,
         SubscriptionCursorRewound,
         LaunchLimitLifted,
+        ReviewRequested,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

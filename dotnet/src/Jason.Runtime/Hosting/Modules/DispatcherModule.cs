@@ -100,13 +100,14 @@ public static class DispatcherModule
         services.TryAddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
-        services.AddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
+        // Tried as well: the campaigns module states it too, for a review a person asks for, which counts the same day.
+        services.TryAddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
         services.AddSingleton(Seam<SendingOptions>(SendingOptions.Section));
         services.AddSingleton(Seam<LinesOptions>(LinesOptions.Section));
         services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
 
         // The installation's zone, read through its seam at each scan: the day the daily limits count and a lift covers runs
-        // from one midnight to the next in it. Named with TryAdd, since the lift's own module needs the same day and either
+        // from one midnight to the next in it. Named with TryAdd, since the lift's own module and the campaigns module need the same day and any
         // module may be composed first.
         services.TryAddSingleton(Seam<RuntimeOptions>(RuntimeOptions.Section));
         services.TryAddSingleton<InstallationDay>();

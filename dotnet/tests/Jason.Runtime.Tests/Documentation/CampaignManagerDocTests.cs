@@ -14,6 +14,40 @@ namespace Jason.Runtime.Tests.Documentation;
 /// </summary>
 public partial class CampaignManagerDocTests
 {
+    /// <summary>
+    /// A review asked for: the page says what it makes, what it does to the two clocks, what its line is, and each code it is
+    /// refused with, in the order the service refuses them, each code read from the runtime's own error.
+    /// </summary>
+    [Fact]
+    public void The_page_says_what_a_review_asked_for_makes_and_where_it_is_refused_in_order()
+    {
+        var page = Flattened(Read());
+
+        Assert.Contains("**A review asked for.**", page, StringComparison.Ordinal);
+        Assert.Contains("`jason campaign review <id>`", page, StringComparison.Ordinal);
+        Assert.Contains("its brief says `review_intent: \"requested\"` and names no trigger and no cause", page, StringComparison.Ordinal);
+        Assert.Contains("a review asked for moves the quick anchor, as every check-in does", page, StringComparison.Ordinal);
+        Assert.Contains("a deep review asked for leaves the grid where it was, so the daily deep review still comes at its moment", page, StringComparison.Ordinal);
+        Assert.Contains($"The request writes one `{JournalKinds.ReviewRequested}` line", page, StringComparison.Ordinal);
+        Assert.Contains("So `review_intent` is one of three values, `scheduled`, `triggered` and `requested`.", page, StringComparison.Ordinal);
+
+        string[] order =
+        [
+            Jason.Runtime.Domain.DomainErrors.ReviewInsideARun("att_x").Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewActorRequired().Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewNotHuman(Jason.Contracts.Api.ActorType.Role).Code,
+            Jason.Runtime.Domain.DomainErrors.CampaignNotFound("cmp_x").Code,
+            Jason.Runtime.Domain.DomainErrors.CampaignNotActive("cmp_x", Jason.Contracts.Api.CampaignStatus.Paused).Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewAlreadyOpen("cmp_x", "wi_x").Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewLaunchesSpent("cmp_x", 1, "2026-10-06T15:00:00Z", "UTC").Code,
+        ];
+        var section = page[page.IndexOf("**A review asked for.**", StringComparison.Ordinal)..];
+        var at = order.Select(code => section.IndexOf($"`{code}`", StringComparison.Ordinal)).ToList();
+        Assert.DoesNotContain(-1, at);
+        Assert.Equal(at.Order(), at);
+        Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.LiftHold, page, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_manager_contract_defines_the_check_in_and_prices_the_cadence()
     {
@@ -36,6 +70,24 @@ public partial class CampaignManagerDocTests
     }
 
     /// <summary>
+    /// The reserve's default is set by the runtime at the first start, so the page says when, for which campaigns, by whom
+    /// and how a person has none; a page that still said a campaign has none until one is set would teach a reader that a
+    /// null before the start means none.
+    /// </summary>
+    [Fact]
+    public void The_reserve_page_says_the_default_the_first_start_sets_and_how_to_have_none()
+    {
+        var page = Flattened(Read());
+
+        Assert.DoesNotContain("A campaign has none until one is set", page, StringComparison.Ordinal);
+        Assert.Contains("When it first goes live, `campaign.start` from `draft`, holding none, and its people come from a search that can top them up, the runtime gives it `Manager:AudienceThreshold`, twenty by default", page, StringComparison.Ordinal);
+        Assert.Contains("A campaign whose people the person brought as a list holds neither and is given nothing", page, StringComparison.Ordinal);
+        Assert.Contains("by `system:runtime`, whose reason says it is the default at the first start", page, StringComparison.Ordinal);
+        Assert.Contains("A resume never does, and a campaign that was already live when its installation was upgraded is never given one.", page, StringComparison.Ordinal);
+        Assert.Contains("So a person who wants none clears it after the start, `--clear audience_threshold`, and it stays cleared through every pause and resume.", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The settings table is the part an operator edits, so the numbers on the page have to be the numbers the
     /// runtime holds them to. A default that drifts here is a page that lies about what happens by itself.
     /// </summary>
@@ -52,6 +104,10 @@ public partial class CampaignManagerDocTests
         Assert.Contains($"`Manager:MaxAttempts` | `{defaults.MaxAttempts}` | 1..10", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxEntriesPerScan` | `{defaults.MaxEntriesPerScan}` | 50..10000", page, StringComparison.Ordinal);
+        Assert.Contains(
+            $"`Manager:AudienceThreshold` | `{defaults.AudienceThreshold}` | {ReserveCounter.MinimumThreshold}..{ReserveCounter.MaximumThreshold}",
+            page,
+            StringComparison.Ordinal);
 
         // And every kind the defaults hold is one the page publishes: a row of the table of what wakes a manager, and
         // the default of the setting, in the order the runtime holds them.

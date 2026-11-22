@@ -7,6 +7,28 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// The reserve's threshold is one batch that the runtime sets at the first start of a campaign fed by a search, and a
+    /// person has none by clearing it after the start. A session told the person sets it once the probe lands, a fifth of
+    /// the probe, would set a second number over the runtime's, or tell a person a null before the start means none.
+    /// </summary>
+    [Fact]
+    public void The_reserve_s_threshold_is_one_batch_the_first_start_sets_and_a_person_clears_after_it()
+    {
+        var managed = Flattened("managed-campaign-work");
+        Assert.Contains("The reserve's threshold is the campaign's own field, one batch, twenty: the runtime sets it at the campaign's first start, because its people come from a search, and the start's answer shows it. A campaign whose people the person brought as a list is given none.", managed, StringComparison.Ordinal);
+        Assert.Contains("or clear it after the start to have none, `--clear audience_threshold`, and it stays cleared.", managed, StringComparison.Ordinal);
+
+        var approvals = Flattened("approvals-and-questions");
+        Assert.Contains("one batch, twenty, which the runtime sets at the campaign's first start, because its people come from a search.", approvals, StringComparison.Ordinal);
+
+        foreach (var skill in new[] { managed, approvals, Flattened("planner-in-session") })
+        {
+            Assert.DoesNotContain("a fifth of the probe", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("a reserve threshold of 5", skill, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void The_managed_path_says_what_the_runtime_decides_and_what_it_promises_nothing_about()
     {
@@ -1159,4 +1181,110 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
         Assert.Contains("The person may ask you to stay and watch; then you read and tell them what you see, and what you see is no reason to create work.", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The fence on a provider's sequence, said where a direct request lands: beside the managed path's example of an
+    /// enrolment at the provider, and in the launch skill, whose trigger words include "sequence". A sequence linked to a
+    /// campaign sends its own steps, and Jason's roles, who know nothing of them, would send their own letters beside
+    /// them; so a campaign linked to one gets no letters of Jason's own, and the person hears that, that the support is
+    /// partial, and that it may be tried on their yes, before anything is done. Never offered, also where the account
+    /// holds some.
+    /// </summary>
+    [Fact]
+    public void The_fence_on_a_providers_sequence_is_said_where_a_direct_request_lands()
+    {
+        const string Never = "A provider's sequence is never offered, also where the account holds some.";
+        const string Fence =
+            "Where a person asks directly to link a campaign to a provider's sequence, or to create one there, say three things before anything else: "
+            + "1. Jason's support of a provider's sequences is partial. "
+            + "2. In a campaign linked to a provider's sequence Jason sends no letters at all: whether the sequence sends is the sequence's matter, and Jason adds no steps to it. "
+            + "3. It may be tried, on the person's yes.";
+
+        // The managed path: in "The work itself", before the enrolment it prints as its example of a provider operation.
+        var work = Section("The work itself");
+        var flat = Whitespace().Replace(work, " ");
+        Assert.Contains(Never, flat, StringComparison.Ordinal);
+        Assert.Contains(Fence, flat, StringComparison.Ordinal);
+        var enrol = flat.IndexOf("--operation campaign.enroll", StringComparison.Ordinal);
+        Assert.True(
+            enrol > flat.IndexOf(Fence, StringComparison.Ordinal),
+            "managed-campaign-work says the fence after its enrolment example, or prints no enrolment; it belongs before the example.");
+
+        // The launch skill: in its section on Jason, before its prerequisites.
+        var launch = File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "campaign-launch", SkillPack.SkillFile)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var from = launch.IndexOf("\n## Jason's set-up, and this skill as its method\n", StringComparison.Ordinal);
+        var to = launch.IndexOf("\n## Prerequisites\n", StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, "campaign-launch has no section \"## Jason's set-up, and this skill as its method\" before \"## Prerequisites\".");
+        var section = Whitespace().Replace(launch[from..to], " ");
+        Assert.Contains(Never, section, StringComparison.Ordinal);
+        Assert.Contains(Fence, section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The fence stands in two places, and no other skill steers towards a provider's sequence: a sentence that speaks of
+    /// linking a campaign to one, creating one, putting people into one or offering one points at one of the two places,
+    /// or it is a second rule that drifts from the fence, or a steer the fence was written to stop. Read over every
+    /// Markdown file of both packs but the two places and the manager's, which carries the manager's own part of the rule.
+    /// Words in backticks are names, a retired <c>sequence.create</c> among them, and are not read as prose. The phrases:
+    /// linking and a sequence in one sentence, either way round; creating, building, setting up or making one; enrolling,
+    /// putting or adding somebody into one; and offering, proposing, suggesting or recommending one.
+    /// </summary>
+    [Fact]
+    public void No_skill_but_the_fences_two_places_speaks_of_linking_or_creating_a_providers_sequence()
+    {
+        var phrases = new (string Name, Regex Pattern, string Steer)[]
+        {
+            ("linking to a sequence", new Regex(@"\blink\w*\b[^.;:]{0,80}\bsequences?\b", RegexOptions.IgnoreCase), "Link the campaign to the sequence the account already holds."),
+            ("a sequence linked", new Regex(@"\bsequences?\b[^.;:]{0,80}\blink\w*", RegexOptions.IgnoreCase), "Where the account holds sequences, ask which one to link."),
+            ("creating a sequence", new Regex(@"\b(creat|build|built|set up|setting up|make|making|made)\w*\b[^.;:]{0,60}\bsequences?\b", RegexOptions.IgnoreCase), "Create a sequence at the provider with three steps."),
+            ("into a sequence", new Regex(@"\b(enrol|put|add)\w*\b[^.;:]{0,40}\b(into|to|in) (a|the|their|your|its|that|this)( provider's)? sequences?\b", RegexOptions.IgnoreCase), "Enrol the first twenty people into the provider's sequence."),
+            ("offering a sequence", new Regex(@"\b(offer|propos|suggest|recommend)\w*\b[^.;:]{0,60}\bsequences?\b|\bsequences?\b[^.;:]{0,40}\b(offer|propos|suggest|recommend)\w*", RegexOptions.IgnoreCase), "Offer the person one of their sequences."),
+        };
+
+        // Each phrase finds the steer it is named for, so a pattern that matched nothing would not pass for a clean pack.
+        foreach (var phrase in phrases)
+        {
+            Assert.True(phrase.Pattern.IsMatch(phrase.Steer), $"The phrase '{phrase.Name}' does not find its own example: {phrase.Steer}");
+        }
+
+        var skills = Path.Combine(SkillPack.RepositoryRoot(), "skills");
+        var excluded = new[]
+        {
+            Path.Combine(SkillPack.BusinessRoot(), "campaign-launch", SkillPack.SkillFile),
+            SkillPack.Find("managed-campaign-work").File,
+        };
+        var manager = Path.Combine(SkillPack.Root(), "roles", "manager") + Path.DirectorySeparatorChar;
+        var files = Directory.EnumerateFiles(skills, "*.md", SearchOption.AllDirectories)
+            .Where(file => !excluded.Contains(file, StringComparer.OrdinalIgnoreCase) && !file.StartsWith(manager, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.True(files.Count > 20, $"Only {files.Count} Markdown files were read under '{skills}', so this guard holds little.");
+
+        var found = new List<string>();
+        foreach (var file in files)
+        {
+            var text = Whitespace().Replace(File.ReadAllText(file), " ");
+            var neutral = Backticked().Replace(text, match => match.Value.Replace('.', '·'));
+            foreach (var sentence in SentenceEnd().Split(neutral))
+            {
+                if (sentence.Contains("managed-campaign-work", StringComparison.Ordinal) || sentence.Contains("campaign-launch", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var bare = Backticked().Replace(sentence, " ");
+                found.AddRange(phrases.Where(phrase => phrase.Pattern.IsMatch(bare)).Select(phrase => $"'{Path.GetRelativePath(skills, file)}' ({phrase.Name}): {sentence}"));
+            }
+        }
+
+        Assert.True(
+            found.Count == 0,
+            "A skill outside the fence's two places speaks of a provider's sequence; point it at `managed-campaign-work` instead:\n"
+            + string.Join('\n', found));
+    }
+
+    [GeneratedRegex(@"`[^`]*`")]
+    private static partial Regex Backticked();
+
+    [GeneratedRegex(@"(?<=[.!?])\s+")]
+    private static partial Regex SentenceEnd();
 }

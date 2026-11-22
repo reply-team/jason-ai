@@ -26,7 +26,8 @@ public sealed record CampaignSummaryDto(
 /// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
 /// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
 /// null where none is recorded — a campaign made before folders were. <c>audience_threshold</c> is how few untouched
-/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
+/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them. The runtime sets
+/// it at the first start of a campaign whose people come from a search and that holds none, to the installation's default.
 /// <c>send_modes</c> is the campaign's own mode for its cold contacts and its warm ones, each null where it sets none;
 /// <c>send_modes_in_force</c> is the mode a send to each would go under now, with where it comes from: the campaign, the
 /// installation's preference, or the default, which is every message. <c>deep_review_due_at</c> is the next moment of the
@@ -104,6 +105,26 @@ public sealed record CampaignUpdateRequest(
 
 /// <summary>The body of <c>campaign.start</c>, <c>campaign.pause</c> and <c>campaign.archive</c>.</summary>
 public sealed record CampaignTransitionRequest(string? CampaignId, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// A person's word that a campaign's manager reviews it now: <c>depth</c> is <see cref="ReviewDepths.Quick"/>, the default,
+/// or <see cref="ReviewDepths.Deep"/>. The answer is the check-in it made, the summon's own work item; the actor is a person
+/// with an id, and the reason is journaled with the request.
+/// </summary>
+public sealed record CampaignReviewRequest(string? CampaignId, string? Depth, ActorRef? Actor, string? Reason);
+
+/// <summary>The depths a review is asked for at: a quick look, or a deep review.</summary>
+public static class ReviewDepths
+{
+    /// <summary>A quick look, the manager's <c>quick_look</c> entry, and what a request that names no depth asks for.</summary>
+    public const string Quick = "quick";
+
+    /// <summary>A deep review, the manager's <c>deep_review</c> entry.</summary>
+    public const string Deep = "deep";
+
+    /// <summary>Every depth, in the order the help names them.</summary>
+    public static IReadOnlyList<string> All { get; } = [Quick, Deep];
+}
 
 /// <summary>Top-level edits to the campaign context. Null is a legitimate value, so clearing a key means listing it in <c>unset</c>.</summary>
 public sealed record CampaignUpdateContextRequest(

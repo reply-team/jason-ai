@@ -82,6 +82,12 @@ public static class ManagerCheckIn
     /// <see cref="RoleEntries"/>, or null for none. This is the one writer of a work item's entry. A name the table does
     /// not give the manager is a programming error, refused before anything is written.
     /// </param>
+    /// <param name="requested">
+    /// Whether a person asked for this review (<c>campaign.review</c>) rather than the summon deciding it. A requested
+    /// review has no cause, says <c>review_intent: requested</c>, moves the quick anchor as every check-in does, and never
+    /// moves the deep review's grid, so the daily deep review still comes at its moment. A cause with it is a programming
+    /// error.
+    /// </param>
     public static async Task<WorkItem> CreateAsync(
         WorkItemService items,
         JasonDbContext db,
@@ -89,12 +95,18 @@ public static class ManagerCheckIn
         ManagerCause? cause,
         ManagerOptions options,
         CancellationToken cancellationToken,
-        string? entry = null)
+        string? entry = null,
+        bool requested = false)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(options);
+        if (requested && cause is not null)
+        {
+            throw new ArgumentException("A review a person asked for has no cause in the chronicle.", nameof(cause));
+        }
+
         if (entry is not null && !RoleEntries.Carries(Role, entry))
         {
             throw new ArgumentOutOfRangeException(
@@ -117,10 +129,10 @@ public static class ManagerCheckIn
             options.TimeoutSeconds,
             HeartbeatSeconds: null,
             options.MaxAttempts,
-            Context(cause),
+            Context(cause, requested),
             ResultFormat.DeepClone(),
             Actor: null,
-            Reason: cause is null ? "the review cadence came round" : "the chronicle asked for a review");
+            Reason: requested ? "a person asked for a review" : cause is null ? "the review cadence came round" : "the chronicle asked for a review");
 
         var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken, entry).ConfigureAwait(false);
 
@@ -129,9 +141,10 @@ public static class ManagerCheckIn
         // next one comes round on time either way.
         campaign.ManagerReviewAnchor = item.CreatedAt;
 
-        // A deep review, and only a deep review, moves the grid: on by whole intervals to its first moment after this one,
-        // read from the interval in force now, so a runtime that was down for days owes one deep review and not one a day.
-        if (string.Equals(entry, ManagerEntryChoice.DeepReview, StringComparison.Ordinal))
+        // A deep review, and only a deep review the summon decided, moves the grid: on by whole intervals to its first moment
+        // after this one, read from the interval in force now, so a runtime that was down for days owes one deep review and
+        // not one a day. One a person asked for leaves it, so the daily one still comes at its moment.
+        if (!requested && string.Equals(entry, ManagerEntryChoice.DeepReview, StringComparison.Ordinal))
         {
             campaign.DeepReviewDueAt = DeepReviewSchedule.Next(campaign.DeepReviewDueAt, options.DeepReviewSeconds, item.CreatedAt);
         }
@@ -144,11 +157,13 @@ public static class ManagerCheckIn
     /// manager and not one thing about what the manager will find; a sentence here would be the dispatcher
     /// reading meaning, which is the one thing it must never do.
     /// </summary>
-    private static JsonObject Context(ManagerCause? cause)
+    private static JsonObject Context(ManagerCause? cause, bool requested)
     {
         var context = new JsonObject
         {
-            ["review_intent"] = cause is null ? "scheduled" : "triggered",
+            // Three values: scheduled when a clock came round, triggered when a line of the chronicle asked, and requested
+            // when a person asked (campaign.review). A requested review names no trigger and no cause, as a scheduled one.
+            ["review_intent"] = requested ? "requested" : cause is null ? "scheduled" : "triggered",
             ["allowed_operations"] = new JsonArray([.. AllowedOperations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
 
             // The one verb that changes what happens next, in a key of its own beside a list that also holds

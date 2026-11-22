@@ -1,0 +1,11 @@
+{
+  "kind": "review_requested",
+  "version": 1,
+  "case": "a person asked for a deep review, and the check-in was made with the deep review's entry",
+  "body": {
+    "key": "deep",
+    "old": null,
+    "new": { "work_item_id": "wi_01K7QN0000000000000000000A", "entry": "deep_review" }
+  },
+  "expect": "valid"
+}

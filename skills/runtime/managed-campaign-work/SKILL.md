@@ -150,7 +150,9 @@ sets them going. So you write no message, no template and no plan of steps or fo
 sequence at a provider, and you create no send. A message you write yourself is one no role will follow up and no
 critic has read, and it holds neither the person's tone nor the campaign's plan. When the person asks in plain words
 for the thing itself, "write this letter yourself" or "send it to her now", say once what is lost: no role follows it
-up, and no critic has read it. Then do what they asked, as their act and in their name.
+up, and no critic has read it. Then do what they asked, as their act and in their name. A person who asks directly to
+tie the campaign to a sequence at the provider, or to make one there, is answered as "The work itself" says, beside
+its example of a provider operation.
 
 The set-up's method is the business pack's: `campaign-launch` for what must hold before a campaign reaches anybody,
 and `audience-building` for who belongs on it and where they come from. Read them for that judgement; what Jason
@@ -240,8 +242,8 @@ The message ends with exactly: "Everything is ready. Start it?"
 - **Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then
   read it back. Say "Started, as you said. It is recorded under your name, {name}." only once `jason campaign get`
   answers the status `active`.
-- **They will start it themselves**: leave it as it is. In Jason Desktop they press Start at the top of the campaign's
-  chat; in a terminal they type `jason campaign start` with the campaign's id.
+- **They will start it themselves**: leave it as it is. They start it when they choose, by telling this chat or any
+  session to start it, or by typing `jason campaign start` with the campaign's id in a terminal.
 - **Start it later**: leave it a draft, with everything recorded. When they tell you, or any session, to start it, read
   that it is ready again and start it then. A draft runs nothing, so nothing is lost by waiting. Jason has no start at
   a moment the person names, "Monday at nine", and a session cannot wake itself: say so plainly where they ask for one,
@@ -400,8 +402,24 @@ jason contact list --query "marta@"
 ```
 
 A managed provider operation is a work item whose `--operation` names a published contract and whose `--input`
-carries that contract's arguments. The example is an enrolment into a campaign at the provider, which is never a step
-of the set-up and is made only where the person asks for a provider's campaign by name:
+carries that contract's arguments. The example below is an enrolment into a campaign at the provider, which is never a
+step of the set-up.
+
+**A provider's sequence.** A provider's sequence is never offered, also where the account holds some. Where a person
+asks directly to link a campaign to a provider's sequence, or to create one there, say three things before anything
+else:
+
+1. Jason's support of a provider's sequences is partial.
+2. In a campaign linked to a provider's sequence Jason sends no letters at all: whether the sequence sends is the
+   sequence's matter, and Jason adds no steps to it.
+3. It may be tried, on the person's yes.
+
+The rule is the campaign's, not one person's. On their yes, linking is tried by the enrolment below, one person at a
+time into the sequence they named, by its identifier at the provider; and write in the campaign's context, in their
+words, that the campaign is linked to that sequence, so that every role that reads the campaign knows it writes no
+letters there. Jason has no operation that makes a sequence: where they asked for one, say so, and that it is made in
+the provider's own tool and can then be tried the same way.
+
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}" --idempotency-key q3-latam-enrol-marta
@@ -423,7 +441,7 @@ they came from:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --idempotency-key q3-latam-probe-logistics --file - <<'EOF'
-{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}}
+{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. At the start, a reserve threshold of 20, one batch; once the audience works, top-ups of 25 up to 250."}}
 EOF
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --idempotency-key q3-latam-form-audience --file - <<'EOF'
 {"context":{"brief":"form the audience from the campaign context and create its probe"}}
@@ -438,8 +456,10 @@ it parks for their approval unless their allowance covers it:
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"audience":1,"count":25}' --reason 'the person asked for 25 more of audience 1' --idempotency-key q3-latam-topup-1-first
 ```
 
-The reserve's threshold is the campaign's own field, which the person sets once the probe's people have landed, the
-planner's proposal being a fifth of the probe: `jason campaign update <campaign-id> --audience-threshold <n>`. Under it, the campaign's manager is told the reserve is
+The reserve's threshold is the campaign's own field, one batch, twenty: the runtime sets it at the campaign's first start,
+because its people come from a search, and the start's answer shows it. A campaign whose people the person brought as a
+list is given none. The person may change it, `jason campaign update <campaign-id> --audience-threshold <n>`, or clear it
+after the start to have none, `--clear audience_threshold`, and it stays cleared. Under it, the campaign's manager is told the reserve is
 low, and the top-ups after the probe are the manager's, run under the allowance the person gave
 (`approvals-and-questions`). The definition is the audience's row, never the context: the context keeps the person's
 own words about who belongs.
