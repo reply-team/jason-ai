@@ -4,6 +4,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -289,6 +290,55 @@ public partial class ClaimerTests
 
         await using var after = database.Open();
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await after.WorkItems.AsNoTracking().SingleAsync(w => w.Id == reply.Id, Ct)).Status);
+    }
+
+    /// <summary>
+    /// The line ended through <c>campaign.finish_contacts</c>, and read back: the people list shows the person finished, the
+    /// journal holds the line that ended it with its reason, the touch the person still had open was cancelled by it, a touch
+    /// made afterwards is refused at the claim, and a reply in the person's thread still goes to the person's approval.
+    /// </summary>
+    [Fact]
+    public async Task A_line_ended_by_the_manager_reads_back_finished_and_the_claim_refuses_its_touches_but_not_a_reply()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LineHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        var open = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        var memberships = new MembershipService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+
+        await memberships.FinishAsync(new FinishContactsRequest(campaign.PublicId, [contact.PublicId], new ActorRef(ActorType.Role, "manager"), "Four touches and no answer."), Ct);
+
+        var listed = await memberships.ListAsync(new ListContactsRequest(campaign.PublicId, MembershipState.Finished, null, null), Ct);
+        Assert.Equal(contact.PublicId, Assert.Single(listed.Items).Contact.Id);
+        var line = await db.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.ContactsFinished, Ct);
+        Assert.Equal(("Four touches and no answer.", ActorType.Role, "manager"), (line.Reason, line.ActorType, line.ActorId));
+        Assert.Equal(WorkItemStatus.Cancelled, (await db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == open.Id, Ct)).Status);
+
+        var send = Sending(db, campaign, contact);
+        var reply = WorkItemFactory.NewProviderOp(campaign, "conversation.reply", Noon);
+        reply.Contact = contact;
+        reply.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["thread"] = new JsonObject { ["external_id"] = "th-1" },
+                ["body"] = "Thank you, Tuesday works.",
+            },
+        };
+        db.WorkItems.Add(reply);
+        await db.SaveChangesAsync(Ct);
+
+        // One item a campaign a scan: the touch is refused in the first, the reply parked in the second.
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(AttemptErrors.LineFinished, await RefusalAsync(fresh, send));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == reply.Id, Ct)).Status);
     }
 
     /// <summary>The ceiling is read once a scan: one raised between two scans lets the next touch through to the person's approval.</summary>

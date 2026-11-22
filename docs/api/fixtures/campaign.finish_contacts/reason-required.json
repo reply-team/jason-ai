@@ -1,0 +1,29 @@
+{
+  "operation": "campaign.finish_contacts",
+  "case": "reason-required",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contact_ids": [
+      "cnt_1"
+    ],
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: reason: required.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "reason",
+          "code": "required",
+          "message": "reason is required: ending a line is a judgement, and the line records why."
+        }
+      ]
+    }
+  }
+}

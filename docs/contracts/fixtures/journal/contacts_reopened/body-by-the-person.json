@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_reopened",
+  "version": 1,
+  "case": "the person reopens one line by their own word",
+  "body": { "key": null, "old": null, "new": { "reopened": 1, "not_finished": 0, "not_member": 0, "excluded": 0, "not_in_decision": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"], "decision_id": null } },
+  "expect": "valid"
+}

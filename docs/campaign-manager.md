@@ -304,6 +304,10 @@ check-in. One live attempt may raise more than one question — nothing forbids 
 time is what the manager's skill teaches, because a person who opens ten questions from one review answers
 none of them.
 
+The manager ends a person's line with a reason (`jason campaign finish-contacts`, which cancels their open touches in
+the campaign), and reopens an ended line only on the person's answered question, naming it with `--decision`
+(`jason campaign reopen-contacts`; [docs/work-execution.md](work-execution.md), "A person's line in a campaign").
+
 ### What retires one
 
 A question is answered once. **Archiving a campaign cancels its open questions** in the same transaction,

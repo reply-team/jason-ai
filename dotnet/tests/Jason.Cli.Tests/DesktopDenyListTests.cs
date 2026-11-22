@@ -101,7 +101,8 @@ public class DesktopDenyListTests
     /// <summary>The allow list's verbs that change something: a chat in Plan only never runs them.</summary>
     private static readonly string[] ChangesTheAgentMakes =
     [
-        "campaign add-contacts", "campaign create", "campaign pause", "campaign remove-contacts",
+        "campaign add-contacts", "campaign continue-contacts", "campaign create", "campaign finish-contacts", "campaign pause",
+        "campaign remove-contacts",
         "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
         "decision raise", "events backfill", "events signal", "journal append", "project create", "project update",
         "reply record", "rolenote set", "suppression add", "workitem cancel", "workitem complete", "workitem create",
@@ -284,9 +285,9 @@ public class DesktopDenyListTests
     {
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
-            "# preference, a campaign's send mode, a block cleared, work resumed, today's launch limits lifted, a send reviewed, a\n" +
-            "# report and a subscription rewound. The CLI gives them no default actor, and gives none to eight verbs further down\n" +
-            "# either.\n",
+            "# preference, a campaign's send mode, an ended line reopened, a block cleared, work resumed, today's launch limits\n" +
+            "# lifted, a send reviewed, a report and a subscription rewound. The CLI gives them no default actor, and gives none to\n" +
+            "# eight verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
@@ -341,6 +342,7 @@ public class DesktopDenyListTests
         ["preference set"] = "a preference",
         ["preference unset"] = "a preference",
         ["campaign set-send-mode"] = "a campaign's send mode",
+        ["campaign reopen-contacts"] = "reopening an ended line",
         ["block clear"] = "clearing a block",
         ["workitem resume"] = "resuming work",
         ["launches lift"] = "lifting today's launch limits",

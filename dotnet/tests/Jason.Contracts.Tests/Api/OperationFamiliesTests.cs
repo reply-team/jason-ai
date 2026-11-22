@@ -134,7 +134,7 @@ public class OperationFamiliesTests
         Assert.Equal(["suppression.add"], OperationFamilies.Writes["suppression"]);
         Assert.Equal(["contact.create", "contact.update", "contact.archive"], OperationFamilies.Writes["contact"]);
         Assert.Equal(
-            ["campaign.create", "campaign.update", "campaign.start", "campaign.pause", "campaign.archive", "campaign.update_context", "campaign.add_contacts", "campaign.remove_contacts"],
+            ["campaign.create", "campaign.update", "campaign.start", "campaign.pause", "campaign.archive", "campaign.update_context", "campaign.add_contacts", "campaign.remove_contacts", "campaign.finish_contacts", "campaign.continue_contacts"],
             OperationFamilies.Writes["campaign"]);
     }
 
