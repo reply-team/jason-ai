@@ -93,6 +93,59 @@ public sealed class ReplyNotificationTests
         Assert.DoesNotContain("repl", Assert.Single(toast.Messages).Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The verdict recorded by the real writer, <see cref="Jason.Runtime.Replies.ReplyService"/>, as <c>jason reply record</c>
+    /// sends it, never a line built by hand: the writer decides the nature's spelling, the confined mark, the key and the
+    /// attempt, and the count reads exactly those. A run's attempt counts and its end wakes the pointer; a person outside
+    /// any run does not; the same request from the confined chat does not; and a person named from inside a run is that
+    /// run's, so it counts.
+    /// </summary>
+    [Theory]
+    [InlineData("attempt", 1)]
+    [InlineData("person_outside_a_run", 0)]
+    [InlineData("confined", 0)]
+    [InlineData("person_inside_a_run", 1)]
+    public async Task A_verdict_the_reply_service_records_is_counted_as_the_writer_marks_it(string recorded, int counted)
+    {
+        using var harness = await StartedAsync();
+        var run = await RunAsync(harness);
+
+        await using (var db = harness.Open())
+        {
+            var actor = recorded is "attempt" or "confined" ? new ActorRef(ActorType.Attempt, run.Attempt) : new ActorRef(ActorType.Human, "dana");
+            var verdict = new ReplyRecordRequest(
+                run.Campaign,
+                "mailbox",
+                "thread-1",
+                "message-1",
+                new DateTimeOffset(Noon),
+                "interested",
+                0.9,
+                ReplyReaction.Draft,
+                Actor: actor,
+                Nature: ReplyNature.Person);
+            var service = new Jason.Runtime.Replies.ReplyService(db, new JournalWriter(harness.Clock));
+            using var confined = recorded == "confined" ? ConfinedScope.Open() : null;
+            using var inside = recorded == "person_inside_a_run" ? RunScope.Open(run.Attempt) : null;
+            await service.RecordAsync(verdict, Ct);
+        }
+
+        // The run has not ended: the verdict alone wakes nothing yet. Its end wakes the pointer only where the verdict counts.
+        Assert.Null(await HandedOverAsync(harness));
+        await EndAsync(harness, run);
+        var request = await HandedOverAsync(harness);
+        if (counted == 0)
+        {
+            Assert.Null(request);
+            await Waiting.ApprovalsAsync(harness, 1, Ct);
+            request = await HandedOverAsync(harness);
+        }
+
+        Assert.True(request is not null, $"A verdict recorded {recorded} left no pointer to send.");
+        var line = await Sender(harness, FakeChannel.Delivering()).SendAsync(request, Ct);
+        Assert.Equal(counted, line!.Replies);
+    }
+
     [Fact]
     public async Task One_reply_judged_in_two_campaigns_is_counted_once()
     {
