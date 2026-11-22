@@ -1644,8 +1644,8 @@ body,
     overflow-y: auto;
 }
 /* A row's menu opens its dialog in a frame beside the shell, not in a pane: the frame scopes the palette's tokens, which
-   inherit through it, and draws no box. A box of the panel's height there would be a second window's height under the
-   shell, and the page would scroll past the sidebar and the chat to the empty frame behind the dialog's layer. */
+   inherit through it, and draws no box. As a box of the panel's height it is a second item of the console's column, which
+   shrinks the shell to no height and fills the window with its own opaque background behind the dialog's layer. */
 .jc-console .harness.row-dialog {
     display: contents;
 }

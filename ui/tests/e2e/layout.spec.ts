@@ -139,7 +139,7 @@ test('in the console a dialog a row menu opens draws nothing between its layer a
     const dialog = page.getByRole('dialog', { name: 'Archive Row dialog' });
     await expect(dialog).toBeVisible();
     // Under the dialog's translucent layer, at a point of the sidebar, the next thing drawn is the sidebar itself: the
-    // frame the dialog stands in draws no box of its own over the page, and the page is the window's height.
+    // frame the dialog stands in draws no box of its own, and the shell keeps the window's height.
     const seen = await page.evaluate(() => {
         const box = document.querySelector('.jc-console .side')!.getBoundingClientRect();
         const stack = document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -148,11 +148,13 @@ test('in the console a dialog a row menu opens draws nothing between its layer a
             under: under === undefined ? null : `${under.tagName.toLowerCase()}.${under.className}`,
             inSide: under?.closest('.side') !== null && under !== undefined,
             height: document.documentElement.scrollHeight,
+            shell: document.querySelector('.jc-console .shell')!.getBoundingClientRect().height,
             window: window.innerHeight,
         };
     });
     expect(seen.inSide, `the first thing drawn under the dialog's layer ${JSON.stringify(seen)}`).toBe(true);
     expect(seen.height, `the page's height ${JSON.stringify(seen)}`).toBe(seen.window);
+    expect(seen.shell, `the shell's height ${JSON.stringify(seen)}`).toBe(seen.window);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
 });

@@ -726,6 +726,28 @@ describe('Needs you', () => {
             expect(needs().querySelector('.needs-left')).toBeNull();
         });
 
+        it('says again what left once the panel is back in sight', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            const desktop = await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+            const section = () => document.querySelector<HTMLElement>('section[data-pane="needs"]')!;
+            // Away to Agents and back, with nothing leaving meanwhile.
+            flush(() => desktop.command('navigate.campaigns'));
+            await waitFor(() => expect(section().hidden).toBe(true));
+            fireEvent.click(
+                within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }),
+            );
+            await waitFor(() => expect(section().hidden).toBe(false));
+            // Now the item shown is decided elsewhere, in the person's sight: the pane says so.
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_2');
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            expect(words(needs().querySelector('.needs-left')!)).toBe(
+                'What you had open is no longer waiting: it was decided or withdrawn elsewhere. This is the next one.',
+            );
+        });
+
         it('stays on the question shown when an approval arrives above it', async () => {
             const journal = stubStream();
             const fake = new FakeApi()
