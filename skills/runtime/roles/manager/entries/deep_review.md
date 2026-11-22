@@ -155,8 +155,9 @@ what came of it before you widen:
 - **The first batch is read before the campaign widens.** The deep review that first finds every first touch of the
   first batch gone, and the days the line gives before the next touch passed for them, creates one analyst's item to
   read that batch — the audience, the messages and the delivery, with the replies, bounces and failures that came in —
-  once for the campaign; the widening after the first batch waits for its answer. At the review after it has answered,
-  take the turn: where its reading says the batch works and the campaign's context already allows going on, widen at
+  once for the campaign; the widening after the first batch waits for its answer. Where the first batch is an
+  audience's probe whose judgement you already asked for, that judgement is the reading: ask for the delivery and the
+  messages in the same item, and create no second one. At the review after it has answered, take the turn: where its reading says the batch works and the campaign's context already allows going on, widen at
   that review; otherwise raise one question with its reading and your recommendation — go on, change course, or stop —
   and widen on an answer to go on, at the review that answer wakes. A change of course is the planner's, on the
   analyst's reading.

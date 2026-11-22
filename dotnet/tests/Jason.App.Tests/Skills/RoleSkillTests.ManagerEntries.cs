@@ -200,6 +200,7 @@ public partial class RoleSkillTests
         Assert.Contains("**The first batch is read before the campaign widens.**", deep, StringComparison.Ordinal);
         Assert.Contains("creates one analyst's item to read that batch", deep, StringComparison.Ordinal);
         Assert.Contains("once for the campaign; the widening after the first batch waits for its answer", deep, StringComparison.Ordinal);
+        Assert.Contains("Where the first batch is an audience's probe whose judgement you already asked for, that judgement is the reading: ask for the delivery and the messages in the same item, and create no second one.", deep, StringComparison.Ordinal);
         Assert.DoesNotContain("planner's pilot asked the person whether to go on", deep, StringComparison.Ordinal);
         Assert.DoesNotContain("at the end of the pilot the planner runs", deep, StringComparison.Ordinal);
 
