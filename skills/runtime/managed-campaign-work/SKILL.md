@@ -217,8 +217,8 @@ question.
   this machine, `operating-the-installation`'s: propose it, and run it only when the person asks. Once the check
   passes, come back here.
 - **Will they hear back?** Read the `notifications` check in the same answer. Where it is `absent` or `failed`, say in
-  one sentence that nothing will tell them when Jason starts waiting for them, and give the check's own words; it never
-  stops the start. Where it is `ok`, say nothing.
+  one sentence that nothing will tell them when Jason starts waiting for them, or when one of the campaign's people
+  writes back, and give the check's own words; it never stops the start. Where it is `ok`, say nothing.
 - **Is someone named to write as?** Where the sender has no value, the campaign is not started either: ask for it as
   the first item says.
 - **Can anything be sent?** With no channel that has a route and an active account, say firmly that not one message
@@ -811,6 +811,19 @@ jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the wrong copy wen
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --not-before 2026-11-02T09:00:00Z --reason 'the person said not before Monday'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason 'the person wants this one first'
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the corrected copy is in place'
+```
+
+**"Ignore the limit" lets held work go today, and only on the person's word.** Work held at a daily limit of launches
+waits until the installation's next midnight, and a notification tells the person so. When the person tells you to
+ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run
+`jason launches lift` as the person, under their own name. It lets go every item held at a daily limit, in every
+campaign holding one and for every role, until the installation's next midnight. Then say three things: which campaigns
+and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and
+that the items it released are counted again after that midnight. Never lift on your own initiative: only the person's
+word lifts, and a role inside a run cannot.
+
+```
+jason launches lift --actor human:ada --reason 'the person said to ignore the limit today'
 ```
 
 ## What this skill does not cover

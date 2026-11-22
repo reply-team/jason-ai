@@ -1114,17 +1114,47 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// The early check of notifications reads what `jason status` already says, and only speaks on a problem: a person
-    /// whose notifications are off hears once that nothing will tell them when Jason waits for them, and may still start;
-    /// a person whose notifications work hears nothing of them.
+    /// whose notifications are off hears once that nothing will tell them when Jason waits for them, or when one of the
+    /// campaign's people writes back, since a person's reply is notified too, and may still start; a person whose
+    /// notifications work hears nothing of them.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_early_check_says_once_that_nothing_will_tell_them_and_never_stops_the_start()
     {
         Assert.Contains(
-            "**Will they hear back?** Read the `notifications` check in the same answer. Where it is `absent` or `failed`, say in one sentence that nothing will tell them when Jason starts waiting for them, and give the check's own words; it never stops the start. Where it is `ok`, say nothing.",
+            "**Will they hear back?** Read the `notifications` check in the same answer. Where it is `absent` or `failed`, say in one sentence that nothing will tell them when Jason starts waiting for them, or when one of the campaign's people writes back, and give the check's own words; it never stops the start. Where it is `ok`, say nothing.",
             Whitespace().Replace(Section(SetUp), " "),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "Ignore the limit" sits beside the acts that stop or hold work, as the one that lets held work go today: the session
+    /// runs the lift as the person, under their name, says which campaigns and roles it let go, until when in the person's
+    /// own time with the zone named, and that the released items are counted again after midnight; it never lifts on its
+    /// own initiative, and a role cannot.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void Stopping_or_holding_work_says_ignore_the_limit_is_the_person_s_lift()
+    {
+        var raw = Section("Stopping or holding work");
+        var section = Whitespace().Replace(raw, " ");
+        foreach (var fact in new[]
+        {
+            "**\"Ignore the limit\" lets held work go today, and only on the person's word.**",
+            "When the person tells you to ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name.",
+            "It lets go every item held at a daily limit, in every campaign holding one and for every role, until the installation's next midnight.",
+            "Then say three things: which campaigns and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and that the items it released are counted again after that midnight.",
+            "Never lift on your own initiative: only the person's word lifts, and a role inside a run cannot.",
+        })
+        {
+            Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Stopping or holding work\" does not say: {fact}");
+        }
+
+        Assert.Contains(
+            SkillPack.PrintedCommands(raw.Split('\n')),
+            line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
     }
 
     /// <summary>
