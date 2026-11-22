@@ -47,12 +47,16 @@ jason decision list --human
 ```
 
 Each list is a table of identifiers, dates and states: enough to say how much is waiting, never enough
-to decide anything. Before you present one, read it:
+to show what any item would do. Before you present one, read it:
 
 ```
 jason approval get apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason decision get dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+All of these, said about a list you showed them, is their word for each item where each one's content was shown.
+Where it was not, say once how many would go out unread and ask whether to show them first or approve them as they
+are; their answer is their word.
 
 Both lists take `--status` when the person is asking about something already decided rather than about
 what is still open, and both take `--campaign` and `--work-item` to narrow to one piece of work.
@@ -76,7 +80,7 @@ present it with what you found; the lists still show the rest, and arriving with
 
 Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs. Dismissing
 a toast, or reading the message, decides nothing; what decides is the person's word on that item, once they have read
-what it is.
+what it is or, told how many would go out unread, chosen to approve them as they are.
 
 ## Presenting one in the person's own words
 

@@ -122,6 +122,36 @@ public partial class InteractiveSkillTests
 
 
     /// <summary>
+    /// "All of these", said about a list the agent showed, is the person's word for each item whose content was shown;
+    /// where some were not shown, the agent says once how many would go out unread and asks whether to show them first or
+    /// approve them as they are, and does what the answer says. It never refuses and never insists. Said the same in the
+    /// session skill that presents the list and in the business pack's <c>confirm_each</c>, and the sentences beside them
+    /// that made a list never enough, or a confirmation valid only after reading, say it too. Without it a chat approves
+    /// ten letters on one "all of these" where a terminal refuses them, or a terminal holds a person to reading what they
+    /// chose not to read.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void All_of_these_about_a_shown_list_is_the_persons_word_for_each_and_unread_items_are_asked_once()
+    {
+        const string Sentence =
+            "All of these, said about a list you showed them, is their word for each item where each one's content was shown. "
+            + "Where it was not, say once how many would go out unread and ask whether to show them first or approve them as "
+            + "they are; their answer is their word.";
+        var approvals = Flattened("approvals-and-questions");
+        Assert.Contains(Sentence, approvals, StringComparison.Ordinal);
+        Assert.DoesNotContain("never enough to decide anything", approvals, StringComparison.Ordinal);
+        Assert.Contains("once they have read what it is or, told how many would go out unread, chosen to approve them as they are.", approvals, StringComparison.Ordinal);
+
+        var boundaries = Whitespace().Replace(File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "approval-boundaries", SkillPack.SkillFile)), " ");
+        var from = boundaries.IndexOf("- **`confirm_each`** —", StringComparison.Ordinal);
+        var to = from < 0 ? -1 : boundaries.IndexOf("### ", from, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, $"approval-boundaries has no `confirm_each` entry (found at {from}, next heading at {to}).");
+        Assert.Contains(Sentence, boundaries[from..to], StringComparison.Ordinal);
+        Assert.Contains("for a previewed call, after seeing the preview, or after being told how many would go out unread and choosing to approve them as they are.", boundaries, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// An act's reason is the agent's own short line, never the person's pasted text, in a person's own session as in the
     /// chat, whose rule 13 says it in these words: a reason is journaled, and text from outside never goes into a command. A
     /// session taught to carry the person's sentence across would put a prospect's words, or a quote that breaks the line,
