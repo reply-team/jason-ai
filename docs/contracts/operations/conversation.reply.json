@@ -29,6 +29,7 @@
   "channel_templates": null,
   "route_channel_argument": "channel",
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
+  "touch": false,
   "contact_projection": { "fields": ["id"], "channels": "consumed" },
   "precondition": "The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent.",
   "preview": {

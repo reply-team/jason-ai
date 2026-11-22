@@ -321,14 +321,14 @@ before 0.49.1 still takes them on Linux, where it installs the command line:
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.2/install.sh | sh -s -- --version 0.49.2
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.50.0/install.sh | sh -s -- --version 0.50.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.49.2/install.ps1))) -Version 0.49.2
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.50.0/install.ps1))) -Version 0.50.0
 ```
 
-These install 0.49.2 with 0.49.2's own script: a pinned install fetches the script from the release it installs.
+These install 0.50.0 with 0.50.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share, the entry stays, and so does everything else it

@@ -33,13 +33,14 @@ public class SkillSequenceTests
     private const string FirstName = "Marta";
 
     // The managed path's first lines, as it prints them: the project of what is sold, the campaign under it with the
-    // brief as its context, and its people.
+    // brief as its context, handed to the program on standard input in the line's here-document, and its people.
     private const string Brief = "{\"offer\":\"payroll for startups hiring in Latin America\","
         + "\"audience\":\"founders of seed-stage startups in Mexico and Colombia\","
         + "\"their_words\":\"Our best customers came through their accountants. We sell to founders, never to HR.\"}";
     private const string FindProject = "jason project list --query payroll";
     private const string MakeProject = "jason project create --name \"Payroll for Latin America\"";
-    private const string Create = $"jason campaign create --name \"Q3 LatAm founders\" --project prj_{Placeholder} --context '" + Brief + "' --idempotency-key q3-latam";
+    private const string Create = $"jason campaign create --name \"Q3 LatAm founders\" --project prj_{Placeholder} --idempotency-key q3-latam --file - <<'EOF'";
+    private const string CreateBody = "{\"context\":" + Brief + "}";
     private const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
     private const string List = $"jason campaign list-contacts cmp_{Placeholder}";
 
@@ -63,13 +64,15 @@ public class SkillSequenceTests
             Assert.Contains(line, printed);
         }
 
+        AssertPrintedWithBody("managed-campaign-work", Create, CreateBody);
+
         var plugins = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "plugin", "list")));
         Assert.True(plugins["plugins"]?.AsArray().Count == 0, $"This installation was to have no plugin, and it lists {plugins.ToJsonString()}.");
 
         var nothing = new Dictionary<string, string>(StringComparer.Ordinal);
         var project = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(MakeProject, nothing)])))["id"]!;
         var inProject = new Dictionary<string, string>(StringComparer.Ordinal) { ["prj_"] = project };
-        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]!;
+        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, Substituted(Create, inProject), CreateBody)))["id"]!;
         var ids = new Dictionary<string, string>(StringComparer.Ordinal) { ["cmp_"] = campaign };
 
         var contacts = await WriteContactsAsync(it);
@@ -134,12 +137,16 @@ public class SkillSequenceTests
         const string Lately = $"jason campaign activity cmp_{Placeholder} --since 2026-10-09T00:00:00Z --until now";
         const string Behind = $"jason campaign list-contacts cmp_{Placeholder} --summary failed";
         const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
-        const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason 'the person widened the audience'";
+        const string Change = $"jason campaign update-context cmp_{Placeholder} --reason 'the person widened the audience' --file - <<'EOF'";
+        const string ChangeBody = $"{{\"set\":{{\"audience\":\"{Widened}\"}}}}";
 
         foreach (var line in new[] { FindProject, MakeProject, Create, Add, List, Work, Start, Follow, Planned, HowMany, History, Moved, Standing, Lately, Behind, Change })
         {
             Assert.Contains(line, printed);
         }
+
+        AssertPrintedWithBody("managed-campaign-work", Create, CreateBody);
+        AssertPrintedWithBody("managed-campaign-work", Change, ChangeBody);
 
         var contacts = await WriteContactsAsync(it);
 
@@ -152,12 +159,12 @@ public class SkillSequenceTests
         var inProject = new Dictionary<string, string>(StringComparer.Ordinal) { ["prj_"] = project };
 
         var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]!;
+            GoldenPath.JasonAsync(it, Substituted(Create, inProject), CreateBody)))["id"]!;
         var ids = new Dictionary<string, string>(StringComparer.Ordinal) { ["cmp_"] = campaign };
 
         // What the skill teaches about a lost answer: the same line again, key and all, answers with what the first
         // one made rather than making it twice.
-        Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, inProject)])))["id"]);
+        Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, Substituted(Create, inProject), CreateBody)))["id"]);
 
         // The brief becomes the campaign: read back from the runtime, the campaign's context is the object the printed
         // line carried, key for key, the person's own words under the key the skill printed them under — and the
@@ -177,7 +184,7 @@ public class SkillSequenceTests
 
         // A change of direction goes into the context by the line the skill prints for it: the key it names is
         // written, and every key it does not name — the person's own words among them — reads as it did.
-        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, [.. Substituted(Change, ids)]));
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, Substituted(Change, ids), ChangeBody));
         var changed = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)))["context"]!;
         var expected = JsonNode.Parse(Brief)!;
         expected["audience"] = Widened;
@@ -352,6 +359,16 @@ public class SkillSequenceTests
     /// <summary>Every <c>jason …</c> line this skill prints, by the pack's one reader of them.</summary>
     internal static IReadOnlyList<string> Prints(string skill) =>
         SkillPack.PrintedCommands(SkillPack.Find(skill).File);
+
+    /// <summary>
+    /// The line is printed with this body in its here-document, verbatim: what is run is what the page prints, the body
+    /// as much as the line, so the page cannot change either without this failing.
+    /// </summary>
+    private static void AssertPrintedWithBody(string skill, string line, string body)
+    {
+        var command = Assert.Single(SkillPack.Printed(SkillPack.Find(skill).File), printed => printed.Line == line);
+        Assert.Equal(body, command.Body);
+    }
 
     /// <summary>The printed line with this run's own identifiers in place of the skill's placeholders.</summary>
     internal static IReadOnlyList<string> Substituted(

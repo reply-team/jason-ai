@@ -217,6 +217,54 @@ public class OperationCatalogTests
         Assert.Contains("reach", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("\"yes\"")]
+    [InlineData("null")]
+    [InlineData("1")]
+    public void A_touch_that_is_not_a_boolean_is_refused_by_name(string value)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["touch"] = JsonNode.Parse(value);
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+
+        Assert.Contains("campaign.get.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("touch", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A touch reaches a person, and only an operation whose reach is `act` does: a read or a control is never one.</summary>
+    [Theory]
+    [InlineData("\"read\"", false)]
+    [InlineData("\"control\"", false)]
+    [InlineData("\"act\"", true)]
+    [InlineData("""{ "value": "act", "conditional": true, "detail": "bookkeeping while the campaign is not live, `act` the moment it is." }""", true)]
+    public void A_touch_is_refused_unless_its_reach_is_act(string reach, bool parses)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = JsonNode.Parse(reach);
+        document["touch"] = true;
+
+        if (parses)
+        {
+            Assert.True(OperationContract.Parse("campaign.enroll.json", document).Touch);
+            return;
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+        Assert.Contains("`touch`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("reaches a person", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_touches_are_exactly_the_three_operations_that_open_or_carry_on_a_line()
+    {
+        var found = OperationCatalog.Touches.OrderBy(id => id, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            new[] { "campaign.enroll", "message.send", "social_invitation.send" }.SequenceEqual(found),
+            $"The touches found were: {string.Join(", ", found)}.");
+    }
+
     /// <summary>
     /// The floor, its reason and the preview were added to a contract that already had published documents, which
     /// is exactly when a reader would be tempted to treat a missing field as "the old behaviour". It is not.
@@ -226,6 +274,7 @@ public class OperationCatalogTests
     [InlineData("approval_reason")]
     [InlineData("preview")]
     [InlineData("dispatch")]
+    [InlineData("touch")]
     [InlineData("channel_arguments")]
     [InlineData("channel_templates")]
     [InlineData("route_channel_argument")]
@@ -1207,6 +1256,7 @@ public class OperationCatalogTests
           "channel_templates": null,
           "route_channel_argument": null,
           "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
+          "touch": false,
           "contact_projection": null,
           "precondition": "none",
           "preview": null,

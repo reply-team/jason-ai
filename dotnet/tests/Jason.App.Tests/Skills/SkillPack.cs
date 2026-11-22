@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Jason.Cli.Tests.Documentation;
 
 namespace Jason.App.Tests.Skills;
 
@@ -10,6 +11,13 @@ namespace Jason.App.Tests.Skills;
 /// differ, and the directory is what says which is which.
 /// </param>
 internal sealed record PackSkill(string Name, string Directory, string File, bool IsRole);
+
+/// <summary>
+/// One command a page prints: the line as typed, the here-document's body it hands the program on standard input, or
+/// the file it hands it there by name. At most one of the two is set. <paramref name="Number"/> is the line's own, from
+/// one, so a guard names where the page prints it.
+/// </summary>
+internal sealed record PrintedCommand(string Line, string? Body, string? InputFile, int Number);
 
 /// <summary>
 /// Every skill this repository ships, found the way the guards need them: from the repository rather than
@@ -59,7 +67,98 @@ internal static class SkillPack
 
     /// <summary>Every <c>jason …</c> line a skill prints, read from the file.</summary>
     public static IReadOnlyList<string> PrintedCommands(string file) =>
-        PrintedCommands(System.IO.File.ReadAllLines(file));
+        [.. Printed(file).Select(command => command.Line)];
+
+    /// <summary>Every command a skill prints, read from the file, with what each hands the program on standard input.</summary>
+    public static IReadOnlyList<PrintedCommand> Printed(string file) =>
+        Printed(System.IO.File.ReadAllLines(file), file);
+
+    /// <summary>
+    /// Every <c>jason …</c> line inside a fenced block, with the body it hands the program on standard input. A line that
+    /// ends <c>&lt;&lt;'EOF'</c> carries the fence's lines after it, up to the delimiter, as its body — which is never read
+    /// as a command, whatever its lines begin with; a line that ends <c>&lt; file</c> names the file.
+    /// </summary>
+    /// <remarks>
+    /// Two pages are refused rather than read, naming <paramref name="source"/> and the line: a here-document the fence
+    /// closes before its delimiter, which prints half a command, and a file on standard input the page names nowhere
+    /// else, which tells a reader to type a file nobody described.
+    /// </remarks>
+    public static IReadOnlyList<PrintedCommand> Printed(IReadOnlyList<string> lines, string source = "the page")
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        ArgumentNullException.ThrowIfNull(source);
+
+        var commands = new List<PrintedCommand>();
+        string? fence = null;
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            var marker = FenceMarker(line);
+            if (marker is not null && (fence is null || fence == marker))
+            {
+                fence = fence is null ? marker : null;
+                continue;
+            }
+
+            var text = line.Trim();
+            if (fence is null || !text.StartsWith("jason ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            ShellCommand parsed;
+            try
+            {
+                parsed = ShellWords.Parse(text);
+            }
+            catch (FormatException ex)
+            {
+                throw new InvalidDataException($"{source}:{index + 1}: {ex.Message}", ex);
+            }
+
+            switch (parsed.Input)
+            {
+                case { Kind: ShellRedirectionKind.HereDocument, Target: var delimiter }:
+                    var indentation = line[..(line.Length - line.TrimStart().Length)];
+                    var body = new List<string>();
+                    var end = index + 1;
+                    while (end < lines.Count && FenceMarker(lines[end]) != fence && lines[end].Trim() != delimiter)
+                    {
+                        body.Add(lines[end].StartsWith(indentation, StringComparison.Ordinal) ? lines[end][indentation.Length..] : lines[end].TrimStart());
+                        end++;
+                    }
+
+                    if (end == lines.Count || lines[end].Trim() != delimiter)
+                    {
+                        throw new InvalidDataException(
+                            $"{source}:{index + 1}: '{text}' opens a here-document that its fence closes before the line "
+                            + $"'{delimiter}' ends it, so the page prints half a command.");
+                    }
+
+                    commands.Add(new PrintedCommand(text, string.Join('\n', body), null, index + 1));
+                    index = end;
+                    break;
+
+                case { Kind: ShellRedirectionKind.File, Target: var file }:
+                    var at = index;
+                    if (!lines.Where((other, number) => number != at).Any(other => other.Contains(file, StringComparison.Ordinal)))
+                    {
+                        throw new InvalidDataException(
+                            $"{source}:{index + 1}: '{text}' reads '{file}' on standard input, and the page says nowhere "
+                            + "else what that file is.");
+                    }
+
+                    commands.Add(new PrintedCommand(text, null, file, index + 1));
+                    break;
+
+                default:
+                    commands.Add(new PrintedCommand(text, null, null, index + 1));
+                    break;
+            }
+        }
+
+        return commands;
+    }
 
     /// <summary>
     /// Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type, and as
@@ -71,18 +170,8 @@ internal static class SkillPack
     /// Markdown has it. A reader that knew only the backticks let a command printed between tildes go unread by every
     /// guard that asks what a page prints.
     /// </remarks>
-    public static IReadOnlyList<string> PrintedCommands(IReadOnlyList<string> lines)
-    {
-        ArgumentNullException.ThrowIfNull(lines);
-
-        return
-        [
-            .. Fenced(lines)
-                .Where(line => line.Fenced)
-                .Select(line => line.Text.Trim())
-                .Where(text => text.StartsWith("jason ", StringComparison.Ordinal)),
-        ];
-    }
+    public static IReadOnlyList<string> PrintedCommands(IReadOnlyList<string> lines) =>
+        [.. Printed(lines).Select(command => command.Line)];
 
     /// <summary>The marker a line opens or closes a fenced block with — three backticks or three tildes — or null.</summary>
     public static string? FenceMarker(string line)
