@@ -34,6 +34,24 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A deep review that falls due as a reply asks for a review runs in the reply review's place, and the reply's section
+    /// is no longer in the head: the head and the deep review send it to the <c>inbound_reply</c> entry's file, and a
+    /// review after a resume reads the replies of the pause there too.
+    /// </summary>
+    [Fact]
+    public void A_deep_review_carrying_a_reply_reads_the_reply_entry_s_file()
+    {
+        const string Pointer = "Where `trigger` is `inbound_reply_observed`, its section is the `inbound_reply` entry: read the file `entries/inbound_reply.md` beside your skill, its \"When a reply woke you\" and \"A reply no responder judged\", before step 1.";
+        Assert.Contains(Pointer, Flattened("manager"), StringComparison.Ordinal);
+        Assert.Contains(Pointer, FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
+        Assert.Contains("replies, and the lines they held, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill)", FlattenedEntry("manager", "resume"), StringComparison.Ordinal);
+
+        var reply = FlattenedEntry("manager", "inbound_reply");
+        Assert.Contains("## When a reply woke you", reply, StringComparison.Ordinal);
+        Assert.Contains("## A reply no responder judged", reply, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A review a person asked for is <c>requested</c>, names no cause, and is read from the person's own line, which the
     /// runtime writes under the kind and the verb this build has; the two review entries say what it means for each depth,
     /// and a deep one asked for leaves the daily grid where it stands.

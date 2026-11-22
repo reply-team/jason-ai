@@ -6,13 +6,15 @@ metadata:
 
 # The manager's entry: the deep review
 
-You were launched for the deep review, which comes once a day on the campaign's own grid, a day after it went live and
-every day after that. This entry is followed first, and your skill (`SKILL.md`) is what it rests on: the review, the
-boundary, how to ask, the line you leave and your answer are said there and not again here.
+You were launched for the deep review, which comes on the campaign's own grid, one grid interval after it went live, a
+day by default, and every interval after that. This entry is followed first, and your skill (`SKILL.md`) is what it
+rests on: the review, the boundary, how to ask, the line you leave and your answer are said there and not again here.
 
 The deep review is the one review that accounts for every person of the campaign: nobody in it stands without a reason
 you can name. Where the brief carries a `trigger` and a `cause`, a line asked for a review as this one fell due, and it
-runs in that review's place: read the cause's section of your skill first, then go on as below. Where its
+runs in that review's place: read the cause's section of your skill first, then go on as below. Where `trigger` is
+`inbound_reply_observed`, its section is the `inbound_reply` entry: read the file `entries/inbound_reply.md` beside
+your skill, its "When a reply woke you" and "A reply no responder judged", before step 1. Where its
 `review_intent` is `requested`, a person asked for a deep review now: read what they asked, as your skill says, and
 know that the daily one still comes at its own moment, which this review does not move.
 

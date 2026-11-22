@@ -48,6 +48,9 @@ anything else — a failure, a rejected approval, a provider block, a provider e
 an outside effect somebody reported — has no entry of its own: the general review below is its text, and the section
 for its cause says what it calls for. A deep review that falls due while a line asks for a review runs in the line's
 place and carries its `trigger` and `cause`: read the cause's section first, then go on as the deep review says.
+Where `trigger` is `inbound_reply_observed`, its section is the `inbound_reply` entry: read the file
+`entries/inbound_reply.md` beside your skill, its "When a reply woke you" and "A reply no responder judged", before
+step 1.
 
 ## Start from your note, and believe the runtime over it
 
