@@ -184,7 +184,8 @@ export function RowMenu() {
                 </div>
             )}
             {dialog !== null && (
-                <div className="harness">
+                // The palette's scope for the dialog, taking no room: this frame stands beside the shell, not in a pane.
+                <div className="harness row-dialog">
                     {dialog.kind === 'move' ? (
                         <TransitionDialog
                             campaign={dialog.agent}
