@@ -501,6 +501,12 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
             options.ReviewSeconds,
             ManagerOptions.MinimumReviewSeconds,
             ManagerOptions.MaximumReviewSeconds);
+        OptionRules.Range(
+            failures,
+            "Manager:DeepReviewSeconds",
+            options.DeepReviewSeconds,
+            ManagerOptions.MinimumReviewSeconds,
+            ManagerOptions.MaximumReviewSeconds);
         OptionRules.Range(failures, "Manager:TimeoutSeconds", options.TimeoutSeconds, 30, 86_400);
         OptionRules.Range(failures, "Manager:MaxAttempts", options.MaxAttempts, 1, 10);
 

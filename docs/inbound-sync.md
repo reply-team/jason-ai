@@ -271,7 +271,8 @@ linked active campaign, and about 384 lifecycle lines in the chronicle (each rea
 succeeded), besides the lines that say a reply. A read lists every thread that moved within the look-back, 100 to a
 page, so a busy campaign may take two or three read work items a cadence rather than one: as many pages as the threads
 that moved in the last four hours fill. A thread listed again says nothing: its key holds a move already said. A
-manager reading everything in the chronicle since its last review reads those too, about 80 in five hours; reading by
+manager reading everything in the chronicle since its last review reads those too, about 96 in the six hours between
+two quick looks; reading by
 kind (`jason journal list --kind inbound_reply_observed`) passes over them, and one person's replies are
 `jason journal list --contact cnt_… --kind inbound_reply_observed`.
 

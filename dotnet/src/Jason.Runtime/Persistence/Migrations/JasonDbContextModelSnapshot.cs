@@ -517,6 +517,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DeepReviewDueAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deep_review_due_at");
+
                     b.Property<DateTime?>("EventsFrom")
                         .HasColumnType("TEXT")
                         .HasColumnName("events_from");

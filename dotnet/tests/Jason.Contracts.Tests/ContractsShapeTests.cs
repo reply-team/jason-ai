@@ -60,12 +60,17 @@ public class ContractsShapeTests
             SendModes: new SendModesDto(SendMode.Automatic, null),
             SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default)));
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
+        var live = JsonSerializer.Serialize(dto with { DeepReviewDueAt = DateTimeOffset.UnixEpoch.AddDays(1) }, JasonJson.Options);
         Assert.Equal(
             "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"project_id\":\"prj_A\",\"project_slug\":\"default\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
                 + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null,\"audience_threshold\":null,"
                 + "\"send_modes\":{\"cold\":\"automatic\",\"warm\":null},"
-                + "\"send_modes_in_force\":{\"cold\":{\"mode\":\"automatic\",\"source\":\"campaign\"},\"warm\":{\"mode\":\"every_message\",\"source\":\"default\"}}}",
+                + "\"send_modes_in_force\":{\"cold\":{\"mode\":\"automatic\",\"source\":\"campaign\"},\"warm\":{\"mode\":\"every_message\",\"source\":\"default\"}},"
+                + "\"deep_review_due_at\":null}",
             json);
+
+        // The deep review's next moment, where the campaign has one, as every timestamp travels.
+        Assert.EndsWith(",\"deep_review_due_at\":\"1970-01-02T00:00:00.000Z\"}", live, StringComparison.Ordinal);
     }
 
     [Fact]

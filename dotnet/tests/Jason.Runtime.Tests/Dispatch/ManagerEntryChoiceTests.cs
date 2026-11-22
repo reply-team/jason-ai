@@ -83,11 +83,57 @@ public class ManagerEntryChoiceTests
         Assert.Null(ManagerEntryChoice.Choose(new ManagerEntryInputs(JournalKinds.WorkItemFailed, FirstStart: true, ReviewDue: false)));
     }
 
+    /// <summary>The deep review due, with nothing caused and the quick look not due, is the deep review.</summary>
+    [Fact]
+    public void The_deep_review_due_with_no_cause_is_the_deep_review()
+    {
+        var entry = ManagerEntryChoice.Choose(new ManagerEntryInputs(CauseKind: null, FirstStart: false, ReviewDue: false, DeepReviewDue: true));
+
+        Assert.Equal("deep_review", entry);
+    }
+
+    /// <summary>Where both clocks are due, the deep one runs instead of the quick look.</summary>
+    [Fact]
+    public void The_deep_review_wins_over_a_due_quick_look()
+    {
+        var entry = ManagerEntryChoice.Choose(new ManagerEntryInputs(CauseKind: null, FirstStart: false, ReviewDue: true, DeepReviewDue: true));
+
+        Assert.Equal("deep_review", entry);
+    }
+
+    /// <summary>
+    /// The deep review due wins over a cause of every kind: the start, the resume, a reply and the general text alike.
+    /// The cause is still carried in the brief; the entry is the deep review's.
+    /// </summary>
+    [Fact]
+    public void The_deep_review_wins_over_every_cause()
+    {
+        foreach (var kind in ManagerOptions.Default)
+        {
+            foreach (var first in new[] { true, false })
+            {
+                foreach (var quick in new[] { true, false })
+                {
+                    Assert.Equal("deep_review", ManagerEntryChoice.Choose(new ManagerEntryInputs(kind, first, quick, DeepReviewDue: true)));
+                }
+            }
+        }
+    }
+
+    /// <summary>Not due, the deep review changes nothing: every row above answers as it did.</summary>
+    [Fact]
+    public void The_deep_review_not_due_leaves_every_other_row_as_it_was()
+    {
+        Assert.Equal("start", ManagerEntryChoice.Choose(new ManagerEntryInputs(JournalKinds.CampaignStarted, FirstStart: true, ReviewDue: true, DeepReviewDue: false)));
+        Assert.Equal("quick_look", ManagerEntryChoice.Choose(new ManagerEntryInputs(CauseKind: null, FirstStart: false, ReviewDue: true, DeepReviewDue: false)));
+        Assert.Null(ManagerEntryChoice.Choose(new ManagerEntryInputs(CauseKind: null, FirstStart: false, ReviewDue: false, DeepReviewDue: false)));
+    }
+
     /// <summary>Every name the function can give is one the manager carries, so the one writer never refuses it.</summary>
     [Fact]
     public void Every_name_it_gives_is_one_the_manager_carries()
     {
-        foreach (var name in new[] { ManagerEntryChoice.Start, ManagerEntryChoice.Resume, ManagerEntryChoice.InboundReply, ManagerEntryChoice.QuickLook })
+        foreach (var name in new[] { ManagerEntryChoice.Start, ManagerEntryChoice.Resume, ManagerEntryChoice.InboundReply, ManagerEntryChoice.QuickLook, ManagerEntryChoice.DeepReview })
         {
             Assert.True(RoleEntries.Carries(ManagerCheckIn.Role, name), name);
         }
