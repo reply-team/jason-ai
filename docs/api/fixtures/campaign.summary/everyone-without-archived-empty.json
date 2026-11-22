@@ -16,6 +16,8 @@
       "idle": 0,
       "sequence": 0,
       "out": 0,
+      "paused": 0,
+      "finished": 0,
       "removed": 0
     }
   }

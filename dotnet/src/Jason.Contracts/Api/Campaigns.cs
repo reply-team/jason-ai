@@ -138,6 +138,8 @@ public sealed record CampaignSummaryRow(
     int Idle,
     int Sequence,
     int Out,
+    int Paused,
+    int Finished,
     int Removed,
     bool SequenceLinked);
 
@@ -146,7 +148,7 @@ public sealed record CampaignSummaryRow(
 /// may still be in two counts, as in one campaign. There is no <c>sequence_linked</c>: a campaign not linked counts nobody
 /// in the sequence.
 /// </summary>
-public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);
+public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Paused, int Finished, int Removed);
 
 /// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
 public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns, CampaignSummaryTotal Total);

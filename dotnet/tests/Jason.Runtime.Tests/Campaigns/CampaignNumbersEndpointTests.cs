@@ -19,12 +19,12 @@ public class CampaignNumbersEndpointTests
 
         Assert.Equal(
             [
-                new CampaignSummaryRow(world.Spring.PublicId, 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow(world.Autumn.PublicId, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(world.Spring.PublicId, 22, 3, 3, 2, 2, 6, 2, 6, Paused: 1, Finished: 1, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(world.Autumn.PublicId, 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
             summary.Campaigns);
         // Ada waits in Spring and is new in Autumn; Hal is new in Spring and idle in Autumn: each is one person in two counts.
-        Assert.Equal(new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1), summary.Total);
+        Assert.Equal(new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Paused: 1, Finished: 1, Removed: 1), summary.Total);
     }
 
     /// <summary>
@@ -49,17 +49,17 @@ public class CampaignNumbersEndpointTests
 
         Assert.Equal(
             [
-                new CampaignSummaryRow(world.Spring.PublicId, 22, 2, 3, 2, 2, 7, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow(world.Autumn.PublicId, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(world.Spring.PublicId, 22, 2, 3, 2, 2, 7, 2, 6, Paused: 1, Finished: 1, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(world.Autumn.PublicId, 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
             counted.Campaigns);
         Assert.Equal(
             [
-                new CampaignSummaryRow(world.Spring.PublicId, 20, 2, 3, 2, 1, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow(world.Autumn.PublicId, 0, 0, 0, 0, 0, 0, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(world.Spring.PublicId, 20, 2, 3, 2, 1, 6, 2, 6, Paused: 1, Finished: 1, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(world.Autumn.PublicId, 0, 0, 0, 0, 0, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
             left.Campaigns);
-        Assert.Equal(new CampaignSummaryTotal(20, 2, 3, 2, 1, 6, 2, 6, Removed: 1), left.Total);
+        Assert.Equal(new CampaignSummaryTotal(20, 2, 3, 2, 1, 6, 2, 6, Paused: 1, Finished: 1, Removed: 1), left.Total);
     }
 
     /// <summary>False and null read as the option absent: everyone is counted, archived people too.</summary>

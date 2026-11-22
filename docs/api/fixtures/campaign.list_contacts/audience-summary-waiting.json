@@ -86,7 +86,9 @@
           },
           "search": "wi_1",
           "landed_at": "2026-10-01T11:00:00.000Z"
-        }
+        },
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -156,7 +158,9 @@
           },
           "search": "wi_1",
           "landed_at": "2026-10-01T11:00:00.000Z"
-        }
+        },
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

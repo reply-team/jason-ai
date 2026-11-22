@@ -15,6 +15,8 @@
         "idle": 6,
         "sequence": 2,
         "out": 6,
+        "paused": 1,
+        "finished": 1,
         "removed": 1,
         "sequence_linked": true
       },
@@ -28,6 +30,8 @@
         "idle": 1,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       },
@@ -41,6 +45,8 @@
         "idle": 0,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       }
@@ -54,6 +60,8 @@
       "idle": 7,
       "sequence": 2,
       "out": 6,
+      "paused": 1,
+      "finished": 1,
       "removed": 1
     }
   }
