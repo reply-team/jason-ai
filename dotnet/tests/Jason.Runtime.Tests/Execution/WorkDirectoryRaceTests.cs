@@ -195,6 +195,32 @@ public class WorkDirectoryRaceTests : IDisposable
         Assert.Null(report.Entry);
     }
 
+    /// <summary>
+    /// An entry file rewritten in the source after the copy, at the same length, is one the bracket's measurements cannot
+    /// see. The text the launch carries is the copy's, which is the folder the host finds; a read of the source would hand
+    /// over words the host's folder does not hold.
+    /// </summary>
+    [Fact]
+    public void An_entry_rewritten_at_the_same_length_after_the_copy_is_read_from_the_copy()
+    {
+        Deploy(Live, "BODY");
+        Entry(Live, "COPIED-TEXT");
+        WorkDirectory.BetweenCopyAndEntryRead.Value = () =>
+        {
+            WorkDirectory.BetweenCopyAndEntryRead.Value = null;
+            File.WriteAllText(Path.Combine(Live, "entries", "start.md"), "SOURCE-TEXT");
+        };
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, entry: "start");
+
+        Assert.True(report.RefusalCode is null, $"The launch was refused: {report.RefusalCode}: {report.Message}");
+        Assert.False(report.Rescued, "The same-length rewrite was seen by the bracket, so this test no longer isolates the read.");
+        Assert.Equal("SOURCE-TEXT", File.ReadAllText(Path.Combine(Live, "entries", "start.md")));
+        var copied = File.ReadAllText(Path.Combine(WorkDir, ".claude", "skills", Role, "entries", "start.md"));
+        Assert.Equal("COPIED-TEXT", copied);
+        Assert.Equal(copied, report.Entry!.Entry.Text);
+    }
+
     private static void Entry(string directory, string text) =>
         File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(directory, "entries")).FullName, "start.md"), text);
 
@@ -210,6 +236,7 @@ public class WorkDirectoryRaceTests : IDisposable
     [Theory]
     [Critical(Family.B1, "test seams are unreachable in production")]
     [InlineData(nameof(WorkDirectory.BetweenReadAndCopy))]
+    [InlineData(nameof(WorkDirectory.BetweenCopyAndEntryRead))]
     [InlineData(nameof(Jason.Runtime.Plugins.Invocation.PluginInvoker.EnvelopeWriteMissesTheCancellation))]
     public void Nothing_in_the_product_arms_a_test_hook(string hook)
     {
@@ -266,6 +293,7 @@ public class WorkDirectoryRaceTests : IDisposable
     {
         GC.SuppressFinalize(this);
         WorkDirectory.BetweenReadAndCopy.Value = null;
+        WorkDirectory.BetweenCopyAndEntryRead.Value = null;
         try
         {
             Directory.Delete(_root, recursive: true);

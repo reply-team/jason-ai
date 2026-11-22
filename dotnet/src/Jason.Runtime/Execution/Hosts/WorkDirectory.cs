@@ -228,6 +228,7 @@ public static class WorkDirectory
         // The entry's text is read here, from the copy, before the tree is read again: the bytes the envelope carries are
         // the bytes of the folder the host finds, and a read this bracket throws away throws the text away with it. The
         // file is bounded as the whole tree is, by Roles:MaxSkillBytes, since it is a file of the tree.
+        BetweenCopyAndEntryRead.Value?.Invoke();
         var taughtEntry = entry is null ? null : ReadEntry(target, entry);
 
         // The copy reads by path, and a path resolves to whatever is there when it is used rather than to what
@@ -307,4 +308,12 @@ public static class WorkDirectory
     /// </para>
     /// </remarks>
     internal static AsyncLocal<Action?> BetweenReadAndCopy { get; } = new();
+
+    /// <summary>
+    /// Runs once between copying the role's tree and reading the entry's text, so a test can rewrite the source's entry
+    /// file there, at the same length, which the bracket's measurements cannot see: only a read of the copy keeps the
+    /// envelope's text and the folder the host finds the same bytes. Null everywhere but that test, for the reasons
+    /// <see cref="BetweenReadAndCopy"/> gives.
+    /// </summary>
+    internal static AsyncLocal<Action?> BetweenCopyAndEntryRead { get; } = new();
 }

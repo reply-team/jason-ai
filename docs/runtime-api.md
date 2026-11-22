@@ -336,8 +336,8 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   and null for every item that has none. Only the runtime writes one, from a fixed vocabulary per role in which only the
   manager has names today; `workitem.create` and `workitem.update` take no such member, and one sent is ignored as any
   member a request does not have is, so it never reaches the item. There is no filter by entry. An attempt's `launch`
-  names the entry it was launched with beside `role_skill`, as `{name, bytes}`, the size of the text the launch
-  envelope handed over (0 where the role's folder had no file for it), and leaves the member out where the item has no
+  names the entry it was launched with beside `role_skill`, as `{name, bytes}`, `bytes` being the size of the
+  file the launch read (0 where the role's folder had no file for it), and leaves the member out where the item has no
   entry ([`docs/work-execution.md`](work-execution.md), "The launch envelope").
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution

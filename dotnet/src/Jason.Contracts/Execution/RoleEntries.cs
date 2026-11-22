@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Jason.Contracts.Execution;
 
 /// <summary>
@@ -12,12 +14,12 @@ namespace Jason.Contracts.Execution;
 /// </summary>
 public static class RoleEntries
 {
-    private static readonly Dictionary<string, IReadOnlySet<string>> Table = new(StringComparer.Ordinal)
+    private static readonly FrozenDictionary<string, FrozenSet<string>> Table = new Dictionary<string, FrozenSet<string>>(StringComparer.Ordinal)
     {
-        ["manager"] = new HashSet<string>(StringComparer.Ordinal) { "start", "resume", "quick_look", "deep_review", "reply" },
-    };
+        ["manager"] = FrozenSet.Create(StringComparer.Ordinal, "start", "resume", "quick_look", "deep_review", "reply"),
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    private static readonly IReadOnlySet<string> None = new HashSet<string>(StringComparer.Ordinal);
+    private static readonly FrozenSet<string> None = FrozenSet<string>.Empty;
 
     /// <summary>The folder, inside a role's own folder, that holds one file per entry: <c>entries/&lt;name&gt;.md</c>.</summary>
     public const string Folder = "entries";
@@ -26,7 +28,7 @@ public static class RoleEntries
     public static IReadOnlyList<string> Roles { get; } = [.. Table.Keys.Order(StringComparer.Ordinal)];
 
     /// <summary>The entry names <paramref name="role"/> has; empty for a role the table does not name.</summary>
-    public static IReadOnlySet<string> Of(string role)
+    public static FrozenSet<string> Of(string role)
     {
         ArgumentNullException.ThrowIfNull(role);
         return Table.GetValueOrDefault(role) ?? None;

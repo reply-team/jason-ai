@@ -45,7 +45,7 @@ internal static partial class CriticalTier
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
-        [Family.B1] =  [  9,   2,   4,   2,   8],
+        [Family.B1] =  [  9,   2,   4,   2,   9],
         [Family.B2] =  [  4,   2,   0,   0,   6],
         [Family.B3] =  [  0,   0,   4,   1,  29],
         [Family.B4] =  [  0,   0,   0,   0,   7],
@@ -119,7 +119,7 @@ internal static partial class CriticalTier
         (219, 3449, 6567, 477),  // Jason.Cli.Tests
         (107, 864, 4589, 138),   // Jason.Contracts.Tests
         (48, 302, 479, 54),      // Jason.PluginHost.Tests
-        (752, 6338, 13053, 957), // Jason.Runtime.Tests
+        (752, 6338, 13053, 958), // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>

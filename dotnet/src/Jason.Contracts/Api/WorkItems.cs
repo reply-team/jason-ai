@@ -43,8 +43,8 @@ public sealed record AttemptErrorDto(
 /// a host whose allow rules travel on its command line, which the entry command shows.
 /// </param>
 /// <param name="Entry">
-/// The entry the item carried, by its name and the size in bytes of the text the envelope handed over: 0 where the
-/// role's folder had no file for it. Absent where the item carries no entry.
+/// The entry the item carried, by its name and the size in bytes of the file the launch read: 0 where the role's
+/// folder had no file for it. Absent where the item carries no entry.
 /// </param>
 public sealed record AttemptLaunchDto(
     IReadOnlyList<string> EntryCommand,
@@ -61,7 +61,7 @@ public sealed record AttemptLaunchDto(
 /// <summary>Whether the role that ran this attempt was given its skill, and how large the one it was given was.</summary>
 public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);
 
-/// <summary>Which entry an attempt was launched with, and how many bytes of its text the envelope carried.</summary>
+/// <summary>Which entry an attempt was launched with, and the size in bytes of the file its text was read from.</summary>
 public sealed record LaunchEntryRecordDto(string Name, long Bytes);
 
 /// <summary>
