@@ -163,6 +163,78 @@ public class InsideARunTests
             Jason.Runtime.Api.InsideARun.ChangesJason.Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// A reopen is the person's decision carried two ways, and one of them is a run, so the gate cannot refuse it by
+    /// operation: from inside a run the service refuses one that names no question, with the gate's code and status and
+    /// whatever person it names, and changes nothing; one that names the question a person answered about the ended line
+    /// reopens it, the header and all.
+    /// </summary>
+    [Fact]
+    public async Task A_reopen_from_inside_a_run_needs_the_person_s_answered_question()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var campaign = await CampaignAsync(api);
+        var added = await api.PostOkAsync<AddContactsResult>(Operations.CampaignAddContacts, new { campaign_id = campaign, contacts = new[] { new { first_name = "Ingrid" } } }, Ct);
+        var ingrid = added.Items[0].ContactId!;
+        await api.PostOkAsync<FinishContactsResult>(Operations.CampaignFinishContacts, new { campaign_id = campaign, contact_ids = new[] { ingrid }, reason = "No answer.", actor = Ada }, Ct);
+        var before = await StateAsync(api);
+
+        var (status, text) = await api.PostAsync(Operations.CampaignReopenContacts, new { campaign_id = campaign, contact_ids = new[] { ingrid }, actor = Ada }, Inside, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"campaign.reopen_contacts answered {(int)status}: {text}");
+        var error = JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.Equal(
+            $"This request comes from inside attempt `{HeaderAttempt}`. Reopening a line is the person's decision: from inside a run, name the question they answered about it in decision_id, or raise it as a decision.",
+            error.Message);
+        Assert.Equal(before, await StateAsync(api));
+        Assert.DoesNotContain(Operations.CampaignReopenContacts, Jason.Runtime.Api.InsideARun.Refusing);
+
+        var (attempt, decision) = await AnsweredAboutTheEndAsync(api, campaign);
+        var asked = new Dictionary<string, string> { ["Jason-Attempt"] = attempt };
+        var (reopened, answer) = await api.PostAsync(
+            Operations.CampaignReopenContacts,
+            new { campaign_id = campaign, contact_ids = new[] { ingrid }, decision_id = decision, actor = new { type = "attempt", id = attempt }, reason = "She said yes." },
+            asked,
+            Ct);
+
+        Assert.True(reopened == HttpStatusCode.OK, $"campaign.reopen_contacts answered {(int)reopened}: {answer}");
+        var result = JsonSerializer.Deserialize<ReopenContactsResult>(answer, JasonJson.Options)!;
+        Assert.Equal(ReopenContactsItemStatus.Reopened, Assert.Single(result.Items).Status);
+    }
+
+    /// <summary>The manager's run that asked whether to write to the person again, and the question a person answered.</summary>
+    private static async Task<(string Attempt, string Decision)> AnsweredAboutTheEndAsync(RuntimeApiFixture api, string campaignId)
+    {
+        var now = Nine.UtcDateTime;
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignId, Ct);
+        var line = await db.Journal.AsNoTracking().SingleAsync(e => e.CampaignId == campaign.Id && e.Kind == Jason.Runtime.Journal.JournalKinds.ContactsFinished, Ct);
+        var item = WorkItemFactory.NewAiRole(campaign, "manager", now: now);
+        item.Status = WorkItemStatus.Processing;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, now);
+        db.WorkItems.Add(item);
+        var decision = new Decision
+        {
+            PublicId = "dec_01K7QN0000000000000000000B",
+            Campaign = campaign,
+            WorkItem = item,
+            Attempt = attempt,
+            Question = "Write to Ingrid again?",
+            References = [new JsonObject { ["kind"] = "journal_entry", ["id"] = line.PublicId }],
+            Status = DecisionStatus.Answered,
+            RaisedAt = now,
+            Answer = "Yes.",
+            AnsweredAt = now,
+            AnsweredByType = ActorType.Human,
+            AnsweredById = "ada",
+        };
+        db.Decisions.Add(decision);
+        await db.SaveChangesAsync(Ct);
+        return (attempt.PublicId, decision.PublicId);
+    }
+
     public static TheoryData<string> OtherVerbs =>
     [
         Operations.WorkItemWait,

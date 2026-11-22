@@ -1,0 +1,34 @@
+{
+  "operation": "campaign.finish_contacts",
+  "case": "finish-one",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contact_ids": [
+      "cnt_1"
+    ],
+    "reason": "No answer after four touches.",
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "finished": 1,
+      "already_finished": 0,
+      "not_member": 0,
+      "excluded": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "finished",
+        "contact_id": "cnt_1",
+        "error": null
+      }
+    ]
+  }
+}

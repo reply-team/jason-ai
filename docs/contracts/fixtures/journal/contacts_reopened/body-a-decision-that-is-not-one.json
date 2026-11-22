@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_reopened",
+  "version": 1,
+  "case": "a reopen naming as its decision something that is no question",
+  "body": { "key": null, "old": null, "new": { "reopened": 1, "not_finished": 0, "not_member": 0, "excluded": 0, "not_in_decision": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"], "decision_id": "wi_01JC0000000000000000000001" } },
+  "expect": { "invalid": [{ "pointer": "/new/decision_id", "reason": "pattern" }] }
+}
