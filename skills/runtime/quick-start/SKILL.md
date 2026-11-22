@@ -30,7 +30,9 @@ through. Never ask for them: the person is not asked which channels they have. M
 ```
 jason project list --query payroll
 jason project create --name "Payroll for Latin America"
-jason campaign create --name "Seed-stage owners in Mexico and Colombia" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key payroll-latam-owners-20261114-1530
+jason campaign create --name "Seed-stage owners in Mexico and Colombia" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --idempotency-key payroll-latam-owners-20261114-1530 --file - <<'EOF'
+{"context":{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}}
+EOF
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel linkedin
 ```
@@ -97,7 +99,9 @@ from the campaign that exists: the brief and the goals go into its context, and 
 start the campaign:
 
 ```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason 'the plan agreed with the person'
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the plan agreed with the person' --file - <<'EOF'
+{"set":{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}}
+EOF
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 

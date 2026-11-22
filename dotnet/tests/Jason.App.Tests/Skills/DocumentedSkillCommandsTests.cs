@@ -45,14 +45,49 @@ public class DocumentedSkillCommandsTests
         var printed = 0;
         foreach (var skill in skills)
         {
-            foreach (var command in SkillPack.PrintedCommands(await File.ReadAllLinesAsync(skill.File, Ct)))
+            foreach (var command in SkillPack.Printed(skill.File))
             {
-                await AssertUnderstoodAsync(command, skill);
+                await AssertUnderstoodAsync(command.Line, skill, StandardInput(command));
                 printed++;
             }
         }
 
         Assert.True(printed > 0, "The pack printed no commands at all, so this guard asserted nothing.");
+    }
+
+    /// <summary>
+    /// A line that hands its request to standard input is typed with it: the here-document's body as the page prints it,
+    /// so a body that is not the JSON the verb's file option takes is refused here as a usage error, as it would be typed.
+    /// A file the page names on standard input is not on this machine, so an empty object stands in for it.
+    /// </summary>
+    private static string? StandardInput(PrintedCommand command) =>
+        command.Body ?? (command.InputFile is null ? null : "{}");
+
+    /// <summary>
+    /// The body is what is typed: a line whose here-document is not JSON is refused, and the same line with the body it
+    /// should carry is understood. Without the body on standard input the guard would bless a page whose body nothing reads.
+    /// </summary>
+    [Fact]
+    public async Task A_here_document_s_body_is_typed_as_standard_input_and_a_body_that_is_not_json_is_refused()
+    {
+        string[] page =
+        [
+            "```",
+            "jason campaign create --name \"Q3\" --file - <<'EOF'",
+            "{\"context\":{\"offer\":\"payroll for startups\"}}",
+            "EOF",
+            "jason campaign create --name \"Q3\" --file - <<'EOF'",
+            "the offer is payroll for startups",
+            "EOF",
+            "```",
+        ];
+        var printed = SkillPack.Printed(page, "this test");
+
+        await AssertUnderstoodAsync(printed[0].Line, "this test", variables: null, StandardInput(printed[0]));
+
+        var refused = await Assert.ThrowsAsync<Xunit.Sdk.TrueException>(
+            () => AssertUnderstoodAsync(printed[1].Line, "this test", variables: null, StandardInput(printed[1])));
+        Assert.Contains("does not understand it", refused.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -152,13 +187,13 @@ public class DocumentedSkillCommandsTests
     /// CI runners.
     /// </summary>
     internal static Task AssertUnderstoodAsync(string command, string source) =>
-        AssertUnderstoodAsync(command, source, variables: null);
+        AssertUnderstoodAsync(command, source, variables: null, input: null);
 
     /// <summary>
     /// A line a page of the pack prints, typed as that page's reader types it: inside a run for a role's page.
     /// </summary>
-    private static Task AssertUnderstoodAsync(string command, PackSkill page) =>
-        AssertUnderstoodAsync(command, page.File, page.IsRole ? ARun() : null);
+    private static Task AssertUnderstoodAsync(string command, PackSkill page, string? input = null) =>
+        AssertUnderstoodAsync(command, page.File, page.IsRole ? ARun() : null, input);
 
     /// <summary>
     /// The environment of a run, as the launcher hands it to a role's agent: this process's own variables, which a
@@ -178,8 +213,9 @@ public class DocumentedSkillCommandsTests
         return variables;
     }
 
+    /// <param name="input">What the line hands the program on standard input, or null for nothing at all.</param>
     private static async Task AssertUnderstoodAsync(
-        string command, string source, IReadOnlyDictionary<string, string>? variables)
+        string command, string source, IReadOnlyDictionary<string, string>? variables, string? input)
     {
         // The splitter drops the program's own name, so what is left is what the program is handed — which
         // is what ModeRouter reads to decide which of its modes answers at all.
@@ -213,7 +249,11 @@ public class DocumentedSkillCommandsTests
                 using (var tree = new TempTree())
                 {
                     var error = new StringWriter();
-                    var machine = Machine(tree, error) with { Variables = variables };
+                    var machine = Machine(tree, error) with
+                    {
+                        Variables = variables,
+                        In = input is null ? null : new StringReader(input),
+                    };
                     var exit = await CliApp.RunAsync(Named(arguments, tree.Root), machine, Ct);
 
                     Assert.True(
@@ -276,7 +316,8 @@ public class DocumentedSkillCommandsTests
                 _ => null,
             };
 
-            if (content is null || File.Exists(arguments[index + 1]))
+            // Standard input is what the line's own body is for, never a placeholder file named '-'.
+            if (content is null || arguments[index + 1] == "-" || File.Exists(arguments[index + 1]))
             {
                 continue;
             }

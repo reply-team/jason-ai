@@ -107,7 +107,9 @@ to be done.
 ```
 jason project list --query payroll
 jason project create --name "Payroll for Latin America"
-jason campaign create --name "Q3 LatAm founders" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
+jason campaign create --name "Q3 LatAm founders" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --idempotency-key q3-latam --file - <<'EOF'
+{"context":{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}}
+EOF
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
@@ -155,7 +157,7 @@ jason campaign list --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 **The brief becomes the campaign.** What the person told you about the campaign — the product, the audience, how it
-sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any
+sells, in their own words — is the campaign's context, given at `jason campaign create` as the `context` of the request it reads on standard input (`--file -`), before any
 contact is added and before anything is sent. It is the campaign's shared knowledge: a role that reads the campaign
 (`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its
 keys are yours to name for what they hold, apart from `goals`, the one key Jason reserves and checks (below). Keep the person's own words beside what you made of
@@ -164,11 +166,13 @@ them, and put a link or a file in as what it says, briefly, with where it is, ra
 campaign at a provider.
 
 **A change of direction goes into the context as well.** On a campaign that already exists, what the person
-changes about it is written with `jason campaign update-context`: `--set` writes the top-level keys it names,
+changes about it is written with `jason campaign update-context`: `set`, in the request it reads on standard input, writes the top-level keys it names,
 `--unset` removes a key, once for each, and every key it does not name stays as it was.
 
 ```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"audience":"founders of seed-stage startups in Mexico, Colombia and Chile"}' --reason 'the person widened the audience'
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the person widened the audience' --file - <<'EOF'
+{"set":{"audience":"founders of seed-stage startups in Mexico, Colombia and Chile"}}
+EOF
 ```
 
 **What the campaign is for is its `goals`.** The outcomes the campaign steers each conversation towards, settled with
@@ -180,7 +184,9 @@ campaign with no goals is valid, and its roles take the default goal, a demo. `d
 contract. It is not `goal.get`, the catalog's read of a person's or team's target for a period, which is a different thing.
 
 ```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason 'the person settled what the campaign is for'
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the person settled what the campaign is for' --file - <<'EOF'
+{"set":{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}}
+EOF
 ```
 
 **Give every create a key you could send again.** `--idempotency-key` names that one create, in words you
@@ -235,8 +241,12 @@ once approved its people land on the campaign by themselves, each named in `camp
 they came from:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --context '{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}' --idempotency-key q3-latam-probe-logistics
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --context '{"brief":"form the audience from the campaign context and create its probe"}' --idempotency-key q3-latam-form-audience
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --idempotency-key q3-latam-probe-logistics --file - <<'EOF'
+{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. Once they land, a reserve threshold of 5; once the audience works, top-ups of 25 up to 250."}}
+EOF
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --idempotency-key q3-latam-form-audience --file - <<'EOF'
+{"context":{"brief":"form the audience from the campaign context and create its probe"}}
+EOF
 jason campaign audience cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
@@ -256,7 +266,9 @@ own words about who belongs.
 Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}' --idempotency-key q3-latam-research-ae
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --idempotency-key q3-latam-research-ae --file - <<'EOF'
+{"context":{"account":"Analytical Engines","question":"which of the two sites is the target"}}
+EOF
 ```
 
 Then follow the work:
@@ -370,7 +382,9 @@ names where they are; a note itself is read when it is wanted:
 jason rolenote get --role researcher
 jason rolenote get --role researcher --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason rolenote get --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason rolenote set --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"gatekeeper":"the switchboard hangs up after six"}'
+jason rolenote set --role researcher --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note-file - <<'EOF'
+{"gatekeeper":"the switchboard hangs up after six"}
+EOF
 ```
 
 A note is written **whole** — there is no patch, so read it, add to it and write all of it back — and
@@ -512,7 +526,9 @@ person's approval, and one approval is one send: one work item is one reply to o
 text the person read with you.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"t_99812"},"body":"Thursday at 10 works. I will send an invitation."}' --reason 'the answer the person gave to the reply from Marta' --idempotency-key q3-latam-reply-marta-t99812
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the answer the person gave to the reply from Marta' --idempotency-key q3-latam-reply-marta-t99812 --file - <<'EOF'
+{"context":{"input":{"channel":"email","thread":{"external_id":"t_99812"},"body":"Thursday at 10 works. I will send an invitation."}}}
+EOF
 ```
 
 Recording their decision on it is `approvals-and-questions`. Two replies are two work items and two approvals, never
@@ -587,7 +603,9 @@ taken back. Starting the provider's campaign again later is `campaign.activate`,
 
 ```
 jason workitem cancel wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the person stopped this send'
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"content","note":"the wrong copy went out in step 2"}}' --reason 'the person asked the provider to stop sending' --idempotency-key q3-latam-pause-wrong-copy
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --reason 'the person asked the provider to stop sending' --idempotency-key q3-latam-pause-wrong-copy --file - <<'EOF'
+{"context":{"input":{"reason":{"code":"content","note":"the wrong copy went out in step 2"}}}}
+EOF
 jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the wrong copy went out in step 2'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --not-before 2026-11-02T09:00:00Z --reason 'the person said not before Monday'
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason 'the person wants this one first'
