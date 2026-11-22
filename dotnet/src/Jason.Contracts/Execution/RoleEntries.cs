@@ -16,7 +16,7 @@ public static class RoleEntries
 {
     private static readonly FrozenDictionary<string, FrozenSet<string>> Table = new Dictionary<string, FrozenSet<string>>(StringComparer.Ordinal)
     {
-        ["manager"] = FrozenSet.Create(StringComparer.Ordinal, "start", "resume", "quick_look", "deep_review", "reply"),
+        ["manager"] = FrozenSet.Create(StringComparer.Ordinal, "start", "resume", "quick_look", "deep_review", "inbound_reply"),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     private static readonly FrozenSet<string> None = FrozenSet<string>.Empty;

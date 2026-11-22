@@ -359,7 +359,7 @@ public class ManagerCheckInTests
     [InlineData("resume")]
     [InlineData("quick_look")]
     [InlineData("deep_review")]
-    [InlineData("reply")]
+    [InlineData("inbound_reply")]
     public async Task A_check_in_created_with_an_entry_carries_it_on_its_row_and_nowhere_else(string entry)
     {
         using var database = new TestDatabase();

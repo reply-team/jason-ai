@@ -13,7 +13,7 @@ public class RoleEntriesTests
     {
         Assert.Equal(["manager"], RoleEntries.Roles);
         Assert.Equal(
-            ["deep_review", "quick_look", "reply", "resume", "start"],
+            ["deep_review", "inbound_reply", "quick_look", "resume", "start"],
             RoleEntries.Of("manager").Order(StringComparer.Ordinal));
     }
 
@@ -22,13 +22,13 @@ public class RoleEntriesTests
     [InlineData("manager", "resume", true)]
     [InlineData("manager", "quick_look", true)]
     [InlineData("manager", "deep_review", true)]
-    [InlineData("manager", "reply", true)]
+    [InlineData("manager", "inbound_reply", true)]
     [InlineData("manager", "Start", false)]
     [InlineData("manager", "start ", false)]
     [InlineData("manager", "", false)]
     [InlineData("manager", "general", false)]
     [InlineData("researcher", "start", false)]
-    [InlineData("responder", "reply", false)]
+    [InlineData("responder", "inbound_reply", false)]
     [InlineData("Manager", "start", false)]
     public void A_role_carries_an_entry_only_where_the_table_gives_it_that_name(string role, string entry, bool carries)
     {

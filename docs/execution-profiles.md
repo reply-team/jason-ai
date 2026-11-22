@@ -237,7 +237,7 @@ own: nothing in the launch depends on a second file being there, or on the role 
 
 **Entries.** A role's folder may hold `entries/<name>.md`, one file for each named way into the role's job. A work item
 that the runtime created with an entry — only the manager has entry names today: `start`, `resume`, `quick_look`,
-`deep_review` and `reply` — is launched with that file's text in its launch envelope (`entry`, in
+`deep_review` and `inbound_reply` — is launched with that file's text in its launch envelope (`entry`, in
 [work-execution.md](work-execution.md), "The launch envelope"), read whole from the copy in the work directory, so every
 host is handed the same words without any change to its command line. The folder is copied like the rest of the tree
 and counts toward `Roles:MaxSkillBytes`. A folder of a person's own, with no record of a deployment, is read the same

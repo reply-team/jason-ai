@@ -329,7 +329,7 @@ public class WorkDirectoryTests : IDisposable
         Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\nAsk the runtime for the brief.\n");
         var entries = Directory.CreateDirectory(Path.Combine(SkillsRoot, Role, "entries")).FullName;
         File.WriteAllText(Path.Combine(entries, "start.md"), EntryText);
-        File.WriteAllText(Path.Combine(entries, "reply.md"), "Answer in the thread.");
+        File.WriteAllText(Path.Combine(entries, "inbound_reply.md"), "Answer in the thread.");
         var host = Hosts().Single(candidate => candidate.Kind == kind);
 
         var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024, host, entry: "start");
@@ -337,7 +337,7 @@ public class WorkDirectoryTests : IDisposable
         Assert.Null(report.RefusalCode);
         var copied = Path.Combine(AgentHosts.Under(WorkDir, host.Facts.WorkSkills), Role, "entries");
         Assert.Equal(EntryText, File.ReadAllText(Path.Combine(copied, "start.md")));
-        Assert.Equal("Answer in the thread.", File.ReadAllText(Path.Combine(copied, "reply.md")));
+        Assert.Equal("Answer in the thread.", File.ReadAllText(Path.Combine(copied, "inbound_reply.md")));
         Assert.Equal(new LaunchEntry("start", EntryText), report.Entry!.Entry);
         Assert.Equal(new FileInfo(Path.Combine(copied, "start.md")).Length, report.Entry.Bytes);
     }

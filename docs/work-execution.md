@@ -1125,7 +1125,7 @@ it is told the same, because the wait it follows is still the last one.
 
 `entry` is the named way into its role's job the work item was created with, and null for every item that has none.
 Only the runtime writes one, from a fixed vocabulary per role in which only the manager has names today — `start`,
-`resume`, `quick_look`, `deep_review` and `reply` — and no request to `workitem.create` or `workitem.update` carries it.
+`resume`, `quick_look`, `deep_review` and `inbound_reply` — and no request to `workitem.create` or `workitem.update` carries it.
 `name` is the item's entry; `text` is the file `entries/<name>.md` of the role's folder, whole, as UTF-8, read from the
 copy the launch made in the work directory inside the same read that copies the role's tree, so the text the envelope
 carries and the folder the host finds are the same bytes. Nothing in it is stripped or parsed, and the runtime composes
