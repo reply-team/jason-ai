@@ -17,4 +17,13 @@ public sealed class RuntimeOptions
     /// <c>system.info</c> says so; 0 lets the OS choose. The descriptor tells clients the result either way.
     /// </summary>
     public int Port { get; set; } = DefaultPort;
+
+    /// <summary>
+    /// The installation's time zone, as an IANA id: the zone the installation's day runs in, from one local midnight to
+    /// the next, which is the day <c>Launches:MaxPerDay</c> counts and a lift of it covers. Left out, written as nothing or
+    /// as white space, it is the system's own zone, as the runtime's clock reads it. It is the installation's, not the
+    /// limit's, so it stands here rather than under <c>Launches</c>. Read through its seam, so an edit applies at the next
+    /// scan; an id the system does not know is refused at start and, on a live edit, keeps the last good settings.
+    /// </summary>
+    public string? TimeZone { get; set; }
 }

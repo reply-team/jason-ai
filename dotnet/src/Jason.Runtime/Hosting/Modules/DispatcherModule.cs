@@ -97,6 +97,12 @@ public static class DispatcherModule
         services.AddSingleton(Seam<SendingOptions>(SendingOptions.Section));
         services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
 
+        // The installation's zone, read through its seam at each scan: the day the daily limits count and a lift covers runs
+        // from one midnight to the next in it. Named with TryAdd, since the lift's own module needs the same day and either
+        // module may be composed first.
+        services.TryAddSingleton(Seam<RuntimeOptions>(RuntimeOptions.Section));
+        services.TryAddSingleton<InstallationDay>();
+
         // Named here because the summon creates work through the work-item service, and that service reads the
         // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either
         // may be first.

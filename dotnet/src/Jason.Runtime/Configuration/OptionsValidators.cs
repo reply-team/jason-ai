@@ -71,6 +71,16 @@ public sealed class RuntimeOptionsValidator : IValidateOptions<RuntimeOptions>
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
         OptionRules.Range(failures, "Runtime:Port", options.Port, 0, 65535);
+
+        // The zone is held to the rule a contact's zone is held to: an IANA id this system resolves, never a Windows id,
+        // which names a different vocabulary on every machine. The text is described, never said back.
+        if (!string.IsNullOrWhiteSpace(options.TimeZone) && InstallationDay.ZoneOf(options.TimeZone) is null)
+        {
+            failures.Add(
+                "Runtime:TimeZone must be an IANA time zone id such as Asia/Tokyo, or left out for the system's own zone; "
+                + OptionRules.Written("value", options.TimeZone, "is not one this system knows"));
+        }
+
         return OptionRules.Result(failures);
     }
 }

@@ -23,7 +23,7 @@ public static class SettingsVocabulary
         "Subscriptions", "Sending",
 
         // Runtime and Logging.
-        "Port",
+        "Port", "TimeZone",
         "MinimumLevel", "RetainedFileCountLimit", "FileSizeLimitBytes",
 
         // Dispatcher, and the defaults of each kind of work it names.
