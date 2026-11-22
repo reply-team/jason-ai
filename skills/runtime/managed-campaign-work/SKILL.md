@@ -219,6 +219,7 @@ question.
 - **Will they hear back?** Read the `notifications` check in the same answer. Where it is `absent` or `failed`, say in
   one sentence that nothing will tell them when Jason starts waiting for them, and give the check's own words; it never
   stops the start. Where it is `ok`, say nothing.
+  Where it is `unknown`, say once that whether they will hear is not known; that never stops the start either.
 - **Is someone named to write as?** Where the sender has no value, the campaign is not started either: ask for it as
   the first item says.
 - **Can anything be sent?** With no channel that has a route and an active account, say firmly that not one message
@@ -242,8 +243,8 @@ The message ends with exactly: "Everything is ready. Start it?"
 - **Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then
   read it back. Say "Started, as you said. It is recorded under your name, {name}." only once `jason campaign get`
   answers the status `active`.
-- **They will start it themselves**: leave it as it is. They start it when they choose, by telling this chat or any
-  session to start it, or by typing `jason campaign start` with the campaign's id in a terminal.
+- **They will start it themselves**: leave it as it is. They start it when they choose, by telling this conversation or
+  any session to start it, or by typing `jason campaign start` with the campaign's id in a terminal.
 - **Start it later**: leave it a draft, with everything recorded. When they tell you, or any session, to start it, read
   that it is ready again and start it then. A draft runs nothing, so nothing is lost by waiting. Jason has no start at
   a moment the person names, "Monday at nine", and a session cannot wake itself: say so plainly where they ask for one,
@@ -379,7 +380,7 @@ you already used is refused with `idempotency_key_reused`; give it a key of its 
 **The campaign's own people are `campaign list-contacts`**, each with where they stand in it: enrolled, paused,
 finished or excluded. `contact list --campaign cmp_…` lists the same people who are not excluded, as contact records.
 **`enrolled` here is Jason's own membership and nothing more.** It says the person is on this campaign in Jason, and
-it is the state a person has the moment they are added. It does not say the person was put into a sequence at the
+it is the state a person has the moment they are added. It does not say the person is in a sequence at the
 provider; that is a `campaign.enroll` work item that succeeded, and the provider's own list is read with
 `enrollment.list`. A campaign with no provider sequence has members, never enrolments: say "on the campaign" or
 "members", and never that they are enrolled at the provider, however `list-contacts` spells the state.
@@ -417,9 +418,9 @@ else:
 The rule is the campaign's, not one person's. On their yes, linking is tried by the enrolment below, one person at a
 time into the sequence they named, by its identifier at the provider; and write in the campaign's context, in their
 words, that the campaign is linked to that sequence, so that every role that reads the campaign knows it writes no
-letters there. Jason has no operation that makes a sequence: where they asked for one, say so, and that it is made in
-the provider's own tool and can then be tried the same way.
-
+letters there. Jason makes no sequence that sends: `campaign.create` makes only an empty draft at the provider, with no
+steps of its own. Where they asked for one, say so, and that its steps are made in the provider's own tool; it can then
+be tried the same way.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}" --idempotency-key q3-latam-enrol-marta
@@ -441,7 +442,7 @@ they came from:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"definition":{"industries":[{"value":"Logistics","type":"include"}],"company_sizes":["51-200"]},"count":25}' --idempotency-key q3-latam-probe-logistics --file - <<'EOF'
-{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. At the start, a reserve threshold of 20, one batch; once the audience works, top-ups of 25 up to 250."}}
+{"context":{"proposal":"The definition matches about 640 people, so a probe of 25, about 50 credits on Reply. At the start, a reserve threshold of 20, set by the runtime; once the audience works, top-ups of 25 up to 250."}}
 EOF
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --idempotency-key q3-latam-form-audience --file - <<'EOF'
 {"context":{"brief":"form the audience from the campaign context and create its probe"}}
@@ -456,13 +457,13 @@ it parks for their approval unless their allowance covers it:
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation audience.search --input '{"audience":1,"count":25}' --reason 'the person asked for 25 more of audience 1' --idempotency-key q3-latam-topup-1-first
 ```
 
-The reserve's threshold is the campaign's own field, one batch, twenty: the runtime sets it at the campaign's first start,
-because its people come from a search, and the start's answer shows it. A campaign whose people the person brought as a
-list is given none. The person may change it, `jason campaign update <campaign-id> --audience-threshold <n>`, or clear it
-after the start to have none, `--clear audience_threshold`, and it stays cleared. Under it, the campaign's manager is told the reserve is
-low, and the top-ups after the probe are the manager's, run under the allowance the person gave
-(`approvals-and-questions`). The definition is the audience's row, never the context: the context keeps the person's
-own words about who belongs.
+The reserve's threshold is the campaign's own field, twenty, the runtime's own number: the runtime sets it at the
+campaign's first start, because its people come from a search, and the start's answer shows it. A campaign whose people
+the person brought as a list is given none. The person may change it,
+`jason campaign update <campaign-id> --audience-threshold <n>`, or clear it after the start to have none,
+`--clear audience_threshold`, and it stays cleared. Under it, the campaign's manager is told the reserve is low, and the
+top-ups after the probe are the manager's, run under the allowance the person gave (`approvals-and-questions`). The
+definition is the audience's row, never the context: the context keeps the person's own words about who belongs.
 
 Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
 

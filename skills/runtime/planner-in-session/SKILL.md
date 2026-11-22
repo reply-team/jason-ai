@@ -108,11 +108,11 @@ who owns the campaign, who sees the definition and the number before anything is
 people it finds land on the campaign by themselves.
 
 **With the probe you propose the rest of the pulse, and the person decides it.** The reserve's threshold, under which
-the manager is told the campaign is running out of people nobody has started on: one batch, twenty. The runtime sets it
-at the campaign's first start, because its people come from a search; the person may change it, or clear it after the
-start to have none. The allowance a person may give once the audience is judged to work: top-ups the size of the probe,
-with a ceiling of ten probes' worth of people. You propose the allowance with its numbers and name the threshold the
-start sets, and you set neither: changing the threshold and giving the allowance are the person's.
+the manager is told the campaign is running out of people nobody has started on: twenty, the runtime's own number. The
+runtime sets it at the campaign's first start, because its people come from a search; the person may change it, or clear
+it after the start to have none. The allowance a person may give once the audience is judged to work: top-ups the size
+of the probe, with a ceiling of ten probes' worth of people. You propose the allowance with its numbers and name the
+threshold the start sets, and you set neither: changing the threshold and giving the allowance are the person's.
 
 **An audience judged not worth more people comes back to you.** You form the next one the same way, from what the
 person said, what the judgement found and the audiences the campaign already holds, so that the next definition is a
