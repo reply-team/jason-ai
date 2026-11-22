@@ -365,7 +365,9 @@ uninstall-left)
     # the harness root. Any other line, left or gone, fails.
     after="$OUT/after-cask-uninstall.txt"; before="$OUT/before.txt"
     [ -f "$after" ] && [ -f "$before" ] || fail "no listing to compare: $after and $before"
-    declared='^(local bin|profile |launch agent file|launchd |claude skills|agents skills|system-kept|updater cache|ShipIt cache|extracted|data directory|harness root)'
+    # The labels carry no anchor of their own: the pattern below anchors them after the '+ ' or '- ' it adds, and a second
+    # '^' there would match no line, so every line would count as outside.
+    declared='(local bin|profile |launch agent file|launchd |claude skills|agents skills|system-kept|updater cache|ShipIt cache|extracted|data directory|harness root)'
     outside="$( { comm -13 "$before" "$after" | sed 's/^/+ /'; comm -23 "$before" "$after" | sed 's/^/- /'; } | grep -vE "^[+-] $declared" || true)"
     [ -z "$outside" ] || fail "brew uninstall --cask left the machine different from before outside what it may leave: $(printf '%s' "$outside" | tr '\t\n' ' ;')"
     say "against the machine before, a plain uninstall differs only in what it may leave: $(comm -13 "$before" "$after" | cut -f1 | sed 's|/.*||' | sort -u | tr '\n' ';')"
