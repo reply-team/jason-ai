@@ -113,6 +113,7 @@ public partial class RoleSkillTests
 
         Assert.Contains("fell under the threshold the campaign holds — one batch, twenty, which the runtime sets at the campaign's first start where its people come from a search (`Manager:AudienceThreshold`), unless the person changed it", head, StringComparison.Ordinal);
         Assert.DoesNotContain("the threshold the person set", head, StringComparison.Ordinal);
+        Assert.Equal(20, new Jason.Runtime.Configuration.ManagerOptions().AudienceThreshold);
         Assert.Contains("**Where no top-up can bring more, ask at once.**", head, StringComparison.Ordinal);
         Assert.Contains("raise one question to the person at this review, and do not leave it to the next deep review", head, StringComparison.Ordinal);
         Assert.Contains("Where a top-up you created parks for the person, its preview is that question, so raise none beside it.", head, StringComparison.Ordinal);
