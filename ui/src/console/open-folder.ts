@@ -5,7 +5,7 @@ import { can, earlier } from '../platform/places';
 import type { SessionHost } from './conversation-items';
 import { here, inTab } from './state';
 
-// An agent's folder in the system's file manager, from the agent's "…" and the menu on a row of Recent: through Open in's
+// An agent's folder in the system's file manager, from the agent's "…" and the menu on a row of the sidebar: through Open in's
 // own bridge (`openIn.open('files', …)`), which opens the folder the runtime recorded for the agent and never takes a path
 // from the page, asked not to keep the file manager as Open in's default, so one agent's item never moves the window's
 // button. The place is named as Open in names it: a product's name is the desktop's, and the page's own word

@@ -272,7 +272,7 @@ fails, as the page holds it, it says that campaign is left as it is, keeps sendi
 paused by Jason once the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or
 paused and its route lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by
 asking in the agent's chat, and always in the provider itself, the same from Settings and from **Archive…** on the
-agent's row under **Recent**. One press sends one archive. The page then goes back to the list, read again without the
+agent's row under **Agents**. One press sends one archive. The page then goes back to the list, read again without the
 agent, and says the agent is archived and what was cancelled, only what there was; an archived agent's Settings say it
 is archived and offer nothing, and a confirmation opened after another window archived
 the agent says so. The browser
@@ -282,10 +282,13 @@ and its Chat under one header ([below](#an-agent-in-the-console)). Its **Chat** 
 kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents list's Chat opens the same one. An agent's
 conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
-no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
-the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
-conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. A conversation
-leaves Recent once its campaign is read as archived, and the campaign's own **Chat** still opens it; a conversation
+no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and the other conversations the
+desktop keeps are listed in two sections, the open one marked: under **Agents** each agent that is not archived, by the
+agent's name, the one active most recently first, whether or not it has a conversation yet; the first ten under All, then
+**All agents**, and under any other filter every agent the filter keeps; and under **Chats** each chat about no campaign,
+by its first words, the newest first, ten at a time with **Load more**; a conversation is in one section alone. A conversation is kept, and
+listed, from its first turn, so a chat never sent to leaves nothing behind. A conversation leaves **Agents** once its
+campaign is read as archived, and the campaign's own **Chat** still opens it; a conversation
 whose campaign the runtime does not know stays. What happens in
 the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
@@ -297,8 +300,12 @@ manager, named as Open in names that place, and after it **Open Claude Code in t
 terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat runs on
 where Open in found it, else the first found, Claude Code before Codex, one item even where both are found, none where
 neither is, none in the demo, and it leaves the window's Open in where it was. The menu on the agent's row under
-**Recent** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts:
-**Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
+**Agents** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts: **Rename
+conversation**, which the row's menu holds as **Rename** and which there renames the agent itself, through
+`campaign.update`, with the row's name made a field in place (a chat's row renames its conversation in place the same
+way: Enter keeps the name, Escape or leaving the field keeps nothing, and once Enter has sent a name both wait for the
+answer, thirty seconds at most, a refusal is said under the field), **Start
+conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
 transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words.

@@ -1,5 +1,5 @@
 // Pure: the acts a conversation offers, as one list, so the agent's header ("…", `agent-head.tsx`) and the menu on a
-// row of Recent (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Every word and
+// row of the sidebar (`row-menu.tsx`) offer the same acts by the same words, gated and held by the same rules. Every word and
 // title is the locale table's (`agent.menu.*`, `agent.openHost`); the file manager's name and the host's are put in by
 // Open in (`open-folder.ts`).
 
@@ -109,13 +109,31 @@ export function conversationItems(facts: ConversationFacts, gates: Gates): MenuI
 }
 
 /**
- * The menu on a row of Recent: Open, and right after it the agent's folder in the file manager and the agent host in a
+ * The menu on a row of the sidebar: Open, and right after it the agent's folder in the file manager and the agent host in a
  * terminal, where the conversation's acts hold them; for an agent whose status is read, its move by that status and Archive…, neither for an archived one;
- * then the conversation's other acts, Remove last after a separator of its own. A chat about no agent, or an agent not
+ * then the conversation's other acts, Remove last after a separator of its own. A draft with no brief and no one in it
+ * has no move yet (`startHeld`). A chat about no agent, or an agent not
  * read yet, has no move and no Archive…. A separator stands only between two groups that hold something.
  */
-export function rowItems(agent: { status: string } | null, facts: ConversationFacts, gates: Gates): MenuItem[] {
-    const own = conversationItems(facts, gates);
+export function rowItems(
+    agent: { status: string; context?: Record<string, unknown> } | null,
+    facts: ConversationFacts,
+    gates: Gates,
+    people?: number | null,
+): MenuItem[] {
+    // An agent's row renames the agent, its campaign, through the runtime, with or without a conversation: never held.
+    // A chat's row renames its conversation, as the chat's own bar does.
+    const conversation = conversationItems(facts, gates);
+    const renameAgent: MenuItem = { kind: 'rename', label: t('agent.menu.renameAgent'), disabled: false };
+    const kept = conversation.filter((each) => each.kind !== 'rename');
+    // In the place of the conversation's Rename: before its other acts, after the folder and the host.
+    const at = kept.findIndex((each) => each.kind === 'fresh' || each.kind === 'remove');
+    const own: MenuItem[] =
+        facts.campaignId === null
+            ? conversation
+            : at === -1
+              ? [...kept, renameAgent]
+              : [...kept.slice(0, at), renameAgent, ...kept.slice(at)];
     const groups: MenuItem[][] = [
         [
             { kind: 'open', label: t('agent.menu.open') },
@@ -123,7 +141,7 @@ export function rowItems(agent: { status: string } | null, facts: ConversationFa
             ...(agent === null
                 ? []
                 : [
-                      ...transitions(agent).map((move): MenuItem => ({
+                      ...transitions(agent, people).map((move): MenuItem => ({
                           kind: 'move',
                           move,
                           label: t(`agent.menu.move.${move}`),

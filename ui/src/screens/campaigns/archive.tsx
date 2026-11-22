@@ -188,7 +188,7 @@ type DialogProps = { campaign: Movable; onDone: (archived: Campaign, open: WasOp
 export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const api = useApi();
     // Whether this place has an agent's chat to ask in: a fact of the place, never of where the dialog is mounted, so the
-    // agent's Settings and the menu on its row under Recent offer the same way first.
+    // agent's Settings and the menu on its row under Agents offer the same way first.
     const chat = can('chat.send');
     const [read, setRead] = useState<Read | null>(null);
     const [reading, setReading] = useState(0);

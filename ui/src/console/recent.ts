@@ -5,17 +5,32 @@ import { act, argsOf, define, parseArgs } from './actions';
 import { agentFacts } from './agent-facts';
 import { shownAgent } from './agent-place';
 import { campaigns, read } from './campaigns';
+import { agentMaking } from './new-agent';
+import { offUnless } from './off';
+import { can } from '../platform/places';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
 import { needsInput } from './needs';
-import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type RecentRow } from './recent-rows';
-import { chats, clock, conversations, currentChat } from './state';
+import { rowRename, typedName } from './row-rename';
+import {
+    agentRows,
+    chatRows,
+    pageSize,
+    recentFilters,
+    shownRows,
+    type RecentFilter,
+    type RecentInput,
+    type RecentRow,
+} from './recent-rows';
+import { chats, clock, conversations, conversationsListed, currentChat } from './state';
 
-// "Recent" in the sidebar: the conversations, each with a dot, its title, what waits on the person and its age, a search
-// box and a filter in the header, ten rows at a time. Everything here is read from what the console already holds, but
-// the state of the agent of a conversation the list of agents does not hold, which is read on its own, so that a
-// conversation whose agent is archived leaves Recent; the state below is the page's own and is kept nowhere.
+// The sidebar's two sections, AGENTS above CHATS, each a header with a plus at its right. AGENTS: every agent that is
+// not archived, each with a dot, its title, what waits on the person and its age, a filter in the header, and All agents
+// under the rows. CHATS: the conversations about no agent, the newest first, ten at a time, each its title and age.
+// Everything here is read from what the console already holds, but the state of the agent of a conversation the list of
+// agents does not hold, which is read on its own, so that a conversation whose agent is archived leaves AGENTS; the
+// state below is the page's own and is kept nowhere.
 
 /**
  * The agents of the conversations that the list of agents does not hold, as one key: an archived agent, which that list
@@ -77,18 +92,13 @@ export function readUnlisted(api: Api): () => void {
     });
 }
 
-/** Whether the search box is drawn, and what is typed in it. */
-const searching = signal(false);
-const text = signal('');
-/** The filter entry in force, whether its menu is open, and how many rows "Load more" has uncovered. */
+/** AGENTS' filter entry in force, whether its menu is open, and how many rows of CHATS "Load more" has uncovered. */
 const filter = signal<RecentFilter>('all');
 const menuOpen = signal(false);
 const limit = signal(pageSize);
 
-/** Puts the search, the filter and the paging back as a fresh window has them. */
+/** Puts the filter and the paging back as a fresh window has them. */
 export function resetRecent(): void {
-    searching.value = false;
-    text.value = '';
     filter.value = 'all';
     menuOpen.value = false;
     limit.value = pageSize;
@@ -99,12 +109,17 @@ export function closeFilterMenu(): void {
     menuOpen.value = false;
 }
 
-/** The menu open on a row (`row-menu.tsx`): the row's conversation, its title, and where the menu stands in the window. */
+/**
+ * The menu open on a row (`row-menu.tsx`): the row's key (its conversation, or an agent with none yet), its title, and
+ * where the menu stands in the window.
+ */
 export interface RowMenuAt {
     id: string;
     title: string;
     x: number;
     y: number;
+    /** Opened by the row's three dots, which take the focus back when it closes; else the row does. */
+    dots?: true;
 }
 
 export const rowMenu = signal<RowMenuAt | null>(null);
@@ -125,6 +140,18 @@ export function focusRow(id: string): void {
     rowElement(id)?.focus();
 }
 
+/** The three dots of the row of the conversation, where it is drawn. */
+export function dotsElement(id: string): HTMLElement | undefined {
+    return rowElement(id)?.parentElement?.querySelector<HTMLElement>('.rdots') ?? undefined;
+}
+
+/** Gives the focus back to what opened a row's menu: its three dots, else the row. */
+export function focusOpener(at: Pick<RowMenuAt, 'id' | 'dots'>): void {
+    const dots = at.dots === true ? dotsElement(at.id) : undefined;
+    if (dots) dots.focus();
+    else focusRow(at.id);
+}
+
 const labels: Readonly<Record<RecentFilter, string>> = {
     all: t('recent.filter.all'),
     needs: t('recent.filter.needs'),
@@ -141,22 +168,6 @@ const dotTitles = {
     none: t('recent.dot.none'),
 } as const;
 
-define('recent.search', (_args, element) => {
-    searching.value = !searching.value;
-    if (!searching.value) {
-        text.value = '';
-        return;
-    }
-    closeFilterMenu();
-    element.closest('.side')?.querySelector<HTMLInputElement>('[data-input="recent.type"]')?.focus();
-});
-define('recent.type', (_args, element) => {
-    if (element instanceof HTMLInputElement) text.value = element.value;
-});
-define('recent.close', () => {
-    searching.value = false;
-    text.value = '';
-});
 define('recent.menu', () => {
     menuOpen.value = !menuOpen.value;
 });
@@ -164,7 +175,6 @@ define('recent.filter', ([value]) => {
     const chosen = recentFilters.find((each) => each === value);
     if (!chosen) return;
     filter.value = chosen;
-    limit.value = pageSize;
     closeFilterMenu();
 });
 define('recent.more', () => {
@@ -177,40 +187,89 @@ function dotTitle(row: RecentRow): Html | null {
     return html`title="${dotTitles[row.dot]}"`;
 }
 
-/** Whether the row is the conversation of the agent the area shows, on whichever of its tabs. */
-function agentsRow(id: string): boolean {
+/** Whether the row is the agent the area shows, on whichever of its tabs, or the chat it shows. */
+function inFront(row: RecentRow): boolean {
+    if (row.conversationId !== null && row.conversationId === currentChat.value) return true;
     const agent = shownAgent.value;
-    return (
-        agent !== null &&
-        conversations.value.some((each) => each.id === id && !each.main && each.campaignId === agent.id)
-    );
+    return agent !== null && row.campaignId === agent.id;
+}
+
+/**
+ * A row whose name is a field in place (`row-rename.ts`), with what was refused under it and named as the field's
+ * description. The refusal is announced by the sidebar's one region (`RowRenameSaid`), which keeps its node however
+ * often the rows are painted, so a repaint never says it again.
+ */
+function renamingView(row: RecentRow, said: string | null, busy: boolean): Html {
+    const name = row.campaignId !== null ? t('side.rename.agent') : t('side.rename.chat');
+    return html`<div class="rrow renaming">
+        <input
+            class="rrename"
+            type="text"
+            aria-label="${name}"
+            value="${typedName()}"
+            ${said === null ? null : html`aria-invalid="true"`}
+            ${busy ? html`aria-busy="true" readonly` : null}
+            ${said === null ? null : html`aria-describedby="rrename-said"`}
+            data-input="side.renameType"
+            data-enter="side.renameKeep"
+            data-escape="side.renameDrop"
+            data-blur="side.renameBlur"
+            ${argsOf(row.id)}
+        />
+        ${said === null ? null : html`<div class="rrename-said" id="rrename-said">${said}</div>`}
+    </div>`;
 }
 
 function rowView(row: RecentRow): Html {
+    const renaming = rowRename.value;
+    if (renaming !== null && renaming.id === row.id) return renamingView(row, renaming.said, renaming.busy);
     const menu = rowMenu.value?.id === row.id;
+    const agent = row.campaignId !== null;
     const said = [
-        row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
+        agent && row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
         row.age === '' ? null : row.age,
         row.agent === null ? null : dotTitles[row.dot],
     ]
         .filter((each) => each !== null)
         .join(' · ');
-    return html`<button
-        class="item recent-row${menu ? ' menu-open' : ''}"
-        type="button"
-        aria-label="${row.title}"
-        aria-description="${said}"
-        ${row.id === currentChat.value || agentsRow(row.id) ? html`aria-current="true"` : null}
-        aria-haspopup="menu"
-        aria-expanded="${menu ? 'true' : 'false'}"
-        ${act('side.chat', row.id)}
-        data-menu="side.rowmenu"
-    >
-        <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>
-        <span class="rt">${row.title}</span>
-        ${row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waitingWords}</span>` : null}
-        <span class="t" aria-hidden="true">${row.age}</span>
-    </button>`;
+    const more = t('side.rowMenu', { name: row.title });
+    return html`<div class="rrow${menu ? ' menu-open' : ''}">
+        <button
+            class="item recent-row${menu ? ' menu-open' : ''}"
+            type="button"
+            aria-label="${row.title}"
+            aria-description="${said}"
+            ${inFront(row) ? html`aria-current="true"` : null}
+            aria-haspopup="menu"
+            aria-expanded="${menu ? 'true' : 'false'}"
+            ${row.conversationId === null ? act('side.agent', row.id) : act('side.chat', row.id)}
+            data-menu="side.rowmenu"
+        >
+            ${
+                agent
+                    ? html`<span
+                          class="rdot ${row.dot}${row.running ? ' running' : ''}"
+                          ${dotTitle(row)}
+                          aria-hidden="true"
+                      ></span>`
+                    : null
+            }
+            <span class="rt">${row.title}</span>
+            ${agent && row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waitingWords}</span>` : null}
+            <span class="t" aria-hidden="true">${row.age}</span>
+        </button>
+        <button
+            class="rdots"
+            type="button"
+            title="${more}"
+            aria-label="${more}"
+            aria-haspopup="menu"
+            aria-expanded="${menu ? 'true' : 'false'}"
+            ${act('side.rowdots', row.id)}
+        >
+            ${svg('more', 14)}
+        </button>
+    </div>`;
 }
 
 function filterMenu(): Html {
@@ -234,76 +293,120 @@ function filterMenu(): Html {
         </div>`;
 }
 
-/** Every row of Recent, and the ones drawn now under the filter, the search and the paging. */
+/** The two sections' rows, and the ones drawn now: AGENTS under its filter, CHATS by the paging. */
 const listed = computed(() => {
-    const rows = recentRows({
+    const input: RecentInput = {
         conversations: conversations.value,
         titles: (id) => chats.value[id]?.title,
+        campaignOf: (id) => chats.value[id]?.campaignId,
         running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
         agentRead: stateOf,
         ...needsInput(),
         now: clock.value,
-    });
-    const drawn = shownRows(rows, filter.value, text.value, limit.value);
-    return { rows, shown: drawn.rows, more: drawn.more };
+    };
+    const agents = agentRows(input);
+    const talks = chatRows(input);
+    const drawn = shownRows(talks, 'all', limit.value);
+    return {
+        agents,
+        // AGENTS shows its first ten under All, and every agent a filter keeps; All agents opens the rest on their page.
+        agentsShown: shownRows(agents, filter.value, pageSize).rows,
+        chats: talks,
+        chatsShown: drawn.rows,
+        more: drawn.more,
+    };
 });
 
-/** Whether the conversation's row is drawn now. */
-export function rowDrawn(id: string): boolean {
-    return listed.value.shown.some((each) => each.id === id);
+/** The row of a key as it is drawn now, in either section. */
+export function drawnRow(id: string): RecentRow | undefined {
+    const { agentsShown, chatsShown } = listed.value;
+    return agentsShown.find((each) => each.id === id) ?? chatsShown.find((each) => each.id === id);
 }
 
-/** The header, the search box when it is open, and the list of conversations. */
-export function recentView(): Html {
-    const { rows, shown, more } = listed.value;
+/** Whether the row of the key is drawn now. */
+export function rowDrawn(id: string): boolean {
+    return drawnRow(id) !== undefined;
+}
+
+/** A section's header: its name, then its tools and the plus at its right. */
+function header(name: string, tools: Html | null, plus: Html): Html {
     return html`<div class="recent">
-            <span class="rl">${t('recent.title')}</span>
-            <span class="rtools">
-                <button
-                    class="rbtn"
-                    type="button"
-                    title="${t('recent.search')}"
-                    aria-label="${t('recent.search')}"
-                    aria-pressed="${searching.value ? 'true' : 'false'}"
-                    ${act('recent.search')}
-                >
-                    ${svg('search', 14)}
-                </button>
-                <button
-                    class="rbtn"
-                    type="button"
-                    title="${t('recent.filter')}"
-                    aria-label="${t('recent.filter')}"
-                    aria-haspopup="menu"
-                    aria-expanded="${menuOpen.value ? 'true' : 'false'}"
-                    data-active="${filter.value === 'all' ? 'false' : 'true'}"
-                    ${act('recent.menu')}
-                >
-                    ${svg('filter', 14)}
-                </button>
-            </span>
-            ${menuOpen.value ? filterMenu() : null}
+        <span class="rl">${name}</span>
+        <span class="rtools">${tools}${plus}</span>
+        ${tools !== null && menuOpen.value ? filterMenu() : null}
+    </div>`;
+}
+
+/** AGENTS above CHATS. */
+export function recentView(): Html {
+    const { agents, agentsShown, chats: talks, chatsShown, more } = listed.value;
+    const filterButton = html`<button
+        class="rbtn"
+        type="button"
+        title="${t('recent.filter')}"
+        aria-label="${t('recent.filter')}"
+        aria-haspopup="menu"
+        aria-expanded="${menuOpen.value ? 'true' : 'false'}"
+        data-active="${filter.value === 'all' ? 'false' : 'true'}"
+        ${act('recent.menu')}
+    >
+        ${svg('filter', 14)}
+    </button>`;
+    const newAgent = html`<button
+        class="rbtn plus"
+        type="button"
+        title="${t('side.newAgent')}"
+        aria-label="${t('side.newAgent')}"
+        ${act('side.start')}
+        ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
+    >
+        ${svg('plus', 14)}
+    </button>`;
+    const newChat = html`<button
+        class="rbtn plus"
+        type="button"
+        title="${t('side.newChat')}"
+        aria-label="${t('side.newChat')}"
+        ${act('side.new')}
+        ${offUnless('chat.create')}
+    >
+        ${svg('plus', 14)}
+    </button>`;
+    // Said once the list of agents is read, and CHATS' once the desktop listed its conversations: before that, none is
+    // not yet known. The plus is named only where it can be pressed.
+    const agentsEmpty =
+        agentsShown.length > 0 || !read.value
+            ? null
+            : html`<div class="rnone">
+                  ${
+                      agents.length > 0
+                          ? t('recent.none.match')
+                          : can('chat.createAgent')
+                            ? t('side.none.agents')
+                            : t('side.none.agentsBare')
+                  }
+              </div>`;
+    const chatsEmpty =
+        talks.length > 0 || !conversationsListed.value
+            ? null
+            : html`<div class="rnone">${can('chat.create') ? t('side.none.chats') : t('side.none.chatsBare')}</div>`;
+    // One landmark for both sections, each a named group of its own under its header.
+    return html`<nav class="sections" aria-label="${t('side.sections')}">
+        ${header(t('side.agents'), filterButton, newAgent)}
+        <div class="list" role="group" aria-label="${t('side.agents')}">
+            ${agentsShown.map(rowView)} ${agentsEmpty}
+            ${
+                agents.length > 0
+                    ? html`<button class="item rmore" type="button" ${act('side.allAgents')}>
+                          <span>${t('side.allAgents')}</span>
+                      </button>`
+                    : null
+            }
         </div>
-        ${
-            searching.value
-                ? html`<div class="rsearch">
-                      <input
-                          class="inp"
-                          type="text"
-                          aria-label="${t('recent.search')}"
-                          placeholder="${t('recent.search')}"
-                          autocomplete="off"
-                          value="${text.value}"
-                          data-input="recent.type"
-                          data-escape="recent.close"
-                          ${argsOf()}
-                      />
-                  </div>`
-                : null
-        }
-        <nav class="list" aria-label="Conversations">
-            ${shown.map(rowView)}
+        ${header(t('side.chats'), null, newChat)}
+        <div class="list" role="group" aria-label="${t('side.chats')}">
+            ${chatsShown.map(rowView)} ${chatsEmpty}
             ${
                 more
                     ? html`<button class="item rmore" type="button" ${act('recent.more')}>
@@ -311,10 +414,6 @@ export function recentView(): Html {
                       </button>`
                     : null
             }
-        </nav>
-        ${
-            shown.length > 0
-                ? null
-                : html`<div class="rnone">${rows.length === 0 ? t('recent.none.chats') : t('recent.none.match')}</div>`
-        }`;
+        </div>
+    </nav>`;
 }

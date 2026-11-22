@@ -97,6 +97,11 @@ export interface Chat {
     campaignId: string | null;
     /** Whether it is the Feed, the person's main chat, which keeps its name and is never handed over. */
     main: boolean;
+    /**
+     * Present, and true, for an agent's conversation the desktop made with its campaign at a click on New GTM agent:
+     * while nothing is in it, it asks Start's question (`asksStart`).
+     */
+    madeAtClick?: true;
     /** The host the next turn runs on: a `DesktopHost.id`, or null when none that drives the chat was found. */
     host: string | null;
     /** The model the next turn names, as the host takes it; null for the host's own. */
@@ -239,6 +244,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         title: record.title,
         campaignId: record.campaignId,
         main: record.main === true,
+        ...(record.madeAtClick === true && record.campaignId !== null ? { madeAtClick: true as const } : {}),
         entries: record.entries.map(entryOf),
         reopened: record.entries.length,
         dropped: record.dropped,
@@ -249,6 +255,13 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         turnHost: chosen?.host ?? null,
     };
 }
+
+/**
+ * Whether the chat asks Start's question in its place: an agent's chat made at the click, with nothing in it yet, no
+ * turn running and no message waiting. Its first message is the person's first minute, as Start's is, inside the agent.
+ */
+export const asksStart = (chat: Chat): boolean =>
+    chat.madeAtClick === true && !chat.main && chat.entries.length === 0 && !chat.running && chat.waiting === null;
 
 /** What the plan card sends, as the person's message, once the chat is in Ask first. */
 export const planGo = 'Go ahead with the plan in your last answer.';

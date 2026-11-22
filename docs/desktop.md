@@ -100,7 +100,7 @@ campaign and nothing else: the commands, the API and the ids keep `campaign`, an
 runs commands is called the AI.
 
 The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
-its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
+its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
@@ -108,8 +108,29 @@ link is enough to start." where the AI host chosen for the chat can open a page;
 without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
-**Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New GTM agent** brings it forward. **New chat**, the button under it, makes a chat about no agent directly, and such
+**Take back** returns the words. Start opens every time the window opens, also when campaigns exist.
+
+Under Search, Needs you, the Feed and Accounts the sidebar holds two sections, **Agents** above **Chats**, each a
+header with a small plus at its right. **Agents** lists the agents that are not archived, each by the agent's name,
+with a dot for its state or amber while something waits on you, the number waiting and its age, the one active most
+recently first: by the later of its conversation's last turn and the agent's own last change, so an agent made anywhere,
+here, by an AI's turn or from the command line, comes on top. An agent with no conversation yet has its row too, and
+opening it opens its Chat, as the Agents page does. Its header keeps the filter (All, Needs you, Live, Paused, Draft):
+under All it shows the first ten, then **All agents**, which opens the Agents page; under any other entry it shows every
+agent the entry keeps. **Chats** lists the
+chats about no agent, the newest first, ten at a time with **Load more**, each its title and age. A conversation is in
+one section alone: a set-up chat that became an agent's conversation is in **Agents**, as that agent. Each row shows a
+**⋯** button on hover and on focus that opens the row's menu, as a right-click and Shift+F10 do. **Search** finds agents
+and chats by their names; neither section has a search box of its own.
+
+The plus over **Agents** (**New agent**) makes the agent at the click: a draft in the default project named "New agent 3",
+one more than the highest number such a name carries, archived agents included, and its conversation, kept from that
+moment so its row comes at the top of **Agents**, marked, and survives a restart. Its place opens on its Chat, which asks Start's question about it, "Who
+should New agent 3 reach?", with Start's box, its menus, the AI card where no AI is connected, and the chips; the first
+message goes in that agent's own conversation. A draft with no brief and no one in it offers no Start yet. A click that
+made no agent says why in the sidebar, "Jason is not running. Start it, then try again." or "Jason could not make the
+agent: …", with **Try again**, which repeats the same click, so a click makes one agent at most. The Dashboard's,
+Search's and Needs you's New GTM agent do the same. **New chat**, the plus over **Chats**, makes a chat about no agent directly, as Ctrl+N (⌘N) does, and such
 a chat says so on a line at its top, "Chat · no agent", from before its first message; an agent's chat is named by the
 agent's header instead, and the Feed by its own.
 
@@ -164,10 +185,10 @@ agent's header instead, and the Feed by its own.
   ends while a tab may no longer send to its chat; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
-- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under
-  **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds every page, agent, chat and
+- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials:
+  **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds every page, agent, chat and
   person; **Needs you**, with the number of approvals and questions waiting; the **Feed** under it; **Accounts**, where
-  an account is connected; the other conversations under **Recent**; and **Settings** alone at the foot. The pages it
+  an account is connected; the two sections **Agents** and **Chats**, as the Demo draws them; and **Settings** alone at the foot. The pages it
   does not draw keep their addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
   System holds. **Back**, at the left of Settings' head, and the Escape key, where no field, menu or dialog is using
@@ -759,13 +780,22 @@ Explorer** on Windows, **Open in Finder** on macOS, **Open in File manager** on 
 Code in terminal** or **Open Codex in terminal**: a new session of that host in a terminal at the agent's folder, by the
 same `jason session open` as Open in's own entry for it, the host the agent's chat runs on where it is found here, else
 Claude Code, else Codex; it is not there where neither is found, nor in the demo, nor in a tab, and opening it leaves
-Open in's default as it was. The menu on the agent's row under **Recent** holds the two right after **Open**, then
-**Rename conversation**, **Start conversation fresh**, which begins the agent's next turn without its memory of the
-conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
+Open in's default as it was. The menu on the agent's row under **Agents** holds the two right after **Open**, then
+**Rename**, which renames the agent itself in its row (below), **Start conversation fresh**, which begins the agent's
+next turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
 computer after one question, saying that the agent stays as it is and, for a conversation with a folder of its own, that
 the folder is kept seven days and where, that on Windows a program that has it open keeps it where it is until a later
 start of Jason Desktop moves it, and that on macOS and Linux a terminal open in it follows it there; the host keeps its
 own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
+
+**Rename** in an agent's row menu, and **Rename conversation** in a chat's under **Chats**, make the row's name a field
+in place, with no chat shown.
+Enter keeps the name; Escape, or the focus leaving the field, keeps nothing; an unchanged name is kept with nothing
+asked. Once Enter has sent a name, the field waits for the answer: Escape and the focus leaving it close nothing until
+the name is kept or refused, or for thirty seconds at most: then the field says that Jason did not answer, and a name
+kept after that still shows. An agent's row renames the agent, through `campaign.update`, as you: the row, the agent's header and the Agents
+page show the new name at once, and the agent's folder stays where it is. A chat's row renames its conversation, cut at
+sixty characters, as the chat's own Rename does. A name refused is said under the field, which keeps what you typed.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,

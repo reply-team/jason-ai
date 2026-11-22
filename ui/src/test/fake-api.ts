@@ -1,4 +1,5 @@
 import { ApiError, Unpaired, type Api } from '../api/client';
+import type { ErrorEnvelope } from '../api/types';
 import { fixtures, type FixtureName } from './fixtures';
 
 type Call = { operation: string; body: object; kind: 'read' | 'write' };
@@ -130,8 +131,8 @@ export class FakeApi implements Api {
         const exchange = fixtures[name];
         if (exchange.status === 401) throw new Unpaired();
         if (exchange.status >= 400) {
-            const { error } = exchange.response as { error: { code: string; message: string; retryable: boolean } };
-            throw new ApiError(error.code, error.message, error.retryable, exchange.status);
+            const { error } = exchange.response as ErrorEnvelope;
+            throw new ApiError(error.code, error.message, error.retryable, exchange.status, error.details);
         }
         return exchange.response as T;
     }

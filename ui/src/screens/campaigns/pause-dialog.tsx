@@ -19,7 +19,7 @@ export { transitions, verbs, type Transition } from './moves-model';
  * provider's pins where the caller has read them. Without the pins, the Pause dialog reads the campaign before it says
  * what pausing does.
  */
-export type Movable = CampaignSummary & { external_ids?: ExternalId[] };
+export type Movable = CampaignSummary & { external_ids?: ExternalId[]; context?: Record<string, unknown> };
 
 type Props = { campaign: Movable; kind: Transition; onDone: () => void; onClose: () => void };
 

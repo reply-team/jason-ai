@@ -257,6 +257,24 @@ test('a set-up chat is named once after its first turn ended well, by Claude Cod
     assert.equal(r.namings().length, 1);
 });
 
+test('an agent made at the click keeps "New agent N", its campaign\'s and its conversation\'s, past a first message and a restart', async (t) => {
+    const r = rig(t, { account: 'ada' });
+    // A name is offered, so a naming run that ran would be seen taking it.
+    naming(r, { say: 'Dentist outreach plan' });
+    const made = await r.chat.createAgent('0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10');
+    assert.equal(made.campaign.name, 'New agent 1');
+    await r.turn(made.conversation.id, 'Heads of finance at Polish SaaS firms', { host: 'claude' });
+    await r.chat.idle();
+    assert.deepEqual(r.namings(), [], 'no naming run for the agent\'s conversation');
+    assert.equal(titleOf(r, made.conversation.id), 'New agent 1');
+    const after = r.again();
+    assert.equal(after.list().find((each) => each.id === made.conversation.id)?.title, 'New agent 1');
+    assert.equal(keptOf(r, made.conversation.id)?.title, 'New agent 1');
+    const campaigns = JSON.parse(readFileSync(r.campaigns, 'utf8')) as { id: string; name: string }[];
+    assert.deepEqual(campaigns.map((each) => [each.id, each.name]), [[made.campaign.id, 'New agent 1']]);
+    assert.ok(r.jason().every((asked) => !asked.startsWith('campaign update')), 'the runtime is never asked to rename the campaign');
+});
+
 test('the naming run offers Haiku no effort below the version that makes it take one', async (t) => {
     const version = versionFile(t, '2.1.292');
     const r = rig(t, {}, {}, { STUB_CLAUDE_VERSION_FILE: version });

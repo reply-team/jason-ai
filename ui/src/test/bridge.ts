@@ -14,6 +14,7 @@ const table = new Set([
     'chat.list',
     'chat.open',
     'chat.create',
+    'chat.createAgent',
     'chat.send',
     'chat.stop',
     'chat.rename',

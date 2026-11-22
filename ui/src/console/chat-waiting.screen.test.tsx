@@ -24,6 +24,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { chats, conversations } from './state';
 import { READ_LIMIT_MS, forgetWaiting } from './waiting';
+import { sideRow } from '../test/side-rows';
 
 // An agent's chat draws, under its conversation, the campaign's approvals and questions that wait on a person: read
 // with `approval.list` and `decision.list` of that campaign, decided through the calls Needs you makes, and gone once
@@ -120,14 +121,12 @@ function renderConsole(
     return { fake, desktop, journal };
 }
 
-const listed = () =>
-    within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', { name: 'Conversations' });
-
 /** Opens a kept chat from the sidebar, as a person does, and returns its pane. */
 async function openChat(title: 'Spring' | 'Summer'): Promise<HTMLElement> {
     // The sidebar is painted afresh as the desktop lists its conversations: the row is pressed until the chat is shown.
     await waitFor(() => {
-        fireEvent.click(within(listed()).getByRole('button', { name: title }));
+        // Summer's row shows its agent's name.
+        fireEvent.click(sideRow(title === 'Spring' ? 'Spring' : 'Summer referrals', 'agents'));
         expect(shown()).toBe(`chat:${title === 'Spring' ? spring : summer}`);
     });
     return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;

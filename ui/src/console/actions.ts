@@ -2,7 +2,8 @@ import { html, type Html } from './html';
 
 // The runtime's CSP allows no inline handler, so the console's markup names what a control does instead:
 // `data-action` for a click, `data-submit` on a form, `data-change` and `data-input` on a field, and `data-enter` on a
-// text box that sends with Enter, `data-escape` on a text box that Escape closes, and `data-menu` on a control whose own
+// text box that sends with Enter, `data-escape` on a text box that Escape closes, `data-blur` on a field whose losing the
+// focus closes it, and `data-menu` on a control whose own
 // menu opens on a right-click, Shift+F10 or the menu key, which there alone the page takes from the system. Each names an
 // entry of one closed table of the console's own functions, and its arguments travel in `data-args` as a JSON literal,
 // parsed and never evaluated.
@@ -88,6 +89,14 @@ export function listen(root: HTMLElement): () => void {
         const element = closest(event, 'data-menu', root);
         if (element && run(element.dataset['menu'], element, event)) event.preventDefault();
     };
+    const focusout = (event: Event) => {
+        const element = closest(event, 'data-blur', root);
+        if (!element) return;
+        // The focus moving inside the element is no loss of it.
+        if (event instanceof FocusEvent && event.relatedTarget instanceof Node && element.contains(event.relatedTarget))
+            return;
+        run(element.dataset['blur'], element, event);
+    };
     const keydown = (event: Event) => {
         if (!(event instanceof KeyboardEvent) || event.isComposing) return;
         if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
@@ -110,6 +119,7 @@ export function listen(root: HTMLElement): () => void {
         ['change', change],
         ['input', input],
         ['keydown', keydown],
+        ['focusout', focusout],
         ['contextmenu', contextmenu],
     ];
     for (const [kind, listener] of listeners) root.addEventListener(kind, listener);

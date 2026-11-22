@@ -1,4 +1,4 @@
-// Pure: what Needs you lists, under which filter and agent, and the one count the sidebar, the dashboard and Recent
+// Pure: what Needs you lists, under which filter and agent, and the one count the sidebar, the dashboard and Agents
 // show. Every approval and question comes from the runtime's two lists as they were read, filtered only on fields the
 // runtime wrote; a chat that waits comes from the conversations the desktop keeps, once they have been read. Nothing
 // here reads, keeps or draws anything.
@@ -120,7 +120,7 @@ export const countOf = (input: NeedsInput, filter: NeedsFilter, agent: string | 
 
 /**
  * The one count of what waits on a person: what Needs you's All holds, for every agent or for one. The sidebar, the
- * dashboard and each row of Recent show it; nothing else counts what waits.
+ * dashboard and each row of Agents show it; nothing else counts what waits.
  */
 export const needsCount = (input: NeedsInput, agent: string | null = null): Count => countOf(input, 'all', agent);
 
