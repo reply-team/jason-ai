@@ -844,4 +844,10 @@ or other skills, and guessing at them here would be worse than saying so.
 A check-in is the launched manager's, and a session neither runs one nor does its work. A session that keeps a
 campaign moving asks the person and commits what they decide, as above, and `approvals-and-questions` and
 `troubleshooting-jason` cover what is waiting and what stopped. Where a campaign seems to stand, say what you read and
-that its manager is the one to look again; do not fill the gap with work of your own.
+that its manager is the one to look again; do not fill the gap with work of your own. On the person's word, ask its
+manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open
+(`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).
+
+```
+jason campaign review cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --depth deep --actor human:ada --reason 'the person asked for a look now'
+```

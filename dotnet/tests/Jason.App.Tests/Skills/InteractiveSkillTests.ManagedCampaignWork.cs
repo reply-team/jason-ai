@@ -1165,6 +1165,25 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// A session neither runs a check-in nor does its work, and where a campaign seems to stand, the person may still have
+    /// its manager look now: the session asks for a review on their word, a quick look or a deep one, and knows the two
+    /// refusals it will meet, a review already open and the manager's launches of the day spent.
+    /// </summary>
+    [Fact]
+    public void A_session_asks_the_manager_to_look_now_on_the_person_s_word()
+    {
+        var skill = Flattened("managed-campaign-work");
+        Assert.Contains(
+            "On the person's word, ask its manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).",
+            skill,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("managed-campaign-work").File)),
+            line => line.StartsWith("jason campaign review cmp_", StringComparison.Ordinal) && line.Contains(" --depth deep", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The first batch is twenty, said as a fact in the question and asked about nowhere; a number the person names is
     /// recorded where the roles read it, the campaign's context, under one key.
     /// </summary>
