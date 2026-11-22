@@ -374,6 +374,36 @@ describe('New GTM agent with no AI connected, while the click is made or a chip 
     });
 });
 
+describe('A message Start holds, when the click makes no agent', () => {
+    it.each(['refused', 'thrown'] as const)(
+        'is back on Start once, and nowhere else, when the create is %s',
+        async (how) => {
+            const { desktop } = await renderAt('window', api(), noHost);
+            const start = await waitFor(() => document.querySelector<HTMLFormElement>('form[aria-label="Start"]')!);
+            const startBox = within(start).getByRole<HTMLTextAreaElement>('textbox');
+            fireEvent.change(startBox, { target: { value: 'Founders of seed-stage fintechs' } });
+            fireEvent.keyDown(startBox, { key: 'Enter' });
+            await waitFor(() => expect(startWaiting.value).toBe('Founders of seed-stage fintechs'));
+            if (how === 'refused')
+                desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
+            else desktop.chat.createAgent = () => Promise.reject(new Error('The desktop could not be reached.'));
+            click();
+            await waitFor(() => side().getByRole('alert'));
+            expect(startWaiting.value).toBe('Founders of seed-stage fintechs');
+            expect(openingWaiting.value).toEqual({});
+            expect(Object.values(chats.value).filter((each) => each.entries.length > 0 || each.draft !== '')).toEqual(
+                [],
+            );
+            expect(desktop.calls.some((each) => each.name === 'chat.create' || each.name === 'chat.send')).toBe(false);
+            // Once: Start's note holds it, and its box is not given it a second time.
+            const notes = [...document.querySelectorAll('.start-waiting')].filter((each) =>
+                each.textContent?.includes('Founders of seed-stage fintechs'),
+            );
+            expect(notes).toHaveLength(1);
+        },
+    );
+});
+
 describe('The bar’s rule in its other places, on the recorded draft', () => {
     it('offers no Start in Recent’s row menu', async () => {
         await renderAt('window');

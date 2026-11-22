@@ -1601,14 +1601,16 @@ export function ChatNotes({ chat }: { chat: Chat }) {
  * the agent page's own control with its own confirmation. The dialog is the browser shell's, so it is drawn inside that
  * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
  */
-function AgentInBar({ campaignId }: { campaignId: string }) {
+function AgentInBar({ campaignId, running }: { campaignId: string; running: boolean }) {
     const api = useApi();
     const listed = campaigns.value.find((each) => each.id === campaignId);
-    // A draft's brief is read where no header read it, so the bar knows whether its Start is held (`startHeld`).
-    const unread = listed?.status === 'draft' && agentFacts.value[campaignId] === undefined;
+    // A draft's brief is read where no header reads it, so the bar knows whether its Start is held (`startHeld`): when
+    // the bar is drawn, once each of the chat's turns ends, which may have written the brief, and whenever the list of
+    // agents is read again, as the journal's lines have it. No read stands as final.
+    const draft = listed?.status === 'draft';
     useEffect(() => {
-        if (unread) void readAgent(api, campaignId);
-    }, [api, campaignId, unread]);
+        if (draft && !running) void readAgent(api, campaignId);
+    }, [api, campaignId, draft, running, listed]);
     // An archived campaign is over: it has no move, and its chat says nothing of a state.
     if (!listed || listed.status === 'archived') return null;
     // Its brief as its header read it, where it did, so a draft with none and no one in it offers no Start yet.
@@ -1691,11 +1693,13 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     // The opening's box and the chat's are two boxes: once the first message ends the opening, the chat's box takes the
     // focus the opening's had.
     const openingNow = record !== undefined && asksStart(record);
-    const wasOpening = useRef(false);
+    // Only the same chat's opening ending moves the focus: a panel shown for another chat starts over.
+    const wasOpening = useRef<{ chatId: string; opening: boolean } | null>(null);
     useEffect(() => {
-        if (wasOpening.current && !openingNow) messageBox.current?.focus();
-        wasOpening.current = openingNow;
-    }, [openingNow]);
+        const was = wasOpening.current;
+        if (was !== null && was.chatId === chatId && was.opening && !openingNow) messageBox.current?.focus();
+        wasOpening.current = { chatId, opening: openingNow };
+    }, [chatId, openingNow]);
     // The rename box takes focus with its name selected, so typing replaces it; once it closes, by Save, Cancel or
     // Escape, focus goes back to Rename.
     useEffect(() => {
@@ -2114,7 +2118,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         <BarMark name="remove" />
                     </button>
                 )}
-                {chat.campaignId !== null && !chat.main && !underHead && <AgentInBar campaignId={chat.campaignId} />}
+                {chat.campaignId !== null && !chat.main && !underHead && (
+                    <AgentInBar campaignId={chat.campaignId} running={chat.running} />
+                )}
             </div>
             {chat.removing && (
                 <div
