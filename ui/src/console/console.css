@@ -2499,7 +2499,7 @@ body,
 }
 /* The plus of a section header: a 20px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
    the plus in the accent's text colour (6.4:1 on the tint in light, 6.9:1 in dark).
-   The plus drawn in its icon box is about 9px, 16px box. */
+   The icon box is 22px, so the drawn cross (14/24 of it) is about 13px; the box overflows the 18px inside, the cross does not. */
 .jc-console .rbtn.plus {
     box-sizing: border-box;
     width: 20px;
@@ -2521,8 +2521,9 @@ body,
     }
 }
 .jc-console .rbtn.plus svg {
-    width: 16px;
-    height: 16px;
+    flex: none;
+    width: 22px;
+    height: 22px;
 }
 .jc-console .rbtn.plus:hover {
     background: color-mix(in srgb, var(--accent) 26%, var(--side-bg));
