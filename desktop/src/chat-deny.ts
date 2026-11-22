@@ -227,9 +227,10 @@ export const askingCardedForms: readonly CardedForm[] = [
 export const cliCommandTree: readonly string[] = [
     'approval approve', 'approval get', 'approval list', 'approval list-standing', 'approval reject', 'approval set-standing',
     'approval unset-standing', 'audience availability', 'audience filter-values', 'audience preview', 'block clear', 'block get', 'block list',
-    'campaign activity', 'campaign activity-by-period', 'campaign add-contacts', 'campaign archive', 'campaign audience', 'campaign create',
-    'campaign get', 'campaign list', 'campaign list-contacts', 'campaign pause', 'campaign remove-contacts', 'campaign set-send-mode',
-    'campaign start', 'campaign summary', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
+    'campaign activity', 'campaign activity-by-period', 'campaign add-contacts', 'campaign archive', 'campaign audience',
+    'campaign continue-contacts', 'campaign create', 'campaign finish-contacts', 'campaign get', 'campaign list', 'campaign list-contacts',
+    'campaign pause', 'campaign remove-contacts', 'campaign reopen-contacts', 'campaign set-send-mode', 'campaign start', 'campaign summary',
+    'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
     'contact list', 'contact thread', 'contact threads', 'contact update', 'decision answer', 'decision get', 'decision list', 'decision raise',
     'doctor', 'events backfill', 'events signal', 'events sources', 'export', 'import', 'install', 'journal append', 'journal kinds', 'journal list',
     'journal watch', 'launches lift', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
@@ -268,8 +269,8 @@ export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
  * gains such an option is red there until it is named here.
  */
 export const requestFileVerbs: readonly string[] = [
-    'campaign add-contacts', 'campaign archive', 'campaign create', 'campaign pause', 'campaign remove-contacts', 'campaign start', 'campaign update',
-    'campaign update-context', 'contact archive', 'contact create', 'contact update', 'journal append', 'preference set', 'profile create',
+    'campaign add-contacts', 'campaign archive', 'campaign continue-contacts', 'campaign create', 'campaign finish-contacts', 'campaign pause',
+    'campaign remove-contacts', 'campaign reopen-contacts', 'campaign start', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact update', 'journal append', 'preference set', 'profile create',
     'profile update', 'project create', 'project update', 'report submit', 'role add', 'rolenote set', 'workitem cancel', 'workitem complete',
     'workitem create', 'workitem resume', 'workitem set-result', 'workitem update',
 ];

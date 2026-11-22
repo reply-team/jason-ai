@@ -2,9 +2,11 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Api;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -14,6 +16,11 @@ public static class CampaignModule
     public static IServiceCollection AddCampaignModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // A campaign going live reads the deep review's interval from the manager's section, so the seam is stated here
+        // as well as beside the loop: whichever module comes first registers it, and a composition without the dispatcher
+        // still reads the installation's setting rather than the shipped default.
+        services.TryAddSingleton(DispatcherModule.Seam<ManagerOptions>(ManagerOptions.Section));
         return services.AddScoped<CampaignService>().AddScoped<CampaignNumbers>().AddScoped<CampaignAudienceView>().AddScoped<JournalService>();
     }
 

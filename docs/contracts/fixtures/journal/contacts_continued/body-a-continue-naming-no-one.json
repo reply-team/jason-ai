@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_continued",
+  "version": 1,
+  "case": "a continue that leaves out the people it enrolled again",
+  "body": { "key": null, "old": null, "new": { "continued": 1, "not_paused": 0, "not_member": 0, "excluded": 0, "rejected": 0 } },
+  "expect": { "invalid": [{ "pointer": "/new/contact_ids", "reason": "required" }] }
+}

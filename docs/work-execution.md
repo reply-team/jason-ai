@@ -817,6 +817,33 @@ without that time left out. `jason workitem count` takes the same filters and an
 return, without paging through them. `--block blk_…` (`provider_block_id`) keeps the items a provider block holds: those
 whose open wait names it (§Provider blocks).
 
+## A person's line in a campaign
+
+A membership's `state` is where the line with that person in that campaign stands. `enrolled` is a line that goes on.
+`excluded` is a person removed (`campaign.remove_contacts`), with every piece of their open work there cancelled.
+`finished` is a line that was ended: the claim refuses every touch to the person in that campaign, `line_finished`
+(below), while a reply in a thread the person opened, a take-back of a send and every read go on, and the line stays
+ended until it is reopened. `paused` is a person held: nothing in this version holds one, and a held person's touches
+are not refused by the claim.
+
+Three acts move a line, one operation each, and each takes `campaign_id` and `contact_ids` (at most 1000), answers one
+result per item in the order asked, as `campaign.remove_contacts` does, and writes one reserved line for the request:
+
+- **`campaign.finish_contacts`** (`jason campaign finish-contacts`) ends the line with an `enrolled` or `paused` member:
+  the membership becomes `finished`, and in the same save the person's open touches in that campaign — the operations
+  whose document says `touch: true` — are cancelled, while their responder, its `conversation.get`, a
+  `conversation.reply`, a `message.cancel` and every other item are left to run. Any named actor may end a line, a role
+  from its run among them, and the `reason` is required (`validation_failed`, `required` on `reason`). The line is
+  `contacts_finished`, with the people whose line it ended and the reason.
+- **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose held
+  touches are candidates again by that alone; any named actor may. The line is `contacts_continued`.
+- **`campaign.reopen_contacts`** (`jason campaign reopen-contacts`) enrols a `finished` member again. It is the person's
+  decision, carried one of two ways: their own word, from a named `human` outside any run, or a run that names, in
+  `decision_id`, the campaign's question a named person answered about the `contacts_finished` line that ended those
+  lines, a person that line does not name answered `not_in_decision`. The runtime never reads the answer's words, so
+  the manager reopens only on an answer that says yes. The line is `contacts_reopened`, with the question where a run
+  carried it. Touches counted before the line ended stay counted: the ceiling counts work items, never a state.
+
 ## A campaign's people, counted
 
 `jason campaign summary` (`campaign.summary`) answers, for each campaign named or every campaign not archived, in every
@@ -1630,6 +1657,8 @@ mistyped one.
 | `Dispatcher:ProviderOp:TimeoutSeconds` | `600` | 30..86400 | the budget of one `provider_op` attempt; never below the slowest published operation's `timeout_ms` plus `Plugins:Invoker:KillGraceMs` |
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
+| `Manager:ReviewSeconds` | `21600` | 300..604800 | how long after a campaign's last review of any kind, with nothing happened, its manager is given a quick look, unless the campaign names its own pace ([docs/campaign-manager.md](campaign-manager.md) §4) |
+| `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the interval of a campaign's deep review grid, started at every going live and moved only by a deep review; the installation's only, no campaign carries its own ([docs/campaign-manager.md](campaign-manager.md) §4) |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 | `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
 | `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the reads of sends a bounce asks for sit one below it, and the inbound read's `conversation.list` items ten above it |

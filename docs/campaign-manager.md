@@ -133,19 +133,21 @@ asked about is something that happened afterwards.
 
 Work that simply sits there produces no line at all, so silence needs a clock.
 
-`Manager:ReviewSeconds` is how often an active campaign is reviewed when nothing has happened to it —
-five hours by default, and between five minutes and a week. A campaign may carry its own pace within
-the same bounds (`jason campaign update <id> --review-seconds 600`, and
-`--clear review_seconds` to put it back on the installation's). It is a field beside the campaign's
-execution profile rather than a key in its context, because the dispatcher reads it and the
+Two clocks keep it, and each gives a review of its own kind: a **quick look** often, and a **deep review** once a day.
+
+`Manager:ReviewSeconds` is the quick look's pace: how long after a campaign's last review of any kind, with nothing
+happened since, it is given a quick look — six hours by default, and between five minutes and a week. A campaign may
+carry its own pace within the same bounds (`jason campaign update <id> --review-seconds 600`, and
+`--clear review_seconds` to put it back on the installation's); `review_seconds` is always the quick look's pace. It is a
+field beside the campaign's execution profile rather than a key in its context, because the dispatcher reads it and the
 dispatcher must never read a context for meaning.
 
-**The cadence is measured from an anchor**, which is set when a campaign goes live — the first time
-and every later time — and moved every time the runtime creates a check-in. So:
+**The quick look is measured from an anchor**, which is set when a campaign goes live — the first time
+and every later time — and moved every time the runtime creates a check-in of any kind, the deep review included. So:
 
 - going live summons a review of its own, by its `campaign_started` line (§2), and the check-in it
   creates moves the anchor, so a campaign paused for a week and started again is reviewed when it wakes
-  and its next scheduled review comes a full interval after that one: the week it spent stopped is not
+  and its next quick look comes a full interval after that one: the week it spent stopped is not
   a week nobody looked at it;
 - a review that failed does not stop the loop, because the anchor moved when the check-in was
   **created**, not when it finished;
@@ -153,10 +155,49 @@ and every later time — and moved every time the runtime creates a check-in. So
   "not this one", not "sooner".
 - a campaign that has never been live has no anchor, and is never due rather than due at once.
 
+**The deep review keeps a daily grid**, the campaign's `deep_review_due_at` (read-only in `campaign get`, and printed by
+`campaign get --human`). `Manager:DeepReviewSeconds` is the grid's interval: a day by default, between five minutes and a
+week, and the installation's alone — no campaign carries its own, and no verb writes it; a shorter one is for reaching a
+deep review in minutes on a real machine. So:
+
+- going live writes the grid, the first time and at every resume, to that moment plus the interval in force then: the
+  grid starts from the start, and after a resume it starts again, so the days a campaign stood paused are not deep
+  reviews it owes;
+- a deep review, and nothing else, moves the grid on by whole intervals to its first moment after the review was
+  created: a runtime that was down for three days runs one deep review, not three, and comes back onto the grid it
+  started from;
+- a quick look or a triggered review never moves the grid;
+- a paused campaign is never summoned, and its grid is written again when it resumes;
+- an installation upgrading into this version gives every campaign already active a grid one day after the upgrade,
+  since an upgrade reads no settings, and every other campaign none: no live campaign is due a deep review at once.
+
+**Which review runs.** For a campaign with no check-in open — a check-in held at the manager's daily limit counts as
+open — the summon decides over kinds, identifiers and these two columns:
+
+1. the deep review is due (its grid moment is now or past): a deep review, even when the chronicle read a cause. It
+   carries that cause in its brief as a triggered review would, `trigger` and `cause` with `review_intent: "triggered"`,
+   and consumes the lines it read; with no cause it is `review_intent: "scheduled"`;
+2. otherwise a cause read: the review of that cause (§2, §5);
+3. otherwise the quick look is due: a quick look.
+
+Where both clocks are due, the deep review runs instead of the quick look, and it moves the quick anchor as every review
+does, so a day at the defaults is three quick looks and one deep review. A deep review that falls due while a check-in
+is open or held runs at the first scan after that check-in ends.
+
 **What a cadence costs.** One launch per active campaign per interval, on the operator's own agent
-host and their own plan. Ten active campaigns at the default are about fifty launches a day; at the
-floor of five minutes they are nearly three thousand. The floor exists because the number is easy to
-type and the bill is somebody's. A start adds at most one review per going live, a resume included. While that review
+host and their own plan: a quick look per `Manager:ReviewSeconds` since the last review, and a deep review per
+`Manager:DeepReviewSeconds`, which takes the place of the quick look that would have fallen on it. Ten active campaigns
+at the defaults are about forty launches a day; with the quick look at the floor of five minutes they are nearly three
+thousand. The floor exists because the number is easy to type and the bill is somebody's. Launches a day, before any
+review a cause summons:
+
+| pace | quick looks a day | deep reviews a day | one campaign | ten campaigns |
+|---|---|---|---|---|
+| the defaults, 21600 and 86400 | 3 | 1 | 4 | 40 |
+| the quick look at the floor, 300 | 287 | 1 | 288 | 2880 |
+| the deep review at the floor, 300 | 0 | 288 | 288 | 2880 |
+
+A start adds at most one review per going live, a resume included. While that review
 runs, the campaign's other work waits behind it, as it waits behind any item of the campaign that runs (a campaign has
 one item in flight at a time): work queued or approved meanwhile moves when the review ends, at the latest at the first
 scan after its budget, `Manager:TimeoutSeconds`, runs out.
@@ -187,7 +228,8 @@ The runtime writes the brief, and the brief is identifiers and constants:
 }
 ```
 
-A scheduled review carries `review_intent: "scheduled"` and names no trigger and no cause. Everything
+A scheduled review — a quick look, or a deep review with no cause — carries `review_intent: "scheduled"` and names no
+trigger and no cause; a deep review that read a cause carries it as above. Everything
 else a review needs, it reads for itself through the CLI — the campaign, its work, its chronicle, its
 contacts, and the role note that is the manager's own memory of this campaign.
 
@@ -196,15 +238,18 @@ starts from — chosen from what caused it:
 
 | the summon has | entry |
 |---|---|
+| the deep review is due, whatever cause was read and whether or not the quick look is due | `deep_review` |
 | cause `campaign_started`, and the cause line is the campaign's first such line by id | `start` |
 | cause `campaign_started`, and the cause line is any later such line | `resume` |
 | cause `inbound_reply_observed` | `inbound_reply` |
 | a cause of any other kind | none: the general text |
-| no cause, and the scheduled review is due | `quick_look` |
+| no cause, and the quick look is due | `quick_look` |
 
-The choice reads the cause's kind, one comparison of identifiers — whether the cause line is the smallest journal id
-among the campaign's `campaign_started` lines — and whether the review was due. It reads no line's `old`, `new`, `key`
-or reason, so a start after a pause is told from a first start without reading either. A cause wins over the cadence.
+The first row wins over every row after it, and each later row is read with the deep review not due. The choice reads
+the cause's kind, one comparison of identifiers — whether the cause line is the smallest journal id among the campaign's
+`campaign_started` lines — and whether each clock was due. It reads no line's `old`, `new`, `key` or reason, so a start
+after a pause is told from a first start without reading either. The deep review wins over a cause, and a cause wins
+over the quick look.
 The entry is not a key of the brief: the work item carries it (`entry` in `workitem.get`), and the launch envelope
 carries it as `entry: {name, text}`, where `text` is the file `entries/<name>.md` of the manager's folder, whole
 ([work execution](work-execution.md), "The launch envelope"). A check-in with no entry has `entry: null` there, and is
@@ -304,6 +349,10 @@ check-in. One live attempt may raise more than one question — nothing forbids 
 time is what the manager's skill teaches, because a person who opens ten questions from one review answers
 none of them.
 
+The manager ends a person's line with a reason (`jason campaign finish-contacts`, which cancels their open touches in
+the campaign), and reopens an ended line only on the person's answered question, naming it with `--decision`
+(`jason campaign reopen-contacts`; [docs/work-execution.md](work-execution.md), "A person's line in a campaign").
+
 ### What retires one
 
 A question is answered once. **Archiving a campaign cancels its open questions** in the same transaction,
@@ -379,7 +428,8 @@ of an attempt that ran on somebody's profile could have run on another without a
 | Setting | Default | Range | What it does |
 |---|---|---|---|
 | `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held`, `campaign_started` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
-| `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
+| `Manager:ReviewSeconds` | `21600` | 300..604800 | the quick look's pace, counted from the last review of any kind, unless a campaign names its own |
+| `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the deep review's grid: its first moment that long after a campaign goes live, and each deep review moves it on by whole intervals; the installation's only |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
 | `Manager:Priority` | `0` | -1000..1000 | where a check-in sits in the queue |

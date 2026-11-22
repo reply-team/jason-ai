@@ -118,6 +118,7 @@ public sealed class SettingsAllowlist
         new("Dispatcher:ProviderOp:HeartbeatSeconds", Kind.Integer32),
         new("Dispatcher:ProviderOp:MaxAttempts", Kind.Integer32),
         new("Manager:ReviewSeconds", Kind.Integer32),
+        new("Manager:DeepReviewSeconds", Kind.Integer32),
         new("Manager:TimeoutSeconds", Kind.Integer32),
         new("Manager:MaxAttempts", Kind.Integer32),
         new("Manager:Priority", Kind.Integer32),

@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_continued",
+  "version": 1,
+  "case": "a held person continues and an enrolled one was not held",
+  "body": { "key": null, "old": null, "new": { "continued": 1, "not_paused": 1, "not_member": 0, "excluded": 0, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000002"] } },
+  "expect": "valid"
+}

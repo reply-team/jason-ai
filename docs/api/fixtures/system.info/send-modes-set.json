@@ -55,7 +55,8 @@
         "20261116022841_ProviderSends",
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
-        "20261122065647_LaunchLimitLifts"
+        "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -101,7 +102,8 @@
         "20261116022841_ProviderSends",
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
-        "20261122065647_LaunchLimitLifts"
+        "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid"
       ],
       "backup_file": null
     },
@@ -173,7 +175,7 @@
         "id": "journal-forwarder",
         "state": "not_installed",
         "released": {
-          "version": "1.7.0",
+          "version": "1.8.0",
           "digest": "sha256:recorded-1"
         },
         "installed": null

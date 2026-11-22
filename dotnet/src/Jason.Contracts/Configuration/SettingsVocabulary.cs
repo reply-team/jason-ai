@@ -37,7 +37,7 @@ public static class SettingsVocabulary
         "Blocks", "TrialSeconds",
 
         // Manager.
-        "Triggers", "ReviewSeconds", "Priority", "MaxEntriesPerScan",
+        "Triggers", "ReviewSeconds", "DeepReviewSeconds", "Priority", "MaxEntriesPerScan",
 
         // Roles.
         "DefaultExecutionProfile", "DefaultEntryCommand", "MaxStdoutBytes", "MaxSkillBytes",

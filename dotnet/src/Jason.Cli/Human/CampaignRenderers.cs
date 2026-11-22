@@ -46,6 +46,13 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
+        // The next moment of the deep review's grid, only while the campaign is active: a paused or archived campaign keeps the
+        // moment it had, and nothing runs at it.
+        if (campaign.Status == CampaignStatus.Active && campaign.DeepReviewDueAt is { } deep)
+        {
+            lines.Add(Line("Deep review:", RenderText.Moment(deep)));
+        }
+
         if (campaign.AudienceThreshold is { } threshold)
         {
             lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
@@ -262,6 +269,67 @@ public static class CampaignRenderers
         };
         lines.AddRange(result.Items
             .Where(item => item.Status == RemoveContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of ending lines, counted the way the API counts it.</summary>
+    public static string? FinishBatch(string json)
+    {
+        var result = RenderText.Read<FinishContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"finished {result.Summary.Finished}, already finished {result.Summary.AlreadyFinished}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == FinishContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of continuing held lines, counted the way the API counts it.</summary>
+    public static string? ContinueBatch(string json)
+    {
+        var result = RenderText.Read<ContinueContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"continued {result.Summary.Continued}, not paused {result.Summary.NotPaused}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == ContinueContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of reopening ended lines, counted the way the API counts it.</summary>
+    public static string? ReopenBatch(string json)
+    {
+        var result = RenderText.Read<ReopenContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"reopened {result.Summary.Reopened}, not finished {result.Summary.NotFinished}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, "
+                + $"not in the decision {result.Summary.NotInDecision}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == ReopenContactsItemStatus.Rejected)
             .Select(item => Rejected(item.Index, item.Error)));
 
         return RenderText.Lines(lines);
