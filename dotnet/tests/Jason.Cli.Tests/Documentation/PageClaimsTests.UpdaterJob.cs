@@ -1,4 +1,5 @@
 using Jason.Cli.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -13,6 +14,7 @@ public partial class PageClaimsTests
     /// refusal it relays carries the commands.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task The_pages_say_the_macOS_uninstall_takes_the_updaters_job_out_and_waits_for_an_update_being_installed()
     {
         using var dir = new TempPaths();

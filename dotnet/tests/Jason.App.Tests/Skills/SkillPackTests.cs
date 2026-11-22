@@ -16,6 +16,7 @@ public class SkillPackTests
     /// each other while each looked correct.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_skill_declares_itself_in_the_shape_the_pack_agreed()
     {
         var skills = SkillPack.All();
@@ -37,6 +38,7 @@ public class SkillPackTests
     /// installs, and an entry with no directory behind it is a broken link in the first file anybody opens.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_skill_is_in_the_catalog_and_every_catalog_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.Catalog());
@@ -76,6 +78,7 @@ public class SkillPackTests
     /// rewritten and was replaced with nothing.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void What_a_skill_says_about_itself_agrees_with_its_front_matter()
     {
         const string Draft = "**Status: draft.**";
@@ -108,6 +111,7 @@ public class SkillPackTests
     /// kind of wrong nobody notices because nobody re-reads it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_pages_that_pointed_at_a_revision_that_was_coming_point_at_it_now()
     {
         // 6.4 and 7.2 both said published runtime guidance "is being revised". It has been: this pack is it.
@@ -136,6 +140,7 @@ public class SkillPackTests
     /// be red at every push or would have to carry a commit sha.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_catalog_names_the_version_this_tree_carries()
     {
         var version = Jason.Contracts.Update.SemanticVersion.Current;
@@ -283,6 +288,7 @@ public class SkillPackTests
     /// been written.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("The orchestrator decides when the work runs.")]
     [InlineData("Keep a markdown workspace beside the campaign.")]
     [InlineData("Each task gets a work item file under the plan.")]
@@ -301,6 +307,7 @@ public class SkillPackTests
     /// this reason: an account may be a workspace, and a role's note is its own memory.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_detector_leaves_the_words_this_pack_really_uses_alone()
     {
         Assert.Empty(SupersededVocabulary.Find("--account names an identity - a mailbox, a workspace, a login."));
@@ -314,6 +321,7 @@ public class SkillPackTests
     /// thing the architecture explicitly superseded.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_skill_teaches_the_model_this_pack_replaces()
     {
         foreach (var skill in SkillPack.All())

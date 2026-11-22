@@ -1,6 +1,7 @@
 using Jason.Cli.Session;
 using Jason.Contracts.Api;
 using Jason.Contracts.Hosts;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Session;
 
@@ -30,6 +31,7 @@ public sealed class SetupBriefTests
     /// forms differ in the last line alone.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     public void The_brief_is_the_text_that_was_agreed()
     {
         const string Before =
@@ -54,6 +56,7 @@ public sealed class SetupBriefTests
 
     /// <summary>The two lines say what the session is for, and the core follows after one blank line.</summary>
     [Theory]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     [MemberData(nameof(Forms))]
     public void The_brief_is_the_two_lines_then_a_blank_line_then_the_core(string host, bool deployed)
     {
@@ -70,6 +73,7 @@ public sealed class SetupBriefTests
     /// counting the growth a quote or a backslash takes when the argument is escaped.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     [MemberData(nameof(Forms))]
     public void The_core_fits_any_launch_with_room_for_the_programs_and_the_folders(string host, bool deployed)
     {
@@ -81,6 +85,7 @@ public sealed class SetupBriefTests
 
     /// <summary>The skill the brief names is one the runtime pack holds, so the name leads somewhere.</summary>
     [Fact]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     public void The_brief_names_a_skill_the_runtime_pack_holds()
     {
         Assert.Contains($"The skill {SetupBrief.SkillName} teaches the rest of this job", SetupBrief.Core("claude_code", deployed: true), StringComparison.Ordinal);
@@ -89,6 +94,7 @@ public sealed class SetupBriefTests
 
     /// <summary>A first word that begins with a dash would be read by a host as an option rather than as its first message.</summary>
     [Theory]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     [MemberData(nameof(Forms))]
     public void The_brief_begins_with_nothing_a_host_reads_as_an_option(string host, bool deployed)
     {
@@ -100,6 +106,7 @@ public sealed class SetupBriefTests
     /// line is readable by every process of the account: no path, no home, no token.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     [MemberData(nameof(Forms))]
     public void The_brief_spells_no_path(string host, bool deployed)
     {
@@ -113,6 +120,7 @@ public sealed class SetupBriefTests
 
     /// <summary>The brief carries no backtick in either form: commands and names are written plain.</summary>
     [Theory]
+    [Critical(Family.D4, "the setup session's first message teaches what was not decided")]
     [MemberData(nameof(Forms))]
     public void The_brief_carries_no_backtick(string host, bool deployed)
     {

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Jason.Cli.Doctor;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -12,6 +13,7 @@ public partial class InteractiveSkillTests
     /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_a_draft_and_names_what_runs_in_a_paused_campaign()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -33,6 +35,7 @@ public partial class InteractiveSkillTests
     /// each of the three ways out, a raised limit among them with what it does not reach.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("**A budget hold is the claim's own wait, and no run stands behind it.**")]
     [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in a UTC day")]
     [InlineData("its `last_error` is `launches_spent`, whose message names the setting")]
@@ -49,6 +52,7 @@ public partial class InteractiveSkillTests
     /// where a chain stands, why it waits, what a failed chain left, and a rewind that needs a named person and an offset.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_installation_skills_teach_the_journal_kinds_and_the_subscription_verbs()
     {
         var operating = Flattened("operating-the-installation");
@@ -69,6 +73,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_honest_about_what_this_version_does_not_have()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -96,6 +101,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_collects_the_bundle_for_the_person_and_reads_the_logs_with_the_verb()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -165,6 +171,7 @@ public partial class InteractiveSkillTests
     /// submitted, so it goes to the support address only — the skill says so in the words the command prints.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_offers_the_issue_link_as_the_person_s_act_and_a_journal_file_to_support_only()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -199,6 +206,7 @@ public partial class InteractiveSkillTests
     /// the readings cannot explain, and nobody knows what that is before reading them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_makes_its_four_readings_binding_before_any_doctor()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -216,6 +224,7 @@ public partial class InteractiveSkillTests
     /// readings it refers to and before the three that stay advice.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_says_what_to_read_when_a_notification_brought_the_person()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -233,6 +242,7 @@ public partial class InteractiveSkillTests
     /// the person choosing between things they had not asked about, and wrote nothing they had.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_asks_one_question_after_the_dry_run_and_offers_nothing_else()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -248,6 +258,7 @@ public partial class InteractiveSkillTests
     /// the words a continuing conversation uses are there.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_chosen_by_the_words_a_continuing_conversation_uses()
     {
         Assert.Contains(
@@ -257,6 +268,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_transient_end_from_a_refusal_and_from_a_lost_answer()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -291,6 +303,7 @@ public partial class InteractiveSkillTests
     /// "the ten states"; a phrase such as "either of two states" counts nothing and is not held to it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_counts_its_states_the_way_its_headings_number_them()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -318,6 +331,7 @@ public partial class InteractiveSkillTests
     /// killed, so a session that read both skills is never told two different things.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_restart_repair_points_at_the_one_rule_for_a_stop()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -343,6 +357,7 @@ public partial class InteractiveSkillTests
     /// word, and the line printed for it names them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_waiting_item_apart_and_leaves_its_early_end_to_a_person()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -379,6 +394,7 @@ public partial class InteractiveSkillTests
     /// first, points at it, and the summary counts it among the ones nobody can fix where the work was asked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_capability_the_provider_does_not_offer_apart()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -405,6 +421,7 @@ public partial class InteractiveSkillTests
     /// reader to the operation's document, which says nothing of that object.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void State_seven_names_the_refusal_of_the_provider_object_and_its_repair()
     {
         var text = File.ReadAllText(SkillPack.Find("troubleshooting-jason").File).ReplaceLineEndings("\n");
@@ -435,6 +452,7 @@ public partial class InteractiveSkillTests
     /// once, where the states are told apart, and state 8 says how such a refusal looks.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_reads_a_refusal_recorded_ambiguous_as_an_interrupted_attempt_first()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -477,6 +495,7 @@ public partial class InteractiveSkillTests
     /// block on its own judgement would be saying the cause is gone when nobody had looked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_reads_a_park_on_a_block_and_leaves_its_repair_to_the_person()
     {
         var skill = Flattened("troubleshooting-jason");

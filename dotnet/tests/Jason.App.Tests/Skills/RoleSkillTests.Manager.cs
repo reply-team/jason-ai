@@ -1,9 +1,12 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     /// <summary>The catalog says what the manager now reads in a noticed reply or provider-event line, so a reader choosing a role learns it before opening the file.</summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_catalog_says_that_the_manager_reads_what_a_noticed_reply_asks_and_whose_thread_it_is()
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
@@ -21,6 +24,7 @@ public partial class RoleSkillTests
     /// judging and allowing are other hands', and a search the provider holds is the person's to free.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_tops_up_an_audience_the_campaign_holds_and_spends_nothing_a_person_has_not_allowed()
     {
         var skill = Flattened("manager");
@@ -39,6 +43,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_is_told_which_items_run_without_anybody_and_proposes_the_rest()
     {
         var skill = Flattened("manager");
@@ -68,6 +73,7 @@ public partial class RoleSkillTests
     /// leave a standing instruction there for a role that never sees it, rather than in that role's own work item.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_is_told_that_not_every_role_reads_the_campaign_context()
     {
         var skill = Flattened("manager");
@@ -85,6 +91,7 @@ public partial class RoleSkillTests
     /// to the runtime.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_woken_by_a_reply_reads_the_lines_and_the_thread_and_leaves_the_read_to_the_runtime()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -113,6 +120,7 @@ public partial class RoleSkillTests
     /// itself. Where it does not, no line comes for that reply at all.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_woken_by_its_own_reply_is_told_nothing_happened()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -133,6 +141,7 @@ public partial class RoleSkillTests
     /// the responder, and never answers a thread the outreach of another campaign that is not archived owns.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_a_thread_found_by_the_person_before_it_answers()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -151,6 +160,7 @@ public partial class RoleSkillTests
     /// responder; one without the mark is the manager's, as before. The skill says both plainly.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_defers_a_marked_line_to_the_runtime_and_keeps_an_unmarked_one()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -168,6 +178,7 @@ public partial class RoleSkillTests
     /// line came from: it is queued only where the two agree, and otherwise the manager asks.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_a_thread_found_by_the_person_only_at_the_line_s_plugin()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -183,6 +194,7 @@ public partial class RoleSkillTests
     /// thread to a campaign that already answers it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_leaves_a_thread_no_campaign_owns_to_a_campaign_already_answering_it()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -201,6 +213,7 @@ public partial class RoleSkillTests
     /// is the manager's to raise.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_raises_the_responder_without_a_person_when_the_line_names_none()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -224,6 +237,7 @@ public partial class RoleSkillTests
     /// it once more would run the step twice; and the wait is ended early on a person's word, never on the manager's.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_does_not_take_a_waiting_item_for_stale_work()
     {
         var skill = Flattened("manager");
@@ -248,6 +262,7 @@ public partial class RoleSkillTests
     /// the manager's; and the line that says it cleared wakes nobody, because the work runs again by itself.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_woken_by_a_block_says_what_stopped_and_never_clears_it()
     {
         var skill = Flattened("manager");
@@ -273,6 +288,7 @@ public partial class RoleSkillTests
     /// provider said when it took a message for a status it cannot be asked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_takes_a_capability_the_provider_does_not_offer_yet_as_final()
     {
         var skill = Flattened("manager");
@@ -291,6 +307,7 @@ public partial class RoleSkillTests
     /// `accepted`. The manager reads either as the item done and never sends again to learn whether it went.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_a_send_sent_or_accepted_as_done()
     {
         var skill = Flattened("manager");
@@ -311,6 +328,7 @@ public partial class RoleSkillTests
     /// lists it, names the send and the read and never the text, and calls for nothing by itself.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_names_a_send_by_its_work_item_and_is_told_one_went_only_where_it_asked()
     {
         var skill = Flattened("manager");
@@ -340,6 +358,7 @@ public partial class RoleSkillTests
     /// found and read before any new send to them, never by sending again, and the note says what the thread showed.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_the_thread_before_sending_again_after_a_send_that_may_have_gone()
     {
         var skill = Flattened("manager");
@@ -359,6 +378,7 @@ public partial class RoleSkillTests
     /// provider has said it did not.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_is_told_how_to_send_at_a_moment_the_provider_cannot_hold()
     {
         var skill = Flattened("manager");
@@ -380,6 +400,7 @@ public partial class RoleSkillTests
     /// that writes a template there, which the manager asks for rather than makes.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_is_told_what_to_do_with_a_template_the_plugin_does_not_write()
     {
         var skill = Flattened("manager");
@@ -396,6 +417,7 @@ public partial class RoleSkillTests
     /// names the line, reads the result of one that succeeded, and keeps its own path only for a line nobody answers.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_defers_to_the_responder_the_runtime_raised_for_the_line()
     {
         var skill = FlattenedEntry("manager", "inbound_reply");
@@ -422,6 +444,7 @@ public partial class RoleSkillTests
     /// name a field the responder is never asked to give.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_result_fields_the_manager_reads_are_the_ones_the_responder_is_asked_for()
     {
         var format = Jason.Runtime.Dispatch.Responder.ResultFormat["properties"]!.AsObject();
@@ -437,6 +460,7 @@ public partial class RoleSkillTests
     /// reply, and sends the reader to the responder's data file for the categories rather than copying them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_the_verdict_lines_by_category_since_its_last_review()
     {
         var skill = Flattened("manager");
@@ -451,6 +475,7 @@ public partial class RoleSkillTests
 
     /// <summary>The line the skill reads is the one the runtime writes: its kind and the fields the skill names are the journal's.</summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_verdict_line_the_manager_reads_is_the_kind_the_runtime_writes()
     {
         Assert.Equal("reply_classified", Jason.Runtime.Journal.JournalKinds.ReplyClassified);
@@ -462,6 +487,7 @@ public partial class RoleSkillTests
     /// the count is a problem. The ids are the ones the runtime's categories use.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_reads_bounces_as_a_count_and_the_lists_of_the_replies_that_wait_for_a_moment()
     {
         var skill = Flattened("manager");
@@ -481,6 +507,7 @@ public partial class RoleSkillTests
     /// option the verb takes for them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_records_a_persons_answer_to_a_question_of_the_responder_as_a_second_verdict()
     {
         var skill = Flattened("manager");
@@ -515,6 +542,7 @@ public partial class RoleSkillTests
     /// Every other answer is a record and nothing else, and a draft after it waits for a person.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_lifts_a_register_entry_made_on_a_guess_and_queues_the_responder_and_does_nothing_else_on_an_answer()
     {
         var skill = Flattened("manager");
@@ -544,6 +572,7 @@ public partial class RoleSkillTests
     /// the start as theirs, and no command the skill prints starts a campaign.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_manager_leaves_starting_a_campaign_it_paused_to_the_person()
     {
         var skill = Flattened("manager");

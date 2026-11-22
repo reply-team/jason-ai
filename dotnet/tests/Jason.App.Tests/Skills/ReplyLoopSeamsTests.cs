@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -34,6 +35,7 @@ public sealed partial class ReplyLoopSeamsTests
     /// two lists, so the text the manager is taught from and the note the responder leaves are one shape.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_names_the_role_note_keys_the_responder_writes()
     {
         var written = SkillPack.PrintedCommands(ResponderFile("SKILL.md"))
@@ -70,6 +72,7 @@ public sealed partial class ReplyLoopSeamsTests
     /// printed <c>--category</c>, and each file still names the ones listed here, so the list cannot go stale.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("runtime", "roles/manager", "bounce interested not_now opt_out out_of_office")]
     [InlineData("runtime", "roles/analyst", "bounce")]
     [InlineData("runtime", "approvals-and-questions", "interested meeting_requested")]
@@ -102,6 +105,7 @@ public sealed partial class ReplyLoopSeamsTests
     /// category that waits on nothing would teach a wrong act.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_example_gives_the_reaction_the_categorys_row_gives()
     {
         var lines = new[] { "manager", "approvals-and-questions" }

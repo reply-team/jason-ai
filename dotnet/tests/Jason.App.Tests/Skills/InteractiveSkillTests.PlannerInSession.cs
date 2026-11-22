@@ -7,6 +7,7 @@ public partial class InteractiveSkillTests
 {
     /// <summary>The catalog says how the planner in a session opens and names the campaign, so a reader choosing a skill learns it before opening the file.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_catalog_says_that_the_planner_in_a_session_asks_one_question_at_a_time_and_names_the_campaign_for_what_it_is_for()
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
@@ -25,6 +26,7 @@ public partial class InteractiveSkillTests
     /// after the first clause.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_is_described_by_the_moment_it_is_for()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("planner-in-session").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -34,6 +36,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_agrees_the_direction_and_hands_the_rest_on()
     {
         var skill = Flattened("planner-in-session");
@@ -60,6 +63,7 @@ public partial class InteractiveSkillTests
     /// reads the launched planner's notes at the three levels they are kept at, the client's first.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_reads_what_was_written_down_before_it_plans()
     {
         var skill = Flattened("planner-in-session");
@@ -89,6 +93,7 @@ public partial class InteractiveSkillTests
     /// that weakens one, is a change to this text and fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_agrees_before_anything_is_created_and_approves_nothing()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -136,6 +141,7 @@ public partial class InteractiveSkillTests
     /// person to run, and is held whole by a test of its own, so it is the one place that verb may stand.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public async Task The_planner_in_a_persons_session_prints_only_reads_and_the_persons_own_preferences()
     {
         var file = SkillPack.Find("planner-in-session").File;
@@ -159,6 +165,7 @@ public partial class InteractiveSkillTests
     /// <c>route resolve</c> as much as <c>get</c> — and nothing that changes campaign state or an attempt does.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", true)]
     [InlineData("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll", true)]
     [InlineData("jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", true)]
@@ -196,6 +203,7 @@ public partial class InteractiveSkillTests
     /// shared judgement, so a sentence moved down below the questions or reworded fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planners_first_words_say_where_the_files_live_and_how_to_change_that()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -220,6 +228,7 @@ public partial class InteractiveSkillTests
     /// list. Each step is said once in the paragraph, so a step moved or dropped fails here.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("planner-in-session")]
     [InlineData("planner")]
     public void The_planners_judgement_opens_a_first_campaign_in_the_order_a_real_start_needs(string skill)
@@ -262,6 +271,7 @@ public partial class InteractiveSkillTests
     /// compare for a difference the copy carries. Said whole in the shared judgement, so both seats say the same rule.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("planner-in-session")]
     [InlineData("planner")]
     public void The_planners_judgement_never_splits_a_campaign_only_to_give_some_of_its_people_another_tone(string skill)
@@ -278,6 +288,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>The catalog says that the planner never splits a campaign only for a tone, in both seats, so a reader learns the rule before opening a file.</summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("- [`planner-in-session`]")]
     [InlineData("- [`roles/planner`]")]
     public void The_catalog_says_that_the_planner_never_splits_a_campaign_only_for_a_tone(string entry)
@@ -298,6 +309,7 @@ public partial class InteractiveSkillTests
     /// no value, so the section stands before the agreement, and the read before the two sets.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_has_both_preferences_before_it_plans_and_sets_them_as_the_persons()
     {
         var skill = Flattened("planner-in-session");
@@ -339,6 +351,7 @@ public partial class InteractiveSkillTests
     /// own and written from no conversation it was in.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_shows_the_first_message_and_keeps_a_standing_rule_at_its_level()
     {
         var skill = Flattened("planner-in-session");
@@ -359,6 +372,7 @@ public partial class InteractiveSkillTests
     /// skipped it plans the same way, so a session that waited on it would hold the real work behind a walk they declined.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_commits_a_first_campaign_under_the_project_of_what_is_sold()
     {
         var skill = Flattened("planner-in-session");
@@ -379,6 +393,7 @@ public partial class InteractiveSkillTests
     /// wait, and the file names the failure it forbids, a numbered list of questions: once, where the opening is described.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_asks_the_opening_one_question_per_message()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -406,6 +421,7 @@ public partial class InteractiveSkillTests
     /// the campaign is created.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_names_a_campaign_for_what_it_is_for()
     {
         const string Sentence =
@@ -426,6 +442,7 @@ public partial class InteractiveSkillTests
     /// set-up instead of ending its turn with a campaign nobody started.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_commits_the_set_up_and_creates_nothing_that_writes()
     {
         var skill = Flattened("planner-in-session");
@@ -449,6 +466,7 @@ public partial class InteractiveSkillTests
     /// campaign-planning, not the commands, and not the status line every skill words the same way.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_copies_no_rule_from_the_skills_it_points_to()
     {
         var own = Runs(Prose(SkillPack.Find("planner-in-session").File));
@@ -486,6 +504,7 @@ public partial class InteractiveSkillTests
     /// made, not afterwards. Without the last the campaign is made with no goals and the person is never told.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_asks_what_the_campaign_is_for_and_writes_it_with_the_campaign()
     {
         var skill = Flattened("planner-in-session");
@@ -506,6 +525,7 @@ public partial class InteractiveSkillTests
     /// connected, and the wiring line in the message after "go". A paraphrase would change what the first minutes say.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_quick_start_says_its_words_exactly()
     {
         var skill = Flattened("quick-start");

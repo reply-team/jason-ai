@@ -80,6 +80,7 @@ public class DocumentedSkillCommandsTests
     /// should carry is understood. Without the body on standard input the guard would bless a page whose body nothing reads.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "a skill prints a command the CLI does not understand")]
     public async Task A_here_document_s_body_is_typed_as_standard_input_and_a_body_that_is_not_json_is_refused()
     {
         string[] page =
@@ -108,6 +109,7 @@ public class DocumentedSkillCommandsTests
     /// same line typed outside a run is refused, which is what this guard said of every page before it read the folder.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "a skill prints a command the CLI does not understand")]
     public async Task A_role_page_s_line_is_typed_inside_a_run_where_the_attempt_names_who_acts()
     {
         var manager = SkillPack.Find("manager");
@@ -129,6 +131,7 @@ public class DocumentedSkillCommandsTests
     /// and names none is refused there, whatever a run would have made of it.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "a skill prints a command the CLI does not understand")]
     public async Task A_page_outside_roles_is_typed_outside_a_run_where_a_line_without_an_actor_is_refused()
     {
         var page = SkillPack.Find("troubleshooting-jason");
@@ -147,12 +150,14 @@ public class DocumentedSkillCommandsTests
     /// guard goes through the router: it is answered by the runtime service and never by the CLI.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, "a skill prints a command the CLI does not understand")]
     public async Task The_command_line_that_starts_a_background_runtime_is_understood() =>
         await AssertUnderstoodAsync("jason runtime run --detached --data-dir /tmp/jason-somewhere", "this test");
 
     /// <summary>The one line the version mode answers, typed, so the branch below is exercised by name
     /// whatever the pack happens to print.</summary>
     [Fact]
+    [Critical(Family.D1, "a skill prints a command the CLI does not understand")]
     public async Task The_version_mode_answers_the_bare_line_and_nothing_longer() =>
         await AssertUnderstoodAsync("jason --version", "this test");
 

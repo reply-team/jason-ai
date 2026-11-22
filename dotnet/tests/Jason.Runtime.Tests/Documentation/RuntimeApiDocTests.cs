@@ -30,6 +30,7 @@ public partial class RuntimeApiDocTests
     private static readonly string[] FileExtensions = ["json", "md", "html", "yaml", "js", "txt", "zip"];
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_operation_the_page_names_is_one_the_runtime_has()
     {
         var unknown = Named(Page()).Except(Published(), StringComparer.Ordinal).ToList();
@@ -38,6 +39,7 @@ public partial class RuntimeApiDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_lists_every_operation_the_runtime_has()
     {
         var listed = Named(Section(Page(), "## What `/v1/` holds")).ToHashSet(StringComparer.Ordinal);
@@ -47,6 +49,7 @@ public partial class RuntimeApiDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_path_the_page_names_is_in_the_tree()
     {
         var root = RepositoryTree.Root();
@@ -64,6 +67,7 @@ public partial class RuntimeApiDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_prints_the_numbers_and_names_from_the_code()
     {
         var page = Flat(Page());
@@ -87,6 +91,7 @@ public partial class RuntimeApiDocTests
     /// and the verb that is it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_describes_the_journal_stream_as_the_runtime_serves_it()
     {
         var page = Flat(Page());
@@ -122,6 +127,7 @@ public partial class RuntimeApiDocTests
     /// <see cref="UiFiles"/> serves, no kind left out and none added.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_names_the_manifest_members_and_every_kind_of_file_a_build_is_served()
     {
         var section = Section(Page(), "## Where a program's own pages can live");
@@ -197,6 +203,7 @@ public partial class RuntimeApiDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_the_runtime_api_is_open_and_links_the_page()
     {
         var readme = Flat(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "handbook.md")));
