@@ -366,4 +366,24 @@ public partial class RoleSkillTests
             SkillPack.PrintedCommands(SkillPack.Find("planner").File),
             line => line.StartsWith("jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{\"goals\":[", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The planner, where it speaks of a campaign's letters, says the default line: three touches, each written when it
+    /// is due, another number only where the plan says why, and never past the ceiling the settings hold. A planner that
+    /// planned the whole line at once would queue letters that a reply then has to race.
+    /// </summary>
+    [Fact]
+    public void The_planner_says_a_line_is_three_touches_written_when_due_under_the_ceiling()
+    {
+        var skill = Flattened("planner");
+
+        Assert.Contains(PlannerLine, skill, StringComparison.Ordinal);
+        Assert.Contains(PlannerCeiling, skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>The planner's sentence on a person's line, in the judgement both planner files share.</summary>
+    internal const string PlannerLine = "**A person's line is three touches where nothing better was thought out.** The first letter and two follow-ups, each written when it is due, one at a time, and the line never planned ahead as a whole";
+
+    /// <summary>The planner's words on the ceiling, in the same shared judgement.</summary>
+    internal const string PlannerCeiling = "never more than `Lines:MaxTouches`, the ceiling the settings hold, which no role raises and none asks to have raised";
 }

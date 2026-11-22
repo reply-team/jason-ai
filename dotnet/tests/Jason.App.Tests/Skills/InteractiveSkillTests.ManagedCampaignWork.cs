@@ -1401,6 +1401,26 @@ public partial class InteractiveSkillTests
             + string.Join('\n', found));
     }
 
+    /// <summary>
+    /// Where the campaign's people stand is said with what each state means: a paused person replied and waits for the
+    /// manager, a finished one was ended with a reason and is reopened only on the person's word, and an excluded one was
+    /// removed. A session that read paused as removed, or finished as stopped for good, would tell the person wrong.
+    /// </summary>
+    [Fact]
+    public void The_people_s_four_states_are_said_with_what_each_means()
+    {
+        var skill = Flattened("managed-campaign-work");
+
+        Assert.Contains("**The campaign's own people are `campaign list-contacts`**, each with where they stand in it, in one of four states.", skill, StringComparison.Ordinal);
+        Assert.Contains("`enrolled`: on the campaign, their line open.", skill, StringComparison.Ordinal);
+        Assert.Contains("`paused`: they replied, and the runtime holds every touch to them while the manager reads the reply and continues the line or ends it; an answer in their thread still goes.", skill, StringComparison.Ordinal);
+        Assert.Contains("`finished`: their line in the campaign was ended, always with a reason, which its `contacts_finished` line in the chronicle keeps; no touch reaches them there, their conversation goes on, and the line is reopened only on the word of the person who runs the campaign, as `approvals-and-questions` says.", skill, StringComparison.Ordinal);
+        Assert.Contains("`excluded`: removed from the campaign.", skill, StringComparison.Ordinal);
+        Assert.Equal(
+            ["enrolled", "excluded", "finished", "paused"],
+            Enum.GetNames<Jason.Contracts.Api.MembershipState>().Select(name => name.ToLowerInvariant()).Order(StringComparer.Ordinal));
+    }
+
     /// <summary>The text with the part from <paramref name="start"/> up to <paramref name="end"/> cut out, which must be there.</summary>
     private static string WithoutPart(string text, string start, int end, string skill)
     {

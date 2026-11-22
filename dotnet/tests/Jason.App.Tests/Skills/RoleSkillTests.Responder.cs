@@ -730,4 +730,21 @@ public partial class RoleSkillTests
         var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(result, format));
         Assert.True(problems.Count == 0, $"The result the responder prints is refused by its format: {string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}");
     }
+
+    /// <summary>
+    /// A reply pauses the person's line and an ended line is finished, and neither stops an answer in their thread: the
+    /// line's state holds back touches alone. A responder that read paused as "say nothing" would leave the person who
+    /// wrote unanswered, which is the one thing the hold must never do.
+    /// </summary>
+    [Fact]
+    public void The_responder_answers_a_person_whose_line_is_paused_or_finished()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("**A person whose line is paused or finished is still answered.**", skill, StringComparison.Ordinal);
+        Assert.Contains("The line's state holds back new touches — a letter, an invitation, an enrolment — and never an answer in the thread the person wrote in", skill, StringComparison.Ordinal);
+        Assert.Contains("a `conversation.reply` reaches them whatever their line's state, and it is no touch", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("conversation.reply", OperationCatalog.Touches);
+        Assert.Equal(["campaign.enroll", "message.send", "social_invitation.send"], OperationCatalog.Touches.Order(StringComparer.Ordinal));
+    }
 }

@@ -27,6 +27,12 @@ build, because every skill's do.
 so you either answer or park the draft at once, never leave a classified thread without an action, and the person's
 approval lag is the window in which a follow-up can be lost.
 
+**A person whose line is paused or finished is still answered.** A reply pauses the person's line in the campaign
+until the manager continues it or ends it, and a line the manager ended is `finished`; neither stops your work. The
+line's state holds back new touches — a letter, an invitation, an enrolment — and never an answer in the thread the
+person wrote in: a `conversation.reply` reaches them whatever their line's state, and it is no touch. Read, classify,
+record and react as below, as for anybody.
+
 **What your brief gives you.** Your brief's `inbound_reply` is what the runtime wrote when the thread moved: the
 `plugin` the thread was read at, the provider's `thread` identifier, its `channel`, the `contact_id` of the person the
 line named, the `read` queued for you, and the thread's `moves`, each a line of the chronicle and its moment —

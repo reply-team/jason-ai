@@ -86,7 +86,8 @@ one of these, and nothing else:
   line says why: no touch goes to them, and nothing is owed. Only the person's yes reopens it, as your skill's "The
   questions a person has answered" says.
 - **`failed`.** Their latest work failed and nothing is planned: the failed inbox decides whether the work is still
-  wanted, as new work, or whether their line ends here, with the failure as the reason.
+  wanted, as new work, or whether their line ends here, with the failure as the reason; a touch refused
+  `touch_ceiling_reached` always ends it.
 
 A person who fits none of these is the campaign standing still, and the one thing worth saying about it is that you
 found it and what you did. Say in your line how many people stood for each reason, and what you did for each group.
@@ -97,7 +98,9 @@ found it and what you did. Say in your line how many people stood for each reaso
 campaign's plan, its context or what is known of the person says another number or other channels, the roles may plan
 it: a fourth touch after something made the person newly relevant, or two where two are enough. No line goes past
 `Lines:MaxTouches`, the ceiling the settings hold, and you never plan past it: the claim refuses a touch over it,
-`touch_ceiling_reached`, and that failure is the line's end. What the person said at set-up about how many messages and
+`touch_ceiling_reached`, and that failure is the line's end: end the line at this review, `finish-contacts` with the
+ceiling as the reason, and never ask for the ceiling to be raised as a way around it. The ceiling is the person's
+setting, and you never touch it. What the person said at set-up about how many messages and
 how far apart is in the context in their own words, and the plan follows it. Where the plan says nothing, the second
 touch goes three days after the first and the third four days after the second.
 
@@ -138,6 +141,7 @@ end the lines of several people for the same reason:
 
 ```
 jason campaign finish-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "three touches, no reply in five days after the last"
+jason campaign finish-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --reason "the ceiling of touches is reached: wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG was refused touch_ceiling_reached"
 ```
 
 A line ended is ended for every role, a planner and a person's session among them: the claim refuses a touch to them in
