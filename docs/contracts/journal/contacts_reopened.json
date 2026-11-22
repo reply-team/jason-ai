@@ -25,7 +25,7 @@
           "not_finished": { "type": "integer", "minimum": 0, "description": "Items naming a member whose line was not ended: enrolled, or paused." },
           "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
           "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },
-          "not_in_decision": { "type": "integer", "minimum": 0, "description": "Items naming a person the ended line the question is about does not name." },
+          "not_in_decision": { "type": "integer", "minimum": 0, "description": "Items naming a person the ended line the question is about does not name, or whose line a later contacts_finished line ended again." },
           "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },
           "contact_ids": {
             "type": "array",

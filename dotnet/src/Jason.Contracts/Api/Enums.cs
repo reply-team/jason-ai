@@ -12,7 +12,7 @@ public enum CampaignStatus
 /// <summary>
 /// Where a contact stands inside one campaign. Removal is the soft state <c>excluded</c>, never a deletion. A line ended
 /// by <c>campaign.finish_contacts</c> is <c>finished</c>, which the claim refuses a touch until
-/// <c>campaign.reopen_contacts</c> enrols the person again; <c>paused</c> is a person held, whom
+/// <c>campaign.reopen_contacts</c> enrols the person again; <c>paused</c> is a person whose line is paused, whom
 /// <c>campaign.continue_contacts</c> enrols again.
 /// </summary>
 public enum MembershipState

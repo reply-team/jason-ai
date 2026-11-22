@@ -32,7 +32,7 @@
               "blocks": { "type": "integer", "minimum": 0, "description": "Open provider blocks holding work." },
               "held": { "type": "integer", "minimum": 0, "description": "Work items waiting on a daily limit of launches as the notification was sent, in every campaign." },
               "bounces": { "type": "integer", "minimum": 0, "description": "Emails that bounced since the last notification that reached anybody: provider events, each once however many campaigns it reached." },
-              "replies": { "type": "integer", "minimum": 0, "description": "Replies a role judged, inside a run, a person's own since the last notification that reached anybody: each reply once however many campaigns judged it, and never again once said." }
+              "replies": { "type": "integer", "minimum": 0, "description": "Replies a role judged, inside a run, a person's own since the last notification that reached anybody: each reply once however many campaigns judged it, and never again once said; never a reply that asks to be taken off the list." }
             }
           },
           "covered_through": { "type": ["null", "string"], "pattern": "^jrn_", "description": "The journal line the notification counted through, or null where it counted none." },

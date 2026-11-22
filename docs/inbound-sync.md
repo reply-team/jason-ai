@@ -223,13 +223,14 @@ vendor block are not read out of the page at all, and appear in no line and no l
 **What a line does not know.** A line says that a thread the other side wrote into moved, not that the other side moved
 it last: a follow-up sent into a thread that already has a reply moves it too, and says it again. The manager reads the
 thread to know. The hold compares moments of the runtime's own record instead, and reads no meaning: a line whose
-`last_activity_at` is not later than the latest moment one of Jason's letters to the person in the campaign went out
-holds nobody and takes nothing back. That moment is a touch's `accepted_for`, where its result names one, and otherwise
-the end of its succeeded attempt; and for an answer, a `conversation.reply` of the campaign into the line's own thread,
-the end of its succeeded attempt. A touch records no thread, so touches count for the person across the campaign and an
-answer only for its own thread. Only a moment that has come counts, so a letter the provider still holds for later is no
-reason to leave a reply alone, and a letter a cancel took back never went. A line later than every such moment holds the
-line as any reply does, whoever moved the thread.
+`last_activity_at` is not later than the latest moment any succeeded letter of Jason's own went into the thread holds
+nobody and takes nothing back. That letter is a touch of the person in the campaign, at its `accepted_for` where its
+result names one and otherwise at the end of its succeeded attempt, or an answer the responder sent into the line's
+thread, a `conversation.reply` of the campaign into that thread, at the end of its succeeded attempt. A touch records no
+thread, so touches count for the person across the campaign and an answer only for its own thread. Only a moment that
+has come counts, so a letter the provider still holds for later is no reason to leave a reply alone, and a letter a
+cancel took back never went. A line later than every such moment holds the line as any reply does, whoever moved the
+thread.
 
 The rule has limits, and they run both ways:
 
@@ -243,7 +244,11 @@ The rule has limits, and they run both ways:
   reaches, so it does not hold at once. The role that judges the reply, woken for it as for any line, ends the line or
   continues it.
 
-The events path is not this rule's: there the account's own letter is `provider_send_observed`, never a reply line.
+The rule is for a line that does not know who moved the thread, whichever writer said it: a line this read wrote, and a
+line the events store wrote from a `thread_moved` event that names no side, `moved_by` null
+([events](events.md)). A line the events store wrote from an event that names the other side always holds the line,
+whatever the moments: where the provider said who wrote, the moments do not overrule it. A move the account or the
+provider made is no reply line at all.
 
 ## 5. Where a read starts
 

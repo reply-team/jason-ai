@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
@@ -123,6 +125,93 @@ public partial class HeldSendsCancelTests
         await using var db = harness.Open();
         Assert.Equal(expected, await StateOfAsync(db, campaign, person));
         Assert.Equal(expected == MembershipState.Paused ? 1 : 0, await db.Journal.CountAsync(e => e.Kind == JournalKinds.ContactsPaused, Ct));
+    }
+
+    /// <summary>
+    /// The skip is for a line that does not know who moved the thread. A line the events store wrote from an event that names
+    /// the other side always holds, though its moment is not later than Jason's letter: where the provider said who wrote,
+    /// the moments do not overrule it. One written from an event that names no side may be Jason's own move, and is skipped
+    /// as the inbound read's line is.
+    /// </summary>
+    [Theory]
+    // Critical: a reply the provider says the other side wrote, skipped by its moments, lets the next touch go to a person who answered.
+    [InlineData("other_side", MembershipState.Paused, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.N2)])]
+    [InlineData(null, MembershipState.Enrolled)]
+    public async Task An_events_line_that_names_the_other_side_holds_whatever_the_moments(string? movedBy, MembershipState expected)
+    {
+        using var harness = Routed();
+        var (campaign, person) = await SceneAsync(harness);
+        var went = Noon.AddMinutes(-10);
+        await SentAsync(harness, campaign, person, sendAfter: null, cancelable: false, acceptedFor: Moment(went));
+        await EventReplyLineAsync(harness, campaign, person, "th-1", went.AddSeconds(-30), movedBy);
+
+        await harness.RespondAsync(Ct);
+
+        await using var db = harness.Open();
+        Assert.Equal(expected, await StateOfAsync(db, campaign, person));
+        Assert.Equal(expected == MembershipState.Paused ? 1 : 0, await db.Journal.CountAsync(e => e.Kind == JournalKinds.ContactsPaused, Ct));
+    }
+
+    /// <summary>
+    /// A reply line as the events store writes it from a <c>thread_moved</c> event found by the contact's pin: the stored
+    /// event names <paramref name="movedBy"/>, or no side, and the line names the event and the rule that found the campaign.
+    /// </summary>
+    private static async Task EventReplyLineAsync(DispatchHarness harness, int campaign, int person, string thread, DateTime moved, string? movedBy)
+    {
+        await using var db = harness.Open();
+        var owner = await db.Campaigns.SingleAsync(c => c.Id == campaign, Ct);
+        var publicId = await db.Contacts.Where(c => c.Id == person).Select(c => c.PublicId).SingleAsync(Ct);
+        var moment = InboundSync.Instant(new DateTimeOffset(moved));
+        var source = new EventSource { PublicId = PublicId.New("evs"), PluginId = Mailer, BindingIdentity = EventSource.NoBinding, CreatedAt = Noon };
+        db.EventSources.Add(source);
+        await db.SaveChangesAsync(Ct);
+        var stored = new ProviderEvent
+        {
+            PublicId = PublicId.New("evt"),
+            SourceId = source.Id,
+            PluginId = Mailer,
+            Kind = "thread_moved",
+            OccurredAt = moved,
+            StoredAt = Noon,
+            Key = "sha256:" + PublicId.New("key"),
+            ContactId = person,
+            Data = new JsonObject
+            {
+                ["kind"] = "thread_moved",
+                ["id"] = "ev-1",
+                ["occurred_at"] = moment,
+                ["thread"] = thread,
+                ["contact"] = "c-1",
+                ["campaign"] = "p-1",
+                ["moved_by"] = movedBy,
+                ["channel"] = "email",
+                ["unread"] = true,
+                ["has_meeting_intent"] = null,
+            },
+        };
+        db.Events.Add(stored);
+        await db.SaveChangesAsync(Ct);
+
+        new JournalWriter(harness.Clock).Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.InboundReplyObserved,
+            owner,
+            key: InboundSync.ObservationKey(Mailer, thread, moment),
+            updated: new JsonObject
+            {
+                ["plugin"] = Mailer,
+                ["thread"] = thread,
+                ["channel"] = "email",
+                ["last_activity_at"] = moment,
+                ["unread"] = true,
+                ["has_meeting_intent"] = null,
+                ["contact_id"] = publicId,
+                ["event_id"] = stored.PublicId,
+                ["attributed_by"] = "contact_pin",
+            },
+            contactId: person);
+        await db.SaveChangesAsync(Ct);
     }
 
     /// <summary>A <c>conversation.reply</c> of the campaign to the person, into <paramref name="thread"/>, whose attempt succeeded at <paramref name="at"/>.</summary>

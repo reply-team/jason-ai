@@ -845,13 +845,16 @@ anything else it does with it: whether or not `Responder:OnReply` is on, and wha
 `enrolled` member of the campaign becomes `paused`, and one reserved line says it, `contacts_paused`, as
 `system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already paused, ended or
 removed is left as they are, and a line that names no contact — the thread's person is pinned to none, or to more than
-one — holds nobody. A thread moves when Jason writes into it too, so a line that may be Jason's own move holds nobody
-either: one whose `last_activity_at` is not later than the latest moment one of Jason's letters to the person in the
-campaign went out — a touch's `accepted_for` where its result names one, otherwise the end of its succeeded attempt,
-across the campaign since a touch records no thread, or a `conversation.reply` of the campaign into the line's own
-thread, at the end of its succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a
-succeeded cancel names never went. Moments of the runtime's own record are compared, and nothing the line says is read
-for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
+one — holds nobody. A thread moves when Jason writes into it too, so a line that does not know who moved the thread —
+one the inbound read wrote, or one the events store wrote from a `thread_moved` event that names no side — and may be
+Jason's own move holds nobody either: one whose `last_activity_at` is not later than the latest moment any succeeded
+letter of Jason's own went into the thread — a touch of the person in the campaign, at its `accepted_for` where its
+result names one, otherwise the end of its succeeded attempt, across the campaign since a touch records no thread, or an
+answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
+succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
+went. A line whose event names the other side always holds, whatever the moments. Moments of the runtime's own record
+are compared, and nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line
+does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
 step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
 
 **Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`

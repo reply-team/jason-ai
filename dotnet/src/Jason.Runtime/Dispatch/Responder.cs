@@ -325,7 +325,8 @@ public sealed class Responder(
     /// <summary>
     /// The hold a reply line sets (<see cref="LineHold"/>): the person the line names by its contact column, when they are
     /// an enrolled member of the campaign and the line is not Jason's own letter moving the thread, read by the line's
-    /// thread and moment, is held, and what the provider still holds for them there is taken back
+    /// thread and moment and, for a line the events store wrote, by whether its stored event names the other side, is
+    /// paused, and what the provider still holds for them there is taken back
     /// (<see cref="HeldSendCancels"/>). A line that names nobody holds nobody. A take-back the domain or the database
     /// refuses is said once, under the take-back's own event, and costs neither the hold nor the line.
     /// </summary>
@@ -343,7 +344,8 @@ public sealed class Responder(
             && DateTime.TryParse(moment, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
                 ? parsed
                 : null;
-        if (!await LineHold.ApplyAsync(db, journal, now.UtcDateTime, campaign.Id, contact, line.PublicId, thread, moved, ct).ConfigureAwait(false))
+        var stored = said?["event_id"] is JsonValue evt && evt.TryGetValue<string>(out var e) ? e : null;
+        if (!await LineHold.ApplyAsync(db, journal, now.UtcDateTime, campaign.Id, contact, line.PublicId, thread, moved, stored, ct).ConfigureAwait(false))
         {
             return;
         }
