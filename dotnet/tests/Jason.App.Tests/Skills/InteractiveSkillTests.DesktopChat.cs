@@ -60,6 +60,51 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// A conversation about no campaign is a plain chat about no agent, as rule 7 of the chat's instructions says: the
+    /// managed path and the quick start, which would start a set-up there, say in one sentence that a greeting gets a
+    /// plain answer and the set-up starts only when the person asks for an agent; the planner, which copies no rule of the
+    /// managed path, points to it. Without them a chat greeted with "hi" answers with a set-up and a card asking where to
+    /// begin.
+    /// </summary>
+    [Fact]
+    public void A_chat_about_no_agent_sets_one_up_only_when_the_person_asks()
+    {
+        const string Sentence =
+            "In the chat of Jason Desktop, a conversation about no campaign that is not the Feed is a chat about no agent: "
+            + "a plain greeting there gets a plain answer, and you offer no set-up. The set-up starts only when the person "
+            + "asks you to make an agent, and then goes as `managed-campaign-work` says under \"Setting a campaign up, and "
+            + "starting it\", with at most one campaign created in it.";
+        const string Pointer =
+            "In the chat of Jason Desktop, where the conversation is about no campaign, `managed-campaign-work` says in its own "
+            + "chat passage when an agent is set up there; until the person asks for one, you plan no new campaign and propose none.";
+        foreach (var (name, said) in new[] { ("managed-campaign-work", Sentence), ("quick-start", Sentence), ("planner-in-session", Pointer) })
+        {
+            var passage = Whitespace().Replace(
+                MarkedBlock.Extract(SkillPack.Find(name).File, "<!-- desktop-chat:begin -->", "<!-- desktop-chat:end -->") ?? string.Empty,
+                " ");
+            Assert.True(passage.Contains(said, StringComparison.Ordinal), $"The chat's passage of {name} reads '{passage.Trim()}', without '{said}'.");
+            Assert.Single(Regex.Matches(Flattened(name), Regex.Escape(said)));
+        }
+    }
+
+    /// <summary>
+    /// The managed path's chat passage says what rule 18 of the chat's instructions says of a command the person names:
+    /// it is the one run, and what it answered is said. Without it a chat told to run a command it did not find runs
+    /// another in its place.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_runs_the_command_the_person_named()
+    {
+        const string Sentence =
+            "When the person names a jason command themselves, run the one they named; where it is refused or does not "
+            + "exist, say exactly what was answered. Never run another in its place.";
+        var passage = Whitespace().Replace(
+            MarkedBlock.Extract(SkillPack.Find("managed-campaign-work").File, "<!-- desktop-chat:begin -->", "<!-- desktop-chat:end -->") ?? string.Empty,
+            " ");
+        Assert.True(passage.Contains(Sentence, StringComparison.Ordinal), $"The chat's passage of managed-campaign-work reads '{passage.Trim()}', without '{Sentence}'.");
+    }
+
+    /// <summary>
     /// Without them, the managed path sends the person to a button or to an agent's Settings for what the chat runs on
     /// their word, or asks "which?" of a person who said all of them, archives on words that are not the person's own, or counts an
     /// archive that did not run; and leaves the name and the tone to a page the person

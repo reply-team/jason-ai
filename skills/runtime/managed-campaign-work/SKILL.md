@@ -21,6 +21,12 @@ publishes and nothing else.
 Everything in this skill that is different in the chat of Jason Desktop is in this passage, and in that chat it wins
 over the sections below. In a person's own session it does not apply.
 
+- In the chat of Jason Desktop, a conversation about no campaign that is not the Feed is a chat about no agent: a plain
+  greeting there gets a plain answer, and you offer no set-up. The set-up starts only when the person asks you to make
+  an agent, and then goes as `managed-campaign-work` says under "Setting a campaign up, and starting it", with at most
+  one campaign created in it.
+- When the person names a jason command themselves, run the one they named; where it is refused or does not exist,
+  say exactly what was answered. Never run another in its place.
 - In the chat of Jason Desktop, too, the sender's identity and the tone of voice, the two named preferences, are set
   on the person's word, as `planner-in-session` says; where the chat's mode only reads and proposes, neither is set,
   and the chat says where they are set. Where the sender has no value, tell the person once that it is missing and

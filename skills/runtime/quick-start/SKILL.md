@@ -16,6 +16,10 @@ with step 1. **Status: draft.** Its commands parse against this build.
 Everything in this skill that is different in the chat of Jason Desktop is here, and in that chat it wins over the
 steps below.
 
+- In the chat of Jason Desktop, a conversation about no campaign that is not the Feed is a chat about no agent: a plain
+  greeting there gets a plain answer, and you offer no set-up. The set-up starts only when the person asks you to make
+  an agent, and then goes as `managed-campaign-work` says under "Setting a campaign up, and starting it", with at most
+  one campaign created in it.
 - In the chat of Jason Desktop, too, the campaign is started on the person's word, at the end of the set-up
   `managed-campaign-work` leads, on their yes to its question; where the chat's mode only reads and proposes, you do
   not start it: say that this mode does not.
