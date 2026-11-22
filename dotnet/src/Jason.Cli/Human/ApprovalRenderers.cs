@@ -23,18 +23,30 @@ public static class ApprovalRenderers
             return null;
         }
 
-        var table = new HumanTable("REQUESTED", "OPERATION", "STATUS", "WORK ITEM", "ID");
+        var table = new HumanTable("REQUESTED", "OPERATION", "STATUS", "DECIDED BY", "WORK ITEM", "ID");
         foreach (var approval in page.Items)
         {
             table.Row(
                 RenderText.Moment(approval.RequestedAt),
                 approval.Operation,
                 RenderText.Snake(approval.Status),
+                DecidedBy(approval),
                 approval.WorkItemId,
                 approval.Id);
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);
+    }
+
+    /// <summary>
+    /// Who decided, as <c>type:id</c>, and where a send mode or a standing approval let the work go, the row's own
+    /// reason word beside it. Nothing for an approval nobody has decided.
+    /// </summary>
+    private static string? DecidedBy(ApprovalSummaryDto approval)
+    {
+        var actor = RenderText.Actor(approval.DecidedBy);
+        var released = approval.Reason is "automatic_mode" or "standing_approval";
+        return released ? (actor is null ? approval.Reason : $"{actor} ({approval.Reason})") : actor;
     }
 
     /// <summary>

@@ -545,9 +545,35 @@ public class ApprovalCommandsTests
         var exit = await cli.RunAsync("approval", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("REQUESTED", cli.Text, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^REQUESTED +OPERATION +STATUS +DECIDED BY +WORK ITEM +ID", cli.Text);
         Assert.Contains("campaign.enroll", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pending", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("approved", "approval_required", """{"type": "human", "id": "ada"}""", "human:ada")]
+    [InlineData("approved", "automatic_mode", """{"type": "system", "id": "send_mode"}""", "system:send_mode (automatic_mode)")]
+    [InlineData("approved", "standing_approval", """{"type": "system", "id": "standing"}""", "system:standing (standing_approval)")]
+    [InlineData("pending", "approval_required", "null", null)]
+    public async Task List_shows_who_decided_and_the_automatic_reason_beside_it(string status, string reason, string decidedBy, string? shown)
+    {
+        var approval = OneApproval
+            .Replace("\"status\": \"pending\"", $"\"status\": \"{status}\"", StringComparison.Ordinal)
+            .Replace("\"reason\": \"approval_required\"", $"\"reason\": \"{reason}\"", StringComparison.Ordinal)
+            .Replace("\"decided_by\": null", $"\"decided_by\": {decidedBy}", StringComparison.Ordinal);
+        using var cli = new CliRun($$"""{"items": [{{approval}}], "next_cursor": null}""");
+
+        var exit = await cli.RunAsync("approval", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var row = cli.Text.ReplaceLineEndings("\n").Split('\n').Single(line => line.Contains("campaign.enroll", StringComparison.Ordinal));
+        if (shown is null)
+        {
+            Assert.Matches(@"pending +- +wi_", row);
+            return;
+        }
+
+        Assert.Contains(shown, row, StringComparison.Ordinal);
     }
 
     private const string OneStanding = """
