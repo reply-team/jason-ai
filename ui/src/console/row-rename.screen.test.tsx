@@ -1,5 +1,5 @@
 import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
 import { loadMode, mode } from '../platform/mode';
@@ -233,10 +233,10 @@ describe('An agent’s row renamed in place', () => {
 });
 
 describe('An agent’s rename while its request is in flight, and the row painted again', () => {
-    async function sent(update: FixtureName, typing: string) {
+    async function sent(update: FixtureName, typing: string, spoken = true) {
         const fake = api(update);
         const release = fake.hold('campaign.update');
-        await renderAt('window', fake);
+        await renderAt('window', fake, spoken);
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: typing } });
@@ -295,6 +295,98 @@ describe('An agent’s rename while its request is in flight, and the row painte
         expect(field('Agent name').value).toBe('Half typed');
         expect(document.activeElement).toBe(field('Agent name'));
         expect(side().getByRole('alert')).toBe(alert);
+    });
+
+    it('closes a field whose row was undrawn while its request waited, and says its refusal nowhere', async () => {
+        const { release } = await sent('campaign.update/new-agent-name-too-long', 'n'.repeat(201), false);
+        flush(() => {
+            consoleCampaigns.campaigns.value = [];
+        });
+        await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+        release();
+        await waitFor(() => expect(rowRename.value).toBeNull());
+        expect(side().queryByRole('alert')).toBeNull();
+    });
+
+    it('leaves the focus where the person put it while the request waited, when the name is kept', async () => {
+        const { release } = await sent('campaign.update/new-agent-rename', 'Polish finance');
+        // Somewhere in the area, out of the sidebar.
+        const composer = document.querySelector<HTMLElement>('.mainc textarea, .mainc input, .mainc button')!;
+        expect(composer).not.toBeNull();
+        composer.focus();
+        fireEvent.focusOut(field('Agent name'), { relatedTarget: composer });
+        release();
+        await rowIn(agentsList, 'Polish finance');
+        await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+        expect(document.activeElement).toBe(composer);
+    });
+
+    describe('an answer that does not come', () => {
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        async function timedOut(update: FixtureName, typing: string) {
+            const fake = api(update);
+            const release = fake.hold('campaign.update');
+            await renderAt('window', fake);
+            await chooseFor(agentsList, 'New agent 1', 'Rename');
+            const box = await waitFor(() => field('Agent name'));
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            fireEvent.input(box, { target: { value: typing } });
+            await flush(async () => {
+                fireEvent.keyDown(box, { key: 'Enter' });
+                await Promise.resolve();
+            });
+            expect(field('Agent name').getAttribute('aria-busy')).toBe('true');
+            await flush(async () => {
+                vi.advanceTimersByTime(29_900);
+            });
+            expect(field('Agent name').getAttribute('aria-busy')).toBe('true');
+            await flush(async () => {
+                vi.advanceTimersByTime(200);
+            });
+            expect(side().getByRole('alert').textContent).toBe('Jason did not answer in time. Try again.');
+            expect(field('Agent name').getAttribute('aria-busy')).toBeNull();
+            expect(field('Agent name').value).toBe(typing);
+            vi.useRealTimers();
+            return release;
+        }
+
+        it('says so after thirty seconds, open with what was typed, and Escape works again', async () => {
+            await timedOut('campaign.update/new-agent-rename', 'Polish finance');
+            fireEvent.keyDown(field('Agent name'), { key: 'Escape' });
+            await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+            await rowIn(agentsList, 'New agent 1');
+        });
+
+        it('applies a success that comes late', async () => {
+            const release = await timedOut('campaign.update/new-agent-rename', 'Polish finance');
+            release();
+            await rowIn(agentsList, 'Polish finance');
+        });
+
+        it('drops a refusal that comes late', async () => {
+            const release = await timedOut('campaign.update/new-agent-name-too-long', 'n'.repeat(201));
+            release();
+            await new Promise((done) => setTimeout(done, 20));
+            expect(side().getByRole('alert').textContent).toBe('Jason did not answer in time. Try again.');
+        });
+    });
+
+    it('says a refusal said again anew: the region is cleared first', async () => {
+        await renderAt('window');
+        await chooseFor(agentsList, 'New agent 1', 'Rename');
+        const box = await waitFor(() => field('Agent name'));
+        fireEvent.input(box, { target: { value: '   ' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        const sentence = 'A name needs at least one character that shows.';
+        await waitFor(() => expect(side().getByRole('alert').textContent).toBe(sentence));
+        flush(() => {
+            fireEvent.keyDown(field('Agent name'), { key: 'Enter' });
+        });
+        expect(side().getByRole('alert').textContent).toBe('');
+        await waitFor(() => expect(side().getByRole('alert').textContent).toBe(sentence));
     });
 
     it('is closed when its row is no longer drawn', async () => {

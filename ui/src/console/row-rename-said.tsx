@@ -3,9 +3,10 @@ import { rowDrawn } from './recent';
 import { dropUndrawnRename, rowRename } from './row-rename';
 
 /**
- * The sidebar's one region for a row's rename refused: drawn once while the field is open and kept, so its words are announced when they change
- * and never again because the rows were painted; the words under the field are its visible copy. It also closes a
- * field whose row is no longer drawn, by a new list, a filter or a search.
+ * The sidebar's one region for a row's rename refused: drawn once while the field is open and kept, so its words are
+ * announced when they change and never again because the rows were painted; the words under the field are its visible
+ * copy. It also closes a field whose row is no longer drawn, by a new list, a filter or a search; one whose request is
+ * in flight closes on its answer.
  */
 export function RowRenameSaid() {
     const at = rowRename.value;
@@ -13,8 +14,8 @@ export function RowRenameSaid() {
     useEffect(() => {
         if (!drawn) dropUndrawnRename(rowDrawn);
     }, [drawn]);
-    // Drawn while a field is open, so a sidebar with none holds no empty alert.
-    if (at === null) return null;
+    // Drawn while a field is open and drawn, so a sidebar with none holds no empty alert.
+    if (at === null || !drawn) return null;
     return (
         <div className="rrename-live" role="alert">
             {at.said ?? ''}

@@ -13,8 +13,9 @@ import { changeChat, conversations, here, messageOf } from './state';
 // header and the Agents page then show; its folder is where it was. A chat's row renames its conversation through the
 // desktop, which refuses in its own words. Enter keeps the name; Escape, and the field losing the focus, keep nothing; a
 // refusal is said under the field, which stays open with what was typed. Once Enter has sent the name, the field waits
-// for the answer: Escape and a lost focus close nothing, so a refusal is never lost and nothing is kept unseen. No chat
-// is shown. One row at a time.
+// for the answer: Escape and a lost focus close nothing, so a refusal is never lost and nothing is kept unseen. It waits
+// thirty seconds at most; past that it says Jason did not answer and works again, and an answer that comes later still
+// shows a kept name, while a refusal that late is dropped. No chat is shown. One row at a time.
 
 /** The row being renamed: its key, the agent it renames or the conversation, its name before, and what was refused. */
 export interface RowRename {
@@ -70,6 +71,18 @@ export function beginRowRename(row: {
     field?.select();
 }
 
+/** How long the row waits for its rename's answer before it says that none came. */
+const answerWaitMs = 30_000;
+
+/** The rename sent last: an answer to an earlier one, or to one given up on, decides nothing in the field. */
+let attempt = 0;
+
+/** Whether the focus is where the field left it: on the field, or on nothing, so it may be given to the row or field. */
+function focusUnmoved(): boolean {
+    const active = document.activeElement;
+    return active === null || active === document.body || active === fieldOf();
+}
+
 /** Closes the field and keeps nothing; the row takes the focus back where `focus` asks it. */
 function close(focus: boolean): void {
     const at = rowRename.value;
@@ -78,14 +91,34 @@ function close(focus: boolean): void {
     if (focus) rowOf(at.id)?.focus();
 }
 
-/** Says a refusal under the field of the row, if that row's field is still open. */
+/**
+ * Says a refusal under the field of the row, if that row's field is still open; a field whose row is no longer drawn
+ * closes instead, saying it nowhere. The same words said again are cleared first, so they are announced again.
+ */
 function refused(id: string, said: string): void {
     const at = rowRename.value;
     if (at === null || at.id !== id) return;
-    rowRename.value = { ...at, said, busy: false };
+    if (fieldOf() === null) {
+        rowRename.value = null;
+        return;
+    }
+    const focus = focusUnmoved();
+    if (at.said === said) {
+        rowRename.value = { ...at, said: null, busy: false };
+        setTimeout(() => {
+            const now = rowRename.value;
+            if (now !== null && now.id === id && now.said === null && !now.busy) rowRename.value = { ...now, said };
+        }, 0);
+    } else rowRename.value = { ...at, said, busy: false };
     // The field takes the focus back unless the person has put it somewhere else meanwhile.
-    const active = document.activeElement;
-    if (active === null || active === document.body || active === fieldOf()) fieldOf()?.focus();
+    if (focus) fieldOf()?.focus();
+}
+
+/** The answer of `asked`, or 'late' once the row has waited for it as long as it waits. */
+function inTime<T>(asked: Promise<T>): Promise<T | 'late'> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<'late'>((resolve) => (timer = setTimeout(() => resolve('late'), answerWaitMs)));
+    return Promise.race([asked, late]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -98,6 +131,50 @@ function refusalOfName(error: unknown): string {
     return messageOf(error);
 }
 
+/** Sends the name: what was kept, or the words of a refusal. */
+async function rename(at: RowRename, name: string): Promise<{ kept: () => void } | { refused: string }> {
+    if (at.campaignId !== null) {
+        const id = at.campaignId;
+        try {
+            const answer = await here().api.call<Campaign>('campaign.update', { campaign_id: id, name }, 'write');
+            // The name the runtime keeps is shown at once wherever the console holds the agent; the journal's line has the
+            // list read again in its turn.
+            return {
+                kept: () => {
+                    campaigns.value = campaigns.value.map((each) =>
+                        each.id === id ? { ...each, name: answer.name } : each,
+                    );
+                    const facts = agentFacts.value[id];
+                    if (facts !== undefined)
+                        agentFacts.value = {
+                            ...agentFacts.value,
+                            [id]: { ...facts, campaign: { ...facts.campaign, ...answer } },
+                        };
+                },
+            };
+        } catch (error) {
+            return { refused: refusalOfName(error) };
+        }
+    }
+    const id = at.conversationId;
+    if (id === null) return { kept: () => {} };
+    try {
+        const answer = await here().desktop.chat.rename(id, typed);
+        if (isRefusal(answer)) return { refused: answer.refused };
+        return {
+            kept: () => {
+                changeChat(id, (chat) => ({ ...chat, title: answer.title }));
+                conversations.value = conversations.value.map((each) =>
+                    each.id === id ? { ...each, title: answer.title } : each,
+                );
+                void reloadConversations();
+            },
+        };
+    } catch (error) {
+        return { refused: messageOf(error) };
+    }
+}
+
 /** Keeps the name typed: no request where it is unchanged, a refusal said in the row, and on success the row closes. */
 async function keep(): Promise<void> {
     const at = rowRename.value;
@@ -105,38 +182,27 @@ async function keep(): Promise<void> {
     const name = typed.trim();
     if (name === at.was.trim()) return close(true);
     if (name === '') return refused(at.id, t('side.rename.empty'));
+    const mine = ++attempt;
     rowRename.value = { ...at, said: null, busy: true };
-    if (at.campaignId !== null) {
-        const id = at.campaignId;
-        try {
-            const answer = await here().api.call<Campaign>('campaign.update', { campaign_id: id, name }, 'write');
-            // The name the runtime keeps is shown at once wherever the console holds the agent; the journal's line has the
-            // list read again in its turn.
-            campaigns.value = campaigns.value.map((each) => (each.id === id ? { ...each, name: answer.name } : each));
-            const facts = agentFacts.value[id];
-            if (facts !== undefined)
-                agentFacts.value = {
-                    ...agentFacts.value,
-                    [id]: { ...facts, campaign: { ...facts.campaign, ...answer } },
-                };
-        } catch (error) {
-            return refused(at.id, refusalOfName(error));
+    const asked = rename(at, name);
+    const first = await inTime(asked);
+    const answer = first === 'late' ? null : first;
+    if (answer === null) {
+        if (mine === attempt) refused(at.id, t('side.rename.noAnswer'));
+        // A late answer still shows a name that was kept; a refusal that late is dropped.
+        const later = await asked;
+        if ('kept' in later) {
+            later.kept();
+            const now = rowRename.value;
+            if (mine === attempt && now !== null && now.id === at.id && !now.busy) close(focusUnmoved());
         }
-    } else if (at.conversationId !== null) {
-        const id = at.conversationId;
-        try {
-            const answer = await here().desktop.chat.rename(id, typed);
-            if (isRefusal(answer)) return refused(at.id, answer.refused);
-            changeChat(id, (chat) => ({ ...chat, title: answer.title }));
-            conversations.value = conversations.value.map((each) =>
-                each.id === id ? { ...each, title: answer.title } : each,
-            );
-            void reloadConversations();
-        } catch (error) {
-            return refused(at.id, messageOf(error));
-        }
+        return;
     }
-    if (rowRename.value?.id === at.id) close(true);
+    if (mine !== attempt) return;
+    if ('refused' in answer) return refused(at.id, answer.refused);
+    answer.kept();
+    // The row takes the focus only where the person has not put it somewhere else meanwhile.
+    if (rowRename.value?.id === at.id) close(focusUnmoved());
 }
 
 define('side.renameType', (_args, element) => {
