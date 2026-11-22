@@ -34,6 +34,20 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A first start is held by a missing sender alone: with no tone on record the first batch is handed over all the same
+    /// and the line says once that a tone can be named. A start that raised a question for a tone and stopped would leave a
+    /// campaign the chat set up and started with nothing moving.
+    /// </summary>
+    [Fact]
+    public void A_first_start_stops_for_a_missing_sender_and_goes_on_without_a_tone()
+    {
+        var start = FlattenedEntry("manager", "start");
+        Assert.Contains("a route for the send the context's channel needs; who the messages are written as, from the preferences and the memory files. Where one is missing, nothing that would write to anybody is planned: raise one question naming what is missing, and stop there.", start, StringComparison.Ordinal);
+        Assert.Contains(InteractiveSkillTests.MissingTone + " Say it in your line, and raise no question for it.", start, StringComparison.Ordinal);
+        Assert.DoesNotContain("who the messages are written as and how the company sounds, from the preferences", start, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A deep review that falls due as a reply asks for a review runs in the reply review's place, and the reply's section
     /// is no longer in the head: the head and the deep review send it to the <c>inbound_reply</c> entry's file, and a
     /// review after a resume reads the replies of the pause there too.

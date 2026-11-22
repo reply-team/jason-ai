@@ -260,8 +260,44 @@ public partial class InteractiveSkillTests
 
         Assert.Contains("confirms it before anything is sent", paragraph, StringComparison.Ordinal);
         Assert.Contains("never as a form", paragraph, StringComparison.Ordinal);
-        Assert.Contains("nothing that would write to anybody is settled while either is unknown", paragraph, StringComparison.Ordinal);
+        Assert.Contains("nothing that would write to anybody is settled while who writes is unknown", paragraph, StringComparison.Ordinal);
+        Assert.Contains(MissingTone, paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("while either is unknown", paragraph, StringComparison.Ordinal);
         Assert.Contains("is a rule for the messages after it, so it is kept at the level it belongs to", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a missing tone does, one sentence wherever the planner works, in a person's own session, in the chat and as a
+    /// launched role: it holds nothing back, the messages are written plainly, and the person hears once that they may name
+    /// one. Only a missing sender's name holds the work that writes. A set-up that waited on a tone would stop in a terminal
+    /// where the chat goes on, for the same person and the same campaign.
+    /// </summary>
+    internal const string MissingTone =
+        "A missing tone holds nothing back: the work goes on in a plain, neutral voice, and the person is told once that they may name one.";
+
+    /// <summary>
+    /// In a person's own session a set-up with a sender and no tone goes on, as it does in the chat: the sender's name holds
+    /// what writes to anybody, the tone holds nothing. Said once in the section that asks for both, and the old sentence that
+    /// held everything on both is gone from the file.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_planner_in_a_persons_session_holds_the_work_on_a_missing_sender_and_never_on_a_missing_tone()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## Who writes, and how the company sounds"), " ");
+        foreach (var held in new[]
+        {
+            "Until the sender has a value, nothing that writes to anybody is agreed or created.",
+            MissingTone,
+        })
+        {
+            Assert.True(section.Contains(held, StringComparison.Ordinal), $"'Who writes, and how the company sounds' reads '{section.Trim()}', without '{held}'.");
+        }
+
+        var skill = Flattened("planner-in-session");
+        Assert.DoesNotContain("Until both have a value", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("while either is unknown", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -305,15 +341,15 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// Who writes and how the company sounds are the person's word: read before the first question, asked when the order
     /// reaches each, and set on the answer under the person's own name — a preference is refused from anything but a
-    /// person, and one set under another name records a word nobody gave. Nothing is agreed or created while either has
-    /// no value, so the section stands before the agreement, and the read before the two sets.
+    /// person, and one set under another name records a word nobody gave. Nothing that writes to anybody is agreed or
+    /// created while the sender has no value, so the section stands before the agreement, and the read before the two sets.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_has_both_preferences_before_it_plans_and_sets_them_as_the_persons()
     {
         var skill = Flattened("planner-in-session");
-        Assert.Contains("Until both have a value, nothing is agreed and nothing is created.", skill, StringComparison.Ordinal);
+        Assert.Contains("Until the sender has a value, nothing that writes to anybody is agreed or created.", skill, StringComparison.Ordinal);
         Assert.Contains("under their own name as the actor", skill, StringComparison.Ordinal);
         Assert.Contains("Ask for the forms; a name does not tell you them.", skill, StringComparison.Ordinal);
 
@@ -358,12 +394,44 @@ public partial class InteractiveSkillTests
         Assert.Contains("In a session you neither write the first message nor have it written before the start", skill, StringComparison.Ordinal);
         Assert.Contains("When the person brings it to you, read it with them as it would go out, and change it with them until they confirm it.", skill, StringComparison.Ordinal);
         Assert.Contains("Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.", skill, StringComparison.Ordinal);
-        Assert.Contains("into their memory file at the level it belongs to: the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone", skill, StringComparison.Ordinal);
+        Assert.Contains("The level is the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone; when that is not plain, ask.", skill, StringComparison.Ordinal);
         Assert.Contains("nor a role's note, which is that role's own", skill, StringComparison.Ordinal);
 
         // A launched planner cannot write the person's file and raises the rule as a decision instead; a session that did
         // not know it is the one that writes it would leave that rule in a decision nobody carries to the file.
         Assert.Contains("A launched planner that was given such a rule raises it as a decision that names its file; once the person says yes, you write it there the same way.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// When a person's memory file is written, one sentence for a person's own session and the chat alike: only on the
+    /// person's word, and a rule they state without saying so is proposed, its line and its file, and asked once. A
+    /// session taught to write it unasked writes into a file of the person's what they never said should be kept there, and
+    /// the same sentence from the person then ends one way in a terminal and another in the chat.
+    /// </summary>
+    internal const string MemoryRule =
+        "A standing rule the person states is written into their memory file, at the level it belongs to, only when they "
+        + "tell you to write it; where they state one without saying so, say the exact line and the file it belongs in, and "
+        + "ask once whether to add it.";
+
+    /// <summary>
+    /// The first message's standing rules are written on the person's word alone: the section says the one rule, and once
+    /// they tell you, the line goes in as they said it. The sentence that wrote it unasked is gone.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_writes_a_standing_rule_only_on_the_persons_word()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## The first message, before anything is sent"), " ");
+        foreach (var held in new[]
+        {
+            MemoryRule,
+            "When they tell you to, write exactly that line, in their words, into that file.",
+        })
+        {
+            Assert.True(section.Contains(held, StringComparison.Ordinal), $"'The first message, before anything is sent' reads '{section.Trim()}', without '{held}'.");
+        }
+
+        Assert.DoesNotContain("Write it, in their words, into their memory file", Flattened("planner-in-session"), StringComparison.Ordinal);
     }
 
     /// <summary>

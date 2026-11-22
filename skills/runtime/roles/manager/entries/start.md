@@ -40,9 +40,10 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind campaign_sta
 ```
 
 1. **Check that it can move.** People to reach or a search that brings them; a route for the send the context's
-   channel needs; who the messages are written as and how the company sounds, from the preferences and the memory
-   files. Where one is missing, nothing that would write to anybody is planned: raise one question naming what is
-   missing, and stop there.
+   channel needs; who the messages are written as, from the preferences and the memory files. Where one is missing,
+   nothing that would write to anybody is planned: raise one question naming what is missing, and stop there. A
+   missing tone holds nothing back: the work goes on in a plain, neutral voice, and the person is told once that they
+   may name one. Say it in your line, and raise no question for it.
 
    ```
    jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email

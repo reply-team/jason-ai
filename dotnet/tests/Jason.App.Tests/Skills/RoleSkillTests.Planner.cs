@@ -195,6 +195,20 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A launched planner holds the work that writes on a missing sender alone: where only the tone is missing it plans on,
+    /// as the session and the chat do, and says once where its answer has room that a tone can be named, without a
+    /// decision of its own. One that raised a decision for a tone would hold a first batch the chat set up and started.
+    /// </summary>
+    [Fact]
+    public void The_launched_planner_raises_a_decision_for_a_missing_sender_and_plans_on_without_a_tone()
+    {
+        var skill = Flattened("planner");
+        Assert.Contains("Where the preferences you read say nothing of who writes, or the brief does not say what a step needs, raise one decision that names what is missing, and answer with the plan up to that step.", skill, StringComparison.Ordinal);
+        Assert.Contains(InteractiveSkillTests.MissingTone + " Say it in your answer where its shape has room, and raise no decision for it.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("say nothing of who writes or how the company sounds", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A standing rule the person gives has one route from a launched planner, whatever its level: a decision that
     /// carries the rule in the person's words and names the memory file it belongs in, which the person or their own
     /// session writes. The planner's note is read by the planner alone, so a rule kept there never reaches the role that
