@@ -163,7 +163,7 @@ deep review in minutes on a real machine. So:
 - going live writes the grid, the first time and at every resume, to that moment plus the interval in force then: the
   grid starts from the start, and after a resume it starts again, so the days a campaign stood paused are not deep
   reviews it owes;
-- a deep review, and nothing else, moves the grid on by whole intervals to its first moment after the review was
+- a deep review the summon makes, and nothing else, moves the grid on by whole intervals to its first moment after the review was
   created: a runtime that was down for three days runs one deep review, not three, and comes back onto the grid it
   started from;
 - a quick look or a triggered review never moves the grid;
@@ -205,8 +205,8 @@ The two clocks:
   followed by the grid's at the first scan after it ends.
 
 The request writes one `review_requested` line, under the person and their reason, keyed by the depth and naming the
-check-in and its entry. It is no trigger and cannot be named one usefully: it summons nothing, and a program cannot
-subscribe to it. It is refused, in this order, and refused writes nothing:
+check-in and its entry. It summons nothing unless it is listed in `Manager:Triggers`, where it summons the review after
+it, and a program cannot subscribe to it. It is refused, in this order, and refused writes nothing:
 
 1. from inside a run, `decided_inside_a_run`, whatever actor it names: a review asked for is a person's word, and a
    check-in that asked for its own successor would review for ever;
@@ -218,7 +218,8 @@ subscribe to it. It is refused, in this order, and refused writes nothing:
    is the review, and two requests at once make one check-in;
 6. the manager's launches of the day spent for the campaign (`Launches:MaxPerDay:manager`), counted as the claim counts
    them, `launches_spent`: the check-in would only wait for the installation's next midnight, so it is not made, and the
-   message says the way out — "To go on today, tell your agent: ignore the limit, or run jason launches lift."
+   message says the way out — "To go on today, tell your agent: ignore the limit, or run jason launches lift --actor
+   human:<your name>."
 
 **What a cadence costs.** One launch per active campaign per interval, on the operator's own agent
 host and their own plan: a quick look per `Manager:ReviewSeconds` since the last review, and a deep review per
@@ -232,6 +233,10 @@ review a cause summons:
 | the defaults, 21600 and 86400 | 3 | 1 | 4 | 40 |
 | the quick look at the floor, 300 | 287 | 1 | 288 | 2880 |
 | the deep review at the floor, 300 | 0 | 288 | 288 | 2880 |
+
+The manager's daily limit, `Launches:MaxPerDay:manager` (25 by default), holds each campaign at that many launches in
+the installation's day, so the floors run into it, and the rest of the day's check-ins wait for the installation's
+midnight or a person's lift.
 
 A start adds at most one review per going live, a resume included, and each review a person asks for adds one, counted
 under the manager's daily limit as every check-in is. While that review
@@ -521,7 +526,9 @@ first start; the start's answer shows the campaign with it. Only the first start
 campaign that was already live when its installation was upgraded is never given one. So a person who wants none clears
 it after the start, `--clear audience_threshold`, and it stays cleared through every pause and resume. A null before the
 start means only that the start has not happened yet. While the probe's people are still landing, a reserve under the
-default is said once and recovers as the pages land; the recovery wakes nobody.
+default is said once and recovers as the pages land; the recovery wakes nobody, and the check-in the low line wakes asks
+nothing while the probe is unfinished: the manager asks at once only where the reserve is really spent, with no search
+of the campaign under way.
 
 **Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about

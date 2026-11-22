@@ -833,11 +833,11 @@ A membership's `state` is where the line with that person in that campaign stand
 what the provider holds for them there taken back (below).
 `finished` is a line that was ended: the claim refuses every touch to the person in that campaign, `line_finished`
 (below), while a reply in a thread the person opened, a take-back of a send and every read go on, and the line stays
-ended until it is reopened. `paused` is a line held: a reply holds it, and while it is held the claim takes none of
+ended until it is reopened. `paused` is a line a reply paused, and while it is paused the claim takes none of
 the person's touches in that campaign ([Eligibility](#eligibility), rule 3) — a touch waits, `created`, with nothing
-written — while a reply to the person, a take-back of a send and every read go on. The hold never stops the campaign,
-and it lasts until the line is continued or ended; the manager settles it, since the reply that held it wakes the
-manager, and the deep review accounts for every person held.
+written — while a reply to the person, a take-back of a send and every read go on. The pause never stops the campaign,
+and it lasts until the line is continued or ended; the manager settles it, since the reply that paused it wakes the
+manager, and the deep review accounts for every person paused.
 
 **The hold.** The respond step ([docs/inbound-sync.md](inbound-sync.md) §1) holds the line of the person an
 `inbound_reply_observed` line names, by the line's contact column, inside the transaction that reads the line and before
@@ -948,7 +948,7 @@ Now:
 - `sequence` — They were put into the provider's sequence and are not out of it.
 - `out` — They replied, opted out, were stopped in the sequence, or hard-bounced. A reply is one the inbound read or
   the provider's events observed; opted out means on the do-not-contact register now; a soft bounce takes nobody out.
-- `paused` — Their line in the campaign is held (membership state `paused`). A held line is not ended, so they stay
+- `paused` — Their line in the campaign is paused (membership state `paused`). A paused line is not ended, so they stay
   in every other count they stand in, `new` and `idle` included.
 - `finished` — Their line in the campaign is ended (membership state `finished`). They are still members, so `people`
   and `out` count them as before, but `new` and `idle` leave them out.
@@ -1725,7 +1725,7 @@ mistyped one.
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Manager:ReviewSeconds` | `21600` | 300..604800 | how long after a campaign's last review of any kind, with nothing happened, its manager is given a quick look, unless the campaign names its own pace ([docs/campaign-manager.md](campaign-manager.md) §4) |
-| `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the interval of a campaign's deep review grid, started at every going live and moved only by a deep review; the installation's only, no campaign carries its own ([docs/campaign-manager.md](campaign-manager.md) §4) |
+| `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the interval of a campaign's deep review grid, started at every going live and moved only by a deep review the summon makes; the installation's only, no campaign carries its own ([docs/campaign-manager.md](campaign-manager.md) §4) |
 | `Manager:AudienceThreshold` | `20` | 1..100000 | the `audience_threshold` the runtime gives a campaign at its first start, from `draft`, where it holds none and its people come from a search: one `campaign_updated` line by `system:runtime`; never at a resume ([docs/campaign-manager.md](campaign-manager.md) §9) |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 | `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |

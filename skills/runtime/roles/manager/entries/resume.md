@@ -40,15 +40,17 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind campaign_pau
 ```
 
 **Read what changed while it stood.** From the last review your note names, as your skill's review says: replies, and
-the lines they held; failures; questions answered while it stood; people added; lines ended or continued by somebody
-else. Where you paused it yourself for an incident, read what the person answered and what they set before they
-started it again, and do not undo it: their start is their word that what you asked is settled.
+the lines they held, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill);
+failures; questions answered while it stood; people added; lines ended or continued by somebody else. Where you paused
+it yourself for an incident, read what the person answered and what they set before they started it again, and do not
+undo it: their start is their word that what you asked is settled.
 
 **What it then needs.** Where work stands ready to go again, say so in your line and leave it. Where people in flight
-have touches that fell due while the campaign stood, they are the next deep review's, which comes a day after this
-resume: the daily grid starts again from it, so the days the campaign stood are not deep reviews it owes. Plan a first
-batch only where nobody in the campaign was ever touched, and then as the `start` entry says (the file
-`entries/start.md` beside your skill). Widening to a next batch is the deep review's, never this review's.
+have touches that fell due while the campaign stood, they are the next deep review's, which comes one grid interval
+after this resume, a day by default: the daily grid starts again from it, so the days the campaign stood are not deep
+reviews it owes. Plan a first batch only where nobody in the campaign was ever touched, and then as the `start` entry
+says (the file `entries/start.md` beside your skill). Widening to a next batch is the deep review's, never this
+review's.
 
 A campaign that stood is the one moment a person most wants to hear that it moved again: say in your line, in a
 sentence they can read, what was held and what now goes on.

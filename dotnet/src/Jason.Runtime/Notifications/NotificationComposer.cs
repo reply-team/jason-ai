@@ -49,9 +49,10 @@ public static class NotificationComposer
 
     /// <summary>
     /// What a hold says beside its count, where it fits: the way out for today, in the words a person gives their agent or
-    /// types. Fixed words, no count and no name, so a pointer about a hold stays counts and where to look.
+    /// the command they run as written, with their own name put in. Fixed words, no count and no name, so a pointer about
+    /// a hold stays counts and where to look.
     /// </summary>
-    public const string LiftHold = "To go on today, tell your agent: ignore the limit, or run jason launches lift.";
+    public const string LiftHold = "To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.";
 
     /// <summary>Where to look when items wait on a daily limit and nothing else is said.</summary>
     public const string LookAtHeld = "Ask your agent what is held, or run " + LookAtHeldCommand + ".";

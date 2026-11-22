@@ -1136,10 +1136,10 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// "Ignore the limit" sits beside the acts that stop or hold work, as the one that lets held work go today: the session
-    /// runs the lift as the person, under their name, says which campaigns and roles it let go, until when in the person's
-    /// own time with the zone named, and that the released items are counted again after midnight; it never lifts on its
-    /// own initiative, and a role cannot.
+    /// "Ignore the limit" sits beside the acts that stop or hold work, as the one that lets held work go today: the
+    /// session runs the lift as the person, under their name, says which campaigns and roles it let go, until when as
+    /// the clock time in the answer's zone, named, with how long from now in brackets, and that the released items are
+    /// counted again after midnight; it never lifts on its own initiative, and a role cannot.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
@@ -1152,7 +1152,7 @@ public partial class InteractiveSkillTests
             "**\"Ignore the limit\" lets held work go today, and only on the person's word.**",
             "When the person tells you to ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, until the installation's next midnight.",
-            "Then say three things: which campaigns and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and that the items it released are counted again after that midnight.",
+            "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight.",
             "Never lift on your own initiative: only the person's word lifts, and a role inside a run cannot.",
         })
         {
@@ -1162,6 +1162,25 @@ public partial class InteractiveSkillTests
         Assert.Contains(
             SkillPack.PrintedCommands(raw.Split('\n')),
             line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A session neither runs a check-in nor does its work, and where a campaign seems to stand, the person may still have
+    /// its manager look now: the session asks for a review on their word, a quick look or a deep one, and knows the two
+    /// refusals it will meet, a review already open and the manager's launches of the day spent.
+    /// </summary>
+    [Fact]
+    public void A_session_asks_the_manager_to_look_now_on_the_person_s_word()
+    {
+        var skill = Flattened("managed-campaign-work");
+        Assert.Contains(
+            "On the person's word, ask its manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open (`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).",
+            skill,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("managed-campaign-work").File)),
+            line => line.StartsWith("jason campaign review cmp_", StringComparison.Ordinal) && line.Contains(" --depth deep", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
     }
 
     /// <summary>
