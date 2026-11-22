@@ -515,6 +515,14 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
         OptionRules.Range(failures, "Manager:Priority", options.Priority, -1_000, 1_000);
         OptionRules.Range(failures, "Manager:MaxEntriesPerScan", options.MaxEntriesPerScan, 50, 10_000);
 
+        // The default is a campaign's threshold the runtime writes, so it is held to the range a campaign's own is held to.
+        OptionRules.Range(
+            failures,
+            "Manager:AudienceThreshold",
+            options.AudienceThreshold,
+            Dispatch.ReserveCounter.MinimumThreshold,
+            Dispatch.ReserveCounter.MaximumThreshold);
+
         return OptionRules.Result(failures);
     }
 }

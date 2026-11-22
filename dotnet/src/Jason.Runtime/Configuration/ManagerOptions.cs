@@ -100,6 +100,16 @@ public sealed class ManagerOptions
     public int DeepReviewSeconds { get; set; } = 86_400;
 
     /// <summary>
+    /// The reserve's default: the <c>audience_threshold</c> the runtime gives a campaign at its first start, from
+    /// <c>draft</c>, where the campaign holds none and its people come from a search that can top it up — an audience it
+    /// holds, or a search recorded for it. Twenty by default, one batch of the people a manager starts on at once, so the
+    /// reserve is said to be low while a top-up can still keep the next batch full. Read at each first start and held to
+    /// the range a campaign's own threshold is held to. A resume never reads it, and a campaign already live is never
+    /// given it.
+    /// </summary>
+    public int AudienceThreshold { get; set; } = 20;
+
+    /// <summary>
     /// The budget of one check-in. A review reads a campaign and says what it thinks; the hour an
     /// <c>ai_role</c> item gets by default is a budget for doing research, and a review that wanders for an
     /// hour has gone wrong rather than gone deep.

@@ -26,7 +26,8 @@ public sealed record CampaignSummaryDto(
 /// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
 /// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
 /// null where none is recorded — a campaign made before folders were. <c>audience_threshold</c> is how few untouched
-/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
+/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them. The runtime sets
+/// it at the first start of a campaign whose people come from a search and that holds none, to the installation's default.
 /// <c>send_modes</c> is the campaign's own mode for its cold contacts and its warm ones, each null where it sets none;
 /// <c>send_modes_in_force</c> is the mode a send to each would go under now, with where it comes from: the campaign, the
 /// installation's preference, or the default, which is every message. <c>deep_review_due_at</c> is the next moment of the
