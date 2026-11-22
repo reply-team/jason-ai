@@ -25,7 +25,7 @@ public class CountEqualsListTests
         var row = Assert.Single((await api.PostOkAsync<CampaignSummaryResponse>(
             Operations.CampaignSummary, new { CampaignIds = new[] { world.Spring.PublicId } }, Ct)).Campaigns);
         var listed = await WalkAsync(api, new { CampaignId = world.Spring.PublicId, Summary = filter });
-        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Removed)), listed.Count);
+        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Paused, row.Finished, row.Removed)), listed.Count);
         Assert.Equal(listed.Count, listed.Distinct().Count());
 
         // Across both campaigns, where Ada and Hal are each in two counts: the total is the people listed, each once.
@@ -41,7 +41,7 @@ public class CountEqualsListTests
     /// for it without <c>include_archived</c>: in one campaign, and across every campaign the summary counts when none is
     /// named. Archived people stand in several counts: waiting and idle (Ben, whose question archiving leaves pending),
     /// idle (Ada, whose waiting enrolment archiving cancelled, and Wes), new and idle in two campaigns (Hal), failed
-    /// (Cleo), sequence (Ivy), out (Jon) and removed (Oli).
+    /// (Cleo), sequence (Ivy), out and finished (Jon), out and paused (Rae) and removed (Oli).
     /// </summary>
     [Theory]
     [MemberData(nameof(CountsWithPeople))]
@@ -59,7 +59,7 @@ public class CountEqualsListTests
         var one = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { CampaignIds = new[] { spring }, ExcludeArchivedContacts = true }, Ct);
         var row = Assert.Single(one.Campaigns);
         var listed = await ContactsAsync(api, filter is { } f ? new { CampaignId = spring, Summary = f } : (object)new { CampaignId = spring });
-        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Removed)), listed.Count);
+        Assert.Equal(Of(filter, new CampaignSummaryTotal(row.People, row.Waiting, row.Failed, row.Working, row.New, row.Idle, row.Sequence, row.Out, row.Paused, row.Finished, row.Removed)), listed.Count);
 
         // Across every campaign the summary counts, a person once; people is everyone listed in one of those campaigns.
         var every = await api.PostOkAsync<CampaignSummaryResponse>(Operations.CampaignSummary, new { ExcludeArchivedContacts = true }, Ct);
@@ -81,7 +81,7 @@ public class CountEqualsListTests
         }
     }
 
-    private static readonly string[] Archived = ["Ada", "Ben", "Cleo", "Hal", "Ivy", "Jon", "Oli", "Wes"];
+    private static readonly string[] Archived = ["Ada", "Ben", "Cleo", "Hal", "Ivy", "Jon", "Oli", "Rae", "Wes"];
 
     public static TheoryData<string> CountsWithPeople => ["people", .. Enum.GetNames<CampaignSummaryFilter>()];
 
@@ -115,6 +115,8 @@ public class CountEqualsListTests
         CampaignSummaryFilter.Idle => counts.Idle,
         CampaignSummaryFilter.Sequence => counts.Sequence,
         CampaignSummaryFilter.Out => counts.Out,
+        CampaignSummaryFilter.Paused => counts.Paused,
+        CampaignSummaryFilter.Finished => counts.Finished,
         CampaignSummaryFilter.Removed => counts.Removed,
         _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),
     };

@@ -141,7 +141,8 @@ public enum ContactListOrder
 
 /// <summary>
 /// Where a campaign's people stand now, one count each. A person may be in several at once, and the counts need not add
-/// up to the campaign's people: <c>docs/work-execution.md</c> defines each one.
+/// up to the campaign's people: <c>docs/work-execution.md</c> defines each one. <c>Paused</c> and <c>Finished</c> are
+/// the members whose line is in that state.
 /// </summary>
 public enum CampaignSummaryFilter
 {
@@ -152,6 +153,8 @@ public enum CampaignSummaryFilter
     Idle,
     Sequence,
     Out,
+    Paused,
+    Finished,
     Removed,
 }
 

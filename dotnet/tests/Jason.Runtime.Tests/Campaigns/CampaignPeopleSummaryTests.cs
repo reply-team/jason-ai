@@ -83,6 +83,53 @@ public class CampaignPeopleSummaryTests
     }
 
     [Fact]
+    public async Task Paused_is_every_member_whose_line_is_held()
+    {
+        Assert.Equal(["Rae"], await CountedAsync(CampaignSummaryFilter.Paused));
+    }
+
+    [Fact]
+    public async Task Finished_is_every_member_whose_line_is_ended()
+    {
+        Assert.Equal(["Jon"], await CountedAsync(CampaignSummaryFilter.Finished));
+    }
+
+    /// <summary>
+    /// A person whose line is ended is nobody still to start on and nobody left idle: <c>new</c> and <c>idle</c> leave the
+    /// finished out, so the reserve, which is <c>new</c>, no longer counts them. A held line is not ended, so a paused
+    /// person stays where they stood. Each state is counted, and <c>people</c> and <c>out</c> are as they were.
+    /// </summary>
+    [Fact]
+    public async Task New_and_idle_leave_the_finished_out_and_keep_the_paused()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var world = await CampaignWorld.WriteAsync(db, Ct);
+        var before = (await CampaignPeople.SummaryCountsAsync(db, [world.Spring.Id], null, withoutArchived: false, Ct))[world.Spring.Id];
+        await StateAsync(db, world, MembershipState.Finished, "Quinn", "Tess");
+        await StateAsync(db, world, MembershipState.Paused, "Hal", "Uma");
+
+        Assert.Equal(["Hal"], await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.New)));
+        Assert.Equal(["Ben", "Finn", "Uma", "Vic", "Wes"], await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.Idle)));
+        Assert.Equal(["Jon", "Quinn", "Tess"], await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.Finished)));
+        Assert.Equal(["Hal", "Rae", "Uma"], await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], CampaignSummaryFilter.Paused)));
+        Assert.Equal(1, await CampaignPeople.UntouchedAsync(db, world.Spring.Id, Ct));
+
+        var after = (await CampaignPeople.SummaryCountsAsync(db, [world.Spring.Id], null, withoutArchived: false, Ct))[world.Spring.Id];
+        Assert.Equal(before with { New = 1, Idle = 5, Paused = 3, Finished = 3 }, after);
+        var total = await CampaignPeople.SummaryTotalAsync(db, [world.Spring.Id], null, withoutArchived: false, Ct);
+        Assert.Equal(
+            (after.People, after.Out, after.New, after.Idle, after.Paused, after.Finished),
+            (total.People, total.Out, total.New, total.Idle, total.Paused, total.Finished));
+
+        // Where each of them stands says the same, one bit per count.
+        var standing = await CampaignPeople.StandingAsync(db, [world.Spring.Id], [.. new[] { "Hal", "Tess", "Jon" }.Select(name => world.People[name].Id)], Ct);
+        Assert.Equal([CampaignSummaryFilter.New, CampaignSummaryFilter.Paused], standing[(world.People["Hal"].Id, world.Spring.Id)]);
+        Assert.Equal([CampaignSummaryFilter.Finished], standing[(world.People["Tess"].Id, world.Spring.Id)]);
+        Assert.Equal([CampaignSummaryFilter.Out, CampaignSummaryFilter.Finished], standing[(world.People["Jon"].Id, world.Spring.Id)]);
+    }
+
+    [Fact]
     public async Task A_removed_person_counts_in_nothing_else_on_the_Summary_side()
     {
         using var database = new TestDatabase();
@@ -116,6 +163,15 @@ public class CampaignPeopleSummaryTests
         using var db = database.Open();
         var world = await CampaignWorld.WriteAsync(db, Ct);
         return await NamesAsync(db, CampaignPeople.Matching(db, [world.Spring.Id], filter));
+    }
+
+    /// <summary>The Spring memberships of these people put in <paramref name="state"/>, as the verbs that move a line leave them.</summary>
+    private static async Task StateAsync(JasonDbContext db, CampaignWorld world, MembershipState state, params string[] names)
+    {
+        var people = names.Select(name => world.People[name].Id).ToList();
+        await db.CampaignContacts
+            .Where(membership => membership.CampaignId == world.Spring.Id && people.Contains(membership.ContactId))
+            .ExecuteUpdateAsync(set => set.SetProperty(membership => membership.State, state), Ct);
     }
 
     internal static async Task<string[]> NamesAsync(JasonDbContext db, IQueryable<CampaignContact> memberships)

@@ -205,6 +205,10 @@ internal static partial class CampaignPeople
 
     private const string Current = "f.state <> 'excluded'";
 
+    // A member whose line is ended: nobody still to start on and nobody left idle, so New and Idle leave them out, while a
+    // held line, paused, is not ended and leaves them where they stood.
+    private const string LineOpen = "f.state <> 'finished'";
+
     // Everyone it happened to, removed since or not: last week does not change because somebody was taken out today.
     private const string ActivityMembers = $"cc.campaign_id IN {Asked}";
 
@@ -254,10 +258,13 @@ internal static partial class CampaignPeople
         new(CampaignSummaryFilter.Waiting, $"({Current} AND f.is_waiting)", [WaitingPart]),
         new(CampaignSummaryFilter.Failed, $"({Current} AND NOT f.is_open AND f.last_failed)", [WorkPart]),
         new(CampaignSummaryFilter.Working, $"({Current} AND f.is_working)", [WorkPart]),
-        new(CampaignSummaryFilter.New, $"({Current} AND NOT f.has_own_work)", [WorkPart]),
-        new(CampaignSummaryFilter.Idle, $"({Current} AND f.has_work AND NOT f.is_open AND NOT f.last_failed AND NOT f.is_enrolled)", [WorkPart]),
+        new(CampaignSummaryFilter.New, $"({Current} AND {LineOpen} AND NOT f.has_own_work)", [WorkPart]),
+        new(CampaignSummaryFilter.Idle, $"({Current} AND {LineOpen} AND f.has_work AND NOT f.is_open AND NOT f.last_failed AND NOT f.is_enrolled)", [WorkPart]),
         new(CampaignSummaryFilter.Sequence, $"({Current} AND f.is_enrolled AND NOT {OutNow})", [WorkPart, OutPart, SuppressedPart]),
         new(CampaignSummaryFilter.Out, $"({Current} AND {OutNow})", [WorkPart, OutPart, SuppressedPart]),
+        // The line's own two states, read off the membership alone.
+        new(CampaignSummaryFilter.Paused, "f.state = 'paused'", []),
+        new(CampaignSummaryFilter.Finished, "f.state = 'finished'", []),
         new(CampaignSummaryFilter.Removed, "f.state = 'excluded'", []),
     ];
 
@@ -702,7 +709,7 @@ internal sealed record Moment(int ContactId, long Ms);
 internal sealed record PersonMoment(int ContactId, string PublicId, long Ms);
 
 /// <summary>One campaign's Summary counts, as <see cref="CampaignPeople.SummaryCountsAsync"/> reads them.</summary>
-internal sealed record SummaryCounts(int CampaignId, int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);
+internal sealed record SummaryCounts(int CampaignId, int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Paused, int Finished, int Removed);
 
 /// <summary>One campaign's Activity counts, as <see cref="CampaignPeople.ActivityCountsAsync"/> reads them.</summary>
 internal sealed record ActivityCounts(int CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int Bounced, int OptedOut, int Removed);

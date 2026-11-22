@@ -113,6 +113,26 @@ public class ReserveCounterTests
     }
 
     /// <summary>
+    /// A person whose line is ended is nobody still to start on: the reserve, the summary's <c>new</c>, leaves the finished
+    /// out, while a person whose line is only held still counts. Six people, two finished and one paused, are four.
+    /// </summary>
+    [Fact]
+    public async Task The_reserve_leaves_the_finished_out_and_counts_the_paused()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness, people: 6, threshold: 5);
+        var members = await MembersAsync(harness, campaign);
+        await StateAsync(harness, campaign, MembershipState.Finished, members[0], members[1]);
+        await StateAsync(harness, campaign, MembershipState.Paused, members[2]);
+
+        Assert.Equal(1, await harness.ReserveAsync(Ct));
+
+        var line = Assert.Single(await ReserveLinesAsync(harness, campaign));
+        Assert.Equal(JournalKinds.AudienceReserveLow, line.Kind);
+        Assert.Equal("""{"untouched":4,"threshold":5}""", line.New!.ToJsonString());
+    }
+
+    /// <summary>
     /// Under is strictly under: a reserve at its threshold is said nothing. A campaign with no threshold, or one that is
     /// not live, is not counted at all.
     /// </summary>
@@ -318,6 +338,17 @@ public class ReserveCounterTests
         await items.CreateAsync(
             new WorkItemCreateRequest(campaign, WorkItemKind.AiRole, "researcher", null, contact, null, null, null, null, null, null, null, null, null, null, null),
             Ct);
+    }
+
+    /// <summary>These members' lines put in <paramref name="state"/>, as the verbs that move a line leave them.</summary>
+    private static async Task StateAsync(DispatchHarness harness, string campaign, MembershipState state, params string[] contacts)
+    {
+        await using var db = harness.Open();
+        var memberships = await db.CampaignContacts
+            .Where(membership => membership.Campaign!.PublicId == campaign && contacts.Contains(membership.Contact!.PublicId))
+            .ToListAsync(Ct);
+        memberships.ForEach(membership => membership.State = state);
+        await db.SaveChangesAsync(Ct);
     }
 
     private static async Task<List<string>> MembersAsync(DispatchHarness harness, string campaign)
