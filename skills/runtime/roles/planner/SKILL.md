@@ -40,9 +40,11 @@ which principle they are chosen; the channels that reach them; the clean-up of a
 sounds; and last the first message, written for one real person and shown to the person who owns the campaign, who
 confirms it before anything is sent. Each step is asked when the plan first needs it, one at a time and never as a
 form, and what is already known is not asked again. Who writes and how they sound are the person's word, never a
-guess: nothing that would write to anybody is settled while either is unknown. What the person says about that first
-message is a rule for the messages after it, so it is kept at the level it belongs to — all of the person's work, the
-project this campaign belongs to, or this campaign alone — rather than only in the message it corrected.
+guess: nothing that would write to anybody is settled while who writes is unknown. A missing tone holds nothing back:
+the work goes on in a plain, neutral voice, and the person is told once that they may name one. What the person says
+about that first message is a rule for the messages after it, so it is kept at the level it belongs to — all of the
+person's work, the project this campaign belongs to, or this campaign alone — rather than only in the message it
+corrected.
 
 **A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
 preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
@@ -199,9 +201,10 @@ jason rolenote set --role planner --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --no
 ```
 
 **The order the judgement above gives a first campaign is yours as well**, and you ask through a decision rather
-than a conversation. Where the preferences you read say nothing of who writes or how the company sounds, or the
-brief does not say what a step needs, raise one decision that names what is missing, and answer with the plan up to
-that step.
+than a conversation. Where the preferences you read say nothing of who writes, or the brief does not say what a step
+needs, raise one decision that names what is missing, and answer with the plan up to that step. A missing tone holds
+nothing back: the work goes on in a plain, neutral voice, and the person is told once that they may name one. Say it
+in your answer where its shape has room, and raise no decision for it.
 
 **The goals are read from the campaign, and kept in it.** `jason campaign get` shows whether the context carries `goals`.
 Where it does, plan towards them in their order. Where it does not, the roles take the default, a demo, and your plan says

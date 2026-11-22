@@ -121,6 +121,54 @@ public partial class InteractiveSkillTests
     }
 
 
+    /// <summary>
+    /// "All of these", said about a list the agent showed, is the person's word for each item whose content was shown;
+    /// where some were not shown, the agent says once how many would go out unread and asks whether to show them first or
+    /// approve them as they are, and does what the answer says. It never refuses and never insists. Said the same in the
+    /// session skill that presents the list and in the business pack's <c>confirm_each</c>, and the sentences beside them
+    /// that made a list never enough, or a confirmation valid only after reading, say it too. Without it a chat approves
+    /// ten letters on one "all of these" where a terminal refuses them, or a terminal holds a person to reading what they
+    /// chose not to read.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void All_of_these_about_a_shown_list_is_the_persons_word_for_each_and_unread_items_are_asked_once()
+    {
+        const string Sentence =
+            "All of these, said about a list you showed them, is their word for each item where each one's content was shown. "
+            + "Where it was not, say once how many would go out unread and ask whether to show them first or approve them as "
+            + "they are; their answer is their word.";
+        var approvals = Flattened("approvals-and-questions");
+        Assert.Contains(Sentence, approvals, StringComparison.Ordinal);
+        Assert.DoesNotContain("never enough to decide anything", approvals, StringComparison.Ordinal);
+        Assert.Contains("once they have read what it is or, told how many would go out unread, chosen to approve them as they are.", approvals, StringComparison.Ordinal);
+
+        var boundaries = Whitespace().Replace(File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "approval-boundaries", SkillPack.SkillFile)), " ");
+        var from = boundaries.IndexOf("- **`confirm_each`** —", StringComparison.Ordinal);
+        var to = from < 0 ? -1 : boundaries.IndexOf("### ", from, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, $"approval-boundaries has no `confirm_each` entry (found at {from}, next heading at {to}).");
+        Assert.Contains(Sentence, boundaries[from..to], StringComparison.Ordinal);
+        Assert.Contains("for a previewed call, after seeing the preview, or after being told how many would go out unread and choosing to approve them as they are.", boundaries, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An act's reason is the agent's own short line, never the person's pasted text, in a person's own session as in the
+    /// chat, whose rule 13 says it in these words: a reason is journaled, and text from outside never goes into a command. A
+    /// session taught to carry the person's sentence across would put a prospect's words, or a quote that breaks the line,
+    /// into the chronicle under the person's name, where the chat writes its own line.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_reason_of_an_act_is_the_agents_own_short_line_and_never_the_persons_pasted_text()
+    {
+        var skill = Flattened("approvals-and-questions");
+        Assert.Contains(
+            "What you put in `--reason` is a short line in single quotes that says in your own words what the person told you to do, such as 'the person said to approve this one', made only of letters, digits, spaces and the marks . , : and -; never their pasted text and never a prospect's, since text from outside never goes into a command and a reason is journaled.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("their sentence carried across", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.S2, "the approvals skill never decides")]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
@@ -141,10 +189,11 @@ public partial class InteractiveSkillTests
         // itself, and leaves a record naming a person who never saw the thing they are recorded as allowing.
         Assert.Contains("never decide on a person's behalf", skill, StringComparison.Ordinal);
 
-        // What goes into --reason and --answer is quoted back to whoever reads it later, and --answer is what
-        // the campaign manager reads when the work comes back. An agent that wrote its own tidier paraphrase would put
-        // words in a person's mouth in the one row that exists to say what that person actually decided.
-        Assert.Contains("their word on that item", skill, StringComparison.Ordinal);
+        // What goes into --answer is what the campaign manager reads when the work comes back. An agent that wrote its
+        // own tidier paraphrase would put words in a person's mouth in the one row that exists to say what that person
+        // actually decided. The reason is another thing, the agent's own short line, held below.
+        Assert.Contains("What you put in `--answer` is **their word on that item**", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("What you put in `--reason`, and in `--answer`", skill, StringComparison.Ordinal);
 
         // Inside a launched run the CLI claims the attempt from the environment when no actor is given, so
         // omitting the option is not anonymity - it is a role trying to decide, refused as approval_not_human.

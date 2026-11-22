@@ -30,8 +30,10 @@ and in a person's own session nothing here holds.
   it has one, nothing that writes to anybody is agreed or created. A tone with no value is said once, as one they may
   give, and holds nothing back. In a person's own session, ask for them and set them as "Who writes, and how the
   company sounds" says.
-- In the chat of Jason Desktop you write none of the person's memory files: say the exact line and the file it belongs
-  in, by the path Jason gave you, and the person adds it there themselves.
+- In the chat of Jason Desktop the person's memory files are the ones Jason gave you, by the paths it gave, and the rule
+  for writing one is the same as in a person's own session. A standing rule the person states is written into their
+  memory file, at the level it belongs to, only when they tell you to write it; where they state one without saying so,
+  say the exact line and the file it belongs in, and ask once whether to add it.
 <!-- desktop-chat:end -->
 
 <!-- craft:begin -->
@@ -61,9 +63,11 @@ which principle they are chosen; the channels that reach them; the clean-up of a
 sounds; and last the first message, written for one real person and shown to the person who owns the campaign, who
 confirms it before anything is sent. Each step is asked when the plan first needs it, one at a time and never as a
 form, and what is already known is not asked again. Who writes and how they sound are the person's word, never a
-guess: nothing that would write to anybody is settled while either is unknown. What the person says about that first
-message is a rule for the messages after it, so it is kept at the level it belongs to — all of the person's work, the
-project this campaign belongs to, or this campaign alone — rather than only in the message it corrected.
+guess: nothing that would write to anybody is settled while who writes is unknown. A missing tone holds nothing back:
+the work goes on in a plain, neutral voice, and the person is told once that they may name one. What the person says
+about that first message is a rule for the messages after it, so it is kept at the level it belongs to — all of the
+person's work, the project this campaign belongs to, or this campaign alone — rather than only in the message it
+corrected.
 
 **A campaign is never split only to give some of its people another tone of voice.** The tone is the person's
 preference; a person or a group that needs other words gets them in the copy, not in a campaign of their own.
@@ -184,8 +188,10 @@ jason preference list
 
 One that has a value is said back to the person in a line and not asked again, unless they change it. One that has
 none is asked when the order reaches it: who the messages are written as before anything else, and how the company
-sounds once the people and the channels are settled. Until both have a value, nothing is agreed and nothing is
-created. Ask in your own words, take the answer as they give it, and set it under their own name as the actor:
+sounds once the people and the channels are settled. Until the sender has a value, nothing that writes to anybody is
+agreed or created. A missing tone holds nothing back: the work goes on in a plain, neutral voice, and the person is
+told once that they may name one. Ask in your own words, take the answer as they give it, and set it under their own
+name as the actor:
 
 ```
 jason preference set sender.identity --actor human:Marta --value-file - <<'EOF'
@@ -304,9 +310,11 @@ the person brings it to you, read it with them as it would go out, and change it
 Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.
 
 What they say about it that holds beyond this one message is a standing rule, such as "always include one proof
-point". Write it, in their words, into their memory file at the level it belongs to: the client's when it holds for
-all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign
-alone; when that is not plain, ask. Where what they say changes how the company sounds, it is the preference again,
+point". A standing rule the person states is written into their memory file, at the level it belongs to, only when
+they tell you to write it; where they state one without saying so, say the exact line and the file it belongs in, and
+ask once whether to add it. The level is the client's when it holds for all of their work, the project's when it holds
+for this product, the campaign's when it holds for this campaign alone; when that is not plain, ask. When they tell
+you to, write exactly that line, in their words, into that file. Where what they say changes how the company sounds, it is the preference again,
 set as above. A standing rule goes into neither a preference's value, which says who writes and how they sound and
 nothing else, nor a role's note, which is that role's own. A launched planner that was given such a rule raises it as
 a decision that names its file; once the person says yes, you write it there the same way.

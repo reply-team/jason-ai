@@ -134,11 +134,11 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// The desktop hands the chat the person's memory files, the client's among them, which no folder that chat works
     /// in holds; without these sentences the managed path sends it to read a file it cannot reach, and the planner to
-    /// write a rule into a file the chat never writes.
+    /// write a rule into a file by a path Jason did not give it.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
-    public void The_memory_files_are_given_in_the_desktop_chat_and_written_by_the_person_alone()
+    public void The_memory_files_are_given_in_the_desktop_chat_and_written_by_the_paths_jason_gave()
     {
         var managed = Flattened("managed-campaign-work");
         Assert.Contains("Jason gives you the person's memory files at the top of a message, the client's, the project's and the campaign's: keep to those, and read none of them by its path.", managed, StringComparison.Ordinal);
@@ -148,6 +148,48 @@ public partial class InteractiveSkillTests
         // tells it that the client's file lies outside what it can reach: that was the reason it once gave a person.
         Assert.DoesNotContain("the client's is outside the folders that chat works in", managed, StringComparison.Ordinal);
         var planner = Flattened("planner-in-session");
-        Assert.Contains("In the chat of Jason Desktop you write none of the person's memory files: say the exact line and the file it belongs in, by the path Jason gave you, and the person adds it there themselves.", planner, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop the person's memory files are the ones Jason gave you, by the paths it gave, and the rule for writing one is the same as in a person's own session.", planner, StringComparison.Ordinal);
+        Assert.DoesNotContain("you write none of the person's memory files", planner, StringComparison.Ordinal);
+        Assert.DoesNotContain("the person adds it there themselves", planner, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The chat's plan card may carry steps with a subject and a body, and no role sends those texts: after the start the
+    /// roles write their own. So the managed path's chat passage says what a step on the card holds, and that a letter on
+    /// it is an example shown only where the person asked to see one. Without it a person agrees to letters they take for
+    /// what goes out. Said once, in the passage, since a person's own session has no card.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_says_a_plan_card_s_letter_is_an_example_shown_only_when_asked()
+    {
+        const string Sentence =
+            "On a plan card the steps say when and by which channel. Put a subject and a body on a step only where the "
+            + "person asked to see a letter, and say that it is an example: the roles write their own letters after the start.";
+        var passage = Whitespace().Replace(
+            MarkedBlock.Extract(SkillPack.Find("managed-campaign-work").File, "<!-- desktop-chat:begin -->", "<!-- desktop-chat:end -->") ?? string.Empty,
+            " ");
+        Assert.True(passage.Contains(Sentence, StringComparison.Ordinal), $"The chat's passage of managed-campaign-work reads '{passage.Trim()}', without '{Sentence}'.");
+        Assert.Single(Regex.Matches(Flattened("managed-campaign-work"), Regex.Escape(Sentence)));
+    }
+
+    /// <summary>
+    /// When a person's memory file is written is one rule, said in the same sentence in the chat's passage and in the
+    /// section a person's own session follows, as rule 17 of the chat's instructions says it: on the person's word, and a
+    /// rule stated without that word proposed and asked once. Two sentences that differ give the same words from the person
+    /// two outcomes, a file written in a terminal and a line handed back in the chat.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_chat_and_a_persons_own_session_write_a_memory_file_by_one_sentence()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var passage = Whitespace().Replace(
+            MarkedBlock.Extract(SkillPack.Find("planner-in-session").File, "<!-- desktop-chat:begin -->", "<!-- desktop-chat:end -->") ?? string.Empty,
+            " ");
+        var terminal = Whitespace().Replace(SectionOf(text, "## The first message, before anything is sent"), " ");
+
+        Assert.True(passage.Contains(MemoryRule, StringComparison.Ordinal), $"The chat's passage of planner-in-session reads '{passage.Trim()}', without '{MemoryRule}'.");
+        Assert.True(terminal.Contains(MemoryRule, StringComparison.Ordinal), $"'The first message, before anything is sent' reads '{terminal.Trim()}', without '{MemoryRule}'.");
+        Assert.Equal(2, Regex.Matches(Flattened("planner-in-session"), Regex.Escape(MemoryRule)).Count);
     }
 }

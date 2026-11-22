@@ -1484,10 +1484,13 @@ test('a memory file is written only on the person\'s own words in this message, 
 });
 
 test('an act that cannot be undone or reaches many is said and asked once where it was not spelled, and done whole where it was', () => {
-    assert.equal(ruleOf(21), "21. Before an act that cannot be undone, or one that reaches many items, which the person did not spell out, say in one or two sentences what will happen: how many, which, and that it cannot be undone. Then ask once; their answer, in their own words in their next message, is their word. An act is spelled when the person names the items, says all of these about a list you showed them, or says all but those they name, as in \"archive all campaigns except X\": that is their word already, so do all of it, one after another, and report once at the end. A bare all or everything is not spelled, for starting and pausing as for archiving: say what it takes and ask once.");
-    // What spelled means is rule 21's, so it holds for starting and pausing as for archiving: a bare all asks once.
+    assert.equal(ruleOf(21), "21. Before an act that cannot be undone, or one that reaches many items, which the person did not spell out, say in one or two sentences what will happen: how many, which, and that it cannot be undone. Then ask once; their answer, in their own words in their next message, is their word. An act is spelled when the person names the items, says all of these about a list you showed them, or says all but those they name, as in \"archive all campaigns except X\": that is their word already, so do all of it, one after another, and report once at the end. A bare all or everything is not spelled, for starting as for archiving: say what it takes and ask once. Pausing is never asked: a bare all pauses each at once, and you then say which were paused.");
+    // What spelled means is rule 21's, so it holds for starting as for archiving: a bare all asks once.
     assert.match(ruleOf(21), /An act is spelled when the person names the items, says all of these about a list you showed them, or says all but those they name/);
-    assert.match(ruleOf(21), /A bare all or everything is not spelled, for starting and pausing as for archiving: say what it takes and ask once\./);
+    assert.match(ruleOf(21), /A bare all or everything is not spelled, for starting as for archiving: say what it takes and ask once\./);
+    // A pause is never asked: stopping is the protective direction, so a bare all pauses each at once and says which.
+    assert.match(ruleOf(21), /Pausing is never asked: a bare all pauses each at once, and you then say which were paused\./);
+    assert.doesNotMatch(ruleOf(21), /for starting and pausing as for archiving/);
     // The answer is the person's own words in their next message.
     assert.match(ruleOf(21), /Then ask once; their answer, in their own words in their next message, is their word\./);
     // Archiving follows it, and its report names each archive.

@@ -304,6 +304,22 @@ public class BusinessPackTests
     }
 
     /// <summary>
+    /// A reply to a real prospect stays <c>confirm_each</c>, and "all of these", said about replies whose rendered text
+    /// was shown, is the person's word for each one: a word for each item, never a lowered class. Where the text was not
+    /// shown, the agent says how many would go unread and asks once. The old "no exceptions, no batching" said the
+    /// opposite of what the session skills say, so an agent in the inbox refused what one at the approvals list did.
+    /// </summary>
+    [Fact]
+    public void Inbox_triage_takes_all_of_these_about_shown_replies_as_a_word_for_each_and_keeps_the_class()
+    {
+        var skill = Flat("inbox-triage");
+
+        Assert.Contains("Sending a reply to a real prospect is `confirm_each`: the user confirms the exact rendered text, for this person, on this channel, every time.", skill, StringComparison.Ordinal);
+        Assert.Contains("All of these, said about replies whose rendered text you showed them, is their word for each one: a word for each item, not a lowered class. Where a text was not shown, say once how many would go out unread and ask whether to show them first or approve them as they are; their answer is their word.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("no exceptions, no batching", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The agent that drafts a campaign's copy with the user keeps a first message short and builds it on what is known
     /// about the person, the user's word included; a search's criteria are never such a fact, and what the user states of
     /// everyone on a list they brought is; a template is judged as it renders for one person and for one whose fields
