@@ -184,6 +184,42 @@ Where both clocks are due, the deep review runs instead of the quick look, and i
 does, so a day at the defaults is three quick looks and one deep review. A deep review that falls due while a check-in
 is open or held runs at the first scan after that check-in ends.
 
+**A review asked for.** A person, or their own session on their word, may ask for a review now:
+`jason campaign review <id>`, `campaign.review` ([runtime API](runtime-api.md)), with `--depth quick`, the default, or
+`--depth deep`. Nothing waits for a clock or a line: the request makes the check-in at once, and it is the summon's own
+work item, created by the same routine as the dispatcher, so everything above holds it as it holds one the summon made —
+it is the campaign's one open check-in, its own lines are passed over, and it ends by finishing. Its entry is the depth's,
+`quick_look` or `deep_review`, its brief says `review_intent: "requested"` and names no trigger and no cause (§5), and it
+is root work (§7). For example, a deep review before a meeting:
+
+```sh
+jason campaign review cmp_01JC0000000000000000000001 --depth deep --reason "Before the board meeting."
+```
+
+The two clocks:
+
+- a review asked for moves the quick anchor, as every check-in does, so the next quick look comes a full interval after
+  it;
+- a deep review asked for leaves the grid where it was, so the daily deep review still comes at its moment: one asked for
+  in the morning does not take the place of the one due that evening, and one asked for while the grid's is due is
+  followed by the grid's at the first scan after it ends.
+
+The request writes one `review_requested` line, under the person and their reason, keyed by the depth and naming the
+check-in and its entry. It is no trigger and cannot be named one usefully: it summons nothing, and a program cannot
+subscribe to it. It is refused, in this order, and refused writes nothing:
+
+1. from inside a run, `decided_inside_a_run`, whatever actor it names: a review asked for is a person's word, and a
+   check-in that asked for its own successor would review for ever;
+2. with no named person, `actor_required`, and for an actor that is no person, `review_not_human`;
+3. a campaign that is not there, `campaign_not_found`;
+4. a campaign that is not active — a draft, a paused or an archived one — `campaign_not_active`: only an active campaign
+   is reviewed, and starting one summons a review of its own (§2);
+5. a check-in open, one held at the manager's daily limit included, `review_already_open`, which names it: the open one
+   is the review, and two requests at once make one check-in;
+6. the manager's launches of the day spent for the campaign (`Launches:MaxPerDay:manager`), counted as the claim counts
+   them, `launches_spent`: the check-in would only wait for the installation's next midnight, so it is not made, and the
+   message says the way out — "To go on today, tell your agent: ignore the limit, or run jason launches lift."
+
 **What a cadence costs.** One launch per active campaign per interval, on the operator's own agent
 host and their own plan: a quick look per `Manager:ReviewSeconds` since the last review, and a deep review per
 `Manager:DeepReviewSeconds`, which takes the place of the quick look that would have fallen on it. Ten active campaigns
@@ -197,7 +233,8 @@ review a cause summons:
 | the quick look at the floor, 300 | 287 | 1 | 288 | 2880 |
 | the deep review at the floor, 300 | 0 | 288 | 288 | 2880 |
 
-A start adds at most one review per going live, a resume included. While that review
+A start adds at most one review per going live, a resume included, and each review a person asks for adds one, counted
+under the manager's daily limit as every check-in is. While that review
 runs, the campaign's other work waits behind it, as it waits behind any item of the campaign that runs (a campaign has
 one item in flight at a time): work queued or approved meanwhile moves when the review ends, at the latest at the first
 scan after its budget, `Manager:TimeoutSeconds`, runs out.
@@ -229,7 +266,9 @@ The runtime writes the brief, and the brief is identifiers and constants:
 ```
 
 A scheduled review — a quick look, or a deep review with no cause — carries `review_intent: "scheduled"` and names no
-trigger and no cause; a deep review that read a cause carries it as above. Everything
+trigger and no cause; a deep review that read a cause carries it as above. A review a person asked for (§4) carries
+`review_intent: "requested"` and, like a scheduled one, names no trigger and no cause; its other keys are a scheduled
+review's. So `review_intent` is one of three values, `scheduled`, `triggered` and `requested`. Everything
 else a review needs, it reads for itself through the CLI — the campaign, its work, its chronicle, its
 contacts, and the role note that is the manager's own memory of this campaign.
 
@@ -249,7 +288,8 @@ The first row wins over every row after it, and each later row is read with the 
 the cause's kind, one comparison of identifiers — whether the cause line is the smallest journal id among the campaign's
 `campaign_started` lines — and whether each clock was due. It reads no line's `old`, `new`, `key` or reason, so a start
 after a pause is told from a first start without reading either. The deep review wins over a cause, and a cause wins
-over the quick look.
+over the quick look. The table is the summon's: a review a person asks for is given the entry its depth names,
+`quick_look` or `deep_review`, whatever the clocks and the chronicle say (§4).
 The entry is not a key of the brief: the work item carries it (`entry` in `workitem.get`), and the launch envelope
 carries it as `entry: {name, text}`, where `text` is the file `entries/<name>.md` of the manager's folder, whole
 ([work execution](work-execution.md), "The launch envelope"). A check-in with no entry has `entry: null` there, and is

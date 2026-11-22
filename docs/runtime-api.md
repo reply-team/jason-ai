@@ -167,6 +167,8 @@ so in one line on stderr, naming the variable and never its value.
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
+  `campaign.review` needs an actor of type `human` that names the person too, and there the CLI's default is one:
+  `jason campaign review` with no `--actor` names this account's person, as a start does.
   `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
   `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `campaign.finish_contacts`,
   `campaign.continue_contacts`, `campaign.reopen_contacts`, `suppression.add` and `suppression.remove` set it no limit of
@@ -235,6 +237,19 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started. From inside a
   run it is refused `403` `decided_inside_a_run`, whatever actor it names: only a person, or their own session on their
   word, starts or resumes one.
+- `campaign.review`: a person's word that the campaign's manager reviews it now. The request is `campaign_id`, an
+  optional `depth`, `quick` or `deep`, absent a quick look, `actor` and an optional `reason`. It makes the check-in the
+  dispatcher would make, as the dispatcher, with the manager's `quick_look` or `deep_review` entry and
+  `review_intent: "requested"` in its brief, and answers with that work item as `workitem.create` answers one it made. It moves
+  the quick look's clock as every review does and leaves the deep review's grid alone, so the daily deep review still
+  comes at its moment, and it writes one `review_requested` line, under the person and their reason, which summons
+  nothing. Refused, in this order: from inside a run, `403` `decided_inside_a_run`, whatever actor it names; no named
+  person, `actor_required`, and an actor that is no person, `review_not_human`; then `campaign_not_found`; a campaign
+  that is not active, a draft, a paused or an archived one, `409` `campaign_not_active`; a check-in open, one held at the
+  manager's daily limit included, `409` `review_already_open`, which names it; and the manager's launches of the day
+  spent, as the claim counts them, `409` `launches_spent`, whose message names the way out: "To go on today, tell your
+  agent: ignore the limit, or run jason launches lift." [The campaign manager](campaign-manager.md) §4 is the
+  contract.
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`
@@ -805,7 +820,9 @@ interrupted.
   `campaign.start` is refused there the same way, whatever actor it names, though it takes any actor outside a run: a
   role may pause a campaign, and only a person, or their own session on their word, starts or resumes one. So is
   `launches.lift`, which needs a person by name: a run that lifted the daily limits would let every role in every
-  campaign past them for the rest of the day on no person's word.
+  campaign past them for the rest of the day on no person's word. So is `campaign.review`, which needs a person by name
+  too: a run that asked a campaign's manager for a review would launch a check-in on no person's word, and a check-in
+  that asked for its own successor would review for ever.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it
