@@ -26,7 +26,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// let go, one whose moment passed, or one whose cancel no route takes where it ran. Three acts call it: the hold a reply
 /// sets, the end of a line and a removal.
 /// </summary>
-public class HeldSendsCancelTests
+public partial class HeldSendsCancelTests
 {
     private const string Mailer = "holding-mailer";
 
@@ -350,17 +350,18 @@ public class HeldSendsCancelTests
     }
 
     private static async Task<string> SentAsync(
-        DispatchHarness harness, int campaign, int person, string? sendAfter, bool cancelable = true, string? acceptedFor = null)
+        DispatchHarness harness, int campaign, int person, string? sendAfter, bool cancelable = true, string? acceptedFor = null, DateTime? wentAt = null)
     {
         await using var db = harness.Open();
         var owner = await db.Campaigns.SingleAsync(c => c.Id == campaign, Ct);
-        return await SentAsync(db, owner, person, sendAfter, cancelable, acceptedFor, RoutedIdentity);
+        return await SentAsync(db, owner, person, sendAfter, cancelable, acceptedFor, RoutedIdentity, wentAt);
     }
 
     /// <summary>
     /// A send of the campaign to the person that the provider took with its reference at <see cref="Mailer"/>, for the
     /// moment <paramref name="sendAfter"/> names or none, saying it can cancel it unless <paramref name="cancelable"/> is
-    /// false, and naming its own moment where <paramref name="acceptedFor"/> is given. Answers its work item.
+    /// false, and naming its own moment where <paramref name="acceptedFor"/> is given; its attempt ended at
+    /// <paramref name="wentAt"/>, where one is given. Answers its work item.
     /// </summary>
     internal static async Task<string> SentAsync(
         JasonDbContext db,
@@ -369,7 +370,8 @@ public class HeldSendsCancelTests
         string? sendAfter,
         bool cancelable = true,
         string? acceptedFor = null,
-        string? bindingIdentity = RoutedIdentity)
+        string? bindingIdentity = RoutedIdentity,
+        DateTime? wentAt = null)
     {
         var arguments = new JsonObject
         {
@@ -399,6 +401,7 @@ public class HeldSendsCancelTests
             }),
         };
         var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, Noon.AddHours(-1));
+        attempt.FinishedAt = wentAt;
         attempt.Provenance = new AttemptProvenanceDto(
             Mailer, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
             "message.send", 1, null, null, RouteScope.CampaignDefault, bindingIdentity,

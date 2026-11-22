@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -14,6 +17,15 @@ namespace Jason.Runtime.Contacts;
 /// whose line is already held, ended or removed is left as they are, and so is anyone who is not a member. One reserved
 /// line says it, <c>contacts_paused</c>, as the dispatcher, naming the person and the reply line by their ids alone.
 /// <para>
+/// A thread moves when Jason writes into it too, and a reply line says every move, so a line that may be Jason's own move
+/// holds nobody (<see cref="OwnMoveAsync"/>): its moment is not later than the latest moment Jason's own letter went out
+/// to the person in the campaign. That letter is a touch of the person there, at its result's <c>accepted_for</c> where
+/// it names one and otherwise at the end of its succeeded attempt, or a <c>conversation.reply</c> of the campaign into
+/// the line's own thread, at the end of its succeeded attempt. A touch records no thread, so touches are compared for the
+/// person across the campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a
+/// cancel took back never went. Moments of the runtime's own record are compared and nothing else.
+/// </para>
+/// <para>
 /// Written once and called from one place, the respond step, inside the transaction that reads the reply line, whether
 /// or not a responder is woken for it. Nothing here reads what the reply says: a reply holds the line, and what follows
 /// is the manager's.
@@ -21,9 +33,41 @@ namespace Jason.Runtime.Contacts;
 /// </summary>
 internal static class LineHold
 {
+    /// <summary>The answer into a thread, compared for the thread it names.</summary>
+    private const string Answer = "conversation.reply";
+
+    /// <summary>The cancel that takes a letter back before it goes.</summary>
+    private const string Cancel = "message.cancel";
+
     /// <summary>
-    /// Holds the person's line in the campaign when they are enrolled there, and answers whether it did. The membership is
-    /// read and written inside the caller's transaction, which holds the writer, so nothing changes it in between.
+    /// Whether a letter of Jason's went out to the person at or after the line's moment and by now: a succeeded touch of the
+    /// person in the campaign, at its result's <c>accepted_for</c> or else its succeeded attempt's end, or a succeeded answer
+    /// of the campaign into the line's thread, at its attempt's end; never one a succeeded cancel names. SQLite's date
+    /// functions read the stored moment and the contract's forms alike, and one they cannot read is NULL and counts for
+    /// nothing.
+    /// </summary>
+    private const string OwnMoveSql = """
+        SELECT count(*) AS "Value"
+        FROM work_items AS s
+        JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
+        WHERE s.campaign_id = {0}
+          AND s.status = 'succeeded'
+          AND ((s.contact_id = {1} AND s.operation IN (SELECT value FROM json_each({2})))
+               OR ({3} IS NOT NULL AND s.operation = {4} AND json_extract(s.context_json, '$.input.thread.external_id') = {3}))
+          AND NOT EXISTS (
+              SELECT 1 FROM work_items AS k
+              WHERE k.campaign_id = s.campaign_id AND k.operation = {5} AND k.status = 'succeeded'
+                AND json_extract(k.context_json, '$.input.send') = s.public_id)
+          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) >= julianday({6})
+          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) <= julianday({7})
+        """;
+
+    private static readonly string Touches = JsonSerializer.Serialize(OperationCatalog.Touches);
+
+    /// <summary>
+    /// Holds the person's line in the campaign when they are enrolled there and the line is not Jason's own move, and
+    /// answers whether it did. The membership is read and written inside the caller's transaction, which holds the writer,
+    /// so nothing changes it in between. A line with no moment the step can read is never taken for Jason's own move.
     /// </summary>
     public static async Task<bool> ApplyAsync(
         JasonDbContext db,
@@ -32,10 +76,17 @@ internal static class LineHold
         int campaignId,
         int contactId,
         string linePublicId,
+        string? thread,
+        DateTime? moved,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(journal);
+
+        if (moved is { } moment && await OwnMoveAsync(db, campaignId, contactId, thread, moment, now, ct).ConfigureAwait(false))
+        {
+            return false;
+        }
 
         var membership = await db.CampaignContacts
             .Include(m => m.Contact)
@@ -62,4 +113,23 @@ internal static class LineHold
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return true;
     }
+
+    /// <summary>
+    /// Whether the line's moment may be Jason's own letter moving the thread: it is not later than a moment one of Jason's
+    /// letters to the person went out, one that has come by <paramref name="now"/>.
+    /// </summary>
+    public static async Task<bool> OwnMoveAsync(
+        JasonDbContext db, int campaignId, int contactId, string? thread, DateTime moved, DateTime now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        object named = thread is null ? DBNull.Value : thread;
+        var went = await db.Database
+            .SqlQueryRaw<int>(OwnMoveSql, campaignId, contactId, Touches, named, Answer, Cancel, Moment(moved), Moment(now))
+            .SingleAsync(ct)
+            .ConfigureAwait(false);
+        return went > 0;
+    }
+
+    private static string Moment(DateTime moment) =>
+        DateTime.SpecifyKind(moment, DateTimeKind.Utc).ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
 }
