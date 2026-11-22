@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApi } from '../api/context';
 import { ArchiveDialog } from '../screens/campaigns/archive';
 import { TransitionDialog, type Movable, type Transition } from '../screens/campaigns/pause-dialog';
-import { agentFacts, readAgent } from './agent-facts';
+import { agentFacts, peopleOf, readAgent } from './agent-facts';
 import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { begin, factsOf, placeGates } from './conversation-acts';
 import { rowItems, type MenuItem } from './conversation-items';
@@ -23,6 +23,12 @@ function agentOf(id: string): Movable | null {
     const campaign = conversations.value.find((each) => each.id === id)?.campaignId ?? null;
     if (campaign === null) return null;
     return agentFacts.value[campaign]?.campaign ?? campaigns.value.find((each) => each.id === campaign) ?? null;
+}
+
+/** How many people the agent of a row's conversation holds, as the console counted them last. */
+function peopleOfRow(id: string): number | null {
+    const campaign = conversations.value.find((each) => each.id === id)?.campaignId ?? null;
+    return campaign === null ? null : peopleOf(campaign);
 }
 
 type Open = { row: string; agent: Movable } & ({ kind: 'move'; move: Transition } | { kind: 'archive' });
@@ -135,7 +141,10 @@ export function RowMenu() {
                         } else menuKeys(event, menu.current, close);
                     }}
                 >
-                    <MenuEntries items={rowItems(agentOf(at.id), factsOf(at.id), placeGates())} onChoose={choose} />
+                    <MenuEntries
+                        items={rowItems(agentOf(at.id), factsOf(at.id), placeGates(), peopleOfRow(at.id))}
+                        onChoose={choose}
+                    />
                 </div>
             )}
             {dialog !== null && (

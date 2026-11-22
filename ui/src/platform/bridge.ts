@@ -13,6 +13,7 @@ export const bridgeMembers = [
     'chat.list',
     'chat.open',
     'chat.create',
+    'chat.createAgent',
     'chat.send',
     'chat.stop',
     'chat.rename',
@@ -25,7 +26,10 @@ export interface BridgeSeam {
     mode: Pick<JasonDesktop['mode'], 'get'>;
     theme: Pick<JasonDesktop['theme'], 'get'>;
     setup: Pick<JasonDesktop['setup'], 'status' | 'onChanged'>;
-    chat: Pick<JasonDesktop['chat'], 'list' | 'open' | 'create' | 'send' | 'stop' | 'rename' | 'onEvent'>;
+    chat: Pick<
+        JasonDesktop['chat'],
+        'list' | 'open' | 'create' | 'createAgent' | 'send' | 'stop' | 'rename' | 'onEvent'
+    >;
 }
 
 /** A request the bridge could not take: a fault of this page, said with its status. */
@@ -216,6 +220,7 @@ export class Bridge {
                 list: () => call('chat.list'),
                 open: (chatId) => call('chat.open', chatId),
                 create: (campaignId) => call('chat.create', campaignId),
+                createAgent: (clickId) => call('chat.createAgent', clickId),
                 send: (chatId, text, options) => call('chat.send', chatId, text, options),
                 stop: async (chatId) => void (await call('chat.stop', chatId)),
                 rename: (chatId, title) => call('chat.rename', chatId, title),

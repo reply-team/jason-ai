@@ -56,6 +56,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
+import { agentActor, agentKey, agentName, agentRefused, agentRuntimeAway, clickIdShape, nextAgentNumber, notAClick } from './chat-agent.ts';
 import { ExportRefused, exportInto, exportName, exportNotTyped, exportStart } from './chat-export.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
@@ -206,6 +207,14 @@ export interface ConversationSummary {
      * moves to the ended place, kept seven days.
      */
     ownFolder?: true;
+    /** Present, and true, for an agent's conversation made with its campaign at the click on New GTM agent. */
+    madeAtClick?: true;
+}
+
+/** What a click on New GTM agent made: the agent's conversation, kept, and its campaign as the runtime made it. */
+export interface AgentMade {
+    conversation: ConversationSummary;
+    campaign: { id: string; name: string };
 }
 
 /**
@@ -454,6 +463,7 @@ type Listed = Map<string, { created: number; name: string }>;
 
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
+const projectIdShape = /^prj_[0-9A-Za-z]{1,64}$/;
 const textLimit = 1_000_000;
 /** The most lines one `feed` call takes: as many as the runtime's stream sends at one look. */
 const feedBatch = 200;
@@ -619,8 +629,18 @@ export class Chat {
     /** By conversation id, the turn that runs. */
     #running = new Map<string, Running>();
     #conversations = new Map<string, Conversation>();
-    /** The conversations kept: read from a record, or sent to. One made and never sent to is not listed or written. */
+    /**
+     * The conversations kept: read from a record, sent to, or made at a click on New GTM agent (`createAgent`). Any other
+     * one made and never sent to is not listed or written.
+     */
     #kept = new Set<string>();
+    /**
+     * By click id, the name that click's agent was given in this run and the default project's id it is made in, so a
+     * retry of the click asks the same create.
+     */
+    #clickNames = new Map<string, { name: string; project: string }>();
+    /** The clicks' creates, one after another, so a click's number is read after every earlier click's agent was made. */
+    #clicks: Promise<unknown> = Promise.resolve();
     /**
      * A chat id the page made up, before the page knew the desktop's conversations, and the conversation its first send
      * found or made: that campaign's for a send that named one, a new set-up chat for one that named none.
@@ -937,8 +957,8 @@ export class Chat {
     }
 
     /**
-     * The conversations kept, newest first: one read from its record, or one whose first turn has started. One made
-     * and never sent to is the window's that made it, and is not listed.
+     * The conversations kept, newest first: one read from its record, one whose first turn has started, or an agent's
+     * made at a click. Any other one made and never sent to is the window's that made it, and is not listed.
      */
     list(): ConversationSummary[] {
         return [...this.#conversations.values()]
@@ -965,6 +985,7 @@ export class Chat {
             running: this.#running.has(conversation.id),
             mode: this.#modeOf(conversation),
             ...(conversation.folder === 'own' ? { ownFolder: true as const } : {}),
+            ...(conversation.made_at_click === true ? { madeAtClick: true as const } : {}),
         };
     }
 
@@ -1150,6 +1171,54 @@ export class Chat {
         const again = this.#ofCampaign(campaignId);
         if (again !== undefined) return this.#summaryOf(again);
         return this.#summaryOf(this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId));
+    }
+
+    /**
+     * The agent a click on New GTM agent makes: a campaign in the default project, named by its id whatever folder the
+     * desktop runs in, and named "New agent N", N one more than
+     * the highest number a campaign carries in that name (`nextAgentNumber`), made through the CLI under the click's own
+     * key and the person's actor, and its conversation, kept from now and marked made at the click. A retry of the same
+     * click asks the same create, by the same name and key, so a create that went through before its answer was lost
+     * gives the same campaign back. Clicks are taken one after another. A list that cannot be read whole, or a create
+     * that made nothing, is refused in the desktop's words, and nothing is kept.
+     */
+    createAgent(clickId: unknown): Promise<AgentMade> {
+        if (typeof clickId !== 'string' || !clickIdShape.test(clickId)) return Promise.reject(new ChatRefused(notAClick));
+        const made = this.#clicks.then(() => this.#makeAgent(clickId));
+        this.#clicks = made.catch(() => undefined);
+        return made;
+    }
+
+    async #makeAgent(clickId: string): Promise<AgentMade> {
+        let chosen = this.#clickNames.get(clickId);
+        if (chosen === undefined) {
+            const listed = await this.#listCampaigns();
+            if (listed === null) throw new ChatRefused(agentRuntimeAway);
+            // The default project, named by its id: never the project of a folder the desktop happens to run in.
+            const read = await this.#options.cli.run(['project', 'get', '--slug', 'default']);
+            if (read.exit === 3) throw new ChatRefused(agentRuntimeAway);
+            const project = read.exit === 0 ? objectOf(read.stdout) : null;
+            if (typeof project?.id !== 'string' || !projectIdShape.test(project.id) || project.default !== true) throw new ChatRefused(agentRefused(read));
+            chosen = { name: agentName(nextAgentNumber([...listed.values()].map((each) => each.name))), project: project.id };
+            this.#clickNames.set(clickId, chosen);
+        }
+        const { name } = chosen;
+        const actor = agentActor(this.#options.account);
+        const args = ['campaign', 'create', '--name', name, '--project', chosen.project, '--idempotency-key', agentKey(clickId), ...(actor === null ? [] : ['--actor', actor])];
+        const answer = await this.#options.cli.run(args);
+        if (answer.exit === 3) throw new ChatRefused(agentRuntimeAway);
+        const campaign = answer.exit === 0 ? objectOf(answer.stdout) : null;
+        const id = campaign?.id;
+        if (typeof id !== 'string' || !campaignIdShape.test(id)) throw new ChatRefused(agentRefused(answer));
+        const given = typeof campaign?.name === 'string' ? campaign.name : name;
+        let conversation = this.#ofCampaign(id);
+        if (conversation === undefined) {
+            conversation = this.#made(id, nameOf(given) || id);
+            conversation.made_at_click = true;
+        }
+        this.#kept.add(conversation.id);
+        this.#keep(conversation);
+        return { conversation: this.#summaryOf(conversation), campaign: { id, name: given } };
     }
 
     /**

@@ -108,8 +108,16 @@ link is enough to start." where the AI host chosen for the chat can open a page;
 without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
-**Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New GTM agent** brings it forward. **New chat**, the button under it, makes a chat about no agent directly, and such
+**Take back** returns the words. Start opens every time the window opens, also when campaigns exist.
+
+The sidebar's **New GTM agent** makes the agent at the click: a draft in the default project named "New agent 3", one
+more than the highest number such a name carries, archived agents included, and its conversation, kept from that moment
+so it is in Recent and survives a restart. Its place opens on its Chat, which asks Start's question about it, "Who
+should New agent 3 reach?", with Start's box, its menus, the AI card where no AI is connected, and the chips; the first
+message goes in that agent's own conversation. A draft with no brief and no one in it offers no Start yet. A click that
+made no agent says why in the sidebar, "Jason is not running. Start it, then try again." or "Jason could not make the
+agent: …", with **Try again**, which repeats the same click, so a click makes one agent at most. The Dashboard's,
+Search's and Needs you's New GTM agent do the same. **New chat**, the button under it, makes a chat about no agent directly, and such
 a chat says so on a line at its top, "Chat · no agent", from before its first message; an agent's chat is named by the
 agent's header instead, and the Feed by its own.
 

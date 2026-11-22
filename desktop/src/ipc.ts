@@ -36,6 +36,7 @@ export const invokeChannels = {
     'chat.list': 'jason:chat.list',
     'chat.open': 'jason:chat.open',
     'chat.create': 'jason:chat.create',
+    'chat.createAgent': 'jason:chat.createAgent',
     'chat.remove': 'jason:chat.remove',
     'chat.restart': 'jason:chat.restart',
     'chat.attach': 'jason:chat.attach',

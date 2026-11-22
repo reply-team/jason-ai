@@ -227,16 +227,19 @@ describe('Needs you', () => {
     });
 
     it('starts a new agent from the card, as the sidebar’s New GTM agent does', async () => {
-        await renderConsole(
+        const desktop = await renderConsole(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        // The desktop refuses the agent, so Needs you stays: the card asked what the sidebar's button asks.
+        desktop.refuse.set('chat.createAgent', 'Jason is not running. Start it, then try again.');
         fireEvent.click(
             within(needs().querySelector<HTMLElement>('.card.needs-empty')!).getByRole('button', {
                 name: 'New GTM agent',
             }),
         );
-        await waitFor(() => expect(screen.getByRole('form', { name: 'Start' })).toBeTruthy());
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'chat.createAgent')).toHaveLength(1));
+        expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
     });
 
     it('lists what waits on the left and shows the first, whole, on the right; choosing a line shows that one', async () => {

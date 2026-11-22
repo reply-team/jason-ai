@@ -111,10 +111,16 @@ export function conversationItems(facts: ConversationFacts, gates: Gates): MenuI
 /**
  * The menu on a row of Recent: Open, and right after it the agent's folder in the file manager and the agent host in a
  * terminal, where the conversation's acts hold them; for an agent whose status is read, its move by that status and Archive…, neither for an archived one;
- * then the conversation's other acts, Remove last after a separator of its own. A chat about no agent, or an agent not
+ * then the conversation's other acts, Remove last after a separator of its own. A draft with no brief and no one in it
+ * has no move yet (`startHeld`). A chat about no agent, or an agent not
  * read yet, has no move and no Archive…. A separator stands only between two groups that hold something.
  */
-export function rowItems(agent: { status: string } | null, facts: ConversationFacts, gates: Gates): MenuItem[] {
+export function rowItems(
+    agent: { status: string; context?: Record<string, unknown> } | null,
+    facts: ConversationFacts,
+    gates: Gates,
+    people?: number | null,
+): MenuItem[] {
     const own = conversationItems(facts, gates);
     const groups: MenuItem[][] = [
         [
@@ -123,7 +129,7 @@ export function rowItems(agent: { status: string } | null, facts: ConversationFa
             ...(agent === null
                 ? []
                 : [
-                      ...transitions(agent).map((move): MenuItem => ({
+                      ...transitions(agent, people).map((move): MenuItem => ({
                           kind: 'move',
                           move,
                           label: t(`agent.menu.move.${move}`),

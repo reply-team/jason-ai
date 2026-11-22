@@ -426,8 +426,8 @@ test('two set-up turns that ran at the same time hand over neither, and both off
         assert.deepEqual(said.at(-2), { kind: 'pick', campaignIds: [made] }, chat.id);
     }
     const picked = await r.chat.attach(first.id, made);
-    assert.deepEqual([picked.campaignId, picked.title], [made, 'Spring']);
-    assert.deepEqual(r.events.get(first.id)?.at(-1), { kind: 'attached', campaignId: made, title: 'Spring' });
+    assert.deepEqual([picked.campaignId, picked.title], [made, 'Mine']);
+    assert.deepEqual(r.events.get(first.id)?.at(-1), { kind: 'attached', campaignId: made, title: 'Mine' });
     await assert.rejects(r.chat.attach(second.id, made), { message: 'That agent has its conversation already. Open it from the agent.' });
     await assert.rejects(r.chat.attach(first.id, 'cmp_OTHER'), /already about an agent/);
 });

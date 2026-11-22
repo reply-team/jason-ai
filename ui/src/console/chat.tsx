@@ -1,4 +1,4 @@
-import { computed, effect } from '@preact/signals-react';
+import { computed, effect, signal } from '@preact/signals-react';
 import {
     useCallback,
     useEffect,
@@ -81,10 +81,12 @@ import {
     noteClosed,
     turnOptions,
     typed,
+    asksStart,
     type Answer,
     type Chat,
     type Entry,
 } from './chat-model';
+import { agentFacts, peopleOf, readAgent } from './agent-facts';
 import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { openingChips, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
@@ -101,7 +103,7 @@ import { AccessButton, Glyph, ModeMark, ModelButton, modeSaysOn, useFit } from '
 import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
-import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
+import { aiCardView, chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import {
     changeChat,
     chatOf,
@@ -114,6 +116,7 @@ import {
     inTab,
     messageOf,
     setup,
+    setupError,
 } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
@@ -251,6 +254,54 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
         return null;
     }
 }
+
+/**
+ * By chat id, the first message an agent's opening took while no AI that drives the chat was connected, or Start's that
+ * waited the same way when New GTM agent was clicked: shown in the opening with Take back, and sent once an AI is there,
+ * once, into that agent's own conversation. It waits while the window is open, as Start's does.
+ */
+export const openingWaiting = signal<Readonly<Record<string, string>>>({});
+
+/** Holds a first message in an agent's opening until an AI that drives the chat is connected. */
+export function holdOpening(id: string, text: string): void {
+    const words = text.trim();
+    if (words) openingWaiting.value = { ...openingWaiting.value, [id]: words };
+}
+
+/**
+ * Holds the first message of an agent's opening where no AI that drives the chat is connected and none waits yet: true
+ * where it was held, so the caller sends nothing. A tab locked out of the chat holds nothing.
+ */
+export function holdsOpening(id: string, text: string): boolean {
+    const chat = chats.value[id];
+    if (!chat || !asksStart(chat) || hostOf(chat) !== null || openingWaiting.value[id] !== undefined) return false;
+    if (inTab() && !tabMaySend(chat.mode)) return false;
+    if (!text.trim()) return false;
+    holdOpening(id, text);
+    return true;
+}
+
+/** The waiting message back into the opening's box. */
+export function takeOpeningBack(id: string): void {
+    const held = openingWaiting.value[id];
+    if (held === undefined) return;
+    const rest = { ...openingWaiting.value };
+    delete rest[id];
+    openingWaiting.value = rest;
+    changeChat(id, (each) => typed(each, held));
+}
+
+// A held first message goes as soon as an AI is there to take it and its chat is held here, each once: it is taken out
+// of waiting before it is sent.
+effect(() => {
+    const held = openingWaiting.value;
+    const ready = Object.keys(held).filter((id) => chats.value[id] !== undefined);
+    if (ready.length === 0 || chatHosts(setup.value?.hosts ?? []).drive.length === 0) return;
+    const rest = { ...held };
+    for (const id of ready) delete rest[id];
+    openingWaiting.value = rest;
+    for (const id of ready) sendTurn(id, held[id]!, true, undefined, true);
+});
 
 /** What marks the id an agent's chat is drawn under before its conversation is made: never one the desktop gives. */
 const unmadeMark = 'unmade:';
@@ -593,7 +644,10 @@ effect(() => {
 });
 
 define('chat.suggest', ([id, text]) => {
-    if (typeof id === 'string' && typeof text === 'string') sendTurn(id, text);
+    if (typeof id !== 'string' || typeof text !== 'string') return;
+    // A chip in an agent's opening is its first message, as Send's is: with no AI to take it, it waits there.
+    if (holdsOpening(id, text)) return;
+    sendTurn(id, text);
 });
 
 define('chat.approvePlan', ([id]) => {
@@ -1145,6 +1199,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         </div>`;
     // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
     const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
+    // An agent made at the click asks Start's question above, in its panel, with its box: here are its chips alone.
+    if (asksStart(chat)) return html`<div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
@@ -1545,16 +1601,28 @@ export function ChatNotes({ chat }: { chat: Chat }) {
  * the agent page's own control with its own confirmation. The dialog is the browser shell's, so it is drawn inside that
  * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
  */
-function AgentInBar({ campaignId }: { campaignId: string }) {
-    const campaign = campaigns.value.find((each) => each.id === campaignId);
+function AgentInBar({ campaignId, running }: { campaignId: string; running: boolean }) {
+    const api = useApi();
+    const listed = campaigns.value.find((each) => each.id === campaignId);
+    // A draft's brief is read where no header reads it, so the bar knows whether its Start is held (`startHeld`): when
+    // the bar is drawn, once each of the chat's turns ends, which may have written the brief, and whenever the list of
+    // agents is read again, as the journal's lines have it. No read stands as final.
+    const draft = listed?.status === 'draft';
+    useEffect(() => {
+        if (draft && !running) void readAgent(api, campaignId);
+    }, [api, campaignId, draft, running, listed]);
     // An archived campaign is over: it has no move, and its chat says nothing of a state.
-    if (!campaign || campaign.status === 'archived') return null;
+    if (!listed || listed.status === 'archived') return null;
+    // Its brief as its header read it, where it did, so a draft with none and no one in it offers no Start yet.
+    const brief = agentFacts.value[campaignId]?.campaign.context;
+    const campaign = brief === undefined ? listed : { ...listed, context: brief };
     const { state, tone } = toCampaignRow(campaign, undefined);
     return (
         <div className="chat-agent" role="group" aria-label="This agent">
             <span className={`pillc chat-agent-state ${tone}`}>{state}</span>
             <CampaignMoves
                 campaign={campaign}
+                people={peopleOf(campaignId)}
                 buttonClass={(move) => (move === 'pause' ? 'btn sm chat-agent-move' : 'btn sm p chat-agent-move')}
                 frame={(dialog) => <div className="harness">{dialog}</div>}
                 onDone={() => void reloadCampaigns()}
@@ -1622,6 +1690,16 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const record = chatOf(chatId).value;
     const removing = record?.removing ?? false;
     const renaming = record?.renaming !== null && record?.renaming !== undefined;
+    // The opening's box and the chat's are two boxes: once the first message ends the opening, the chat's box takes the
+    // focus the opening's had.
+    const openingNow = record !== undefined && asksStart(record);
+    // Only the same chat's opening ending moves the focus: a panel shown for another chat starts over.
+    const wasOpening = useRef<{ chatId: string; opening: boolean } | null>(null);
+    useEffect(() => {
+        const was = wasOpening.current;
+        if (was !== null && was.chatId === chatId && was.opening && !openingNow) messageBox.current?.focus();
+        wasOpening.current = { chatId, opening: openingNow };
+    }, [chatId, openingNow]);
     // The rename box takes focus with its name selected, so typing replaces it; once it closes, by Save, Cancel or
     // Escape, focus goes back to Rename.
     useEffect(() => {
@@ -1787,6 +1865,14 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
+        // The agent's opening, as Start, takes the first message while no AI drives the chat: it waits, shown, and goes
+        // once one is connected.
+        if (!tabLocked && current && !host && asksStart(current) && openingWaiting.value[chatId] === undefined) {
+            if (!current.draft.trim()) return;
+            drop.reset();
+            if (holdsOpening(chatId, current.draft)) changeChat(chatId, (each) => typed(each, ''));
+            return;
+        }
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
         // What the box said of a drop goes with the words it was said beside.
         drop.reset();
@@ -1828,6 +1914,128 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     const queues =
         chat.draft.trim() !== '' && host !== null && !nameMissing && !tabLocked && !chat.stopping && !chat.removing;
     const underHead = headed && chat.campaignId !== null && !chat.main;
+    // An agent made at the click asks Start's question in its own place until its first message: Start's box, its
+    // pickers and, with no AI that drives the chat, Start's AI card first, under the question; the chips below it.
+    const opening = asksStart(chat);
+    const aiCard =
+        opening && (setup.value ? chatHosts(setup.value.hosts).drive.length === 0 : setupError.value !== null);
+    const heldWords = opening ? openingWaiting.value[chatId] : undefined;
+    const composer = (
+        <form className="cform" onSubmit={send} aria-label="Message">
+            <div className="composer">
+                {setup.value && !host && heldSaid.length > 0 && (
+                    <div className="note am host-held">
+                        {[...new Set(heldSaid.map((each) => each.belowFloor!))].map((sentence) => (
+                            <div key={sentence}>
+                                {sentence.split('`').map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
+                            </div>
+                        ))}{' '}
+                        <button className="btn sm" type="button" onClick={() => void listHosts()}>
+                            Check again
+                        </button>
+                    </div>
+                )}
+                {setup.value && !host && held.length === 0 && !aiCard && (
+                    <div className="note am">
+                        No AI host that drives the chat was found on this machine. Connect lists the hosts and installs
+                        one.{' '}
+                        {!inTab() && (
+                            <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
+                                Connect
+                            </button>
+                        )}
+                    </div>
+                )}
+                {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
+                {drop.said !== null && (
+                    <div className="note am" role="status">
+                        {drop.said}
+                    </div>
+                )}
+                {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
+                <textarea
+                    ref={messageBox}
+                    rows={1}
+                    disabled={chat.removing || tabLocked || heldWords !== undefined}
+                    placeholder={
+                        chat.running
+                            ? t('chat.queue.placeholder')
+                            : opening
+                              ? host?.id === 'claude'
+                                  ? `${t('start.placeholder')} ${t('start.placeholder.site')}`
+                                  : t('start.placeholder')
+                              : 'Ask Jason…'
+                    }
+                    aria-label="Your message"
+                    value={chat.draft}
+                    onChange={(event) => {
+                        drop.reset();
+                        changeChat(chatId, (each) => typed(each, event.target.value));
+                    }}
+                    onKeyDown={keys}
+                    onDragOver={drop.draggedOver}
+                    onDrop={drop.dropped}
+                />
+                <div
+                    className="crow"
+                    onClickCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                    onKeyDownCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                >
+                    <ChatControls
+                        chat={chat}
+                        change={(next) => changeChat(chatId, next)}
+                        choose={(mode) => chooseMode(chatId, mode)}
+                        modeMenu={modeMenu}
+                    />
+                    {/* One round button. While a turn runs it is the arrow only where it can send the words typed to
+                        wait for the turn's end, and Stop in every other state; Escape in the box stops the turn too. */}
+                    {chat.running && !queues ? (
+                        <button
+                            className="send"
+                            type="button"
+                            title="Stop"
+                            aria-label="Stop"
+                            disabled={chat.removing}
+                            onClick={stop}
+                        >
+                            <Glyph name="stop" size={16} />
+                        </button>
+                    ) : chat.running ? (
+                        <button
+                            className="send"
+                            type="submit"
+                            title={t('chat.queue.sendTitle')}
+                            aria-label={t('chat.queue.send')}
+                        >
+                            <Glyph name="up" size={16} />
+                        </button>
+                    ) : (
+                        <button
+                            className="send"
+                            type="submit"
+                            title="Send"
+                            aria-label="Send"
+                            disabled={
+                                (!host && !opening) ||
+                                chat.removing ||
+                                nameMissing ||
+                                tabLocked ||
+                                heldWords !== undefined
+                            }
+                            {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
+                        >
+                            <Glyph name="up" size={16} />
+                        </button>
+                    )}
+                </div>
+            </div>
+            {/* Queuing is said to a screen reader: the region stands empty and takes the queued line's words. */}
+            <div className="chat-announce" role="status">
+                {chat.waiting !== null ? t('chat.queue.line') : ''}
+            </div>
+            <ChatNotes chat={chat} />
+        </form>
+    );
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
@@ -1910,7 +2118,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         <BarMark name="remove" />
                     </button>
                 )}
-                {chat.campaignId !== null && !chat.main && !underHead && <AgentInBar campaignId={chat.campaignId} />}
+                {chat.campaignId !== null && !chat.main && !underHead && (
+                    <AgentInBar campaignId={chat.campaignId} running={chat.running} />
+                )}
             </div>
             {chat.removing && (
                 <div
@@ -1941,6 +2151,35 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                 </div>
             )}
             <div className="chat-scroll" ref={scroller}>
+                {opening && (
+                    <div className="agent-opening">
+                        <div className="start-title hero">
+                            <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+                            <h2>{t('agent.new.question', { name: chat.title })}</h2>
+                        </div>
+                        {aiCard && <Painted className="start-ai" view={aiCardView} />}
+                        {heldWords !== undefined && (
+                            <div className="note start-waiting" role="status" aria-label="Waiting message">
+                                <div>
+                                    {t(
+                                        setup.value
+                                            ? 'agent.new.waiting'
+                                            : setupError.value !== null
+                                              ? 'agent.new.waitingUnread'
+                                              : 'agent.new.waitingReading',
+                                    )}
+                                </div>
+                                <div className="said">{heldWords}</div>
+                                <div className="crow">
+                                    <button className="btn sm" type="button" onClick={() => takeOpeningBack(chatId)}>
+                                        {t('chat.queue.takeBack')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {composer}
+                    </div>
+                )}
                 <Painted className="thread" view={view} />
                 {chat.waiting !== null && (
                     <Queued
@@ -1974,108 +2213,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         </button>
                     </div>
                 )}
-            <form className="cform" onSubmit={send} aria-label="Message">
-                <div className="composer">
-                    {setup.value && !host && heldSaid.length > 0 && (
-                        <div className="note am host-held">
-                            {[...new Set(heldSaid.map((each) => each.belowFloor!))].map((sentence) => (
-                                <div key={sentence}>
-                                    {sentence
-                                        .split('`')
-                                        .map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
-                                </div>
-                            ))}{' '}
-                            <button className="btn sm" type="button" onClick={() => void listHosts()}>
-                                Check again
-                            </button>
-                        </div>
-                    )}
-                    {setup.value && !host && held.length === 0 && (
-                        <div className="note am">
-                            No AI host that drives the chat was found on this machine. Connect lists the hosts and
-                            installs one.{' '}
-                            {!inTab() && (
-                                <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
-                                    Connect
-                                </button>
-                            )}
-                        </div>
-                    )}
-                    {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
-                    {drop.said !== null && (
-                        <div className="note am" role="status">
-                            {drop.said}
-                        </div>
-                    )}
-                    {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
-                    <textarea
-                        ref={messageBox}
-                        rows={1}
-                        disabled={chat.removing || tabLocked}
-                        placeholder={chat.running ? t('chat.queue.placeholder') : 'Ask Jason…'}
-                        aria-label="Your message"
-                        value={chat.draft}
-                        onChange={(event) => {
-                            drop.reset();
-                            changeChat(chatId, (each) => typed(each, event.target.value));
-                        }}
-                        onKeyDown={keys}
-                        onDragOver={drop.draggedOver}
-                        onDrop={drop.dropped}
-                    />
-                    <div
-                        className="crow"
-                        onClickCapture={unmade ? (event) => openMade(event, chatId) : undefined}
-                        onKeyDownCapture={unmade ? (event) => openMade(event, chatId) : undefined}
-                    >
-                        <ChatControls
-                            chat={chat}
-                            change={(next) => changeChat(chatId, next)}
-                            choose={(mode) => chooseMode(chatId, mode)}
-                            modeMenu={modeMenu}
-                        />
-                        {/* One round button. While a turn runs it is the arrow only where it can send the words typed to
-                            wait for the turn's end, and Stop in every other state; Escape in the box stops the turn too. */}
-                        {chat.running && !queues ? (
-                            <button
-                                className="send"
-                                type="button"
-                                title="Stop"
-                                aria-label="Stop"
-                                disabled={chat.removing}
-                                onClick={stop}
-                            >
-                                <Glyph name="stop" size={16} />
-                            </button>
-                        ) : chat.running ? (
-                            <button
-                                className="send"
-                                type="submit"
-                                title={t('chat.queue.sendTitle')}
-                                aria-label={t('chat.queue.send')}
-                            >
-                                <Glyph name="up" size={16} />
-                            </button>
-                        ) : (
-                            <button
-                                className="send"
-                                type="submit"
-                                title="Send"
-                                aria-label="Send"
-                                disabled={!host || chat.removing || nameMissing || tabLocked}
-                                {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
-                            >
-                                <Glyph name="up" size={16} />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                {/* Queuing is said to a screen reader: the region stands empty and takes the queued line's words. */}
-                <div className="chat-announce" role="status">
-                    {chat.waiting !== null ? t('chat.queue.line') : ''}
-                </div>
-                <ChatNotes chat={chat} />
-            </form>
+            {opening ? null : composer}
         </div>
     );
 }

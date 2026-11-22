@@ -12,8 +12,11 @@ export function CampaignMoves({
     buttonClass,
     frame = (dialog) => dialog,
     onDone,
+    people,
 }: {
     campaign: Movable;
+    /** How many people the campaign holds, where the place read it: with an empty brief, none holds Start back. */
+    people?: number | null;
     buttonClass: (move: Transition) => string;
     frame?: (dialog: ReactNode) => ReactNode;
     onDone: () => void;
@@ -23,7 +26,7 @@ export function CampaignMoves({
     const open = acting?.id === campaign.id ? acting.move : null;
     return (
         <>
-            {transitions(campaign).map((move) => (
+            {transitions(campaign, people).map((move) => (
                 <button
                     key={move}
                     className={buttonClass(move)}

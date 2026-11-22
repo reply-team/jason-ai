@@ -216,6 +216,17 @@ export interface DesktopConversation {
      * desktop.
      */
     ownFolder?: true;
+    /**
+     * Present, and true, for an agent's conversation the desktop made with its campaign at a click on New GTM agent
+     * (`chat.createAgent`): while it is empty, its chat asks Start's question. Absent from an earlier desktop.
+     */
+    madeAtClick?: true;
+}
+
+/** What `chat.createAgent` answers: the agent's conversation, kept, and its campaign as the runtime made it. */
+export interface DesktopAgentMade {
+    conversation: DesktopConversation;
+    campaign: { id: string; name: string };
 }
 
 /**
@@ -831,7 +842,10 @@ export interface JasonDesktop {
         answer(chatId: string, requestId: string, decision: { allow: boolean; always: boolean }): Promise<void>;
         /** Calls `handler` with every event of every chat; the function it returns stops that. */
         onEvent(handler: (chatId: string, event: DesktopChatEvent) => void): () => void;
-        /** The conversations the desktop keeps, the one changed last first; one never sent to is not kept. */
+        /**
+         * The conversations the desktop keeps, the one changed last first; one never sent to is not kept, but for an
+         * agent's made at a click on New GTM agent, kept from the click.
+         */
         list(): Promise<DesktopConversation[]>;
         /** One conversation with what the page drew; an id the desktop does not keep is refused. */
         open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
@@ -840,6 +854,15 @@ export interface JasonDesktop {
          * without one, a new set-up chat. A conversation newly made is in Full access, its `mode` saying so in this answer.
          */
         create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * New GTM agent's click: the desktop makes a campaign in the default project, "New agent N" after the highest
+         * number such a name carries, archived agents included, under the key `clickId` gives it, and its conversation,
+         * kept from now. `clickId` is the page's `crypto.randomUUID()` for that click: the same id again asks the same
+         * create, by the same name, so a retry never makes a second agent. Clicks are made one after another. Refused, in
+         * the desktop's words, while the runtime is away or when the create made nothing; nothing is made then. A desktop
+         * before 0.49.4 has no such member.
+         */
+        createAgent(clickId: string): Promise<DesktopAgentMade | DesktopRefusal>;
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**

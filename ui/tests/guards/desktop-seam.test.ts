@@ -45,6 +45,8 @@ const chat = {
     list: true,
     open: true,
     create: true,
+    // New GTM agent's click: the desktop makes the agent's campaign and its conversation, by the click's own id.
+    createAgent: true,
     remove: true,
     restart: true,
     attach: true,
@@ -154,6 +156,7 @@ describe('the desktop seam', () => {
             'chat.list',
             'chat.open',
             'chat.create',
+            'chat.createAgent',
             'chat.remove',
             'chat.restart',
             'chat.attach',

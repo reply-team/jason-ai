@@ -405,6 +405,15 @@ export const en = {
     'modes.system.note': 'An agent may set its own; it is shown under its Settings tab.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
+    // New GTM agent (`new-agent.ts`): the sidebar's line for a click that made no agent, the question an agent made at
+    // the click asks in its opening, and the note of a first message waiting there for an AI to be connected.
+    'agent.new.again': 'Try again',
+    'agent.new.close': 'Close',
+    'agent.new.question': 'Who should {name} reach?',
+    'agent.new.waiting':
+        'Waiting for an AI to be connected. This waits here while the window is open, and goes when one is:',
+    'agent.new.waitingUnread': 'The setup could not be read, so this is not sent yet:',
+    'agent.new.waitingReading': 'Reading what is set up; this goes once an AI is there:',
     // The agent's menus, the header's "…" and the menu on its row under Recent (`conversation-items.ts`).
     'agent.menu.open': 'Open',
     'agent.menu.folder': 'Open in {place}',
