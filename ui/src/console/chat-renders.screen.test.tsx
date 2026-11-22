@@ -64,7 +64,7 @@ beforeEach(() => {
 describe('a chat out of sight', () => {
     it('is not drawn again while a person types in the chat shown', async () => {
         await renderConsole();
-        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        fireEvent.click(await waitFor(() => recentRow('Spring')));
         await waitFor(() => expect(shown()).toBe('chat:conv_a'));
         fireEvent.change(box(), { target: { value: 'Half a thought' } });
         fireEvent.click(recentRow('North list'));

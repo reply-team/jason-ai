@@ -283,9 +283,10 @@ kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents l
 conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
 no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and the other conversations the
-desktop keeps are listed in two sections, the newest first and the open one marked: under **Agents** each agent that is
-not archived, by its conversation, or by its name where it has none yet, and under **Chats** each chat about no
-campaign, by its first words, ten at a time; a conversation is in one section alone. A conversation is kept, and
+desktop keeps are listed in two sections, the open one marked: under **Agents** each agent that is not archived, by the
+agent's name, the one active most recently first, whether or not it has a conversation yet; the first ten under All, then
+**All agents**, and under any other filter every agent the filter keeps; and under **Chats** each chat about no campaign,
+by its first words, the newest first, ten at a time with **Load more**; a conversation is in one section alone. A conversation is kept, and
 listed, from its first turn, so a chat never sent to leaves nothing behind. A conversation leaves **Agents** once its
 campaign is read as archived, and the campaign's own **Chat** still opens it; a conversation
 whose campaign the runtime does not know stays. What happens in

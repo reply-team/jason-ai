@@ -9,10 +9,10 @@ import { rowItems, type ConversationFacts, type MenuItem } from './conversation-
 import { setVariable } from './html';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { openFolder, openSession } from './open-folder';
-import { closeRowMenu, drawnRow, focusRow, rowDrawn, rowElement, rowMenu } from './recent';
+import { closeRowMenu, dotsElement, drawnRow, focusOpener, rowDrawn, rowElement, rowMenu } from './recent';
 import { beginRowRename } from './row-rename';
 import { openAgentRow, openRow } from './side';
-import { conversations, here } from './state';
+import { conversations, here, sideAway } from './state';
 
 // The menu on a row of AGENTS or CHATS: the acts the row's own view offers, opened on the row by a right-click, Shift+F10,
 // the menu key (`side.rowmenu`) or its three dots (`side.rowdots`), and never opening the row by itself. An agent with no
@@ -20,10 +20,10 @@ import { conversations, here } from './state';
 // the agent, over whatever the area shows; each act of the conversation shows its chat first and begins there
 // (`conversation-acts.ts`).
 
-/** The agent a row is about: its conversation's, or the agent of a row with no conversation; else none. */
+/** The agent a row is about, as its row says it (a hand-over reaches the row first); else its conversation's; else none. */
 function campaignOf(id: string): string | null {
     const row = drawnRow(id);
-    if (row !== undefined && row.conversationId === null) return row.campaignId;
+    if (row !== undefined) return row.campaignId;
     return conversations.value.find((each) => each.id === id)?.campaignId ?? null;
 }
 
@@ -49,7 +49,7 @@ function peopleOfRow(id: string): number | null {
     return campaign === null ? null : peopleOf(campaign);
 }
 
-type Open = { row: string; agent: Movable } & ({ kind: 'move'; move: Transition } | { kind: 'archive' });
+type Open = { row: string; dots?: true; agent: Movable } & ({ kind: 'move'; move: Transition } | { kind: 'archive' });
 
 export function RowMenu() {
     const api = useApi();
@@ -84,8 +84,11 @@ export function RowMenu() {
     });
     useEffect(() => {
         if (at === null) return;
+        // A press on the dots that opened it is theirs: their click closes it.
         const away = (event: MouseEvent) => {
-            if (!menu.current?.contains(event.target as Node)) closeRowMenu();
+            const target = event.target as Node;
+            if (at.dots === true && dotsElement(at.id)?.contains(target)) return;
+            if (!menu.current?.contains(target)) closeRowMenu();
         };
         // The row it stands by moves when the sections scroll or the window changes size: the menu closes rather than float.
         const moved = (event: Event) => {
@@ -112,24 +115,29 @@ export function RowMenu() {
     }, [at, drawn]);
 
     const close = (focus: boolean) => {
-        const row = at?.id;
         closeRowMenu();
-        if (focus && row !== undefined) focusRow(row);
+        if (focus && at !== null) focusOpener(at);
     };
     const choose = (item: MenuItem) => {
         if (at === null) return;
         const row = at.id;
+        const dots = at.dots;
         const agent = agentOf(row);
         closeRowMenu();
-        // The focus goes back to the row, where the act shows nothing that takes it: never to the page itself.
-        focusRow(row);
+        // The focus goes back to what opened the menu, where the act shows nothing that takes it: never to the page.
+        focusOpener(at);
+        // An act that shows something in the area puts a narrow window's drawer away, as the row's own click does. Rename
+        // shows its field in the row, in the drawer, so the drawer stays.
+        if (item.kind === 'open' || item.kind === 'fresh' || item.kind === 'remove') sideAway.value += 1;
         if (item.kind === 'open') (unspoken(row) ? openAgentRow : openRow)(row);
         else if (item.kind === 'folder' || item.kind === 'session') {
             const campaign = campaignOf(row);
             if (campaign !== null)
                 void (item.kind === 'folder' ? openFolder(campaign) : openSession(campaign, item.host));
-        } else if (item.kind === 'move' && agent) setDialog({ row, agent, kind: 'move', move: item.move });
-        else if (item.kind === 'archive' && agent) setDialog({ row, agent, kind: 'archive' });
+        } else if (item.kind === 'move' && agent)
+            setDialog({ row, ...(dots ? { dots } : {}), agent, kind: 'move', move: item.move });
+        else if (item.kind === 'archive' && agent)
+            setDialog({ row, ...(dots ? { dots } : {}), agent, kind: 'archive' });
         else if (item.kind === 'rename') {
             // The name becomes a field in its row, an agent's renaming its campaign and a chat's its conversation.
             const drawn = drawnRow(row);
@@ -149,7 +157,7 @@ export function RowMenu() {
             void readAgent(api, open.agent.id);
             void reloadCampaigns();
         }
-        focusRow(open.row);
+        focusOpener({ id: open.row, ...(open.dots ? { dots: open.dots } : {}) });
     };
 
     return (

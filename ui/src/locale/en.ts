@@ -17,7 +17,10 @@ export const en = {
     'side.chats': 'Chats',
     'side.allAgents': 'All agents',
     'side.none.agents': 'No agents yet: the plus makes one.',
+    'side.none.agentsBare': 'No agents yet.',
     'side.none.chats': 'No chats yet: the plus starts one.',
+    'side.none.chatsBare': 'No chats yet.',
+    'side.sections': 'Conversations',
     'side.rowMenu': 'More for {name}',
     // Rename in the row (`row-rename.ts`): the field's name, by the row's kind, and the page's own refusals of a name.
     'side.rename.agent': 'Agent name',

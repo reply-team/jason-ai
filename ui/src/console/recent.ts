@@ -7,6 +7,7 @@ import { shownAgent } from './agent-place';
 import { campaigns, read } from './campaigns';
 import { agentMaking } from './new-agent';
 import { offUnless } from './off';
+import { can } from '../platform/places';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
@@ -22,7 +23,7 @@ import {
     type RecentInput,
     type RecentRow,
 } from './recent-rows';
-import { chats, clock, conversations, currentChat } from './state';
+import { chats, clock, conversations, conversationsListed, currentChat } from './state';
 
 // The sidebar's two sections, AGENTS above CHATS, each a header with a plus at its right. AGENTS: every agent that is
 // not archived, each with a dot, its title, what waits on the person and its age, a filter in the header, and All agents
@@ -117,6 +118,8 @@ export interface RowMenuAt {
     title: string;
     x: number;
     y: number;
+    /** Opened by the row's three dots, which take the focus back when it closes; else the row does. */
+    dots?: true;
 }
 
 export const rowMenu = signal<RowMenuAt | null>(null);
@@ -135,6 +138,18 @@ export function rowElement(id: string): HTMLElement | undefined {
 /** Gives the focus to the row of the conversation, where it is drawn. */
 export function focusRow(id: string): void {
     rowElement(id)?.focus();
+}
+
+/** The three dots of the row of the conversation, where it is drawn. */
+export function dotsElement(id: string): HTMLElement | undefined {
+    return rowElement(id)?.parentElement?.querySelector<HTMLElement>('.rdots') ?? undefined;
+}
+
+/** Gives the focus back to what opened a row's menu: its three dots, else the row. */
+export function focusOpener(at: Pick<RowMenuAt, 'id' | 'dots'>): void {
+    const dots = at.dots === true ? dotsElement(at.id) : undefined;
+    if (dots) dots.focus();
+    else focusRow(at.id);
 }
 
 const labels: Readonly<Record<RecentFilter, string>> = {
@@ -160,7 +175,6 @@ define('recent.filter', ([value]) => {
     const chosen = recentFilters.find((each) => each === value);
     if (!chosen) return;
     filter.value = chosen;
-    limit.value = pageSize;
     closeFilterMenu();
 });
 define('recent.more', () => {
@@ -279,6 +293,7 @@ const listed = computed(() => {
     const input: RecentInput = {
         conversations: conversations.value,
         titles: (id) => chats.value[id]?.title,
+        campaignOf: (id) => chats.value[id]?.campaignId,
         running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
         agentRead: stateOf,
@@ -353,23 +368,40 @@ export function recentView(): Html {
     >
         ${svg('plus', 14)}
     </button>`;
-    // Said once the list of agents is read: before that, no agent is not yet known.
+    // Said once the list of agents is read, and CHATS' once the desktop listed its conversations: before that, none is
+    // not yet known. The plus is named only where it can be pressed.
     const agentsEmpty =
         agentsShown.length > 0 || !read.value
             ? null
-            : html`<div class="rnone">${agents.length === 0 ? t('side.none.agents') : t('recent.none.match')}</div>`;
+            : html`<div class="rnone">
+                  ${
+                      agents.length > 0
+                          ? t('recent.none.match')
+                          : can('chat.createAgent')
+                            ? t('side.none.agents')
+                            : t('side.none.agentsBare')
+                  }
+              </div>`;
+    const chatsEmpty =
+        talks.length > 0 || !conversationsListed.value
+            ? null
+            : html`<div class="rnone">${can('chat.create') ? t('side.none.chats') : t('side.none.chatsBare')}</div>`;
     // One landmark for both sections, each a named group of its own under its header.
-    return html`<nav class="sections" aria-label="Conversations">
+    return html`<nav class="sections" aria-label="${t('side.sections')}">
         ${header(t('side.agents'), filterButton, newAgent)}
         <div class="list" role="group" aria-label="${t('side.agents')}">
-            ${agentsShown.map(rowView)}
-            <button class="item rmore" type="button" ${act('side.show', 'campaigns')}>
-                <span>${t('side.allAgents')}</span>
-            </button>
+            ${agentsShown.map(rowView)} ${agentsEmpty}
+            ${
+                agents.length > 0
+                    ? html`<button class="item rmore" type="button" ${act('side.allAgents')}>
+                          <span>${t('side.allAgents')}</span>
+                      </button>`
+                    : null
+            }
         </div>
-        ${agentsEmpty} ${header(t('side.chats'), null, newChat)}
+        ${header(t('side.chats'), null, newChat)}
         <div class="list" role="group" aria-label="${t('side.chats')}">
-            ${chatsShown.map(rowView)}
+            ${chatsShown.map(rowView)} ${chatsEmpty}
             ${
                 more
                     ? html`<button class="item rmore" type="button" ${act('recent.more')}>
@@ -378,6 +410,5 @@ export function recentView(): Html {
                     : null
             }
         </div>
-        ${talks.length > 0 ? null : html`<div class="rnone">${t('side.none.chats')}</div>`}
     </nav>`;
 }
