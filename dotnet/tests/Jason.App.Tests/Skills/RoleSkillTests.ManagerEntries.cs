@@ -229,6 +229,25 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// On a provider without events, a thread can move for a follow-up the provider sent later than recorded, and the
+    /// runtime holds the person for it: the reply entry is the one place that continues them, plans again what the hold
+    /// took back, and says so in the note.
+    /// </summary>
+    [Fact]
+    public void The_reply_entry_continues_a_line_held_for_a_move_that_was_jason_s_own()
+    {
+        var reply = FlattenedEntry("manager", "inbound_reply");
+
+        Assert.Contains("**Where the thread's last message is Jason's own, the hold was for nothing.** On a provider without events", reply, StringComparison.Ordinal);
+        Assert.Contains("a follow-up the provider sent later than Jason recorded", reply, StringComparison.Ordinal);
+        Assert.Contains("Continue the line, plan again what the hold took back", reply, StringComparison.Ordinal);
+        Assert.Contains("and say so in your note, naming the thread and the letter", reply, StringComparison.Ordinal);
+        Assert.Contains(
+            SkillPack.PrintedCommands(EntryFile("manager", "inbound_reply")),
+            line => line.StartsWith("jason campaign continue-contacts ", StringComparison.Ordinal) && line.Contains("our own follow-up", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A reply no responder judged is told to nobody, so the manager records its verdict, nature included, as the
     /// responder would; a person's reply is then notified at the end of the run that judged it.
     /// </summary>

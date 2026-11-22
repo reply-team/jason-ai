@@ -162,6 +162,16 @@ going, and mark it in `replies` as waiting on the verdict. The next review of an
 continues the line; the deep review accounts for every held person. An item already `processing` is past stopping: say
 so in your line with its id.
 
+**Where the thread's last message is Jason's own, the hold was for nothing.** On a provider without events, the read
+can show that what moved the thread was a letter of this campaign's — a follow-up the provider sent later than Jason
+recorded — and nothing the person wrote. The runtime held the person for it all the same, and nobody else continues
+them. Continue the line, plan again what the hold took back — a letter the provider held for later, whose take-back the
+runtime queued, is created again for its moment — and say so in your note, naming the thread and the letter:
+
+```
+jason campaign continue-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "the thread moved for our own follow-up, not for a reply"
+```
+
 ## A reply no responder judged
 
 A reply that no responder judges is told to nobody: the person hears of a reply only once a role, inside a run, has
