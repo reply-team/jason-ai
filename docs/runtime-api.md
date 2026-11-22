@@ -333,8 +333,13 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   (403), so a review can tell its author apart. The context key `send_review` is the runtime's, the brief of the
   critic it creates for a send under an automatic send mode: a create or a patch that names it is refused `not_allowed`
   at that field, on every item, whoever sends it.
-- `workitem.get`
-- `workitem.list`
+- `workitem.get` and `workitem.list`: each item says its `entry`, the named way into its role's job it was created with,
+  and null for every item that has none. Only the runtime writes one, from a fixed vocabulary per role in which only the
+  manager has names today; `workitem.create` and `workitem.update` take no such member, and one sent is ignored as any
+  member a request does not have is, so it never reaches the item. There is no filter by entry. An attempt's `launch`
+  names the entry it was launched with beside `role_skill`, as `{name, bytes}`, `bytes` being the size of the
+  file the launch read (0 where the role's folder had no file for it), and leaves the member out where the item has no
+  entry ([`docs/work-execution.md`](work-execution.md), "The launch envelope").
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
   profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval

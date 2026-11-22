@@ -200,11 +200,16 @@ public sealed class WorkItemService(
     /// but the chain that check-in belongs to is the chain of the thing it is about — so lineage is read from
     /// the cause and handed in, and the actor stays the truth about who made the row.
     /// </param>
+    /// <param name="entry">
+    /// The item's entry, already held to the role's vocabulary by the one caller that names one, the manager's check-in.
+    /// No request carries it: it is the runtime's own, and the row is the only place it is written.
+    /// </param>
     internal async Task<WorkItem> CreateCoreAsync(
         WorkItemCreateRequest request,
         ActorRef actor,
         LineageRecord? lineage,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? entry = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -239,6 +244,7 @@ public sealed class WorkItemService(
 
         var now = clock.GetUtcNow().UtcDateTime;
         var item = Compose(request, actor, record, campaign, contact, context, now);
+        item.Entry = entry;
 
         // Under an automatic mode the runtime adds the send's critic, in this same save: both are written or neither is.
         var critic = await CriticAsync(item, campaign, contact, record, now, cancellationToken).ConfigureAwait(false);

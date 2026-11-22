@@ -42,6 +42,10 @@ public sealed record AttemptErrorDto(
 /// The allow rules written into the work directory for this attempt, as they were written, beside the deny; absent for
 /// a host whose allow rules travel on its command line, which the entry command shows.
 /// </param>
+/// <param name="Entry">
+/// The entry the item carried, by its name and the size in bytes of the file the launch read: 0 where the role's
+/// folder had no file for it. Absent where the item carries no entry.
+/// </param>
 public sealed record AttemptLaunchDto(
     IReadOnlyList<string> EntryCommand,
     string WorkDir,
@@ -51,10 +55,14 @@ public sealed record AttemptLaunchDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OutputAbandoned = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Deny = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RoleSkillDto? RoleSkill = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Allow = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Allow = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LaunchEntryRecordDto? Entry = null);
 
 /// <summary>Whether the role that ran this attempt was given its skill, and how large the one it was given was.</summary>
 public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);
+
+/// <summary>Which entry an attempt was launched with, and the size in bytes of the file its text was read from.</summary>
+public sealed record LaunchEntryRecordDto(string Name, long Bytes);
 
 /// <summary>
 /// What was resolved to run one agent attempt: which profile, chosen by which level of the published order, and
@@ -241,7 +249,13 @@ public sealed record WorkItemDto(
     /// The hash a review of this send is bound to (<c>workitem.review</c>): the operation, the item and its context's
     /// input, canonically. Present only on a send to a person; an edit of the input changes it.
     /// </summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReviewHash = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReviewHash = null,
+
+    /// <summary>
+    /// The named way into its role's job this item was created with, from the role's fixed vocabulary
+    /// (<c>RoleEntries</c>); null for every item that has none. Only the runtime writes it.
+    /// </summary>
+    string? Entry = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -272,7 +286,10 @@ public sealed record WorkItemSummaryDto(
     DateTimeOffset? RunningSince = null,
 
     /// <summary>What a waiting item waits for, without the items themselves; absent unless the item is waiting.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitSummaryDto? Wait = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitSummaryDto? Wait = null,
+
+    /// <summary>The item's entry, as <see cref="WorkItemDto.Entry"/> says it; null where it has none.</summary>
+    string? Entry = null);
 
 public sealed record WorkItemCreateRequest(
     string? CampaignId,

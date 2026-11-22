@@ -55,6 +55,7 @@
     },
     "campaign_name": "Spring launch",
     "contact_name": "Person 100",
-    "review_hash": "sha256:recorded-107"
+    "review_hash": "sha256:recorded-107",
+    "entry": null
   }
 }

@@ -235,6 +235,15 @@ for that role — which the runtime copies across with everything else in the di
 directory holds only `SKILL.md` is taught the contract and nothing else, and that is complete on its
 own: nothing in the launch depends on a second file being there, or on the role reading one.
 
+**Entries.** A role's folder may hold `entries/<name>.md`, one file for each named way into the role's job. A work item
+that the runtime created with an entry — only the manager has entry names today: `start`, `resume`, `quick_look`,
+`deep_review` and `inbound_reply` — is launched with that file's text in its launch envelope (`entry`, in
+[work-execution.md](work-execution.md), "The launch envelope"), read whole from the copy in the work directory, so every
+host is handed the same words without any change to its command line. The folder is copied like the rest of the tree
+and counts toward `Roles:MaxSkillBytes`. A folder of a person's own, with no record of a deployment, is read the same
+way, so its own `entries/<name>.md` is what its role is handed. Where the file is not there, the envelope names the
+entry with no text and the attempt runs.
+
 ## 7. What a launched session is, and is not, given
 
 An agent host is installed and configured by a person, for their own work. Starting one for a background work

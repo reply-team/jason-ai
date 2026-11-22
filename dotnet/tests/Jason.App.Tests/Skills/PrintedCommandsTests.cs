@@ -52,4 +52,97 @@ public class PrintedCommandsTests
 
         Assert.Equal(["jason rolenote list cmp_1", "jason campaign get cmp_1"], SkillPack.PrintedCommands(page));
     }
+
+    /// <summary>
+    /// A line that hands its request to standard input in a here-document carries the fence's lines after it, up to the
+    /// delimiter, as its body; and the body is never a command of its own, whatever its lines begin with.
+    /// </summary>
+    [Fact]
+    public void A_here_document_is_the_body_of_the_line_that_opens_it_and_never_a_command()
+    {
+        string[] page =
+        [
+            "```",
+            "jason campaign create --name \"Q3\" --file - <<'EOF'",
+            "{\"context\":{\"brief\":\"two words\"}}",
+            "jason campaign list",
+            "EOF",
+            "jason contact list",
+            "```",
+        ];
+
+        var printed = SkillPack.Printed(page, "page.md");
+
+        Assert.Equal(
+            ["jason campaign create --name \"Q3\" --file - <<'EOF'", "jason contact list"],
+            printed.Select(command => command.Line));
+        Assert.Equal("{\"context\":{\"brief\":\"two words\"}}\njason campaign list", printed[0].Body);
+        Assert.Null(printed[1].Body);
+        Assert.Equal(printed.Select(command => command.Line), SkillPack.PrintedCommands(page));
+    }
+
+    /// <summary>A body inside an indented fence loses the indentation its command line has, and nothing more.</summary>
+    [Fact]
+    public void A_body_in_an_indented_fence_loses_the_fence_s_indentation()
+    {
+        string[] page =
+        [
+            "1. Create it:",
+            "   ```",
+            "   jason campaign create --file - <<'EOF'",
+            "   {",
+            "     \"context\": {}",
+            "   }",
+            "   EOF",
+            "   ```",
+        ];
+
+        Assert.Equal("{\n  \"context\": {}\n}", Assert.Single(SkillPack.Printed(page, "page.md")).Body);
+    }
+
+    /// <summary>A here-document the fence closes before its delimiter is a page that prints half a command: the read fails, naming the file and the line.</summary>
+    [Fact]
+    public void A_here_document_that_never_reaches_its_delimiter_fails_the_read_naming_the_file_and_the_line()
+    {
+        string[] page =
+        [
+            "Some prose.",
+            "```",
+            "jason campaign create --file - <<'EOF'",
+            "{\"context\":{}}",
+            "```",
+            "EOF",
+        ];
+
+        var refused = Assert.Throws<InvalidDataException>(() => SkillPack.Printed(page, "skills/runtime/x/SKILL.md"));
+
+        Assert.Contains("skills/runtime/x/SKILL.md:3", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'EOF'", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidDataException>(() => SkillPack.PrintedCommands(page));
+    }
+
+    /// <summary>
+    /// A line that reads its request from a file names that file; the page has to say what the file is somewhere else,
+    /// or a reader is told to type a file nobody described.
+    /// </summary>
+    [Fact]
+    public void A_file_on_standard_input_names_a_file_the_page_also_prints()
+    {
+        string[] page =
+        [
+            "`brief.json` holds the request:",
+            "```",
+            "jason campaign create --file - < brief.json",
+            "```",
+        ];
+
+        var command = Assert.Single(SkillPack.Printed(page, "page.md"));
+        Assert.Equal("brief.json", command.InputFile);
+        Assert.Null(command.Body);
+
+        string[] undescribed = ["```", "jason campaign create --file - < brief.json", "```"];
+        var refused = Assert.Throws<InvalidDataException>(() => SkillPack.Printed(undescribed, "page.md"));
+        Assert.Contains("page.md:2", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("brief.json", refused.Message, StringComparison.Ordinal);
+    }
 }

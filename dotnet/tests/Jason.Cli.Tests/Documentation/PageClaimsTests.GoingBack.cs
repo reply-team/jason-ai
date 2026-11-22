@@ -12,8 +12,21 @@ public partial class PageClaimsTests
     /// <summary>The release the section goes back to.</summary>
     private const string GoingBackTo = "0.48.7";
 
-    /// <summary>The newest migration 0.48.7 shipped: a database 0.49 opened is one 0.48.7 opens only while no later one exists.</summary>
+    /// <summary>
+    /// The newest migration 0.48.7 shipped, which is also 0.49's newest: 0.49 adds none, so a database 0.49 opened is one
+    /// 0.48.7 opens as it is.
+    /// </summary>
     private const string GoingBackToNewestMigration = "20261116053811_DecisionThread";
+
+    /// <summary>
+    /// The migrations the tree holds after <see cref="GoingBackToNewestMigration"/>, in order: each is newer than 0.49, and
+    /// a migration added in 0.50 is appended here. Where there is one, data a release after 0.49 opened is data the section's
+    /// steps do not take back, and the section says so.
+    /// </summary>
+    private static readonly string[] MigrationsAfter049 =
+    [
+        "20261122055316_WorkItemEntry",
+    ];
 
     /// <summary>
     /// The newest line of each package's digest list at v0.48.7, the version and the digest of the package that release
@@ -89,13 +102,15 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// "0.49 adds no migration to the database": the newest migration this tree compiles is the newest 0.48.7 shipped. A
-    /// migration added in 0.49 turns this red, and the section with it, since 0.48.7 refuses data a newer Jason migrated.
+    /// "0.49 adds no migration": the newest migration 0.48.7 shipped is in the tree, and every one after it is a migration
+    /// a later release adds, named in <see cref="MigrationsAfter049"/>. While the tree holds one, the section scopes its
+    /// steps to data no release after 0.49 opened and says what 0.49 and 0.48.7 make of data 0.50 has opened.
     /// </summary>
     [Fact]
-    public void Going_back_from_0_49_holds_while_0_49_adds_no_migration()
+    public void Going_back_from_0_49_holds_for_data_no_later_release_has_opened()
     {
-        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7 opens the same data as it is, and there is no backup to put back.", Flat(GoingBack()), StringComparison.Ordinal);
+        var section = Flat(GoingBack());
+        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7 opens the same data as it is, and there is no backup to put back.", section, StringComparison.Ordinal);
 
         var migrations = Directory.GetFiles(Path.Combine(Root(), "dotnet", "src", "Jason.Runtime", "Persistence", "Migrations"), "*.Designer.cs")
             .Select(file => MigrationId().Match(File.ReadAllText(file)))
@@ -103,8 +118,37 @@ public partial class PageClaimsTests
             .Select(match => match.Groups["id"].Value)
             .Order(StringComparer.Ordinal)
             .ToList();
-        Assert.NotEmpty(migrations);
-        Assert.Equal(GoingBackToNewestMigration, migrations[^1]);
+        var at = migrations.IndexOf(GoingBackToNewestMigration);
+        Assert.True(at >= 0, $"The tree no longer holds {GoingBackToNewestMigration}, the newest migration 0.48.7 shipped.");
+        Assert.Equal(MigrationsAfter049, migrations[(at + 1)..]);
+
+        if (MigrationsAfter049.Length > 0)
+        {
+            Assert.Contains("These steps, and that there is no backup to put back, hold for data that no release after 0.49 has opened.", section, StringComparison.Ordinal);
+            Assert.Contains(
+                "0.50 migrates the database. From 0.49.0 on, a runtime refuses a database holding a migration it does not know (`data_newer`, \"Going back\" above), so 0.49.x refuses data that 0.50 has opened; a version before 0.49.0, 0.48.7 among them, has no such check and runs its own model over the newer schema.",
+                section,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "\"Going back\" above says when `jason update rollback` restores the backup that migration took, which is only while the chronicle stands where it stood at `healthy`, and what the rollback of an update a carried `jason` handed to Jason Desktop puts back. Wherever the rollback leaves the database as it stands, and for the deb, whose `jason` refuses a rollback with `update_managed_by_package_manager`, \"Restoring a database by hand\" above is how you put that backup back yourself.",
+                section,
+                StringComparison.Ordinal);
+
+            // It points at no section that touches no database.
+            Assert.DoesNotContain("Applying an older release", section, StringComparison.Ordinal);
+
+            // The sections it points at say what it says they say, each read on its own.
+            var page = Page("docs", "release-and-update.md");
+            var back = Flat(Section(page, "### Going back\n"));
+            Assert.Contains("it also restores the backup that migration took", back, StringComparison.Ordinal);
+            Assert.Contains("**The database is restored only while it is certain that nothing has happened since.** That is decided from the chronicle:", back, StringComparison.Ordinal);
+            Assert.Contains("and the database, only while the chronicle stands where it stood at `healthy`.", back, StringComparison.Ordinal);
+            Assert.Contains("All three answers are the same answer: the executable goes back, the database is left exactly as it stands, and the message names the backup file.", back, StringComparison.Ordinal);
+            Assert.Contains("The `jason` the deb carries refuses a rollback with `update_managed_by_package_manager`", back, StringComparison.Ordinal);
+            Assert.Contains("From 0.49.0 on, a runtime whose database holds a migration its build does not know refuses to start, with `data_newer`", back, StringComparison.Ordinal);
+            Assert.Contains("A version before 0.49.0 has no such check, and EF Core passes over the history rows it has no migration for, so it runs its own model over the newer schema.", back, StringComparison.Ordinal);
+            Assert.Contains("Every start that migrates writes a backup under `~/.jason/state/backups/` first", Flat(Section(page, "### Restoring a database by hand\n")), StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

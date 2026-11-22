@@ -27,15 +27,16 @@ public sealed record LaunchEnvelope(
     RuntimeLocation Runtime,
     RoleMemoryLocation? RoleMemory = null,
     MemoryFileLocations? MemoryFiles = null,
-    Resumption? Resumption = null)
+    Resumption? Resumption = null,
+    LaunchEntry? Entry = null)
 {
     /// <summary>
-    /// 5 since <see cref="Resumption"/> was added, 4 since <see cref="MemoryFiles"/> was added and
+    /// 6 since <see cref="Entry"/> was added, 5 since <see cref="Resumption"/> was added, 4 since <see cref="MemoryFiles"/> was added and
     /// <see cref="RoleMemory"/> named the campaign's project, 3 since <see cref="RoleMemory"/> was added, and 2 since
     /// <see cref="RuntimeLocation.CliCommand"/> was. Every change here is additive, so a host written against version 1
     /// keeps working: it reads the fields it knows and ignores the rest.
     /// </summary>
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 }
 
 /// <summary>
@@ -62,6 +63,20 @@ public sealed record Resumption(
     /// </summary>
     public const int MaxResultBytes = 1024 * 1024;
 }
+
+/// <summary>
+/// The entry the work item carries, by its name and the text of the role's file for it, so every host is taught the
+/// same words without any change to its command line. Null where the item carries none.
+/// <para>
+/// The text is the file <c>entries/&lt;name&gt;.md</c> of the role's folder, whole, as UTF-8, read from the copy the
+/// launch made in the work directory: the bytes the envelope carries are the bytes the host finds there. Nothing is
+/// stripped or parsed, and the runtime composes no prompt of it. Null where the folder has no such file; the attempt runs
+/// all the same, and never with some other text in its place.
+/// </para>
+/// </summary>
+/// <param name="Name">The entry's name, one of the role's in <see cref="RoleEntries"/>.</param>
+/// <param name="Text">The file's text, whole; null where the role's folder has no file for the entry.</param>
+public sealed record LaunchEntry(string Name, string? Text);
 
 /// <summary>One work item a wait named, as it stood when the next run was claimed.</summary>
 /// <param name="Role">The role, for agent work; null for a provider operation.</param>

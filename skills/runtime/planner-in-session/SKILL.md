@@ -160,8 +160,12 @@ sounds once the people and the channels are settled. Until both have a value, no
 created. Ask in your own words, take the answer as they give it, and set it under their own name as the actor:
 
 ```
-jason preference set sender.identity --value '{"senders":[{"name":"Marta Silva","gender_forms":"feminine","company":"Example Payroll"}]}' --actor human:Marta
-jason preference set tone_of_voice --value '{"summary":"Plain and warm; no exclamation marks.","formality":"informal"}' --actor human:Marta
+jason preference set sender.identity --actor human:Marta --value-file - <<'EOF'
+{"senders":[{"name":"Marta Silva","gender_forms":"feminine","company":"Example Payroll"}]}
+EOF
+jason preference set tone_of_voice --actor human:Marta --value-file - <<'EOF'
+{"summary":"Plain and warm; no exclamation marks.","formality":"informal"}
+EOF
 ```
 
 A sender needs a `name` and its `gender_forms`: the forms a message uses for the sender in a language that marks
