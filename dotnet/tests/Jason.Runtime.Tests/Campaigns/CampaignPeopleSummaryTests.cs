@@ -195,7 +195,8 @@ public class CampaignPeopleSummaryTests
     /// <summary>
     /// A send the provider held for a later moment counts at that moment, its result's <c>accepted_for</c> read in UTC
     /// whatever its offset, and not when the provider accepted it; a send a succeeded <c>message.cancel</c> of the campaign
-    /// took back never went, and the row leaves it out, as the ceiling does.
+    /// took back never went, and the row leaves it out, as the ceiling does: from its count, and as its last touch, though its
+    /// moment is the later of the two.
     /// </summary>
     [Fact]
     public async Task A_row_counts_a_held_send_at_its_moment_and_leaves_out_one_a_cancel_took_back()
