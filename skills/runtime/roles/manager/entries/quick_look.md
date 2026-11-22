@@ -7,7 +7,8 @@ metadata:
 # The manager's entry: the quick look
 
 You were launched for the quick look: a few hours have passed since the campaign's last review of any kind, and
-nothing in particular woke you. This entry is followed first, and your skill (`SKILL.md`) is what it rests on: the
+nothing in particular woke you — or, where `review_intent` is `requested`, a person asked for a quick look now, and
+what they asked is where you look first. This entry is followed first, and your skill (`SKILL.md`) is what it rests on: the
 review, the boundary, how to ask, the line you leave and your answer are said there and not again here.
 
 The quick look is short. It reads the counts, acts only on what is off, and accounts for no person one by one: who is

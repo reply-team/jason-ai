@@ -12,7 +12,9 @@ boundary, how to ask, the line you leave and your answer are said there and not 
 
 The deep review is the one review that accounts for every person of the campaign: nobody in it stands without a reason
 you can name. Where the brief carries a `trigger` and a `cause`, a line asked for a review as this one fell due, and it
-runs in that review's place: read the cause's section of your skill first, then go on as below.
+runs in that review's place: read the cause's section of your skill first, then go on as below. Where its
+`review_intent` is `requested`, a person asked for a deep review now: read what they asked, as your skill says, and
+know that the daily one still comes at its own moment, which this review does not move.
 
 ## Your note first
 

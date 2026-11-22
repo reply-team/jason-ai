@@ -22,6 +22,10 @@ the work item, the attempt, and `decision_id` when the answer to a question is w
 `cause.qualifying_count` says how many such lines were read in the same pass: ten failures in a burst are one
 review, and it is yours.
 
+`review_intent` is `requested` when a person asked for this review now, with `jason campaign review`: their
+`review_requested` line names the depth they asked for and carries their reason. Read it first, look first at what it
+asks about, and answer it in your line. A review is asked for by a person only; a run never asks for one.
+
 The brief is identifiers and constants. It does not say what happened, because the runtime that wrote it read
 no meaning, and you should not take it for a summary either. It says where to look first.
 
