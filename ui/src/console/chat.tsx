@@ -311,6 +311,14 @@ const unmadeMark = 'unmade:';
 /** Whether a chat is an agent's drawn before its conversation was made (`unmadeChat`). */
 export const isUnmade = (id: string): boolean => id.startsWith(unmadeMark);
 
+/**
+ * The name of the agent a chat is about as the console reads it now, so a rename shows at once; the chat's own title
+ * (what its conversation was called when it was made) where the console does not hold the agent, or for a chat of none.
+ */
+function agentNameOf(chat: Chat): string {
+    return campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
+}
+
 /** An unmade chat as it is drawn: named as the console's list names its agent, in the mode its conversation will take. */
 function unmadeAsDrawn(chat: Chat): Chat {
     const title = campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
@@ -1206,7 +1214,9 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
-                <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
+                <h2>
+                    ${chat.campaignId ? `What should Jason do in ${agentNameOf(chat)}?` : 'What should Jason work on?'}
+                </h2>
                 ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
@@ -2157,7 +2167,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     <div className="agent-opening">
                         <div className="start-title hero">
                             <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
-                            <h2>{t('agent.new.question', { name: chat.title })}</h2>
+                            <h2>{t('agent.new.question', { name: agentNameOf(chat) })}</h2>
                         </div>
                         {aiCard && <Painted className="start-ai" view={aiCardView} />}
                         {heldWords !== undefined && (
