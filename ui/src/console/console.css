@@ -2500,25 +2500,32 @@ body,
 /* The plus of a section header: a 20px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
    the plus in the accent's text colour (6.4:1 on the tint in light, 6.9:1 in dark).
    The icon box is 22px, so the drawn cross (14/24 of it) is about 13px; the box overflows the 18px inside, the cross does not. */
+.jc-console {
+    --plus-tint: 14%;
+    --plus-edge: 38%;
+    --plus-tint-hover: 26%;
+}
+:root[data-theme='dark'] .jc-console {
+    --plus-tint: 20%;
+    --plus-edge: 45%;
+    --plus-tint-hover: 32%;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console {
+        --plus-tint: 20%;
+        --plus-edge: 45%;
+        --plus-tint-hover: 32%;
+    }
+}
 .jc-console .rbtn.plus {
     box-sizing: border-box;
     width: 20px;
     height: 20px;
     margin: 0 0 0 5px;
-    border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--side-bg));
+    border: 1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg));
     border-radius: 5px;
-    background: color-mix(in srgb, var(--accent) 14%, var(--side-bg));
+    background: color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg));
     color: var(--accent-text);
-}
-:root[data-theme='dark'] .jc-console .rbtn.plus {
-    background: color-mix(in srgb, var(--accent) 20%, var(--side-bg));
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--side-bg));
-}
-@media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) .jc-console .rbtn.plus {
-        background: color-mix(in srgb, var(--accent) 20%, var(--side-bg));
-        border-color: color-mix(in srgb, var(--accent) 45%, var(--side-bg));
-    }
 }
 .jc-console .rbtn.plus svg {
     flex: none;
@@ -2526,7 +2533,7 @@ body,
     height: 22px;
 }
 .jc-console .rbtn.plus:hover {
-    background: color-mix(in srgb, var(--accent) 26%, var(--side-bg));
+    background: color-mix(in srgb, var(--accent) var(--plus-tint-hover), var(--side-bg));
     border-color: var(--accent);
     color: var(--accent-text);
 }
@@ -2593,8 +2600,11 @@ body,
     opacity: 0;
 }
 .jc-console .rrow:hover .rdots,
-.jc-console .rrow:has(:focus-visible) .rdots,
 .jc-console .rrow.menu-open .rdots {
+    opacity: 1;
+}
+/* Its own rule: an engine without :has() drops this one and keeps the two above. */
+.jc-console .rrow:has(:focus-visible) .rdots {
     opacity: 1;
 }
 .jc-console .rdots:hover {
