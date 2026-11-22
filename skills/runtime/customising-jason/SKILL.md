@@ -67,8 +67,8 @@ with.
 The manager is taught by its `SKILL.md` and by one file for each kind of review it is launched for, in the folder
 `entries` beside it: `start.md`, `resume.md`, `quick_look.md`, `deep_review.md` and `inbound_reply.md`. To change how
 the manager does one kind of review, edit that entry's file, and the next review of that kind is handed your text; to
-change what every review shares, edit `SKILL.md`. Keep an entry file's front matter as it is, since it names the entry.
-As with a role's `SKILL.md`, an update keeps a file the person edited.
+change what every review shares, edit `SKILL.md`. Keep the file's name and its front matter: the runtime finds an entry
+by its file name. As with a role's `SKILL.md`, an update keeps a file the person edited.
 
 Keep the file's front matter as it is: its `name` must equal the folder's name, and a role whose file is a link, cannot
 be read, names itself differently from its folder or is over `Roles:MaxSkillBytes` is refused at launch rather than run
