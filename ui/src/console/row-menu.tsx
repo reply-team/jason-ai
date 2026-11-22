@@ -10,6 +10,7 @@ import { setVariable } from './html';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
 import { openFolder, openSession } from './open-folder';
 import { closeRowMenu, drawnRow, focusRow, rowDrawn, rowElement, rowMenu } from './recent';
+import { beginRowRename } from './row-rename';
 import { openAgentRow, openRow } from './side';
 import { conversations, here } from './state';
 
@@ -129,7 +130,17 @@ export function RowMenu() {
                 void (item.kind === 'folder' ? openFolder(campaign) : openSession(campaign, item.host));
         } else if (item.kind === 'move' && agent) setDialog({ row, agent, kind: 'move', move: item.move });
         else if (item.kind === 'archive' && agent) setDialog({ row, agent, kind: 'archive' });
-        else if (item.kind === 'rename' || item.kind === 'fresh' || item.kind === 'remove')
+        else if (item.kind === 'rename') {
+            // The name becomes a field in its row, an agent's renaming its campaign and a chat's its conversation.
+            const drawn = drawnRow(row);
+            if (drawn !== undefined)
+                beginRowRename({
+                    id: row,
+                    title: drawn.title,
+                    campaignId: drawn.campaignId,
+                    conversationId: drawn.conversationId,
+                });
+        } else if (item.kind === 'fresh' || item.kind === 'remove')
             void begin(row, item.kind, (held) => here().dock.showChat(held));
     };
     const ended = (open: Open, done: boolean) => {

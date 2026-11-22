@@ -34,6 +34,36 @@ public sealed class NewAgentExchangesTests
         Assert.Equal((CampaignStatus.Draft, 0), (read.Status, read.Context.Count));
     }
 
+    /// <summary>
+    /// An agent renamed from its row in the sidebar: the name changes and the folder stays where it was made, and a name
+    /// longer than the runtime keeps is refused, changing nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_draft_made_at_the_click_renamed_from_its_row()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var made = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "New agent 1" }, Ct);
+        var person = new { type = "human", id = "ada" };
+
+        var renamed = await api.RecordAsync<CampaignDto>(
+            Operations.CampaignUpdate,
+            "new-agent-rename",
+            new { campaign_id = made.Id, name = "Polish finance", actor = person },
+            Ct);
+        var refused = await api.RecordErrorAsync(
+            Operations.CampaignUpdate,
+            "new-agent-name-too-long",
+            new { campaign_id = made.Id, name = new string('n', 201), actor = person },
+            System.Net.HttpStatusCode.BadRequest,
+            Ct);
+        var read = await api.PostOkAsync<CampaignDto>(Operations.CampaignGet, new { campaign_id = made.Id }, Ct);
+
+        Assert.Equal(("Polish finance", made.FolderPath), (renamed.Name, renamed.FolderPath));
+        Assert.Equal("validation_failed", refused.Code);
+        Assert.Equal(("Polish finance", made.FolderPath), (read.Name, read.FolderPath));
+        Assert.NotNull(made.FolderPath);
+    }
+
     [Fact]
     public async Task A_draft_made_at_the_click_with_a_brief_and_no_one_in_it()
     {

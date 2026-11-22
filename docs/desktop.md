@@ -778,12 +778,19 @@ Code in terminal** or **Open Codex in terminal**: a new session of that host in 
 same `jason session open` as Open in's own entry for it, the host the agent's chat runs on where it is found here, else
 Claude Code, else Codex; it is not there where neither is found, nor in the demo, nor in a tab, and opening it leaves
 Open in's default as it was. The menu on the agent's row under **Agents** holds the two right after **Open**, then
-**Rename conversation**, **Start conversation fresh**, which begins the agent's next turn without its memory of the
-conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
+**Rename**, which renames the agent itself in its row (below), **Start conversation fresh**, which begins the agent's
+next turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
 computer after one question, saying that the agent stays as it is and, for a conversation with a folder of its own, that
 the folder is kept seven days and where, that on Windows a program that has it open keeps it where it is until a later
 start of Jason Desktop moves it, and that on macOS and Linux a terminal open in it follows it there; the host keeps its
 own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
+
+**Rename** in an agent's row menu, and **Rename conversation** in a chat's under **Chats**, make the row's name a field
+in place, with no chat shown.
+Enter keeps the name; Escape, or the focus leaving the field, keeps nothing; an unchanged name is kept with nothing
+asked. An agent's row renames the agent, through `campaign.update`, as you: the row, the agent's header and the Agents
+page show the new name at once, and the agent's folder stays where it is. A chat's row renames its conversation, cut at
+sixty characters, as the chat's own Rename does. A name refused is said under the field, which keeps what you typed.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
