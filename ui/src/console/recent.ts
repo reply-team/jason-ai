@@ -194,7 +194,11 @@ function inFront(row: RecentRow): boolean {
     return agent !== null && row.campaignId === agent.id;
 }
 
-/** A row whose name is a field in place (`row-rename.ts`), with what was refused under it. */
+/**
+ * A row whose name is a field in place (`row-rename.ts`), with what was refused under it and named as the field's
+ * description. The refusal is announced by the sidebar's one region (`RowRenameSaid`), which keeps its node however
+ * often the rows are painted, so a repaint never says it again.
+ */
 function renamingView(row: RecentRow, said: string | null, busy: boolean): Html {
     const name = row.campaignId !== null ? t('side.rename.agent') : t('side.rename.chat');
     return html`<div class="rrow renaming">
@@ -204,14 +208,15 @@ function renamingView(row: RecentRow, said: string | null, busy: boolean): Html 
             aria-label="${name}"
             value="${typedName()}"
             ${said === null ? null : html`aria-invalid="true"`}
-            ${busy ? html`aria-busy="true"` : null}
+            ${busy ? html`aria-busy="true" readonly` : null}
+            ${said === null ? null : html`aria-describedby="rrename-said"`}
             data-input="side.renameType"
             data-enter="side.renameKeep"
             data-escape="side.renameDrop"
             data-blur="side.renameBlur"
             ${argsOf(row.id)}
         />
-        ${said === null ? null : html`<div class="rrename-said" role="alert">${said}</div>`}
+        ${said === null ? null : html`<div class="rrename-said" id="rrename-said">${said}</div>`}
     </div>`;
 }
 

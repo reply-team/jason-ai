@@ -43,6 +43,7 @@ public sealed class NewAgentExchangesTests
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
         var made = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "New agent 1" }, Ct);
+        Assert.NotNull(made.FolderPath);
         var person = new { type = "human", id = "ada" };
 
         var renamed = await api.RecordAsync<CampaignDto>(
@@ -61,7 +62,7 @@ public sealed class NewAgentExchangesTests
         Assert.Equal(("Polish finance", made.FolderPath), (renamed.Name, renamed.FolderPath));
         Assert.Equal("validation_failed", refused.Code);
         Assert.Equal(("Polish finance", made.FolderPath), (read.Name, read.FolderPath));
-        Assert.NotNull(made.FolderPath);
+        Assert.True(Directory.Exists(made.FolderPath), "The agent's folder is where it was after the rename.");
     }
 
     [Fact]

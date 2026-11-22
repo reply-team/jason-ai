@@ -178,7 +178,11 @@ describe('An agent’s row renamed in place', () => {
         fireEvent.input(box, { target: { value: long } });
         fireEvent.keyDown(box, { key: 'Enter' });
         const alert = await waitFor(() => side().getByRole('alert'));
-        expect(alert.textContent).toBe('That name is too long. Keep it to 200 characters.');
+        expect(alert.textContent).toBe('That name is too long. Keep it to a short line.');
+        // The field is described by what was refused, drawn under it.
+        const described = document.getElementById(field('Agent name').getAttribute('aria-describedby') ?? '');
+        expect(described?.textContent).toBe(alert.textContent);
+        expect(field('Agent name').parentElement?.contains(described ?? null)).toBe(true);
         expect(field('Agent name').value).toBe(long);
         expect(document.activeElement).toBe(field('Agent name'));
         expect(updates(fake)).toHaveLength(1);
@@ -225,6 +229,82 @@ describe('An agent’s row renamed in place', () => {
         fireEvent.keyDown(box, { key: 'Enter' });
         await rowIn(agentsList, 'Polish finance');
         expect(updates(fake)).toHaveLength(1);
+    });
+});
+
+describe('An agent’s rename while its request is in flight, and the row painted again', () => {
+    async function sent(update: FixtureName, typing: string) {
+        const fake = api(update);
+        const release = fake.hold('campaign.update');
+        await renderAt('window', fake);
+        await chooseFor(agentsList, 'New agent 1', 'Rename');
+        const box = await waitFor(() => field('Agent name'));
+        fireEvent.input(box, { target: { value: typing } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(field('Agent name').getAttribute('aria-busy')).toBe('true'));
+        return { fake, release };
+    }
+
+    it('stays open through a lost focus while the request waits, and says the refusal that then comes', async () => {
+        const { release } = await sent('campaign.update/new-agent-name-too-long', 'n'.repeat(201));
+        const elsewhere = side().getByRole('button', { name: 'New chat' });
+        elsewhere.focus();
+        fireEvent.focusOut(field('Agent name'), { relatedTarget: elsewhere });
+        await new Promise((done) => setTimeout(done, 5));
+        expect(field('Agent name').value).toBe('n'.repeat(201));
+        release();
+        const alert = await waitFor(() => side().getByRole('alert'));
+        expect(alert.textContent).toBe('That name is too long. Keep it to a short line.');
+        expect(field('Agent name').value).toBe('n'.repeat(201));
+        expect(field('Agent name').getAttribute('aria-busy')).toBeNull();
+    });
+
+    it('stays open through Escape while the request waits, and closes on the answer with the row focused', async () => {
+        const { release } = await sent('campaign.update/new-agent-rename', 'Polish finance');
+        fireEvent.keyDown(field('Agent name'), { key: 'Escape' });
+        await new Promise((done) => setTimeout(done, 5));
+        expect(field('Agent name')).toBeTruthy();
+        release();
+        await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+        await waitFor(() =>
+            expect(document.activeElement).toBe(within(agentsList()).getByRole('button', { name: 'Polish finance' })),
+        );
+    });
+
+    it('says any other refusal in the runtime’s own words', async () => {
+        await renderAt('window', api('campaign.get/unknown'));
+        await chooseFor(agentsList, 'New agent 1', 'Rename');
+        const box = await waitFor(() => field('Agent name'));
+        fireEvent.input(box, { target: { value: 'Polish finance' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect((await waitFor(() => side().getByRole('alert'))).textContent).toBe("No campaign with id 'cmp_3'.");
+    });
+
+    it('keeps the field, its text, its focus and its refusal’s one node when the lists change under it', async () => {
+        await renderAt('window', api('campaign.update/new-agent-name-too-long'));
+        await chooseFor(agentsList, 'New agent 1', 'Rename');
+        const box = await waitFor(() => field('Agent name'));
+        fireEvent.input(box, { target: { value: 'n'.repeat(201) } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        const alert = await waitFor(() => side().getByRole('alert'));
+        fireEvent.input(field('Agent name'), { target: { value: 'Half typed' } });
+        flush(() => {
+            consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) => ({ ...each }));
+            conversations.value = [...conversations.value];
+        });
+        expect(field('Agent name').value).toBe('Half typed');
+        expect(document.activeElement).toBe(field('Agent name'));
+        expect(side().getByRole('alert')).toBe(alert);
+    });
+
+    it('is closed when its row is no longer drawn', async () => {
+        await renderAt('window', api(), false);
+        await chooseFor(agentsList, 'New agent 1', 'Rename');
+        await waitFor(() => field('Agent name'));
+        flush(() => {
+            consoleCampaigns.campaigns.value = [];
+        });
+        await waitFor(() => expect(rowRename.value).toBeNull());
     });
 });
 

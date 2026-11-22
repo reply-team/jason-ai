@@ -653,6 +653,11 @@ describe('the sidebar where the window is narrow', () => {
         expect(aside().classList.contains('open')).toBe(true);
         expect(aside().contains(field)).toBe(true);
         expect(document.activeElement).toBe(field);
+        // Escape in the field closes the field alone: the drawer stays open, with the focus back on the row.
+        fireEvent.keyDown(field, { key: 'Escape' });
+        await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(document.activeElement).toBe(side().getByRole('button', { name: 'Mailboxes' }));
     });
 
     it('keeps the drawer open for a row menu its three dots open, and Escape gives the focus back inside it', async () => {

@@ -303,7 +303,8 @@ neither is, none in the demo, and it leaves the window's Open in where it was. T
 **Agents** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts: **Rename
 conversation**, which the row's menu holds as **Rename** and which there renames the agent itself, through
 `campaign.update`, with the row's name made a field in place (a chat's row renames its conversation in place the same
-way: Enter keeps the name, Escape or leaving the field keeps nothing, a refusal is said under the field), **Start
+way: Enter keeps the name, Escape or leaving the field keeps nothing, and once Enter has sent a name both wait for the
+answer, a refusal is said under the field), **Start
 conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own

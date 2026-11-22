@@ -791,7 +791,8 @@ own transcript. A set-up chat has the same acts in its own bar, as **Rename**, *
 **Rename** in an agent's row menu, and **Rename conversation** in a chat's under **Chats**, make the row's name a field
 in place, with no chat shown.
 Enter keeps the name; Escape, or the focus leaving the field, keeps nothing; an unchanged name is kept with nothing
-asked. An agent's row renames the agent, through `campaign.update`, as you: the row, the agent's header and the Agents
+asked. Once Enter has sent a name, the field waits for the answer: Escape and the focus leaving it close nothing until
+the name is kept or refused. An agent's row renames the agent, through `campaign.update`, as you: the row, the agent's header and the Agents
 page show the new name at once, and the agent's folder stays where it is. A chat's row renames its conversation, cut at
 sixty characters, as the chat's own Rename does. A name refused is said under the field, which keeps what you typed.
 

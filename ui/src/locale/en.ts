@@ -26,7 +26,7 @@ export const en = {
     'side.rename.agent': 'Agent name',
     'side.rename.chat': 'Conversation name',
     'side.rename.empty': 'A name needs at least one character that shows.',
-    'side.rename.tooLong': 'That name is too long. Keep it to {n} characters.',
+    'side.rename.tooLong': 'That name is too long. Keep it to a short line.',
     'attention.filter.label': 'Approvals or questions',
     'attention.filter.all': 'All',
     'attention.filter.approvals': 'Approvals',

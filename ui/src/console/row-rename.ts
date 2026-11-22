@@ -12,7 +12,9 @@ import { changeChat, conversations, here, messageOf } from './state';
 // through `campaign.update`, with the person as actor, and the name the runtime keeps is the one the row, the agent's
 // header and the Agents page then show; its folder is where it was. A chat's row renames its conversation through the
 // desktop, which refuses in its own words. Enter keeps the name; Escape, and the field losing the focus, keep nothing; a
-// refusal is said under the field, which stays open with what was typed. No chat is shown. One row at a time.
+// refusal is said under the field, which stays open with what was typed. Once Enter has sent the name, the field waits
+// for the answer: Escape and a lost focus close nothing, so a refusal is never lost and nothing is kept unseen. No chat
+// is shown. One row at a time.
 
 /** The row being renamed: its key, the agent it renames or the conversation, its name before, and what was refused. */
 export interface RowRename {
@@ -81,7 +83,9 @@ function refused(id: string, said: string): void {
     const at = rowRename.value;
     if (at === null || at.id !== id) return;
     rowRename.value = { ...at, said, busy: false };
-    fieldOf()?.focus();
+    // The field takes the focus back unless the person has put it somewhere else meanwhile.
+    const active = document.activeElement;
+    if (active === null || active === document.body || active === fieldOf()) fieldOf()?.focus();
 }
 
 /**
@@ -90,7 +94,7 @@ function refused(id: string, said: string): void {
  */
 function refusalOfName(error: unknown): string {
     if (error instanceof ApiError && error.details?.some((each) => each.field === 'name' && each.code === 'too_long'))
-        return t('side.rename.tooLong', { n: '200' });
+        return t('side.rename.tooLong');
     return messageOf(error);
 }
 
@@ -145,11 +149,27 @@ define('side.renameType', (_args, element) => {
     }
     typed = element.value;
 });
-define('side.renameKeep', () => void keep());
-define('side.renameDrop', () => close(true));
+/** Closes a row's field that is no longer drawn, as a row's menu goes with its row; a request in flight is let answer. */
+export function dropUndrawnRename(drawn: (id: string) => boolean): void {
+    const at = rowRename.value;
+    if (at !== null && !at.busy && !drawn(at.id)) rowRename.value = null;
+}
+
+// The field's keys are its own: Enter and Escape go no further, so a narrow window's drawer stays open around it.
+define('side.renameKeep', (_args, _element, event) => {
+    event.stopPropagation();
+    void keep();
+});
+define('side.renameDrop', (_args, _element, event) => {
+    event.stopPropagation();
+    if (rowRename.value?.busy) return;
+    close(true);
+});
 define('side.renameBlur', () => {
-    // Losing the focus keeps nothing, as Escape does; a field painted again keeps its focus and stays open.
+    // Losing the focus keeps nothing, as Escape does; a field painted again keeps its focus and stays open, and a field
+    // whose request is in flight waits for its answer.
     setTimeout(() => {
+        if (rowRename.value?.busy) return;
         const active = document.activeElement;
         if (active instanceof HTMLElement && active.classList.contains('rrename')) return;
         close(false);

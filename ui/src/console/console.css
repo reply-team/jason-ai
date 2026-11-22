@@ -2544,6 +2544,19 @@ body,
 .jc-console .rrename[aria-invalid='true'] {
     border-color: var(--red);
 }
+/* The region a refusal of a row's rename is heard from: in the page, never on the screen. */
+.jc-console .rrename-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+.jc-console .rrename[aria-busy='true'] {
+    opacity: 0.7;
+    cursor: progress;
+}
 .jc-console .rrename-said {
     margin: 4px 2px 2px;
     font-size: 12px;
