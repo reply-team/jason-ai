@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Routing;
@@ -57,6 +58,10 @@ namespace Jason.Runtime.Routing;
 /// newest first, read only for an operation whose arguments name a thread; null where they name none, or where no line of
 /// the campaign names the thread, which the runtime then knows nothing about.
 /// </param>
+/// <param name="Line">
+/// Where the line with the item's person in the item's campaign stands, read only for a touch
+/// (<see cref="Jason.Contracts.Operations.OperationCatalog.Touches"/>) that names a contact, and null for every other work.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
@@ -72,11 +77,24 @@ public sealed record PreflightFacts(
     NamedAudience? Audience = null,
     string? SearchInTheWay = null,
     IReadOnlyList<ThreadSeen>? Thread = null,
-    string? OptedOut = null)
+    string? OptedOut = null,
+    LineFacts? Line = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
 }
+
+/// <summary>
+/// What the claim read of the line with one person in one campaign, for a touch: the two facts checks 29 and 30 decide on,
+/// and the ceiling the scan read, carried here so the decision stays a function of its facts.
+/// </summary>
+/// <param name="State">The person's membership of the campaign, or null where they are not a member of it.</param>
+/// <param name="Touches">
+/// The person's touches in this campaign other than the work being claimed that may have reached them, by the one
+/// definition the people list counts by too (<see cref="Jason.Runtime.Campaigns.LineTouches"/>).
+/// </param>
+/// <param name="Ceiling"><c>Lines:MaxTouches</c>, as the scan that claims the work read it.</param>
+public sealed record LineFacts(MembershipState? State, int Touches, int Ceiling);
 
 /// <summary>
 /// The kinds of one plugin's pins of a person and of a campaign that the compared attempt and every later attempt of the

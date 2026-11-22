@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Journal;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -47,6 +48,20 @@ public readonly record struct TriggerRead(ManagerCause? Cause, int Watermark);
 /// </summary>
 public static class ManagerTriggers
 {
+    /// <summary>
+    /// How strongly a kind claims to be the cause of a review its read summons, lowest first. A campaign going live is
+    /// what the review that follows is for, so <c>campaign_started</c> ranks first; a thread that moved is what a
+    /// person is waiting on, so <c>inbound_reply_observed</c> ranks next; every other kind ranks the same. It reads
+    /// the kind and nothing else, and it changes only which line is named: what is counted, and how far the read
+    /// accounts for, stay as they were.
+    /// </summary>
+    public static int Rank(string kind) => kind switch
+    {
+        JournalKinds.CampaignStarted => 0,
+        JournalKinds.InboundReplyObserved => 1,
+        _ => 2,
+    };
+
     /// <param name="entries">The chronicle above the watermark, oldest first, already capped by the caller.</param>
     /// <param name="triggers">The kinds that summon a review. Empty is a deliberate configuration: cadence only.</param>
     /// <param name="fromCheckIn">
@@ -70,7 +85,10 @@ public static class ManagerTriggers
             return new TriggerRead(null, watermark);
         }
 
+        // The cause is the first line of the highest-ranked kind the read holds: a strictly better rank replaces it,
+        // an equal one never does, so within a rank the first line wins as it always has.
         ChronicleLine? first = null;
+        var rank = int.MaxValue;
         var qualifying = 0;
         foreach (var entry in entries)
         {
@@ -79,7 +97,13 @@ public static class ManagerTriggers
                 continue;
             }
 
-            first ??= entry;
+            var ranked = Rank(entry.Kind);
+            if (ranked < rank)
+            {
+                first = entry;
+                rank = ranked;
+            }
+
             qualifying++;
         }
 

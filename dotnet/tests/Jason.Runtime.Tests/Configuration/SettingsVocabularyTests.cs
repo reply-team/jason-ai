@@ -67,6 +67,7 @@ public class SettingsVocabularyTests
                 typeof(InboundOptions),
                 typeof(LaunchesOptions),
                 typeof(SendingOptions),
+                typeof(LinesOptions),
                 typeof(HarnessOptions),
                 typeof(SubscriptionsOptions),
             },

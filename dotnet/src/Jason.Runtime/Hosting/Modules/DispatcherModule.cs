@@ -95,6 +95,7 @@ public static class DispatcherModule
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
         services.AddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
         services.AddSingleton(Seam<SendingOptions>(SendingOptions.Section));
+        services.AddSingleton(Seam<LinesOptions>(LinesOptions.Section));
         services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
 
         // The installation's zone, read through its seam at each scan: the day the daily limits count and a lift covers runs

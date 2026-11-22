@@ -60,6 +60,63 @@ public class StartSummonsManagerTests
         Assert.Equal(await StartLineAsync(harness, campaign, latest: true), (string?)resumed.Context["cause"]!["journal_entry_id"]);
     }
 
+    /// <summary>The campaign's first start is the check-in's <c>start</c> entry: its first going live, and nothing before it.</summary>
+    [Fact]
+    public async Task A_first_start_names_the_start_entry()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CreateAsync(harness);
+        await StartAsync(harness, campaign);
+
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+
+        Assert.Equal("start", (await SingleCheckInAsync(harness)).Entry);
+    }
+
+    /// <summary>
+    /// A start after a pause is a later <c>campaign_started</c> line than the campaign's first, by id, so its check-in is
+    /// the <c>resume</c> entry. Nothing reads what either line says: the comparison is of two identifiers.
+    /// </summary>
+    [Fact]
+    public async Task A_start_after_a_pause_names_the_resume_entry()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CreateAsync(harness);
+        await StartAsync(harness, campaign);
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+        await FinishCheckInAsync(harness);
+
+        await PauseAsync(harness, campaign);
+        harness.Clock.Advance(TimeSpan.FromDays(7));
+        await StartAsync(harness, campaign);
+
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+
+        await using var db = harness.Open();
+        var resumed = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role && w.Status == WorkItemStatus.Created, Ct);
+        Assert.Equal("resume", resumed.Entry);
+    }
+
+    /// <summary>
+    /// A first start and a pause and a resume all read in one pass are one review, caused by the first start, so it is
+    /// the <c>start</c> entry: the campaign's first going live has not yet been reviewed at all.
+    /// </summary>
+    [Fact]
+    public async Task A_first_start_and_a_resume_in_one_read_name_the_start_entry()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CreateAsync(harness);
+        await StartAsync(harness, campaign);
+        await PauseAsync(harness, campaign);
+        await StartAsync(harness, campaign);
+
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+
+        var checkIn = await SingleCheckInAsync(harness);
+        Assert.Equal("start", checkIn.Entry);
+        Assert.Equal(await StartLineAsync(harness, campaign), (string?)checkIn.Context["cause"]!["journal_entry_id"]);
+    }
+
     /// <summary>A pause cancels nothing, so a check-in can still be open when the campaign is resumed: it stays the one.</summary>
     [Fact]
     public async Task A_campaign_with_an_open_check_in_gets_no_second_from_a_start()
