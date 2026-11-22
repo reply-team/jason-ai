@@ -865,7 +865,8 @@ public sealed class WorkItemService(
 
     /// <summary>
     /// Work about a person is only meaningful while the campaign is allowed to touch that person, so membership
-    /// is checked here rather than left to the executor to discover.
+    /// is checked here rather than left to the executor to discover. The membership is read tracked, so the person's
+    /// memberships hold it and the create's answer says whether a held person's touch waits, as a listing would.
     /// </summary>
     private async Task<Contact?> LoadMemberAsync(Campaign campaign, string? contactId, CancellationToken cancellationToken)
     {
@@ -881,9 +882,9 @@ public sealed class WorkItemService(
         }
 
         var member = await db.CampaignContacts
-            .AnyAsync(m => m.CampaignId == campaign.Id && m.ContactId == contact.Id && m.State != MembershipState.Excluded, cancellationToken)
+            .FirstOrDefaultAsync(m => m.CampaignId == campaign.Id && m.ContactId == contact.Id && m.State != MembershipState.Excluded, cancellationToken)
             .ConfigureAwait(false);
-        return member ? contact : throw DomainErrors.ContactNotMember(contact.PublicId, campaign.PublicId);
+        return member is not null ? contact : throw DomainErrors.ContactNotMember(contact.PublicId, campaign.PublicId);
     }
 
     /// <summary>

@@ -293,7 +293,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             membership.HasKey(m => m.Id);
             membership.HasIndex(m => new { m.CampaignId, m.ContactId }).IsUnique();
             membership.HasIndex(m => m.ContactId);
-            membership.HasOne(m => m.Contact).WithMany().HasForeignKey(m => m.ContactId).OnDelete(DeleteBehavior.Restrict);
+            membership.HasOne(m => m.Contact).WithMany(c => c.Memberships).HasForeignKey(m => m.ContactId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Suppression>(suppression =>

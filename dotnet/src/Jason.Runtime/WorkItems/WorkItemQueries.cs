@@ -22,6 +22,17 @@ public static class WorkItemQueries
     /// <summary>The operations whose work runs in an archived campaign, as their contracts declare it.</summary>
     private static readonly string[] RunsInArchivedCampaign = [.. OperationCatalog.RunsInArchivedCampaign];
 
+    /// <summary>
+    /// The operations that open or carry on a line with a person, as their contracts declare it: a held person's are not
+    /// candidates. Matched against the operation column, as the campaign's rule is.
+    /// </summary>
+    private static readonly string[] Touches = [.. OperationCatalog.Touches];
+
+    /// <summary>
+    /// The predicate. Its last campaign rule is a person's: a touch of a person whose membership in the item's campaign is
+    /// <c>paused</c> waits, as a paused campaign's work does, with nothing written. In memory it reads the person's
+    /// memberships, which <see cref="WithNavigation"/> loads, the held ones alone; a person not loaded holds nothing there.
+    /// </summary>
     private static readonly Expression<Func<WorkItem, DateTime, bool>> EligibleAt =
         (w, now) => w.Status == WorkItemStatus.Created
             && (w.Campaign!.Status == CampaignStatus.Active
@@ -31,6 +42,10 @@ public static class WorkItemQueries
                 || (w.Campaign!.Status == CampaignStatus.Archived
                     && w.Operation != null
                     && Enumerable.Contains(RunsInArchivedCampaign, w.Operation)))
+            && !(w.Operation != null
+                && Enumerable.Contains(Touches, w.Operation)
+                && w.Contact != null
+                && w.Contact.Memberships.Any(m => m.CampaignId == w.CampaignId && m.State == MembershipState.Paused))
             && (w.NotBefore == null || w.NotBefore <= now)
             && (w.DueAt == null || w.DueAt > now)
             && (w.RetryAfter == null || w.RetryAfter <= now);
@@ -46,11 +61,17 @@ public static class WorkItemQueries
     /// <summary>The same predicate in memory; the item's campaign has to be loaded.</summary>
     public static bool IsEligible(WorkItem item, DateTime now) => Compiled(item, now);
 
-    /// <summary>Everything the mapper needs: an item without its campaign cannot say whether it is eligible.</summary>
+    /// <summary>
+    /// Everything the mapper needs: an item without its campaign cannot say whether it is eligible, nor one without its
+    /// person's held memberships whether its touch waits. Only the held ones are loaded: a person is held in few campaigns.
+    /// </summary>
     public static IQueryable<WorkItem> WithNavigation(this IQueryable<WorkItem> query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        return query.Include(w => w.Campaign).Include(w => w.Contact);
+        return query
+            .Include(w => w.Campaign)
+            .Include(w => w.Contact)
+            .ThenInclude(c => c!.Memberships.Where(m => m.State == MembershipState.Paused));
     }
 
     /// <summary>The scheduled or running attempt, of which the database allows at most one.</summary>

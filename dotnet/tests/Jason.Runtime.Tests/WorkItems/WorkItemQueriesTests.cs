@@ -80,7 +80,7 @@ public class WorkItemQueriesTests
     /// provider operation whose contract says it runs there; an archived one holds everything but a search's stop, the one
     /// operation whose contract says it runs there too; a draft holds everything. Several operations say they run in a
     /// paused campaign, which is what makes the claim's set a set; an add is `control` and `auto` like them, and still
-    /// waits.
+    /// waits. They agree in every state of a person's membership too: a touch of a held person waits.
     /// </summary>
     [Fact]
     [Critical(Family.W6, "eligibility in SQL and in memory agree")]
@@ -110,6 +110,36 @@ public class WorkItemQueriesTests
                 items.Add((item, status == CampaignStatus.Active
                     || (status == CampaignStatus.Paused && name is "a pause" or "a record of a stop" or "a search's stop")
                     || (status == CampaignStatus.Archived && name is "a search's stop")));
+            }
+        }
+
+        // And in every state of the person's membership in an active campaign: a held person's touch waits, and nothing
+        // else of theirs does — a reply, a take-back of a send and a role's work about them go on. A person held in another
+        // campaign holds nothing here, and the other states hold nothing at all: an ended line is the claim's to refuse.
+        foreach (var state in Enum.GetValues<MembershipState>())
+        {
+            var kinds = new (string Name, bool Touch, Func<Campaign, WorkItem> Make)[]
+            {
+                ("a send", true, campaign => WorkItemFactory.NewProviderOp(campaign, "message.send", Noon)),
+                ("an invitation", true, campaign => WorkItemFactory.NewProviderOp(campaign, "social_invitation.send", Noon)),
+                ("an enrollment", true, campaign => WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon)),
+                ("a reply", false, campaign => WorkItemFactory.NewProviderOp(campaign, "conversation.reply", Noon)),
+                ("a take-back", false, campaign => WorkItemFactory.NewProviderOp(campaign, "message.cancel", Noon)),
+                ("a role's work", false, campaign => WorkItemFactory.NewAiRole(campaign, now: Noon)),
+            };
+            foreach (var (name, touch, make) in kinds)
+            {
+                var campaign = WorkItemFactory.NewCampaign($"{state} {name}", CampaignStatus.Active, Noon);
+                var elsewhere = WorkItemFactory.NewCampaign($"{state} {name} elsewhere", CampaignStatus.Active, Noon);
+                var person = new Contact { PublicId = Jason.Contracts.Ids.PublicId.New("cnt"), CreatedAt = Noon, UpdatedAt = Noon };
+                var item = make(campaign);
+                item.Contact = person;
+                db.Campaigns.AddRange(campaign, elsewhere);
+                db.Contacts.Add(person);
+                db.CampaignContacts.Add(new CampaignContact { Campaign = campaign, Contact = person, State = state, AddedAt = Noon, UpdatedAt = Noon });
+                db.CampaignContacts.Add(new CampaignContact { Campaign = elsewhere, Contact = person, State = MembershipState.Paused, AddedAt = Noon, UpdatedAt = Noon });
+                db.WorkItems.Add(item);
+                items.Add((item, !(touch && state == MembershipState.Paused)));
             }
         }
 

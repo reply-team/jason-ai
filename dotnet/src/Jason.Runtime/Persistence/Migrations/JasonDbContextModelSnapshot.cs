@@ -3051,7 +3051,7 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_campaign_contacts_campaigns_campaign_id");
 
                     b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
-                        .WithMany()
+                        .WithMany("Memberships")
                         .HasForeignKey("ContactId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
@@ -3387,6 +3387,8 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Channels");
 
                     b.Navigation("ExternalIds");
+
+                    b.Navigation("Memberships");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfile", b =>
