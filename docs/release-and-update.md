@@ -1544,12 +1544,13 @@ opens the same data as it is, and there is no backup to put back. These steps, a
 hold for data that no release after 0.49 has opened.
 
 0.50 migrates the database. From 0.49.0 on, a runtime refuses a database holding a migration it does not know
-(`data_newer`, "Going back" above), so 0.49 refuses data that 0.50 has opened; a version before 0.49.0, 0.48.7 among
-them, has no such check and runs its own model over the newer schema. Going back from 0.50 therefore starts from the
-database as it stood before 0.50 migrated it: "Going back" above says when `jason update rollback` restores the backup
-that migration took, which is only while the chronicle stands where it stood at `healthy`, and what the rollback of an
-update a carried `jason` handed to Jason Desktop puts back; where the chronicle has moved, "Restoring a database by
-hand" above is how you put that backup back yourself.
+(`data_newer`, "Going back" above), so 0.49.x refuses data that 0.50 has opened; a version before 0.49.0, 0.48.7
+among them, has no such check and runs its own model over the newer schema. Going back from 0.50 therefore starts from
+the database as it stood before 0.50 migrated it: "Going back" above says when `jason update rollback` restores the
+backup that migration took, which is only while the chronicle stands where it stood at `healthy`, and what the rollback
+of an update a carried `jason` handed to Jason Desktop puts back. Wherever the rollback leaves the database as it
+stands, and for the deb, whose `jason` refuses a rollback with `update_managed_by_package_manager`, "Restoring a
+database by hand" above is how you put that backup back yourself.
 
 Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one "Jason did not deploy,
 under a name Jason ships, left as it is", move that folder out of the skills folder before step 3 and put it back after
