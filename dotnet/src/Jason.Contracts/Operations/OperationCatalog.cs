@@ -44,6 +44,13 @@ public static class OperationCatalog
         [.. All.Where(contract => contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id)];
 
     /// <summary>
+    /// The operations that open or carry on the line with a person, from each document's <c>touch</c>: an act a person
+    /// on the other side would count as somebody writing to them. Read once, as the documents are.
+    /// </summary>
+    public static IReadOnlySet<string> Touches { get; } =
+        All.Where(contract => contract.Touch).Select(contract => contract.Id).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
     /// The operations whose work is created, kept and claimed after its campaign is archived, from each document's
     /// <c>dispatch.in_archived_campaign</c>: a stop whose not running is the harm. Read once, as the documents are.
     /// </summary>

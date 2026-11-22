@@ -41,6 +41,7 @@
   "channel_templates": null,
   "route_channel_argument": null,
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
+  "touch": true,
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"
