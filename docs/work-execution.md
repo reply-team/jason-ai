@@ -832,7 +832,13 @@ not archived, each person once with the campaigns that list them under `counted`
 `--activity <count>` and the same period, it lists exactly
 the people one count counts, each with why it counts them in each of those campaigns: the approval or question waiting,
 how their latest work ended, or when in the period it happened, the latest first. Under `--activity people` the why is
-the latest of what happened to them, its `text` naming the count it was. Work about a person is work in that campaign
+the latest of what happened to them, its `text` naming the count it was. Each row also says how many touches the
+person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
+exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
+shows is the number the ceiling stops at, and its moment is the item's finish where it succeeded, else the end of the
+latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
+(`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
 line of each campaign it reaches ([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such
 as the reply to a direct email or a message outside a sequence, reaches every campaign not archived that the person is a

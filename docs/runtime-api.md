@@ -244,9 +244,13 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.remove_contacts`
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
-  the search and when they landed; `exclude_archived_contacts` leaves out the people whose own record is archived.
-- `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole;
-  `exclude_archived_contacts` leaves out the people whose own record is archived.
+  the search and when they landed; every row carries `touches`, the touches the person has had in the row's campaign as
+  the ceiling of touches counts them, and `last_touch_at`, the moment of the last, null with none
+  ([docs/work-execution.md](work-execution.md), "A campaign's people, counted"); `exclude_archived_contacts` leaves out
+  the people whose own record is archived.
+- `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole, with
+  `paused` and `finished` counting the members whose line is in that state; `exclude_archived_contacts` leaves out the
+  people whose own record is archived.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
   not included, whole; `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time; `exclude_archived_contacts`
