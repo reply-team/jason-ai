@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_finished",
+  "version": 1,
+  "case": "one line ends, one was ended already and one person was removed",
+  "body": { "key": null, "old": null, "new": { "finished": 1, "already_finished": 1, "not_member": 0, "excluded": 1, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"] } },
+  "expect": "valid"
+}

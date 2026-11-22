@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_reopened",
+  "version": 1,
+  "case": "a run reopens the line its answered question names and not another",
+  "body": { "key": null, "old": null, "new": { "reopened": 1, "not_finished": 0, "not_member": 0, "excluded": 0, "not_in_decision": 1, "rejected": 0, "contact_ids": ["cnt_01JC0000000000000000000001"], "decision_id": "dec_01JC0000000000000000000001" } },
+  "expect": "valid"
+}

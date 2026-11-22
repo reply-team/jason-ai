@@ -23,7 +23,7 @@ routine. What makes it a check-in is who created it and what it is for, not any 
 a person's approval. A user who has been away for a week comes back to one review, not a pile of
 them — and this is a rule the database keeps, not one the summon merely intends: a unique index over
 the open ones. Two writers both looking first would both see none and both insert.
-A check-in held at the day's limit (`Launches:MaxPerDay:manager`,
+A check-in held at the day's limit (`Launches:MaxPerDay:manager`, `25` by default,
 [docs/work-execution.md](work-execution.md) §The claim rule) is open too, though the index does not see a waiting
 item: the summon reads its wait, so triggers while it is held summon no second check-in beside it; they summon the
 next review once the held one has run, which the limit may hold to the next day.
@@ -348,6 +348,10 @@ Any launched role may raise a question, and the review released by the answer is
 check-in. One live attempt may raise more than one question — nothing forbids it — but one question at a
 time is what the manager's skill teaches, because a person who opens ten questions from one review answers
 none of them.
+
+The manager ends a person's line with a reason (`jason campaign finish-contacts`, which cancels their open touches in
+the campaign), and reopens an ended line only on the person's answered question, naming it with `--decision`
+(`jason campaign reopen-contacts`; [docs/work-execution.md](work-execution.md), "A person's line in a campaign").
 
 ### What retires one
 

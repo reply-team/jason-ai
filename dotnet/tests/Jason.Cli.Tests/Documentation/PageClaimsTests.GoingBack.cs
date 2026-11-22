@@ -47,6 +47,17 @@ public partial class PageClaimsTests
     ];
 
     /// <summary>
+    /// The lines each package's digest list holds after the one 0.49 published, in order, each a version a release after
+    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes. A package
+    /// a later release placed is data in the data directory that no release after 0.49 has opened, as the section's steps
+    /// say of every such data, and a package that moves in 0.50 is appended here.
+    /// </summary>
+    private static readonly (string Plugin, string Line)[] PackagesAfter049 =
+    [
+        ("journal-forwarder", "1.8.0 sha256:a6f4c0c50047911ddcda9d31f32a6cfb745dcecfd8331e8014be92a1fb4b8a6d"),
+    ];
+
+    /// <summary>
     /// The section's commands, in their order: the uninstall, the two pinned install lines, and what is put back. The
     /// two install lines are the install scripts' own pinned forms, read from the scripts, with the release this tree
     /// builds replaced by 0.48.7, and nothing added: an option that keeps the PATH unchanged would leave the new
@@ -166,11 +177,24 @@ public partial class PageClaimsTests
         Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
         Assert.Contains("The Reply package 0.49.2 or later placed differs from the one 0.48.7 shipped: it stays the newer one, 0.19.0, which 0.48.7 still reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, the same reply-cli 0.49.2 needs.", Flat(GoingBack()), StringComparison.Ordinal);
 
-        var newest = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
-            .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Line: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Last().Trim()))
+        var lists = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
+            .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Lines: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Select(line => line.Trim()).ToList()))
             .OrderBy(package => package.Plugin, StringComparer.Ordinal)
             .ToArray();
+
+        // A line a release after 0.49 appended stands at the end of its list, in the order declared, and the newest line
+        // before them is the one 0.48.7 shipped.
+        var newest = lists.Select(list =>
+        {
+            var later = PackagesAfter049.Where(package => package.Plugin == list.Plugin).Select(package => package.Line).ToList();
+            Assert.Equal(later, list.Lines.TakeLast(later.Count));
+            return (list.Plugin, Line: list.Lines[^(later.Count + 1)]);
+        }).ToArray();
         Assert.Equal(GoingBackToPackages, newest);
+        if (PackagesAfter049.Length > 0)
+        {
+            Assert.Contains("These steps, and that there is no backup to put back, hold for data that no release after 0.49 has opened.", Flat(GoingBack()), StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

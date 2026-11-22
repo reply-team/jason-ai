@@ -1,6 +1,6 @@
 manifest_version: 1
 id: journal-forwarder
-version: 1.7.0
+version: 1.8.0
 kind: subscriber
 name: Journal forwarder
 description: Pushes each journal line of a kind it was granted, as JSON, to one URL the person names, a file in a directory they grant, or both - the smallest complete subscriber.
@@ -47,7 +47,10 @@ subscriptions:
   - contact_created
   - contact_updated
   - contacts_added
+  - contacts_continued
+  - contacts_finished
   - contacts_removed
+  - contacts_reopened
   - context_updated
   - decision_answered
   - decision_cancelled

@@ -266,7 +266,8 @@ routes it at all — and an `ai_role` whose role has no entry command fails with
 A silent skip would leave the item looking claimable forever.
 
 Work of a role is held, not failed, when `Launches:MaxPerDay:<role>` names the role and the item's campaign has already
-started that many runs of it since the installation's midnight: a failure would wake the manager, and a responder's reply
+started that many runs of it since the installation's midnight (every role Jason ships is named by default, with the numbers
+the settings table gives, and a role of a person's own is named only where the person names it): a failure would wake the manager, and a responder's reply
 would reach it by a second path. The day is the installation's, from one midnight to the next in its time zone —
 `Runtime:TimeZone` where the settings name one, the system's zone as the runtime read it when it started where they do
 not — since a campaign has no time
@@ -815,6 +816,33 @@ what is still to run), `--order finished` lists newest first and leaves open wor
 without that time left out. `jason workitem count` takes the same filters and answers how many items the listing would
 return, without paging through them. `--block blk_…` (`provider_block_id`) keeps the items a provider block holds: those
 whose open wait names it (§Provider blocks).
+
+## A person's line in a campaign
+
+A membership's `state` is where the line with that person in that campaign stands. `enrolled` is a line that goes on.
+`excluded` is a person removed (`campaign.remove_contacts`), with every piece of their open work there cancelled.
+`finished` is a line that was ended: the claim refuses every touch to the person in that campaign, `line_finished`
+(below), while a reply in a thread the person opened, a take-back of a send and every read go on, and the line stays
+ended until it is reopened. `paused` is a person held: nothing in this version holds one, and a held person's touches
+are not refused by the claim.
+
+Three acts move a line, one operation each, and each takes `campaign_id` and `contact_ids` (at most 1000), answers one
+result per item in the order asked, as `campaign.remove_contacts` does, and writes one reserved line for the request:
+
+- **`campaign.finish_contacts`** (`jason campaign finish-contacts`) ends the line with an `enrolled` or `paused` member:
+  the membership becomes `finished`, and in the same save the person's open touches in that campaign — the operations
+  whose document says `touch: true` — are cancelled, while their responder, its `conversation.get`, a
+  `conversation.reply`, a `message.cancel` and every other item are left to run. Any named actor may end a line, a role
+  from its run among them, and the `reason` is required (`validation_failed`, `required` on `reason`). The line is
+  `contacts_finished`, with the people whose line it ended and the reason.
+- **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose held
+  touches are candidates again by that alone; any named actor may. The line is `contacts_continued`.
+- **`campaign.reopen_contacts`** (`jason campaign reopen-contacts`) enrols a `finished` member again. It is the person's
+  decision, carried one of two ways: their own word, from a named `human` outside any run, or a run that names, in
+  `decision_id`, the campaign's question a named person answered about the `contacts_finished` line that ended those
+  lines, a person that line does not name answered `not_in_decision`. The runtime never reads the answer's words, so
+  the manager reopens only on an answer that says yes. The line is `contacts_reopened`, with the question where a run
+  carried it. Touches counted before the line ended stay counted: the ceiling counts work items, never a state.
 
 ## A campaign's people, counted
 
@@ -1637,7 +1665,7 @@ mistyped one.
 | `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
-| `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in the installation's day, counted from its midnight in `Runtime:TimeZone`; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the installation's next midnight, and `launches.lift` lifts every role's for the rest of the day (§The claim rule) |
+| `Launches:MaxPerDay:<role>` | `critic: 240, personalizer: 120, researcher: 40, manager: 25, responder: 25, planner: 10, copywriter: 10, analyst: 10, deliverability-specialist: 10` | 1..1000 | how many runs of a role one campaign may start in the installation's day, counted from its midnight in `Runtime:TimeZone`; each of the nine roles Jason ships has a limit by default, a net against a runaway role to be corrected after the first live campaigns, and a person's own entry changes that role's number and keeps every other default, a thousand being as high as it goes; a role the map does not name, a custom role of the person's own, has no limit; the claim holds a role at its limit until the installation's next midnight, and `launches.lift` lifts every role's for the rest of the day (§The claim rule) |
 | `Runtime:TimeZone` | absent | an IANA id | the installation's time zone, whose day `Launches:MaxPerDay` counts and a lift covers, the day named by the zone's own id and both spellings of UTC as `UTC`; absent, the system's zone as the runtime read it when it started; an id the system does not know, a Windows id among them, or one spelled otherwise than the zone spells it, as `asia/tokyo` is, is refused at start and keeps the last good settings on a live edit (§The claim rule) |
 | `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
 | `Lines:MaxTouches` | `5` | 1..20 | the most touches — operations whose document says `touch: true` — a person may have in one campaign, counted by the work about them there that succeeded or any attempt of which ended classed `ambiguous`, whatever came after; at it the claim refuses the next touch with `touch_ceiling_reached`, before anybody is asked to approve it, and the manager ends the line (§Provider operations); there is no 0 and no unlimited, and no verb writes it, only the settings file |
