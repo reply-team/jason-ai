@@ -60,10 +60,13 @@ what is still open, and both take `--campaign` and `--work-item` to narrow to on
 ## When a notification brought them here
 
 A person may arrive because Jason told them something is waiting: a toast on their desktop, or a message from a
-notification plugin on their phone. A notification says how many approvals and questions wait, and may add that
-protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both —
-`jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
-decision, and `troubleshooting-jason` is where it is read. The notification itself names no item, so do not guess which one it meant,
+notification plugin on their phone. A notification says how many approvals and questions wait, and may add how many
+replies came in, protective actions that failed in campaigns it names by id, accounts whose events were not read,
+provider blocks, items held at a daily limit and emails that bounced. The approvals and questions are yours here: list
+both — `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
+decision, and `troubleshooting-jason` is where it is read. A hold is lifted only on the person's word, as
+`managed-campaign-work` says; replies, blocks, accounts and bounces are read as `operating-the-installation`'s
+"Notifications" says. The notification itself names no item, so do not guess which one it meant,
 and the counts may already be smaller: something may have been answered since it was sent.
 
 A person may instead arrive with a prompt that names one item — an approval id or a question id — from the UI's Copy
@@ -177,7 +180,8 @@ the manager asks it as a question whose references name the `contacts_finished` 
 answers yes, record their answer as above, then reopen the line as theirs, naming that question with `--decision`. The
 runtime takes only a question that is answered, so the answer comes first. It checks that the question is the
 campaign's, answered by a named person, and about that line, and reopens only the people the line ended
-(`not_in_decision` for anybody else); it never reads what the answer says, so you run the reopen on a yes alone. On any
+whose line it was the latest to end (`not_in_decision` for anybody else, and for a person whose line was ended again
+later, who needs a question of their own); it never reads what the answer says, so you run the reopen on a yes alone. On any
 other answer, record it and reopen nothing. When the person tells you directly to reopen somebody's line, with no
 question behind it, run it as theirs without `--decision`:
 
