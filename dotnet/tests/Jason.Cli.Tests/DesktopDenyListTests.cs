@@ -285,12 +285,9 @@ public class DesktopDenyListTests
     {
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
-            "# preference, a campaign's send mode, an ended line reopened, a block cleared, work resumed, today's launch limits
-" +
-            "# lifted, a send reviewed, a report and a subscription rewound. The CLI gives them no default actor, and gives none to
-" +
-            "# eight verbs further down either.
-",
+            "# preference, a campaign's send mode, an ended line reopened, a block cleared, work resumed, today's launch limits\n" +
+            "# lifted, a send reviewed, a report and a subscription rewound. The CLI gives them no default actor, and gives none to\n" +
+            "# eight verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
