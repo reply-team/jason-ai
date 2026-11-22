@@ -9,8 +9,8 @@ namespace Jason.Cli;
 /// runtime, and the one rule enforced here is that <c>system</c> belongs to the runtime's own writes and
 /// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the verbs
 /// that take no default actor, which name who acts or are refused: somebody's own word (an approval or a rejection, a
-/// standing approval set or unset, an answer, a preference set or unset, a block's clear, a resume, a review of a send, a
-/// report and a subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
+/// standing approval set or unset, an answer, a preference set or unset, an ended line reopened, a block's clear, a resume,
+/// a review of a send, a report and a subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
 /// by itself (a suppression lifted, a route set or unset, a role's execution profile set). Whatever it claims, a CLI
 /// the environment says runs inside an attempt names that attempt on every request beside it, in the Jason-Attempt
 /// header (see <see cref="Http.RuntimeClient"/>).
@@ -57,7 +57,7 @@ public static class ActorOption
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
-            + "setting a campaign's send mode, "
+            + "setting a campaign's send mode, reopening a campaign's ended lines, "
             + "clearing a block, resuming a work item, reviewing a send, rewinding a subscription, submitting a report, "
             + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
@@ -65,7 +65,8 @@ public static class ActorOption
             + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "setting a campaign's send mode and starting a campaign are refused there, "
             + "and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, "
-            + "since nothing inside a run changes Jason itself.",
+            + "since nothing inside a run changes Jason itself. "
+            + "Reopening an ended line is refused there too unless it names, with --decision, the question the person answered.",
         Recursive = true,
     };
 

@@ -52,6 +52,7 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "preference set"),
         (Kind.PersonsWord, "preference unset"),
         (Kind.PersonsWord, "campaign set-send-mode"),
+        (Kind.PersonsWord, "campaign reopen-contacts"),
         (Kind.PersonsWord, "block clear"),
         (Kind.PersonsWord, "workitem resume"),
         (Kind.PersonsWord, "workitem review"),
@@ -100,9 +101,11 @@ public static class ConfinedVerbs
     /// <summary>
     /// The entries of a person's own word that a role runs itself, whose help therefore never says the act is the
     /// person's: <c>workitem review</c>, which the critic sends from its own run, <c>report submit</c>, whose reporter may
-    /// be a role, and <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not.
+    /// be a role, <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not, and
+    /// <c>campaign reopen-contacts</c>, which a run sends carrying the question the person answered, and whose own help
+    /// says whose decision it is.
     /// </summary>
-    public static IReadOnlyList<string> RunByARole { get; } = ["workitem review", "report submit", "workitem resume"];
+    public static IReadOnlyList<string> RunByARole { get; } = ["workitem review", "report submit", "workitem resume", "campaign reopen-contacts"];
 
     /// <summary>
     /// What the help of a person's own word says before <see cref="Help"/>, on every entry of that kind but those a role
