@@ -6,6 +6,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
@@ -42,6 +43,25 @@ public sealed class CampaignService(
     /// without the manager's settings, as a test makes one, reads the shipped default.
     /// </summary>
     private int DeepReviewSeconds() => (manager?.Current ?? new ManagerOptions()).DeepReviewSeconds;
+
+    /// <summary>The reserve's default as the runtime holds it now, read at a campaign's first start.</summary>
+    private int ReserveDefault() => (manager?.Current ?? new ManagerOptions()).AudienceThreshold;
+
+    /// <summary>
+    /// The reason on the line that gives a campaign the reserve's default, so a reader of the chronicle tells it apart from
+    /// a threshold a person set.
+    /// </summary>
+    public const string ReserveDefaultReason = "the reserve's default at the campaign's first start (Manager:AudienceThreshold)";
+
+    /// <summary>
+    /// The operations whose work is a search for the campaign's audience: each makes a search and carries the definition
+    /// it searches by, so its people can be topped up under that definition.
+    /// </summary>
+    private static readonly string[] AudienceSearches =
+        [.. OperationCatalog.All.Select(contract => contract.Id).Where(CampaignAudiences.Recorded)];
+
+    /// <summary>The statuses of a search that was withdrawn, or whose time ran out, before it ever ran: no search at all.</summary>
+    private static readonly WorkItemStatus[] Withdrawn = [WorkItemStatus.Cancelled, WorkItemStatus.Expired];
 
     public const int MaxNameLength = 200;
 
@@ -649,6 +669,25 @@ public sealed class CampaignService(
             updated: JsonSerializer.SerializeToNode(target, JasonJson.Options),
             reason: NormalizeReason(request.Reason));
 
+        // The first going live gives a campaign the reserve's default where it holds no threshold and its people come from
+        // a search that can top them up. The act is the runtime's, on a line of its own, never the person's who started it.
+        // A resume never does, so a threshold a person cleared after the start stays cleared.
+        if (previous == CampaignStatus.Draft && target == CampaignStatus.Active && campaign.AudienceThreshold is null
+            && await FedBySearchAsync(campaign.Id, cancellationToken).ConfigureAwait(false))
+        {
+            var threshold = ReserveDefault();
+            campaign.AudienceThreshold = threshold;
+            journal.Append(
+                db,
+                Actors.Runtime,
+                JournalKinds.CampaignUpdated,
+                campaign,
+                key: "audience_threshold",
+                old: null,
+                updated: JsonValue.Create(threshold),
+                reason: ReserveDefaultReason);
+        }
+
         // An archived campaign can never run again, so work still queued for it is dead weight that would
         // otherwise sit in the inbox for good — and so is a question somebody is still being asked about it.
         // Both join this change set, so the campaign and everything retired with it commit together.
@@ -664,6 +703,23 @@ public sealed class CampaignService(
         canceller.StopCancelled();
         return await AnswerAsync(campaign).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Whether the campaign's people come from a search that can top them up: it holds an audience — a definition a search
+    /// ran under — or a search for its audience is recorded for it and was not withdrawn. Read at the first start, when the
+    /// claim has not yet run for the campaign, since a draft's work waits unclaimed: the probe left while the campaign was
+    /// set up is then the one fact there is. A campaign of a list the person brought holds neither.
+    /// </summary>
+    private async Task<bool> FedBySearchAsync(int campaignId, CancellationToken cancellationToken) =>
+        await db.Audiences.AsNoTracking().AnyAsync(audience => audience.CampaignId == campaignId, cancellationToken).ConfigureAwait(false)
+        || await db.WorkItems.AsNoTracking()
+            .AnyAsync(
+                item => item.CampaignId == campaignId
+                    && item.Kind == WorkItemKind.ProviderOp
+                    && AudienceSearches.Contains(item.Operation)
+                    && !Withdrawn.Contains(item.Status),
+                cancellationToken)
+            .ConfigureAwait(false);
 
     /// <summary>draft → active, paused → active (a resume), active → paused, and anything at all → archived.</summary>
     private static bool IsLegal(CampaignStatus from, CampaignStatus to) => (from, to) switch
