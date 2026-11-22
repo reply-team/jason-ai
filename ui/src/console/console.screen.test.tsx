@@ -142,7 +142,15 @@ describe('the console', () => {
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
             expect(fake.calls.map((each) => each.operation).sort()).toEqual(
-                ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
+                [
+                    'approval.list',
+                    'campaign.list',
+                    'campaign.summary',
+                    'decision.list',
+                    'plugin.list',
+                    'route.list',
+                    'system.info',
+                ].sort(),
             );
         });
         // What the empty chat says in Ask first is true of it: a message follows its campaign's send mode, and the AI

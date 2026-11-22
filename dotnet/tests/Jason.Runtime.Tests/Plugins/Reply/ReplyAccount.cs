@@ -206,6 +206,13 @@ public sealed class ReplyAccount : IDisposable
     /// address the account already holds, so an account can come to hold the same person twice — and a lookup by
     /// address then finds two.
     /// </summary>
+    /// <summary>The stand-in reports this version to `--version` instead of its release's: a reload finds it older.</summary>
+    public ReplyAccount WithCliVersion(string version)
+    {
+        File.WriteAllText(Path.Combine(ConfigHome, StoreDirectory, ".jason-stand-in-version"), version);
+        return this;
+    }
+
     public ReplyAccount WithDuplicate(int id, int of)
     {
         var original = Contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == of)

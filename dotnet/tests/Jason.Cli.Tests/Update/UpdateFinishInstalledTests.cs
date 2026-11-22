@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Commands;
@@ -68,6 +69,38 @@ public sealed class UpdateFinishInstalledTests
         Assert.Contains("reply 0.18.0 is current", second.Parts[0].Lines);
         Assert.Single(installation.Operations, operation => operation == "plugin.reload");
         Assert.Equal(released.Digest, installation.PluginDigest("reply"));
+    }
+
+    /// <summary>
+    /// A plugin the reload reports unavailable is said after the reload's line, by its id and the problem's own message,
+    /// and changes nothing else: the part is done, the update complete.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_the_reload_reports_unavailable_is_said_after_the_reload_line()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        var behind = FakeInstallation.Plugin("reply", "0.17.0");
+        var released = FakeInstallation.Plugin("reply", "0.18.0");
+        installation.WithInstalledPlugin(behind).PublishingPlugin(released, behind);
+        const string Problem = "'reply' reports 0.21.0; the manifest asks for 0.22.0 or later. Install 'reply' 0.22.0 or later where the runtime can see it and run `jason plugin reload`.";
+        installation.ReloadAnswer = new JsonObject
+        {
+            ["plugins"] = new JsonArray(
+                new JsonObject { ["id"] = "reply", ["status"] = "unavailable", ["problems"] = new JsonArray(new JsonObject { ["code"] = "executable_incompatible", ["path"] = "capabilities.exec.executables[0].name", ["message"] = Problem }) },
+                new JsonObject { ["id"] = "other", ["status"] = "valid", ["problems"] = new JsonArray() }),
+        }.ToJsonString();
+
+        var finished = await FinishAsync(installation);
+
+        Assert.True(finished.Complete);
+        var plugins = finished.Parts[0];
+        Assert.Equal(UpdateFinishStates.Done, plugins.State);
+        var reload = plugins.Lines.ToList().IndexOf("reload: the runtime loaded the packages");
+        Assert.True(reload >= 0);
+        Assert.Equal($"reply unavailable: {Problem}", plugins.Lines[reload + 1]);
+        Assert.Equal(reload + 2, plugins.Lines.Count);
     }
 
     /// <summary>A package the person edited is left as an update's plugins step leaves it, and nothing is reloaded for it.</summary>

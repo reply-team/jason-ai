@@ -3,6 +3,8 @@ import { t } from '../platform/i18n';
 import { showDemo } from '../platform/demo-frame';
 import { can, cannotHere, placeKind } from '../platform/places';
 import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
+import { here } from './state';
+import { unavailablePlugins } from './unavailable';
 
 const modes: readonly Mode[] = ['demo', 'live'];
 
@@ -18,7 +20,41 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * alone (`#/demo`), and the desktop, its mode and the person's installation stay as they are.
  * While the demo's sample is still being made a quiet mark says so beside the sentence, and the switch is off, its
  * reason on each button, until the desktop says the sample is ready.
+ * In Live, a plugin a route names that the runtime holds back is said there as an alert, by the name the Accounts card
+ * gives it and the runtime's own problem text with its repair, and its link goes to Accounts: one line for each of up to
+ * two, one line counting more. It stands while the cause does and nothing closes it; the demo's runtime is not the
+ * person's installation, so the demo never says it.
  */
+function Unavailable() {
+    const shown = unavailablePlugins.value;
+    if (shown.length === 0) return null;
+    const accounts = (
+        <button type="button" className="mode-strip-link" onClick={() => here().dock.page({ screen: 'accounts' })}>
+            {t('plugin.unavailable.open')}
+        </button>
+    );
+    const lines =
+        shown.length > 2
+            ? [{ key: 'many', said: t('plugin.unavailable.many', { n: String(shown.length) }) }]
+            : shown.map((each) => ({
+                  key: each.id,
+                  said: t('plugin.unavailable.one', { name: each.label, problem: each.problem }),
+              }));
+    return (
+        <>
+            {lines.map((line) => (
+                <span key={line.key} className="mode-strip-unavailable" role="alert">
+                    <span className="mode-strip-said" title={line.said}>
+                        {line.said}
+                    </span>{' '}
+                    {accounts}
+                </span>
+            ))}
+        </>
+    );
+}
+
+/** The strip itself, as said above. */
 export function ModeStrip({
     openIn,
     nav,
@@ -81,6 +117,7 @@ export function ModeStrip({
                     </button>
                 </span>
             )}
+            {!demo && <Unavailable />}
             {refusal !== null && (
                 <span className="mode-strip-refusal" role="alert">
                     {refusal}

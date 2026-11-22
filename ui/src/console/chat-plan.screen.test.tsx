@@ -7,7 +7,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { FakeApi, watch } from '../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
@@ -350,7 +350,7 @@ describe('a plan the AI proposes', () => {
         expect(words(part)).toContain('People who have replied: Every message waits for you');
         expect(words(part)).toContain('Plugin that sends email: reply');
         expect(words(part)).toContain('Plugin that sends LinkedIn messages: reply');
-        expect(calls(fake, 'route.list').map((each) => each.body)).toEqual([{}]);
+        expect(callsBeyondStart(fake, 'route.list').map((each) => each.body)).toEqual([{}]);
         expect(calls(fake, 'campaign.get')).toEqual([]);
         expect(calls(fake, 'route.resolve')).toEqual([]);
     });
@@ -403,10 +403,10 @@ describe('a plan the AI proposes', () => {
         expect(within(ai(earlier)).getByText('**Winter** outreach')).toBeTruthy();
         expect(words(top(earlier))).toBe('Jason’s proposal Show now');
         expect(earlier.querySelector('.card-facts')).toBeNull();
-        expect(calls(fake, 'route.list')).toHaveLength(1);
+        expect(callsBeyondStart(fake, 'route.list')).toHaveLength(1);
         fireEvent.click(within(top(earlier)).getByRole('button', { name: 'Show now' }));
         const shown = await read(pane, 0);
-        expect(calls(fake, 'route.list')).toHaveLength(2);
+        expect(callsBeyondStart(fake, 'route.list')).toHaveLength(2);
         expect(within(facts(shown)).getByText('No agent is created yet.')).toBeTruthy();
         // The later card's read stands as it was: Show now read the earlier one alone.
         expect(within(facts(proposalsIn(pane)[1]!)).getByText('No agent is created yet.')).toBeTruthy();

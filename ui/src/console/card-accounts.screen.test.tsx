@@ -11,7 +11,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
-import { FakeApi, watch } from '../test/fake-api';
+import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { clock } from '../time/format';
@@ -124,7 +124,8 @@ const onRecord = (shown: HTMLElement): HTMLElement => {
     return part!;
 };
 const count = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name).length;
-const asked = (fake: FakeApi, operation: string) => fake.calls.filter((each) => each.operation === operation).length;
+// The console's own read at its start, for the mode strip, is not the card's.
+const asked = (fake: FakeApi, operation: string) => callsBeyondStart(fake, operation).length;
 const rows = (shown: HTMLElement) =>
     [...shown.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].map((cell) => words(cell)));
 

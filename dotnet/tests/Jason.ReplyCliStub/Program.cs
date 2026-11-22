@@ -24,7 +24,7 @@ Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush
 // resolved, long before any account is involved. reply-cli prints the bare version.
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    await Console.Out.WriteLineAsync(Jason.ReplyCliStub.ReplyCliRelease.Version);
+    await Console.Out.WriteLineAsync(Account.ReportedVersion() ?? Jason.ReplyCliStub.ReplyCliRelease.Version);
     return 0;
 }
 
