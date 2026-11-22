@@ -1839,9 +1839,9 @@ not published, and this guide and those documents are the whole of what a plugin
 
 ## 14. Writing a notification plugin
 
-A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective actions
-failed, accounts have events Jason did not read, provider blocks are open, items wait on a launch budget or emails
-bounced, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
+A notification plugin carries Jason's pointer — how many approvals and questions are waiting, how many replies came in,
+whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a
+launch budget or emails bounced, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
 operator has named it under `Notifications:Plugins:<id>`. No work item names it and no route reaches it.
 [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.
