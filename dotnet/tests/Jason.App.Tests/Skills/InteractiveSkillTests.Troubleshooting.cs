@@ -32,20 +32,96 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// A hold at a daily limit reads as state 11 and is no run's doing, so the state says what it is, where a person sees it, and
-    /// each of the three ways out, a raised limit among them with what it does not reach.
+    /// each of the four ways out, the lift and a raised limit among them with what it does not reach. The day is the
+    /// installation's, from its midnight to the next in its zone, and no longer a UTC day ending at 00:00Z.
     /// </summary>
     [Theory]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
-    [InlineData("**A budget hold is the claim's own wait, and no run stands behind it.**")]
-    [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in a UTC day")]
-    [InlineData("its `last_error` is `launches_spent`, whose message names the setting")]
+    [InlineData("**A hold at a daily limit is the claim's own wait, and no run stands behind it.**")]
+    [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in the installation's day, from its midnight to the next in `Runtime:TimeZone`, or in the machine's own zone where that is not set")]
+    [InlineData("its wait is the installation's next midnight, its `last_error` is `launches_spent`, whose message names the setting and the midnight it counted from, with the zone")]
     [InlineData("its `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role")]
-    [InlineData("A notification counts it among the items that wait on a budget")]
-    [InlineData("at 00:00Z the runtime releases the item by itself and counts the new day, so a day already spent by then holds it again")]
+    [InlineData("A notification counts it among the items that wait on a daily limit")]
+    [InlineData("at the installation's next midnight the runtime releases the item by itself and counts the new day, so a day already spent by then holds it again")]
     [InlineData("a person resumes that one item under their name, as above, and it goes past the limit with its run counted like any other")]
+    [InlineData("a person lifts today's limits, `jason launches lift`, below")]
     [InlineData("a person raises the setting, which applies from the next scan to work not yet held, while an item already held keeps its moment")]
-    public void The_troubleshooting_skill_says_what_a_budget_hold_is_and_its_three_ways_out(string sentence) =>
+    public void The_troubleshooting_skill_says_what_a_budget_hold_is_and_its_four_ways_out(string sentence) =>
         Assert.Contains(sentence, Flattened("troubleshooting-jason"), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The day of a launch limit is the installation's, so no sentence of the skill says a UTC day, a wait until 00:00Z, or
+    /// the notification's old words, and the ways out are four.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_no_longer_counts_the_launch_limit_by_a_utc_day()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var retired in new[] { "starts in a UTC day", "its wait is the next 00:00Z", "at 00:00Z the runtime releases", "wait on a budget", "There are three ways out" })
+        {
+            Assert.DoesNotContain(retired, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("There are four ways out", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "Ignore the limit" is the person's word: the session reads what is held, lifts as the person under their name, and
+    /// says which campaigns and roles it let go, until when in the person's own time with the zone named, and that the
+    /// released items are counted again after midnight. It never lifts on its own initiative, and a role cannot lift.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_lifts_the_limit_on_the_person_s_word_and_says_what_it_did()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
+            "When the person tells you to ignore the limit, or names the lift, read first what is held",
+            "the waiting items whose `last_error` is `launches_spent`, each with its campaign and its role",
+            "Then run the lift as the person, under their own name, with a short reason of your own.",
+            "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
+            "Then say three things: which campaigns and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and that the items it released are counted again after that midnight",
+            "Never lift on your own initiative",
+            "A role inside a run cannot lift, and its attempt is refused.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        var printed = SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)).ToList();
+        var read = printed.FindIndex(line => line == "jason workitem list --status waiting --kind ai_role");
+        var lift = printed.FindIndex(line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+        Assert.True(read >= 0 && lift > read, $"The troubleshooting skill prints the read of what is held at {read} and the lift at {lift}: the read comes first.");
+    }
+
+    /// <summary>
+    /// A touch of a person whose line is held waits in an active campaign with no moment ahead, which neither state 1 nor
+    /// state 2 explained; the skill names the case, who settles it, and that nobody resumes, cancels or recreates it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_names_a_touch_waiting_on_a_held_line()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "A touch listed there with no such moment ahead, in a campaign that is active, is the held line under state 2.",
+            "**One person's line can be held where the campaign is not.**",
+            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime held their line.",
+            "The campaign's manager continues the line or ends it, by the reply's verdict",
+            "Do not resume, cancel or create it again",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            "jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary paused",
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)));
+    }
 
     /// <summary>
     /// The two installation skills teach the journal's kinds and the subscription verbs, and what the person alone does:

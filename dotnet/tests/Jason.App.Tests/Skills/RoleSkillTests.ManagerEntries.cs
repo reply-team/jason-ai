@@ -84,6 +84,7 @@ public partial class RoleSkillTests
         Assert.Contains("It is `finished` once it was ended", head, StringComparison.Ordinal);
         Assert.Contains("**You never plan past the ceiling, and you never touch a setting.**", head, StringComparison.Ordinal);
         Assert.Contains("A day's limit is lifted only on the person's word, `jason launches lift` typed by them, never by you", head, StringComparison.Ordinal);
+        Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift`", head, StringComparison.Ordinal);
         Assert.Contains("**end a person's line** in this campaign, with a reason", head, StringComparison.Ordinal);
     }
 
@@ -175,6 +176,40 @@ public partial class RoleSkillTests
             line => line.StartsWith("jason workitem create ", StringComparison.Ordinal));
         Assert.Contains("--role planner ", planner, StringComparison.Ordinal);
         Assert.Contains("\"batch\":20", planner, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The medium chain, as the manager meets it: the start hands the batch to the planner, which raises the copywriter's
+    /// line, research only where it is asked for or justified, one personalizer per person and the first touches; the deep
+    /// review sends each follow-up from the copywriter's template, has a personalizer write for one person only where it
+    /// decides so, and has the analyst read the first batch once before the campaign widens. A manager told the old pilot
+    /// would wait for a planner's question that never comes, and widen on nothing read.
+    /// </summary>
+    [Fact]
+    public void The_manager_s_entries_carry_the_medium_chain_in_its_order()
+    {
+        var start = FlattenedEntry("manager", "start");
+        Assert.Contains("The planner runs the first batch as its pilot, the medium chain its skill orders, and raises each role's work itself — one copywriter's item for the campaign's line, research for one person only where the person asked or it can say why, one personalizer's item for each person's first letter, and the first touch for each person of the batch", start, StringComparison.Ordinal);
+        Assert.Contains("What follows the first touches is yours, at the deep reviews: the follow-ups, the end of each line, the analyst's reading of the first batch and the widening", start, StringComparison.Ordinal);
+        Assert.DoesNotContain("the hold for their replies and the analyst's reading", start, StringComparison.Ordinal);
+
+        var deep = FlattenedEntry("manager", "deep_review");
+        Assert.Contains("**A follow-up is the copywriter's general template.**", deep, StringComparison.Ordinal);
+        Assert.Contains("create the send from that template, as written, with no role run", deep, StringComparison.Ordinal);
+        Assert.Contains("create a personalizer's item for that person alone, and the send at the review after it has answered; never one for a batch", deep, StringComparison.Ordinal);
+        Assert.Contains("**The first batch is read before the campaign widens.**", deep, StringComparison.Ordinal);
+        Assert.Contains("creates one analyst's item to read that batch", deep, StringComparison.Ordinal);
+        Assert.Contains("once for the campaign; the widening after the first batch waits for its answer", deep, StringComparison.Ordinal);
+        Assert.DoesNotContain("planner's pilot asked the person whether to go on", deep, StringComparison.Ordinal);
+        Assert.DoesNotContain("at the end of the pilot the planner runs", deep, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(EntryFile("manager", "deep_review"));
+        Assert.Contains(printed, line => line.StartsWith("jason workitem list ", StringComparison.Ordinal) && line.Contains(" --role copywriter ", StringComparison.Ordinal));
+        Assert.Contains(printed, line => line.Contains(" --role analyst ", StringComparison.Ordinal) && line.Contains("-read-first-batch", StringComparison.Ordinal));
+
+        var head = Flattened("manager");
+        Assert.Contains("An answer to go on, to the question you raised on the analyst's reading of the first batch, is the word to widen", head, StringComparison.Ordinal);
+        Assert.DoesNotContain("to the question a planner's pilot raised at its end", head, StringComparison.Ordinal);
     }
 
     /// <summary>A start after a pause is not a new campaign: the lines go on, and a first batch only where nobody was touched.</summary>

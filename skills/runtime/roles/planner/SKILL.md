@@ -281,24 +281,41 @@ work, waits for it with `jason workitem wait`, and ends, and the next run is tol
 hold nothing open between them. A pilot is the campaign's first batch: twenty people, unless the campaign's context
 names another number as `first_batch`, or everybody where the campaign holds fewer.
 
-1. **Research.** Raise a researcher's item for each person of the batch, and wait on all of them.
-2. **The sends.** Woken with `children_ended`, read what each researcher found in `resumption.items`, raise one
-   `message.send` for each person the research supports, and wait on all of them. Each send goes to its claim: it parks for a
-   person to approve what it would send, unless they have chosen that this kind of contact goes automatically, and the
-   person is told that approvals are waiting; you ask nobody, and set no mode.
-3. **The replies.** Woken once the sends have ended, hold: wait with `--until` alone, for the moment the pilot's
-   replies are worth reading. A reply that arrives meanwhile is the manager's and the responder's, never yours.
-4. **The reading.** Woken with `moment_reached`, raise an analyst's item to read the pilot's results, and wait on it.
-5. **The turn.** Woken again, read the analyst's result and decide. Going on to the rest reaches more people, so
-   unless the campaign's context already allows it, raise one decision for the person — go on, change course, or stop
-   — and complete with your plan. Their answer wakes the manager, not you.
+### The medium chain
+
+A first batch is three runs of you, in this order, and each role's item is yours to raise, one person or one campaign
+at a time as each step says:
+
+1. **The line.** Raise one copywriter's item for the campaign's line: the first letter's frame, and each follow-up as a
+   general template, one message for the batch rather than one per person. Raise a researcher's item for one person
+   only where the person who owns the campaign asked for research, or you can say why this person needs it, and say
+   why in its brief; nobody is researched by default. Wait on all of them.
+2. **The first letters.** Woken with `children_ended`, read the copywriter's answer and what each researcher found in
+   `resumption.items`, and raise one personalizer's item for each person of the batch, never one for the whole batch:
+   each writes that person's first letter from what is already known — the contact's fields, the campaign's context,
+   the copywriter's frame, and a researcher's result where there is one — and its context carries all of it, since a
+   personalizer does not read the campaign. Wait on all of them.
+3. **The sends.** Woken again, raise one `message.send` for each person with the letter their personalizer wrote, and
+   complete with your plan. Each send goes to its claim: it parks for a person to approve what it would send, unless
+   they have chosen that this kind of contact goes automatically, and the person is told that approvals are waiting;
+   you ask nobody, and set no mode. Under an automatic mode the runtime adds one critic for each send by itself.
+
+Your pilot ends with the sends. A reply that arrives meanwhile is the manager's and the responder's, never yours. The
+follow-ups, the end of each line, the analyst's reading of the first batch and the turn after it are the manager's, at
+its deep reviews: each follow-up is a send from the copywriter's template, written for one person by a personalizer
+only where the manager decides so; and the turn goes back to the person there, as your judgement says it must.
+
+**A later batch** is the same chain without the line, which the first batch's copywriter already wrote: its first run
+raises one personalizer's item per person, with that frame, and its second the sends, so it is two runs of you.
+Research you can justify for one of its people is raised in that first run, and that person's letter waits for the
+next.
 
 ```
-jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-24T09:00:00Z --reason "the pilot's research, three days at most"
-jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --until 2026-10-03T09:00:00Z --reason "five days for the pilot's replies"
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF --until 2026-09-21T09:00:00Z --reason "the line and the research it needs, three days at most"
+jason workitem wait wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG --on wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRH --until 2026-09-22T09:00:00Z --reason "the first letters, one day at most"
 ```
 
-The moments in these two lines are examples: work yours out from now, three days or five ahead, since a moment already
+The moments in these two lines are examples: work yours out from now, three days or one ahead, since a moment already
 past is refused. Name every item the step raised, at most 100 in one wait, and give a step a deadline of its own with
 `--until`: a wait that names none ends at the runtime's ceiling, and you are woken with `wait_ceiling`. Woken by a
 deadline while some items are still running, or with some of them failed, decide from what is there — go on without
