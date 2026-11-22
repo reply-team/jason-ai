@@ -353,7 +353,9 @@ public sealed class Claimer(
     /// since <paramref name="since"/>, the installation's midnight as a UTC instant. A run counts when its attempt started, so an attempt the claim refused, which
     /// never started, spends nothing. One item is let go past the limit: a hold a person resumed. The hold alone writes its
     /// code as the item's last error, and its wait is the item's latest, released by a person, with no attempt and no
-    /// block; a wait released any other way, midnight among them, is counted as usual. Columns and the clock only.
+    /// block; a wait released any other way, midnight among them, is counted as usual, and so is one a lift let go, whose
+    /// release falls in the day a lift covers: a lift is bounded by its day, and the claim asks this only on a day no lift
+    /// covers. Columns and the clock only.
     /// </summary>
     private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime since, CancellationToken ct)
     {
@@ -362,10 +364,11 @@ public sealed class Claimer(
             var latest = await db.WorkItemWaits.AsNoTracking()
                 .Where(w => w.WorkItemId == item.Id)
                 .OrderByDescending(w => w.Id)
-                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId })
+                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId, w.ReleasedAt })
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
-            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null })
+            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null, ReleasedAt: { } released }
+                && !await LaunchLimitLifts.ReleasedAsync(db, released, ct).ConfigureAwait(false))
             {
                 return false;
             }

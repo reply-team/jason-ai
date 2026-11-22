@@ -129,6 +129,46 @@ public class LaunchLimitLiftTests
     }
 
     /// <summary>
+    /// A lift is bounded by its day: an item it let go at 23:50 and that is claimed only after the midnight is counted like
+    /// any other item of the new day, so a new day already spent holds it again.
+    /// </summary>
+    [Fact]
+    public async Task An_item_a_lift_let_go_at_23_50_and_claimed_after_midnight_is_held_at_the_new_day_s_limit()
+    {
+        using var harness = Harness(("planner", 1));
+        var campaign = await CampaignAsync(harness);
+        var held = await HeldBeforeMidnightAsync(harness, campaign);
+
+        harness.Clock.Now = new DateTimeOffset(NextLocalMidnight.AddMinutes(-10));
+        Assert.Equal(1, (await LiftAsync(harness)).Released);
+        Assert.Equal(WorkItemStatus.Created, (await ItemAsync(harness, held)).Status);
+
+        var item = await ClaimedAfterMidnightOnASpentDayAsync(harness, campaign, held);
+
+        Assert.Equal((WorkItemStatus.Waiting, AttemptErrors.LaunchesSpent), (item.Status, item.LastError!.Code));
+    }
+
+    /// <summary>
+    /// A person's own resume of one item at 23:50, on a day no lift covers, keeps its run past the limit after the midnight,
+    /// as it always has: only a lift's release is bounded by the lift's day.
+    /// </summary>
+    [Fact]
+    public async Task An_item_a_person_resumed_at_23_50_and_claimed_after_midnight_still_runs_past_the_limit()
+    {
+        using var harness = Harness(("planner", 1));
+        var campaign = await CampaignAsync(harness);
+        var held = await HeldBeforeMidnightAsync(harness, campaign);
+
+        harness.Clock.Now = new DateTimeOffset(NextLocalMidnight.AddMinutes(-10));
+        await ResumeAsync(harness, held);
+        Assert.Equal(WorkItemStatus.Created, (await ItemAsync(harness, held)).Status);
+
+        var item = await ClaimedAfterMidnightOnASpentDayAsync(harness, campaign, held);
+
+        Assert.Equal(WorkItemStatus.Scheduled, item.Status);
+    }
+
+    /// <summary>
     /// A lift is a person's word: a role and an attempt are refused with <c>lift_not_human</c>, and a request that names no
     /// person with an id with <c>actor_required</c>; the system is no caller's to claim at all. Nothing is let go, written or said.
     /// </summary>
@@ -292,6 +332,33 @@ public class LaunchLimitLiftTests
         Assert.Empty(await harness.ClaimAsync(Ct));
 
         Assert.Equal(WorkItemStatus.Waiting, (await ItemAsync(harness, held)).Status);
+    }
+
+    /// <summary>An item of the planner held at <see cref="Now"/>, its role's day spent by one run.</summary>
+    private static async Task<int> HeldBeforeMidnightAsync(DispatchHarness harness, int campaign)
+    {
+        await LaunchedAsync(harness, campaign, "planner", LocalMidnight.AddMinutes(10));
+        var held = await QueuedAsync(harness, campaign, "planner");
+        Assert.Empty(await harness.ClaimAsync(Ct));
+        Assert.Equal(WorkItemStatus.Waiting, (await ItemAsync(harness, held)).Status);
+        return held;
+    }
+
+    /// <summary>Half an hour into the next day, which one run five minutes after the midnight has already spent, one scan.</summary>
+    private static async Task<WorkItem> ClaimedAfterMidnightOnASpentDayAsync(DispatchHarness harness, int campaign, int itemId)
+    {
+        harness.Clock.Now = new DateTimeOffset(NextLocalMidnight.AddMinutes(30));
+        await LaunchedAsync(harness, campaign, "planner", NextLocalMidnight.AddMinutes(5));
+        await harness.ClaimAsync(Ct);
+        return await ItemAsync(harness, itemId);
+    }
+
+    private static async Task ResumeAsync(DispatchHarness harness, int itemId)
+    {
+        await using var db = harness.Open();
+        var publicId = await db.WorkItems.Where(w => w.Id == itemId).Select(w => w.PublicId).SingleAsync(Ct);
+        await new WorkItemService(db, new JournalWriter(harness.Clock), harness.Clock, TestCanceller.New(harness.Clock), TestOptions.PluginSettings())
+            .ResumeAsync(new WorkItemResumeRequest(publicId, Operator, "answer this one tonight"), Ct);
     }
 
     /// <summary>The Tokyo day of <see cref="Now"/>, seen by the claim: yesterday's runs spend nothing, today's hold, with the hold's words.</summary>
