@@ -15,7 +15,7 @@ public sealed class SettingsAllowlistTests
     /// <summary>The settings that are a switch, or a word from a closed set: the values that say how the runtime is set up.</summary>
     internal static readonly string[] Switches =
     [
-        "Dispatcher:Enabled", "Update:CheckEnabled", "Notifications:Enabled", "Notifications:Toast",
+        "Dispatcher:Enabled", "Update:CheckEnabled", "Notifications:Enabled", "Notifications:Toast", "Notifications:Replies",
         "Notifications:Plugins:fake-provider:Enabled", "Inbound:Enabled", "Responder:OnReply",
     ];
 

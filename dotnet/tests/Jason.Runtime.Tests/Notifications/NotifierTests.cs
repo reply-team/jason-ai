@@ -37,7 +37,11 @@ public sealed class NotifierTests
             JournalKinds.WorkItemAwaitingApproval,
             JournalKinds.ApprovalApproved,
             JournalKinds.DecisionAnswered,
-            JournalKinds.WorkItemCreated])
+            JournalKinds.WorkItemCreated,
+
+            // A run that judged no reply ends, and a verdict outside any run is recorded: neither is a reply to say.
+            JournalKinds.WorkItemSucceeded,
+            JournalKinds.ReplyClassified])
         {
             await harness.WriteLineAsync(kind, Ct);
         }

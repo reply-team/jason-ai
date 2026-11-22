@@ -85,6 +85,7 @@ public sealed class SettingsAllowlist
         new("Update:CheckEnabled", Kind.Switch),
         new("Notifications:Enabled", Kind.Switch),
         new("Notifications:Toast", Kind.Switch),
+        new("Notifications:Replies", Kind.Switch),
         new($"Notifications:Plugins:{AnyPlugin}:Enabled", Kind.Switch),
         new("Inbound:Enabled", Kind.Switch),
         new("Responder:OnReply", Kind.Switch),

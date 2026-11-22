@@ -231,7 +231,7 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once, with a pointer: how many, and where to look.",
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, when a provider block is open, when an email bounces, or when a role has judged a reply a person's own, it tells them once, with a pointer: how many, and where to look.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -497,8 +497,22 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("operating-the-installation");
 
-        Assert.Contains("when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once", skill, StringComparison.Ordinal);
+        Assert.Contains("when it finds a span of an account's events it will not read, when a provider block is open, when an email bounces, or when a role has judged a reply a person's own, it tells them once", skill, StringComparison.Ordinal);
         Assert.Contains("One that says provider blocks hold work items sends you to `jason block list`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A pointer that says replies came in names no command either, so the agent is the door again: the skill says which
+    /// verdicts it counts, where they are read beside the ones it does not, and the one line that turns replies off alone.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_where_an_agent_reads_the_replies_a_pointer_counts_and_how_they_are_turned_off()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("One that says replies came in names no command and leaves them to you as well: it counts each reply once, by the `reply_classified` verdicts a run recorded — the line names an attempt — whose `new.nature` is `person` and which carry no `confined` mark, however many campaigns judged it;", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason journal list --kind reply_classified` lists every verdict, of every nature and by whoever recorded it, so keep those and say who replied, where a line names a contact, and in which campaign.", skill, StringComparison.Ordinal);
+        Assert.Contains("`Notifications:Replies` set to `false` in the same file turns replies alone off, with no verb, and leaves every channel as it is.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>

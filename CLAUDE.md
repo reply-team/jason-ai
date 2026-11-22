@@ -173,7 +173,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   account and nothing else and brings its next read forward, never within a minute of the last; `events.sources` is the
   accounts' record and never answers a cursor. `docs/events.md` is the contract.
 - Notifications: a parked approval, a raised question, failed protective work, an account whose events were not
-  read, an open provider block, an item held at a daily limit of launches and an email that bounced are notified as a
+  read, an open provider block, an item held at a daily limit of launches, an email that bounced and a person's reply a
+  role judged their own are notified as a
   pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a
   reserved `notification_sent` line. One channel, the toast or a named plugin, is turned on or off by
   `notification.enable` and `notification.disable`, written through the runtime's one writer of the settings file and
