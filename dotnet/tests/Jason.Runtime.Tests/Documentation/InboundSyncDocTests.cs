@@ -64,8 +64,27 @@ public partial class InboundSyncDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"`Launches:MaxPerDay:<role>` | `responder: {new LaunchesOptions().MaxPerDay[Responder.Role]}` | {LaunchesOptions.MinimumPerDay}..{LaunchesOptions.MaximumPerDay} |",
+            $"`Launches:MaxPerDay:<role>` | `{string.Join(", ", new LaunchesOptions().MaxPerDay.Select(limit => $"{limit.Key}: {limit.Value}"))}` | {LaunchesOptions.MinimumPerDay}..{LaunchesOptions.MaximumPerDay} |",
             page,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The claim rule's passage says every shipped role is limited by default, and the manager's page names its own number, both
+    /// read off the options so a default that moved is a page that has to change.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_every_shipped_role_has_a_default_limit()
+    {
+        var defaults = new LaunchesOptions();
+        var execution = Flattened(Read("work-execution.md"));
+
+        Assert.Contains("every role Jason ships is named by default", execution, StringComparison.Ordinal);
+        Assert.Contains("each of the nine roles Jason ships has a limit by default", execution, StringComparison.Ordinal);
+        Assert.Equal(9, defaults.MaxPerDay.Count);
+        Assert.Contains(
+            $"`Launches:MaxPerDay:manager`, `{defaults.MaxPerDay["manager"]}` by default,",
+            Flattened(Read("campaign-manager.md")),
             StringComparison.Ordinal);
     }
 

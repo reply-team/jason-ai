@@ -23,7 +23,7 @@ routine. What makes it a check-in is who created it and what it is for, not any 
 a person's approval. A user who has been away for a week comes back to one review, not a pile of
 them — and this is a rule the database keeps, not one the summon merely intends: a unique index over
 the open ones. Two writers both looking first would both see none and both insert.
-A check-in held at the day's limit (`Launches:MaxPerDay:manager`,
+A check-in held at the day's limit (`Launches:MaxPerDay:manager`, `25` by default,
 [docs/work-execution.md](work-execution.md) §The claim rule) is open too, though the index does not see a waiting
 item: the summon reads its wait, so triggers while it is held summon no second check-in beside it; they summon the
 next review once the held one has run, which the limit may hold to the next day.
