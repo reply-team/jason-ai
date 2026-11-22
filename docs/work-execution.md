@@ -216,7 +216,8 @@ it by a test across every campaign state and every state of a person's membershi
 tells you exactly what the next scan would consider. Every way a letter comes to be sent passes the claim, so a held
 person's letter waits whether it was waiting for its `not_before`, parked for an approval the person then gave, or
 released from a wait. A letter already `scheduled` or `processing` is on its way and is not held; one the provider
-already took for a later moment cannot be held, only taken back (below).
+already took for a later moment cannot be held, only taken back (below), and so is one on its way at the hold that the
+provider then takes for a later moment.
 
 ## The claim rule
 
@@ -844,7 +845,13 @@ anything else it does with it: whether or not `Responder:OnReply` is on, and wha
 `enrolled` member of the campaign becomes `paused`, and one reserved line says it, `contacts_paused`, as
 `system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already held, ended or
 removed is left as they are, and a line that names no contact — the thread's person is pinned to none, or to more than
-one — holds nobody. A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
+one — holds nobody. A thread moves when Jason writes into it too, so a line that may be Jason's own move holds nobody
+either: one whose `last_activity_at` is not later than the latest moment one of Jason's letters to the person in the
+campaign went out — a touch's `accepted_for` where its result names one, otherwise the end of its succeeded attempt,
+across the campaign since a touch records no thread, or a `conversation.reply` of the campaign into the line's own
+thread, at the end of its succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a
+succeeded cancel names never went. Moments of the runtime's own record are compared, and nothing the line says is read
+for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
 step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
 
 **Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`
@@ -853,7 +860,11 @@ moment still to come — cannot be held at the claim, only cancelled. Three acts
 queues one `message.cancel` for each such letter of the people it stopped in that campaign, by the runtime's one
 definition of a send the provider holds (the one a route change is held to, [routing](routing.md)), as
 `system:dispatcher`, root work about no person, one above `Responder:Priority`, unless a cancel still open or one that
-succeeded already names the letter: the hold, `campaign.finish_contacts` and `campaign.remove_contacts`. A letter whose
+succeeded already names the letter: the hold, `campaign.finish_contacts` and `campaign.remove_contacts`. A touch that
+was on its way at the hold, `scheduled` or `processing`, is taken back where it ends: when its attempt succeeds and the
+person is `paused` in that campaign by then, the routine that ends attempts asks for the same take-back for them once the
+success is saved, so a letter the provider took for a later moment after the hold is cancelled as one it took before.
+A take-back the runtime refuses there is logged by the code and costs the success nothing. A letter whose
 cancel no route active now takes where it ran, at its plugin and its account, is not taken back, since the claim would
 refuse the cancel; the act goes on, and the runtime's log says so once per campaign, by the campaign's id and the code
 `held_send_cancel_not_routed`. A letter already on its way at the provider answers the cancel `send_not_pending`, and

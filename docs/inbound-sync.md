@@ -28,9 +28,14 @@ It holds whatever follows — `Responder:OnReply` off, and every skip below, inc
 written to again before somebody has read what they wrote. While the line is held the claim takes none of the person's
 touches in that campaign, and in the same transaction what the provider already holds for them there for a later moment
 is taken back, one `message.cancel` a letter ([work execution](work-execution.md), "A person's line in a campaign"). A
-member whose line is already held, ended or removed, and a line that names no contact, hold nobody. The hold is set
-again in the transaction that passes a line whose write was refused, so a responder that could not be made does not let
-the person's touches go on. The reply wakes the manager as it always has, and the manager continues the line or ends it.
+member whose line is already held, ended or removed, and a line that names no contact, hold nobody; nor does a line
+that may be Jason's own letter moving the thread (§4, "What a line does not know"). The hold is set again in the
+transaction that passes a line whose write was refused, so a responder that could not be made does not let the person's
+touches go on; a refusal of the hold itself there is logged once for the campaign, by its code, and the watermark still
+moves past the line, so one line never stops the campaign's respond step. A take-back the runtime refuses is logged once
+in the same way, under an event of its own, and costs neither the hold nor the line. The step reads active campaigns
+only, so a reply in a paused campaign holds the line, and takes back what the provider holds, when the campaign resumes.
+The reply wakes the manager as it always has, and the manager continues the line or ends it.
 
 For a line about a thread that is the campaign's own — every line
 this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
@@ -217,8 +222,15 @@ vendor block are not read out of the page at all, and appear in no line and no l
 
 **What a line does not know.** A line says that a thread the other side wrote into moved, not that the other side moved
 it last: a follow-up sent into a thread that already has a reply moves it too, and says it again. The manager reads the
-thread to know. Such a line holds the person's line again, as any reply line does: a line continued after a reply is held
-once more by the next letter sent into that thread, and the manager continues it again once it has read the thread.
+thread to know. The hold compares moments of the runtime's own record instead, and reads no meaning: a line whose
+`last_activity_at` is not later than the latest moment one of Jason's letters to the person in the campaign went out
+holds nobody and takes nothing back. That moment is a touch's `accepted_for`, where its result names one, and otherwise
+the end of its succeeded attempt; and for an answer, a `conversation.reply` of the campaign into the line's own thread,
+the end of its succeeded attempt. A touch records no thread, so touches count for the person across the campaign and an
+answer only for its own thread. Only a moment that has come counts, so a letter the provider still holds for later is no
+reason to leave a reply alone, and a letter a cancel took back never went. A line later than every such moment holds the
+line as any reply does, whoever moved the thread: a provider that sends a held letter after the moment it named moves the
+thread later than that moment, and the manager reads the thread and continues the line again.
 
 ## 5. Where a read starts
 
