@@ -116,7 +116,7 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status created -
 
 **What it means.** Nothing is wrong. The item is doing what it was asked to do, and the runtime will claim it
 when the moment arrives. Say when that is, and stop. A touch listed there with no such moment ahead, in a campaign
-that is active, is the held line under state 2.
+that is active, is the paused line under state 2.
 
 ### 2. Paused or archived
 
@@ -132,12 +132,12 @@ search's stop.
 tells you nothing. Somebody paused it, or it was never started. Say which campaign and in which status; the
 person decides whether it should be running.
 
-**One person's line can be held where the campaign is not.** A touch — a `message.send`, a `social_invitation.send`
+**One person's line can be paused where the campaign is not.** A touch — a `message.send`, a `social_invitation.send`
 or a `campaign.enroll` about one person — that is `created` and `--not-eligible` in an active campaign, with no
 `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person
-replied, and the runtime held their line. Nothing is written on the item while it waits. The campaign's manager
+replied, and the runtime paused their line. Nothing is written on the item while it waits. The campaign's manager
 continues the line or ends it, by the reply's verdict, and the touch then runs or is cancelled with it. Do not
-resume, cancel or create it again; say whose line is held and that the manager settles it.
+resume, cancel or create it again; say whose line is paused and that the manager settles it.
 
 ```
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary paused

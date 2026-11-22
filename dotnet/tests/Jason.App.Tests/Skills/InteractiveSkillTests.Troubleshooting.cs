@@ -99,7 +99,7 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// A touch of a person whose line is held waits in an active campaign with no moment ahead, which neither state 1 nor
+    /// A touch of a person whose line is paused waits in an active campaign with no moment ahead, which neither state 1 nor
     /// state 2 explained; the skill names the case, who settles it, and that nobody resumes, cancels or recreates it.
     /// </summary>
     [Fact]
@@ -109,11 +109,11 @@ public partial class InteractiveSkillTests
         var skill = Flattened("troubleshooting-jason");
         foreach (var fact in new[]
         {
-            "A touch listed there with no such moment ahead, in a campaign that is active, is the held line under state 2.",
-            "**One person's line can be held where the campaign is not.**",
-            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime held their line.",
+            "A touch listed there with no such moment ahead, in a campaign that is active, is the paused line under state 2.",
+            "**One person's line can be paused where the campaign is not.**",
+            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime paused their line.",
             "The campaign's manager continues the line or ends it, by the reply's verdict",
-            "Do not resume, cancel or create it again",
+            "Do not resume, cancel or create it again; say whose line is paused and that the manager settles it.",
         })
         {
             Assert.Contains(fact, skill, StringComparison.Ordinal);
