@@ -19,8 +19,8 @@ namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
 /// The line's two checks through the real claim, its real reads and a real database, with <c>Lines:MaxTouches</c> at two:
-/// what the ceiling counts — a touch that succeeded, or whose last attempt is classed ambiguous whatever became of the item
-/// since, and nothing else — and
+/// what the ceiling counts — a touch that succeeded, or any attempt of which ended classed ambiguous whatever came after,
+/// once per item, and nothing else — and
 /// that a refusal is decided before anybody is asked to approve, ends the item failed, and wakes the manager.
 /// </summary>
 public partial class ClaimerTests
@@ -92,13 +92,19 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// Only the last attempt of a failed touch decides: an attempt that lost its answer, then a repeat the provider refused
-    /// for good, is a touch that the provider says did not happen, and the reverse is one that may have.
+    /// Any attempt of a touch that ended ambiguous may have reached the person, whatever came after it — a transient attempt,
+    /// a permanent refusal — and whether the item then failed, its attempts spent, or was cancelled: it counts. Only a touch
+    /// none of whose attempts was ambiguous counts for nothing. A later attempt that found nothing was sent still leaves it
+    /// counted, one too many, on the safe side of the ceiling.
     /// </summary>
     [Theory]
-    [InlineData(FailureClass.Ambiguous, FailureClass.Permanent, null)]
-    [InlineData(FailureClass.Permanent, FailureClass.Ambiguous, AttemptErrors.TouchCeilingReached)]
-    public async Task A_failed_touch_is_counted_by_its_last_attempt(FailureClass first, FailureClass last, string? refused)
+    [InlineData(FailureClass.Ambiguous, FailureClass.Permanent, WorkItemStatus.Failed, AttemptErrors.TouchCeilingReached)]
+    [InlineData(FailureClass.Permanent, FailureClass.Ambiguous, WorkItemStatus.Failed, AttemptErrors.TouchCeilingReached)]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Transient, WorkItemStatus.Failed, AttemptErrors.TouchCeilingReached)]
+    [InlineData(FailureClass.Ambiguous, FailureClass.Transient, WorkItemStatus.Cancelled, AttemptErrors.TouchCeilingReached)]
+    [InlineData(FailureClass.Permanent, FailureClass.Transient, WorkItemStatus.Failed, null)]
+    [InlineData(FailureClass.Transient, FailureClass.Permanent, WorkItemStatus.Cancelled, null)]
+    public async Task A_touch_counts_where_any_of_its_attempts_ended_ambiguous(FailureClass first, FailureClass last, WorkItemStatus ended, string? refused)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -111,6 +117,7 @@ public partial class ClaimerTests
         repeated.Error = new AttemptErrorDto(last == FailureClass.Ambiguous ? "provider_answer_lost" : "recipient_rejected", "The provider answered so.", false, Class: last);
         twice.AttemptCount = 2;
         twice.LastError = repeated.Error;
+        twice.Status = ended;
         db.Attempts.Add(repeated);
         var next = Sending(db, campaign, contact);
         await db.SaveChangesAsync(Ct);
@@ -150,7 +157,12 @@ public partial class ClaimerTests
         await AmbiguousAsync(db, await TouchedAsync(db, campaign, contact, WorkItemStatus.Created));
         await AmbiguousAsync(db, await TouchedAsync(db, campaign, contact, WorkItemStatus.Cancelled));
 
-        Assert.Equal(3, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, workItemId: 0, Ct));
+        // One item is one touch at most, however many of its attempts lost their answer.
+        var lostTwice = await TouchedAsync(db, campaign, contact, WorkItemStatus.Failed);
+        await AmbiguousAsync(db, lostTwice, number: 2);
+        await AmbiguousAsync(db, lostTwice, number: 3);
+
+        Assert.Equal(4, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, workItemId: 0, Ct));
     }
 
     /// <summary>
@@ -190,12 +202,15 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// The boundary of the ceiling while a touch waits to be repeated: four touches went out, a fifth lost its answer and was
-    /// put back to be tried again later, and a sixth is claimed meanwhile. The fifth may have reached the person, so the
-    /// sixth meets the ceiling of five, and is refused, though the fifth has not ended.
+    /// The boundary of the ceiling: four touches went out, and a fifth's first attempt lost its answer. Whether the fifth was
+    /// put back to be tried again later, or tried again transiently and then failed with its attempts spent, or was
+    /// cancelled after that, it may have reached the person, so a sixth meets the ceiling of five and is refused.
     /// </summary>
-    [Fact]
-    public async Task A_touch_put_back_after_a_lost_answer_counts_against_the_next_one_at_the_boundary()
+    [Theory]
+    [InlineData(WorkItemStatus.Created)]
+    [InlineData(WorkItemStatus.Failed)]
+    [InlineData(WorkItemStatus.Cancelled)]
+    public async Task A_touch_whose_first_attempt_lost_its_answer_counts_against_the_next_one_at_the_boundary(WorkItemStatus fifth)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -207,9 +222,21 @@ public partial class ClaimerTests
             await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
         }
 
-        var repeat = await TouchedAsync(db, campaign, contact, WorkItemStatus.Created);
-        repeat.RetryAfter = Noon.AddHours(1);
-        await AmbiguousAsync(db, repeat);
+        var lost = await TouchedAsync(db, campaign, contact, WorkItemStatus.Created);
+        lost.RetryAfter = Noon.AddHours(1);
+        await AmbiguousAsync(db, lost);
+        if (fifth != WorkItemStatus.Created)
+        {
+            var again = WorkItemFactory.NewAttempt(lost, 2, AttemptStatus.Failed, Noon.AddMinutes(-30));
+            again.FinishedAt = Noon.AddMinutes(-20);
+            again.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", true, Class: FailureClass.Transient);
+            db.Attempts.Add(again);
+            lost.AttemptCount = 2;
+            lost.LastError = again.Error;
+            lost.Status = fifth;
+            lost.FinishedAt = Noon.AddMinutes(-20);
+        }
+
         var next = Sending(db, campaign, contact);
         await db.SaveChangesAsync(Ct);
 
@@ -217,7 +244,7 @@ public partial class ClaimerTests
 
         await using var fresh = database.Open();
         Assert.Equal(AttemptErrors.TouchCeilingReached, await RefusalAsync(fresh, next));
-        Assert.Equal(WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == repeat.Id, Ct)).Status);
+        Assert.Equal(fifth, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == lost.Id, Ct)).Status);
     }
 
     /// <summary>
@@ -365,13 +392,13 @@ public partial class ClaimerTests
         return (campaign, contact);
     }
 
-    /// <summary>An attempt of <paramref name="item"/> that lost its answer, its only one: it may have reached the person.</summary>
-    private static async Task AmbiguousAsync(JasonDbContext db, WorkItem item)
+    /// <summary>An attempt of <paramref name="item"/>, number <paramref name="number"/>, that lost its answer: it may have reached the person.</summary>
+    private static async Task AmbiguousAsync(JasonDbContext db, WorkItem item, int number = 1)
     {
-        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon.AddHours(-2));
+        var attempt = WorkItemFactory.NewAttempt(item, number, AttemptStatus.Failed, Noon.AddHours(-2));
         attempt.FinishedAt = Noon.AddMinutes(-90);
         attempt.Error = new AttemptErrorDto("provider_answer_lost", "The answer was lost.", true, Class: FailureClass.Ambiguous);
-        item.AttemptCount = 1;
+        item.AttemptCount = number;
         item.LastError = attempt.Error with { Trace = null };
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);

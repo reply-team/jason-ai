@@ -12,15 +12,17 @@ namespace Jason.Runtime.Campaigns;
 /// <remarks>
 /// <para>
 /// A touch counts when its work item is a provider operation whose document says <c>touch: true</c>
-/// (<see cref="OperationCatalog.Touches"/>) and it either succeeded or has a last attempt whose class is <c>ambiguous</c>,
-/// whatever the item's status since, since that attempt may have reached the person: an item put back for a repeat,
-/// parked again, cancelled or expired after such an attempt still counts. Work whose last attempt ended any other way, and
-/// work that never ran, reached nobody, and counts for nothing.
+/// (<see cref="OperationCatalog.Touches"/>) and it either succeeded or any attempt of it ended classed <c>ambiguous</c>,
+/// whatever came after that attempt and whatever the item's status now, since that attempt may have reached the person: an
+/// item put back for a repeat, parked again, failed, cancelled or expired after such an attempt still counts. One item is
+/// one touch at most. Where a later attempt found that nothing had been sent this counts one too many, which is the safe
+/// side of a ceiling; nothing the store keeps proves an earlier attempt did not act. Work none of whose attempts ended
+/// ambiguous, and that did not succeed, reached nobody, and counts for nothing.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
-/// are SQL (<see cref="CampaignPeople"/>). <see cref="CountedSql"/> is a condition over one work item aliased <c>w</c>; the
-/// last attempt is found by the attempts' index on the work item and the number.
+/// are SQL (<see cref="CampaignPeople"/>). <see cref="CountedSql"/> is a condition over one work item aliased <c>w</c>; its
+/// attempts are read by the attempts' index on the work item.
 /// </para>
 /// </remarks>
 internal static class LineTouches
@@ -34,8 +36,8 @@ internal static class LineTouches
         (w.kind = 'provider_op'
          AND w.operation IN ({{TouchesSql}})
          AND (w.status = 'succeeded'
-              OR (SELECT json_extract(a.error_json, '$.class') FROM attempts AS a
-                  WHERE a.work_item_id = w.id ORDER BY a.number DESC LIMIT 1) = 'ambiguous'))
+              OR EXISTS (SELECT 1 FROM attempts AS a
+                         WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous')))
         """;
 
     /// <summary>

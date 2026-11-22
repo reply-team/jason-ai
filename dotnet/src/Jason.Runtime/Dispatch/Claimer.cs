@@ -976,8 +976,8 @@ public sealed class Claimer(
     /// Two touches to one person cannot both pass the count. The claim takes at most one item per campaign per scan, and
     /// none from a campaign while another of its items is scheduled or processing (<see cref="CandidatesAsync"/>), all
     /// inside one immediate transaction; so every touch claimed before this one has left processing by the time this one
-    /// is counted, and its last attempt is in the count if it may have reached the person — it succeeded, or it is classed
-    /// ambiguous, whether the item ended since or was put back for a repeat, parked or held. A touch that has not run yet
+    /// is counted, and it is in the count if it may have reached the person — it succeeded, or an attempt of it ended
+    /// classed ambiguous, whether the item ended since or was put back for a repeat, parked or held. A touch that has not run yet
     /// counts for nothing here, and is counted at its own claim against every touch that ran meanwhile.
     /// </remarks>
     private static async Task<LineFacts> LineAsync(JasonDbContext db, WorkItem item, Contact contact, int ceiling, CancellationToken ct)
