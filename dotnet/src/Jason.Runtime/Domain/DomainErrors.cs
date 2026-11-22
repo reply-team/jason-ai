@@ -341,6 +341,48 @@ public static class DomainErrors
         new("actor_required", "actor.id is required on a lift of the daily limits: what is recorded has to name the person whose word it is.");
 
     /// <summary>
+    /// A role, an attempt or the system asking a campaign's manager for a review: a review asked for is a person's word, as a
+    /// lift is; a role is reviewed by the cadence and the chronicle, and a check-in that asked for its own successor would
+    /// review for ever.
+    /// </summary>
+    public static InvalidRequestException ReviewNotHuman(ActorType type) =>
+        new(
+            "review_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot ask a campaign's manager for a review; a review asked for is a person's word.");
+
+    /// <summary>The same code a lift without a named person is refused with: the request's line names whose word it is.</summary>
+    public static InvalidRequestException ReviewActorRequired() =>
+        new("actor_required", "actor.id is required on a review asked for: what is recorded has to name the person whose word it is.");
+
+    /// <summary>A review asked of a campaign that is not active: only an active campaign is reviewed, as the summon reviews it.</summary>
+    public static ConflictException CampaignNotActive(string id, CampaignStatus status) =>
+        new(
+            "campaign_not_active",
+            $"Campaign '{id}' is {SnakeCaseEnumConverter<CampaignStatus>.Format(status)}; only an active campaign is reviewed. Start it first, and starting it summons a review of its own.");
+
+    /// <summary>
+    /// A review asked of a campaign that has a check-in open, a held one included: one check-in is open per campaign, and the
+    /// one open is the review; it is named, so the person can follow it.
+    /// </summary>
+    public static ConflictException ReviewAlreadyOpen(string campaignId, string checkInId) =>
+        new(
+            "review_already_open",
+            $"Campaign '{campaignId}' has a check-in open, '{checkInId}', and one is open per campaign; the review asked for is that one. Follow it with jason workitem get {checkInId}.");
+
+    /// <summary>
+    /// A review asked of a campaign whose manager has started as many runs today as <c>Launches:MaxPerDay:manager</c> allows,
+    /// counted as the claim counts them: the check-in would only be held to the installation's next midnight. The message
+    /// names the way out in the words a held item's notification uses.
+    /// </summary>
+    public static ConflictException ReviewLaunchesSpent(string campaignId, int limit, string midnight, string zone) =>
+        new(
+            Execution.AttemptErrors.LaunchesSpent,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"The manager of campaign '{campaignId}' has started {(limit == 1 ? "1 run" : $"{limit} runs")} since the installation's midnight ({midnight}, {zone}), the limit Launches:MaxPerDay:manager sets, so a review asked for now would wait until the next one. ")
+            + Notifications.NotificationComposer.LiftHold);
+
+    /// <summary>
     /// The decision has already been made, or the work it was about has moved on without it. Either way there is
     /// nothing here to decide, and the row says which of the two happened.
     /// </summary>
@@ -404,6 +446,12 @@ public static class DomainErrors
         new(
             "decided_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. Lifting the daily limits of launches is a person's own word, given outside any run: a role leaves it to the person, or raises it as a decision.");
+
+    /// <summary>Inside a run, a review asked of a campaign's manager: the code of a person's word, in a sentence of its own.</summary>
+    public static ForbiddenException ReviewInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Asking a campaign's manager for a review is a person's own word, given outside any run: a role leaves it to the cadence and the chronicle, or raises it as a decision.");
 
     /// <summary>
     /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its

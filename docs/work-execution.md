@@ -372,7 +372,7 @@ with a name; a role or an attempt is refused with `approval_not_human`, and an a
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
 approve anything, and that every decision names who made it. An approval, an answer, a preference, a campaign's send
-mode or its start, or a lift of the daily limits, sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names
+mode or its start, a lift of the daily limits, or a review asked of a campaign's manager, sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names
 its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
@@ -1195,6 +1195,12 @@ no prompt of it. The file is a file of the role's tree, bounded with the rest of
 no bound of its own. Where the folder has no such file, `text` is null and the attempt runs all the same: there is no
 fallback to some other text. The attempt's launch record names the entry beside `role_skill`, as `{name, bytes}`,
 `bytes` being the size of the file, and 0 where the file was not there.
+
+A manager's check-in carries its brief in `context`, and the brief's `review_intent` says why the check-in exists, in
+one of three values: `scheduled` when a clock came round, the quick look's or the deep review's; `triggered` when a line
+of the chronicle asked for a review, and then `trigger` and `cause` name it; and `requested` when a person asked for one
+with `campaign.review`, which names no trigger and no cause. The value and the entry are both the runtime's, and they
+are written together when the check-in is created ([docs/campaign-manager.md](campaign-manager.md) §5).
 
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the

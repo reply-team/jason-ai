@@ -36,7 +36,7 @@ public class DesktopDenyListTests
     /// approval whether still asked or already given, stops its running attempts once the archive is committed, and
     /// cancels its pending questions.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive", "campaign review"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
@@ -297,9 +297,10 @@ public class DesktopDenyListTests
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, linking a project's folder, which then becomes a working folder of every chat on the\n" +
-            "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, and archiving\n" +
-            "# one, which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still\n" +
-            "# asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.\n",
+            "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, archiving one,\n" +
+            "# which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still asked\n" +
+            "# or already given, stops its running attempts once the archive is committed, and cancels its pending questions, and\n" +
+            "# asking a campaign's manager for a review, which launches a check-in on the person's word.\n",
     };
 
     /// <summary>

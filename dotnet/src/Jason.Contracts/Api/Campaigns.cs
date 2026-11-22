@@ -106,6 +106,26 @@ public sealed record CampaignUpdateRequest(
 /// <summary>The body of <c>campaign.start</c>, <c>campaign.pause</c> and <c>campaign.archive</c>.</summary>
 public sealed record CampaignTransitionRequest(string? CampaignId, ActorRef? Actor, string? Reason);
 
+/// <summary>
+/// A person's word that a campaign's manager reviews it now: <c>depth</c> is <see cref="ReviewDepths.Quick"/>, the default,
+/// or <see cref="ReviewDepths.Deep"/>. The answer is the check-in it made, the summon's own work item; the actor is a person
+/// with an id, and the reason is journaled with the request.
+/// </summary>
+public sealed record CampaignReviewRequest(string? CampaignId, string? Depth, ActorRef? Actor, string? Reason);
+
+/// <summary>The depths a review is asked for at: a quick look, or a deep review.</summary>
+public static class ReviewDepths
+{
+    /// <summary>A quick look, the manager's <c>quick_look</c> entry, and what a request that names no depth asks for.</summary>
+    public const string Quick = "quick";
+
+    /// <summary>A deep review, the manager's <c>deep_review</c> entry.</summary>
+    public const string Deep = "deep";
+
+    /// <summary>Every depth, in the order the help names them.</summary>
+    public static IReadOnlyList<string> All { get; } = [Quick, Deep];
+}
+
 /// <summary>Top-level edits to the campaign context. Null is a legitimate value, so clearing a key means listing it in <c>unset</c>.</summary>
 public sealed record CampaignUpdateContextRequest(
     string? CampaignId,

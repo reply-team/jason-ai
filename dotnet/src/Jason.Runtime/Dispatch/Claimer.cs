@@ -379,16 +379,43 @@ public sealed class Claimer(
             }
         }
 
-        var started = await db.Attempts.AsNoTracking()
-            .CountAsync(
-                a => a.WorkItem!.CampaignId == item.CampaignId
-                    && a.WorkItem.Kind == WorkItemKind.AiRole
-                    && a.WorkItem.Role == item.Role
-                    && a.StartedAt >= since,
-                ct)
-            .ConfigureAwait(false);
-        return started >= limit;
+        return await StartedSinceAsync(db, item.CampaignId, item.Role!, since, ct).ConfigureAwait(false) >= limit;
     }
+
+    /// <summary>
+    /// The claim's question for work not yet created: whether <paramref name="role"/> in a campaign has spent the limit
+    /// <c>Launches:MaxPerDay</c> sets it for the installation's <paramref name="day"/>, so an item of the role made now would
+    /// only be held. A role the limits do not name has none, and a day a person lifted holds nothing; otherwise the runs
+    /// are counted as <see cref="SpentAsync"/> counts them, by the attempts that started since the day's midnight. Columns
+    /// and the clock only.
+    /// </summary>
+    internal static async Task<bool> SpentTodayAsync(
+        JasonDbContext db,
+        int campaignId,
+        string role,
+        IReadOnlyDictionary<string, int> limits,
+        LocalDay day,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(limits);
+        if (!limits.TryGetValue(role, out var limit) || await LaunchLimitLifts.CoverAsync(db, day, ct).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return await StartedSinceAsync(db, campaignId, role, day.Start, ct).ConfigureAwait(false) >= limit;
+    }
+
+    /// <summary>How many runs of the role's work in the campaign started since <paramref name="since"/>, a UTC instant.</summary>
+    private static Task<int> StartedSinceAsync(JasonDbContext db, int campaignId, string role, DateTime since, CancellationToken ct) =>
+        db.Attempts.AsNoTracking()
+            .CountAsync(
+                a => a.WorkItem!.CampaignId == campaignId
+                    && a.WorkItem.Kind == WorkItemKind.AiRole
+                    && a.WorkItem.Role == role
+                    && a.StartedAt >= since,
+                ct);
 
     /// <summary>
     /// The last error of an item held at its role's limit for the day: the limit, the installation's midnight it is counted from

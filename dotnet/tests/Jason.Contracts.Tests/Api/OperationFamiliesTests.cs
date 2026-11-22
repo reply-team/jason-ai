@@ -110,7 +110,7 @@ public class OperationFamiliesTests
             "approval.approve", "approval.reject", "approval.set_standing", "approval.unset_standing", "block.clear",
             "decision.answer", "preference.set", "preference.unset", "workitem.resume", "workitem.complete",
             "workitem.heartbeat", "plugin.reload", "route.set", "system.shutdown", "ui.open", "suppression.remove",
-            "subscription.runs", "subscription.rewind", "launches.lift",
+            "subscription.runs", "subscription.rewind", "launches.lift", "campaign.review",
         ];
         var everything = OperationFamilies.OperationsOf(OperationFamilies.All);
 

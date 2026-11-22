@@ -1,0 +1,19 @@
+{
+  "operation": "campaign.review",
+  "case": "not-active",
+  "request": {
+    "campaign_id": "cmp_2",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "campaign_not_active",
+      "message": "Campaign 'cmp_2' is draft; only an active campaign is reviewed. Start it first, and starting it summons a review of its own.",
+      "retryable": false
+    }
+  }
+}
