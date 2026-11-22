@@ -83,7 +83,11 @@ one of these, and nothing else:
   their line in this campaign has ended, and you end it as that section says.
 - **`paused`.** They replied and the runtime paused their line. Where the verdict stands, end or continue the line, as the
   `inbound_reply` entry says; where a `not_now` named a later day, the line waits for it, and that is the reason; where
-  no verdict stands yet, it waits for the responder, and that is the reason too.
+  no verdict stands yet, it waits for the responder, and that is the reason too. Where a `not_now` named no day, the
+  line stays paused, and that is the reason too: name those people in your line, and raise one question to the person
+  for all of them together — they said not now and named no day: write to them again, or end their lines? Record in
+  your note that you asked, and for whom, so that no later review asks again for the same people. Such a line is ended
+  on the person's answer only, never on your own judgement.
 - **`finished`.** Their line in this campaign ended, by its touches, a reply or a failure, and its `contacts_finished`
   line says why: no touch goes to them, and nothing is owed. Only the person's yes reopens it, as your skill's "The
   questions a person has answered" says.

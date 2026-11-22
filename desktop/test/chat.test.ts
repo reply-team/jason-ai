@@ -1543,8 +1543,10 @@ test('a file the person names is read wherever it is, written in Full access, an
 });
 
 test('a refusal is said in one sentence with its path in a code block and Open folder, and never worked around', () => {
-    assert.match(ruleOf(23), /Where a `jason` verb does what they wanted, name it, and run it where these rules let you\. Never try another way around a refusal\./);
-    assert.equal(ruleOf(23), "23. When something is refused, say in one sentence exactly what was refused and why, and give the path in a code block. Where opening a folder would help, name Open folder, in the menu of the agent's row and of its header. Where a `jason` verb does what they wanted, name it, and run it where these rules let you. Never try another way around a refusal.");
+    // A verb that does what they wanted is never run in place of a command the person named: rule 18 holds there.
+    assert.match(ruleOf(23), /Where a `jason` verb does what they wanted, name it, and run it where these rules let you, except in place of a command the person named, as rule 18 says\. Never try another way around a refusal\./);
+    assert.equal(ruleOf(23), "23. When something is refused, say in one sentence exactly what was refused and why, and give the path in a code block. Where opening a folder would help, name Open folder, in the menu of the agent's row and of its header. Where a `jason` verb does what they wanted, name it, and run it where these rules let you, except in place of a command the person named, as rule 18 says. Never try another way around a refusal.");
+    assert.match(ruleOf(18), /Never run another in its place\./);
 });
 
 test('prints the instructions a turn is given, the memory file and the words on stdin, for a campaign and a set-up chat on both hosts', async (t) => {

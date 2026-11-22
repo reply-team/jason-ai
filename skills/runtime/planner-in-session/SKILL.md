@@ -36,6 +36,8 @@ and in a person's own session nothing here holds.
   for writing one is the same as in a person's own session. A standing rule the person states is written into their
   memory file, at the level it belongs to, only when they tell you to write it; where they state one without saying so,
   say the exact line and the file it belongs in, and ask once whether to add it.
+- On a plan card the steps say when and by which channel. Put a subject and a body on a step only where the person
+  asked to see a letter, and say that it is an example: the roles write their own letters after the start.
 <!-- desktop-chat:end -->
 
 <!-- craft:begin -->

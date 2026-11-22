@@ -531,13 +531,16 @@ public partial class InteractiveSkillTests
     /// managed-campaign-work's, and what waits on a person approvals-and-questions'. A run of eight words the session file
     /// shares with one of them is a rule copied rather than pointed to, and copies drift. Read over the prose that is the
     /// session file's own: not the shared block, which the launched planner must carry because it cannot read
-    /// campaign-planning, not the commands, and not the status line every skill words the same way.
+    /// campaign-planning, not the commands, and not the status line every skill words the same way. One sentence is
+    /// passed over, by name: the plan card's, <see cref="PlanCardSentence"/>, which the owner ruled is said word for word
+    /// in the chat passages of this skill and of managed-campaign-work, since a host planning in the chat may load this
+    /// skill alone; its test holds the two to one wording, so the copy cannot drift.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_copies_no_rule_from_the_skills_it_points_to()
     {
-        var own = Runs(Prose(SkillPack.Find("planner-in-session").File));
+        var own = Runs(Prose(SkillPack.Find("planner-in-session").File).Replace(PlanCardSentence, " ", StringComparison.Ordinal));
         Assert.True(own.Count > 50, $"planner-in-session's own prose gave {own.Count} runs of eight words, so this guard holds little.");
 
         foreach (var sibling in new[]

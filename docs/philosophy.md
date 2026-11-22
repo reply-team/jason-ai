@@ -79,7 +79,8 @@ Jason keeps six kinds of knowledge apart, because they come from different place
 - **Campaign context** is particular to one campaign: the brief in your own words and what the campaign has established.
   It is part of the runtime's state, read by every role working on the campaign.
 - **Memory files** are your own standing words, a plain `AGENTS.md` for all of your work, for a project and for a
-  campaign, which you read and edit and Jason never writes ([docs/INSTALL.md](INSTALL.md) says where).
+  campaign, which you read and edit and Jason never writes on its own: a session or the chat adds a line only on your
+  word ([docs/INSTALL.md](INSTALL.md) says where).
 - **Named preferences** are the few facts you state about yourself as the client — who messages are written as, how
   the company sounds, how messages go — one value each, set only by you.
 - **Role notes** are a role's own working memory, written by that role for its later runs and kept for your business as

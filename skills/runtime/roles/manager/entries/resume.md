@@ -49,7 +49,9 @@ undo it: their start is their word that what you asked is settled.
 have touches that fell due while the campaign stood, they are the next deep review's, which comes one grid interval
 after this resume, a day by default: the daily grid starts again from it, so the days the campaign stood are not deep
 reviews it owes. Plan a first batch only where nobody in the campaign was ever touched, and then as the `start` entry
-says (the file `entries/start.md` beside your skill). Widening to a next batch is the deep review's, never this
+says (the file `entries/start.md` beside your skill). Where the campaign's context says it is linked to a provider's
+sequence, plan no batch: hand nothing to the planner, say so in your line, and make the check your skill's review gives
+such a campaign. Widening to a next batch is the deep review's, never this
 review's.
 
 A campaign that stood is the one moment a person most wants to hear that it moved again: say in your line, in a
