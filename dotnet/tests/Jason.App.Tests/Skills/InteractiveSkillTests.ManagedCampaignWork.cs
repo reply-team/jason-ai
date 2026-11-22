@@ -40,6 +40,24 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// A pause is never asked: stopping is the protective direction, so a bare "pause all" pauses each campaign at once and
+    /// the agent then says which were paused, while a bare all for starting or archiving is asked once. Said beside the
+    /// archive's sentences, as rule 21 of the chat's instructions says it. A session that asked before pausing everything
+    /// would let approved sends go out while the question waited.
+    /// </summary>
+    [Fact]
+    public void A_bare_pause_all_pauses_each_at_once_and_a_bare_all_for_starting_or_archiving_is_asked_once()
+    {
+        var skill = Flattened("managed-campaign-work");
+        const string Sentence =
+            "say that this mode does not. A pause is never asked. A bare 'pause all' or 'pause everything' pauses each "
+            + "campaign at once, and you then say which were paused. A bare all for starting or archiving is not spelled: say "
+            + "what it takes and ask once.";
+        Assert.Contains(Sentence, skill, StringComparison.Ordinal);
+        Assert.True(skill.IndexOf(Sentence, StringComparison.Ordinal) > skill.IndexOf("In the message that reports the archives", StringComparison.Ordinal), "The pause's sentences stand after the archive's report, beside the archive's sentences.");
+    }
+
+    /// <summary>
     /// The person's word outranks a rule of the skills: where they plainly ask for what departs from one, the agent says
     /// once what follows and asks, and then does what they answer; what the runtime refuses stays refused. Said right after
     /// the sentence that does a plain command at once, so the two read as one. Without it a session answers "I can't" to a
