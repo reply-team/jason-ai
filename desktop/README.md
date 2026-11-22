@@ -679,9 +679,8 @@ and, where a Full access turn could follow in this run, that only a Full access 
   does not name the tool; it is logged once in the turn (`chat_removed_tool_refused`). Any other result of it, or one
   where no such list was read, is taken as a tool the hook missed, as above. On Claude Code 2.1.330 this was seen: a
   conversation resumed in Ask first has no PowerShell in its init line's list, and its PowerShell use comes back marked
-  an error with no hook seen. **The limit:** the refusals read what a
-  command's text and a tool's input show; they are not a sandbox, and a program the agent writes and runs acts with the
-  person's account.
+  an error with no hook seen. **The limit:** the refusals read what a command's text and a tool's input show; they are
+  not a sandbox, and a program the agent writes and runs acts with the person's account.
 - **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
   (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
   byte for byte: `--permission-mode default`, no `acceptEdits` and no `defaultMode`, and the same hook from the floor of

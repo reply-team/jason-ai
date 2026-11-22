@@ -158,11 +158,12 @@ voice.
 - **The console says when a plugin your routes name cannot run.** In Live, while a plugin that one of your routes
   names is unavailable, the bar at the top of the console says that its work does not run, with the runtime's own
   words for the problem and its repair, and a link to Accounts; past two such plugins it counts them in one line. It
-  goes by itself once the plugin can run again, after a `jason plugin reload` or a restart of the runtime. A plugin no
-  route names never draws it, and the Demo never shows it. Where the program a plugin runs is older than its manifest
-  asks for, the problem now ends on the repair: install that version or a later one where the runtime can see it,
-  and run `jason plugin reload`. `jason update` prints a line `<id> unavailable: <problem>` after its reload for each
-  plugin the reload left unavailable.
+  goes by itself once the plugin can run again, after a `jason plugin reload` or a restart of the runtime; there is
+  nothing to close. A plugin no route names never draws it, and the Demo never shows it. Where the program a plugin
+  runs is older than its manifest asks for, the problem now ends on the repair: "Install '<name>' <version> or later
+  where the runtime can see it and run `jason plugin reload`." `jason update apply`, after the reload that follows a
+  plugin package it replaced, prints a line `<id> unavailable: <problem>` for each plugin the reload left
+  unavailable; the update's outcome and exit code are unchanged.
 - **Open in on Windows opens Windows Terminal.** `jason session open`, and every Open in of Jason Desktop that goes
   through it, opens the agent host in a new Windows Terminal window at the folder where your account has Windows
   Terminal 1.18.2681.0 or later. Otherwise the console window opens as before; where Windows Terminal does not start,
