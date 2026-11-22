@@ -67,9 +67,10 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// "Ignore the limit" is the person's word: the session reads what is held, lifts as the person under their name, and
-    /// says which campaigns and roles it let go, until when in the person's own time with the zone named, and that the
-    /// released items are counted again after midnight. It never lifts on its own initiative, and a role cannot lift.
+    /// "Ignore the limit" is the person's word: the session reads what is held, lifts as the person under their name,
+    /// and says which campaigns and roles it let go, until when as the clock time in the answer's zone, named, with how
+    /// long from now in brackets, and that the released items are counted again after midnight. It never lifts on its
+    /// own initiative, and a role cannot lift.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
@@ -81,9 +82,9 @@ public partial class InteractiveSkillTests
             "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
             "When the person tells you to ignore the limit, or names the lift, read first what is held",
             "the waiting items whose `last_error` is `launches_spent`, each with its campaign and its role",
-            "Then run the lift as the person, under their own name, with a short reason of your own.",
+            "Then run the lift as the person, under their own name, with a short reason of your own that says it is their word.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
-            "Then say three things: which campaigns and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and that the items it released are counted again after that midnight",
+            "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight",
             "Never lift on your own initiative",
             "A role inside a run cannot lift, and its attempt is refused.",
         })
@@ -98,7 +99,7 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// A touch of a person whose line is held waits in an active campaign with no moment ahead, which neither state 1 nor
+    /// A touch of a person whose line is paused waits in an active campaign with no moment ahead, which neither state 1 nor
     /// state 2 explained; the skill names the case, who settles it, and that nobody resumes, cancels or recreates it.
     /// </summary>
     [Fact]
@@ -108,11 +109,11 @@ public partial class InteractiveSkillTests
         var skill = Flattened("troubleshooting-jason");
         foreach (var fact in new[]
         {
-            "A touch listed there with no such moment ahead, in a campaign that is active, is the held line under state 2.",
-            "**One person's line can be held where the campaign is not.**",
-            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime held their line.",
+            "A touch listed there with no such moment ahead, in a campaign that is active, is the paused line under state 2.",
+            "**One person's line can be paused where the campaign is not.**",
+            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime paused their line.",
             "The campaign's manager continues the line or ends it, by the reply's verdict",
-            "Do not resume, cancel or create it again",
+            "Do not resume, cancel or create it again; say whose line is paused and that the manager settles it.",
         })
         {
             Assert.Contains(fact, skill, StringComparison.Ordinal);

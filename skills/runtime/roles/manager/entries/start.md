@@ -90,8 +90,8 @@ woke you" says; at this one, say that in your line and create nothing for people
 
 ## A low reserve at the start
 
-A campaign whose people come from a search, and that starts with fewer than twenty people nobody has started on, is low
-from its first scan: the runtime sets its threshold at the start, and its `audience_reserve_low` line is read in the
+A campaign whose people come from a search, and that starts with fewer than its threshold (twenty unless changed) people
+nobody has started on, is low from its first scan: the runtime sets its threshold at the start, and its `audience_reserve_low` line is read in the
 same pass as the start, so this review is the one that answers it. Read it here, and handle it once:
 
 ```
@@ -99,5 +99,11 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind audience_res
 ```
 
 Do as your skill's "When the audience woke you" says: a top-up the allowance covers, or, where no allowance covers one,
-one question to the person at once, as "Where no top-up can bring more" says — never left to the next deep review. Plan
-the first batch from the people there are meanwhile.
+one question to the person at once, as "Where no top-up can bring more" says — never left to the next deep review. That
+section asks nothing in two cases, and at a first start the first is the rule. While a search of the campaign is still
+followed (its `ended_as` is null) or waits for the person's approval, the probe included, a low reserve asks nothing
+and creates nothing: say in your line that the reserve is low because the probe has not landed, and the review the
+search's end summons plans the batch. After that, a low reserve asks nothing while no verdict is in yet and the
+analyst's item that will give one is still open: say in your line when the judgement is due. Where no analyst's item is
+open, because none was made or it ended or failed with no verdict, ask. Plan the first batch from the people there are
+meanwhile.

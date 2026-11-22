@@ -822,12 +822,13 @@ jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the corrected copy
 
 **"Ignore the limit" lets held work go today, and only on the person's word.** Work held at a daily limit of launches
 waits until the installation's next midnight, and a notification tells the person so. When the person tells you to
-ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run
-`jason launches lift` as the person, under their own name. It lets go every item held at a daily limit, in every
-campaign holding one and for every role, until the installation's next midnight. Then say three things: which campaigns
-and roles it released; until when, from the answer's `until`, given in the person's own time with the zone named; and
-that the items it released are counted again after that midnight. Never lift on your own initiative: only the person's
-word lifts, and a role inside a run cannot.
+ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run `jason launches
+lift` as the person, under their own name. It lets go every item held at a daily limit, in every campaign holding one
+and for every role, until the installation's next midnight. Then say three things: which campaigns and roles it
+released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in
+brackets how long from now, such as "until 00:00 Europe/Berlin (in five and a half hours)"; and that the items it
+released are counted again after that midnight. Never lift on your own initiative: only the person's word lifts, and a
+role inside a run cannot.
 
 ```
 jason launches lift --actor human:ada --reason 'the person said to ignore the limit today'
@@ -843,4 +844,10 @@ or other skills, and guessing at them here would be worse than saying so.
 A check-in is the launched manager's, and a session neither runs one nor does its work. A session that keeps a
 campaign moving asks the person and commits what they decide, as above, and `approvals-and-questions` and
 `troubleshooting-jason` cover what is waiting and what stopped. Where a campaign seems to stand, say what you read and
-that its manager is the one to look again; do not fill the gap with work of your own.
+that its manager is the one to look again; do not fill the gap with work of your own. On the person's word, ask its
+manager to look now with `jason campaign review <cmp>`, or `--depth deep`; it is refused while a review is open
+(`review_already_open`) and once the manager's launches of the day are spent (`launches_spent`).
+
+```
+jason campaign review cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --depth deep --actor human:ada --reason 'the person asked for a look now'
+```

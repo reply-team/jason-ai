@@ -6,13 +6,15 @@ metadata:
 
 # The manager's entry: the deep review
 
-You were launched for the deep review, which comes once a day on the campaign's own grid, a day after it went live and
-every day after that. This entry is followed first, and your skill (`SKILL.md`) is what it rests on: the review, the
-boundary, how to ask, the line you leave and your answer are said there and not again here.
+You were launched for the deep review, which comes on the campaign's own grid, one grid interval after it went live, a
+day by default, and every interval after that. This entry is followed first, and your skill (`SKILL.md`) is what it
+rests on: the review, the boundary, how to ask, the line you leave and your answer are said there and not again here.
 
 The deep review is the one review that accounts for every person of the campaign: nobody in it stands without a reason
 you can name. Where the brief carries a `trigger` and a `cause`, a line asked for a review as this one fell due, and it
-runs in that review's place: read the cause's section of your skill first, then go on as below. Where its
+runs in that review's place: read the cause's section of your skill first, then go on as below. Where `trigger` is
+`inbound_reply_observed`, its section is the `inbound_reply` entry: read the file `entries/inbound_reply.md` beside
+your skill, its "When a reply woke you" and "A reply no responder judged", before step 1. Where its
 `review_intent` is `requested`, a person asked for a deep review now: read what they asked, as your skill says, and
 know that the daily one still comes at its own moment, which this review does not move.
 
@@ -159,8 +161,9 @@ what came of it before you widen:
 - **The first batch is read before the campaign widens.** The deep review that first finds every first touch of the
   first batch gone, and the days the line gives before the next touch passed for them, creates one analyst's item to
   read that batch — the audience, the messages and the delivery, with the replies, bounces and failures that came in —
-  once for the campaign; the widening after the first batch waits for its answer. At the review after it has answered,
-  take the turn: where its reading says the batch works and the campaign's context already allows going on, widen at
+  once for the campaign; the widening after the first batch waits for its answer. Where the first batch is an
+  audience's probe whose judgement you already asked for, that judgement is the reading: ask for the delivery and the
+  messages in the same item, and create no second one. At the review after it has answered, take the turn: where its reading says the batch works and the campaign's context already allows going on, widen at
   that review; otherwise raise one question with its reading and your recommendation — go on, change course, or stop —
   and widen on an answer to go on, at the review that answer wakes. A change of course is the planner's, on the
   analyst's reading.

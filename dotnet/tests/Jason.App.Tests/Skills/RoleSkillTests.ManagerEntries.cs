@@ -34,6 +34,24 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A deep review that falls due as a reply asks for a review runs in the reply review's place, and the reply's section
+    /// is no longer in the head: the head and the deep review send it to the <c>inbound_reply</c> entry's file, and a
+    /// review after a resume reads the replies of the pause there too.
+    /// </summary>
+    [Fact]
+    public void A_deep_review_carrying_a_reply_reads_the_reply_entry_s_file()
+    {
+        const string Pointer = "Where `trigger` is `inbound_reply_observed`, its section is the `inbound_reply` entry: read the file `entries/inbound_reply.md` beside your skill, its \"When a reply woke you\" and \"A reply no responder judged\", before step 1.";
+        Assert.Contains(Pointer, Flattened("manager"), StringComparison.Ordinal);
+        Assert.Contains(Pointer, FlattenedEntry("manager", "deep_review"), StringComparison.Ordinal);
+        Assert.Contains("replies, and the lines they held, read as the `inbound_reply` entry says (the file `entries/inbound_reply.md` beside your skill)", FlattenedEntry("manager", "resume"), StringComparison.Ordinal);
+
+        var reply = FlattenedEntry("manager", "inbound_reply");
+        Assert.Contains("## When a reply woke you", reply, StringComparison.Ordinal);
+        Assert.Contains("## A reply no responder judged", reply, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A review a person asked for is <c>requested</c>, names no cause, and is read from the person's own line, which the
     /// runtime writes under the kind and the verb this build has; the two review entries say what it means for each depth,
     /// and a deep one asked for leaves the daily grid where it stands.
@@ -83,8 +101,8 @@ public partial class RoleSkillTests
         Assert.Contains("A line is `paused` once the person replied", head, StringComparison.Ordinal);
         Assert.Contains("It is `finished` once it was ended", head, StringComparison.Ordinal);
         Assert.Contains("**You never plan past the ceiling, and you never touch a setting.**", head, StringComparison.Ordinal);
-        Assert.Contains("A day's limit is lifted only on the person's word, `jason launches lift` typed by them, never by you", head, StringComparison.Ordinal);
-        Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift`", head, StringComparison.Ordinal);
+        Assert.Contains("A day's limit is lifted only on the person's word, `jason launches lift` run on their word, by them or by their own session, never by you", head, StringComparison.Ordinal);
+        Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift` under their own name", head, StringComparison.Ordinal);
         Assert.Contains("**end a person's line** in this campaign, with a reason", head, StringComparison.Ordinal);
     }
 
@@ -140,6 +158,43 @@ public partial class RoleSkillTests
         Assert.Contains("**Where no top-up can bring more, ask at once.**", head, StringComparison.Ordinal);
         Assert.Contains("raise one question to the person at this review, and do not leave it to the next deep review", head, StringComparison.Ordinal);
         Assert.Contains("Where a top-up you created parks for the person, its preview is that question, so raise none beside it.", head, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A low reserve is a question only where the reserve is really spent. While a search of the campaign is still followed
+    /// or waits for the person, the probe included, it asks nothing and creates nothing, and the review the search's end
+    /// summons plans the batch; after that, it waits for a verdict only while the analyst's item that gives one is open, so
+    /// with no such item open the question is asked. The page says the same of the check-in the low line wakes.
+    /// </summary>
+    [Fact]
+    public void A_low_reserve_asks_nothing_while_its_search_or_its_judgement_is_under_way()
+    {
+        const string Search = "While a search of the campaign is still followed (its `ended_as` is null) or waits for the person's approval, the probe included, a low reserve asks nothing and creates nothing: say in your line that the reserve is low because the probe has not landed, and the review the search's end summons plans the batch.";
+        const string Judgement = "After that, a low reserve asks nothing while no verdict is in yet and the analyst's item that will give one is still open: say in your line when the judgement is due.";
+        const string Ask = "Where no analyst's item is open, because none was made or it ended or failed with no verdict, ask.";
+
+        var head = Flattened("manager");
+        var section = head[head.IndexOf("**Where no top-up can bring more, ask at once.**", StringComparison.Ordinal)..];
+        section = section[..section.IndexOf("## What you may decide yourself", StringComparison.Ordinal)];
+        foreach (var said in new[] { Search, Judgement, Ask })
+        {
+            Assert.Contains(said, section, StringComparison.Ordinal);
+        }
+
+        var start = FlattenedEntry("manager", "start");
+        var low = start[start.IndexOf("## A low reserve at the start", StringComparison.Ordinal)..];
+        foreach (var said in new[] { Search, Judgement, Ask })
+        {
+            Assert.Contains(said, low, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("starts with fewer than its threshold (twenty unless changed) people nobody has started on", start, StringComparison.Ordinal);
+
+        var page = Whitespace().Replace(File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "campaign-manager.md")), " ");
+        Assert.Contains(
+            "the recovery wakes nobody, and the check-in the low line wakes asks nothing while the probe is unfinished: the manager asks at once only where the reserve is really spent, with no search of the campaign under way.",
+            page,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -200,6 +255,7 @@ public partial class RoleSkillTests
         Assert.Contains("**The first batch is read before the campaign widens.**", deep, StringComparison.Ordinal);
         Assert.Contains("creates one analyst's item to read that batch", deep, StringComparison.Ordinal);
         Assert.Contains("once for the campaign; the widening after the first batch waits for its answer", deep, StringComparison.Ordinal);
+        Assert.Contains("Where the first batch is an audience's probe whose judgement you already asked for, that judgement is the reading: ask for the delivery and the messages in the same item, and create no second one.", deep, StringComparison.Ordinal);
         Assert.DoesNotContain("planner's pilot asked the person whether to go on", deep, StringComparison.Ordinal);
         Assert.DoesNotContain("at the end of the pilot the planner runs", deep, StringComparison.Ordinal);
 

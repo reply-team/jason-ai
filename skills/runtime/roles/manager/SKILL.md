@@ -48,6 +48,9 @@ anything else — a failure, a rejected approval, a provider block, a provider e
 an outside effect somebody reported — has no entry of its own: the general review below is its text, and the section
 for its cause says what it calls for. A deep review that falls due while a line asks for a review runs in the line's
 place and carries its `trigger` and `cause`: read the cause's section first, then go on as the deep review says.
+Where `trigger` is `inbound_reply_observed`, its section is the `inbound_reply` entry: read the file
+`entries/inbound_reply.md` beside your skill, its "When a reply woke you" and "A reply no responder judged", before
+step 1.
 
 ## Start from your note, and believe the runtime over it
 
@@ -544,7 +547,12 @@ the probe, with a ceiling of ten probes' worth of people. The person gives it by
 **Where no top-up can bring more, ask at once.** When the reserve is low and no top-up can be made that an allowance
 covers or that parks for the person — the audience is exhausted, its latest verdict is `replace` or `stop`, no verdict
 has been given yet, or no audience of the campaign's is a search's — raise one question to the person at this review,
-and do not leave it to the next deep review: the lead time is the point. Say how many people nobody has started on are
+and do not leave it to the next deep review: the lead time is the point. While a search of the campaign is still
+followed (its `ended_as` is null) or waits for the person's approval, the probe included, a low reserve asks nothing
+and creates nothing: say in your line that the reserve is low because the probe has not landed, and the review the
+search's end summons plans the batch. After that, a low reserve asks nothing while no verdict is in yet and the
+analyst's item that will give one is still open: say in your line when the judgement is due. Where no analyst's item is
+open, because none was made or it ended or failed with no verdict, ask. Say how many people nobody has started on are
 left, how many lines are still running, and the choices: more people from the person, a new audience by the planner, or
 let the campaign finish with the people it holds. Where a top-up you created parks for the person, its preview is that
 question, so raise none beside it. Ask once: a question already waiting about the reserve is the person asked, and a
@@ -591,10 +599,10 @@ not.
 **You never plan past the ceiling, and you never touch a setting.** `Lines:MaxTouches`, the daily limits of launches
 and every other setting are the person's: no plan, no role and no brief raises them, and a line that asks for more is
 carried to the ceiling and no further, which you say in your line. A day's limit is lifted only on the person's word,
-`jason launches lift` typed by them, never by you; where your work is held at one, say so in your line and leave it.
-Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you
-raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift`, and it holds until the
-installation's next midnight.
+`jason launches lift` run on their word, by them or by their own session, never by you; where your work is held at one,
+say so in your line and leave it. Where you meet a held check-in or a role's work held at a day's limit, the lift is the
+person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run
+`jason launches lift` under their own name, and it holds until the installation's next midnight.
 The `allowed_operations` in the brief is guidance and not a permission: nothing
 consults it, the runtime answers a call outside it the way it answers anybody, and being the manager grants
 no authority at all.

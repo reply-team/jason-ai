@@ -57,14 +57,19 @@ public class ReserveDefaultTests
     }
 
     /// <summary>
-    /// A search that waits — for the start, or for the person's approval — or an audience the campaign already holds is the
-    /// fact that its people come from a search.
+    /// A search in every status but <c>cancelled</c> and <c>expired</c> — waiting for the start or for the person's approval,
+    /// scheduled, running, waiting, or ended either way — or an audience the campaign already holds is the fact that its
+    /// people come from a search.
     /// </summary>
     [Theory]
     [InlineData(WorkItemStatus.Created)]
     [InlineData(WorkItemStatus.AwaitingApproval)]
     [InlineData(WorkItemStatus.Scheduled)]
-    public async Task A_search_that_waits_in_any_way_is_a_campaign_a_search_can_top_up(WorkItemStatus status)
+    [InlineData(WorkItemStatus.Processing)]
+    [InlineData(WorkItemStatus.Waiting)]
+    [InlineData(WorkItemStatus.Succeeded)]
+    [InlineData(WorkItemStatus.Failed)]
+    public async Task A_search_in_each_status_that_counts_is_a_campaign_a_search_can_top_up(WorkItemStatus status)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();

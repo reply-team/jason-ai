@@ -9,6 +9,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Journal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Notifications;
@@ -16,9 +17,9 @@ namespace Jason.Runtime.Tests.Notifications;
 /// <summary>
 /// A reply a person wrote themselves is said by a pointer: the verdicts a role recorded inside a run with the nature
 /// <c>person</c>, counted by reply in the window since the last pointer that reached anybody, and woken by the end of the run
-/// that recorded the verdict — so the approval its answer needs, parked a tick later, is said in the same pointer. A verdict
-/// of another nature, a person's own verdict outside a run and the chat's are not counted, and a reply already counted is
-/// not counted again.
+/// that recorded the verdict — so the approval its answer needs, parked at the campaign's next claim, is said in the same
+/// pointer. A verdict of another nature, a person's own verdict outside a run and the chat's are not counted, and a reply
+/// already counted is not counted again.
 /// </summary>
 public sealed class ReplyNotificationTests
 {
@@ -93,6 +94,59 @@ public sealed class ReplyNotificationTests
         Assert.DoesNotContain("repl", Assert.Single(toast.Messages).Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The verdict recorded by the real writer, <see cref="Jason.Runtime.Replies.ReplyService"/>, as <c>jason reply record</c>
+    /// sends it, never a line built by hand: the writer decides the nature's spelling, the confined mark, the key and the
+    /// attempt, and the count reads exactly those. A run's attempt counts and its end wakes the pointer; a person outside
+    /// any run does not; the same request from the confined chat does not; and a person named from inside a run is that
+    /// run's, so it counts.
+    /// </summary>
+    [Theory]
+    [InlineData("attempt", 1)]
+    [InlineData("person_outside_a_run", 0)]
+    [InlineData("confined", 0)]
+    [InlineData("person_inside_a_run", 1)]
+    public async Task A_verdict_the_reply_service_records_is_counted_as_the_writer_marks_it(string recorded, int counted)
+    {
+        using var harness = await StartedAsync();
+        var run = await RunAsync(harness);
+
+        await using (var db = harness.Open())
+        {
+            var actor = recorded is "attempt" or "confined" ? new ActorRef(ActorType.Attempt, run.Attempt) : new ActorRef(ActorType.Human, "dana");
+            var verdict = new ReplyRecordRequest(
+                run.Campaign,
+                "mailbox",
+                "thread-1",
+                "message-1",
+                new DateTimeOffset(Noon),
+                "interested",
+                0.9,
+                ReplyReaction.Draft,
+                Actor: actor,
+                Nature: ReplyNature.Person);
+            var service = new Jason.Runtime.Replies.ReplyService(db, new JournalWriter(harness.Clock));
+            using var confined = recorded == "confined" ? ConfinedScope.Open() : null;
+            using var inside = recorded == "person_inside_a_run" ? RunScope.Open(run.Attempt) : null;
+            await service.RecordAsync(verdict, Ct);
+        }
+
+        // The run has not ended: the verdict alone wakes nothing yet. Its end wakes the pointer only where the verdict counts.
+        Assert.Null(await HandedOverAsync(harness));
+        await EndAsync(harness, run);
+        var request = await HandedOverAsync(harness);
+        if (counted == 0)
+        {
+            Assert.Null(request);
+            await Waiting.ApprovalsAsync(harness, 1, Ct);
+            request = await HandedOverAsync(harness);
+        }
+
+        Assert.True(request is not null, $"A verdict recorded {recorded} left no pointer to send.");
+        var line = await Sender(harness, FakeChannel.Delivering()).SendAsync(request, Ct);
+        Assert.Equal(counted, line!.Replies);
+    }
+
     [Fact]
     public async Task One_reply_judged_in_two_campaigns_is_counted_once()
     {
@@ -155,36 +209,109 @@ public sealed class ReplyNotificationTests
     }
 
     /// <summary>
-    /// Under the default send mode the responder records its verdict, drafts, and ends; its answer parks at the next claim, a
-    /// tick later. Woken by the run's end, the quiet window takes the park in, and the reply and the approval its answer needs
-    /// go out as one pointer — never a reply pointer first that would hold the approval behind the floor.
+    /// Under the default send mode the responder records its verdict through the reply service, drafts its answer as a
+    /// <c>conversation.reply</c> item, and ends; the campaign's next claim, the next scan in a quiet campaign, parks the
+    /// answer for the person. Woken by the run's end, the quiet window takes the park in, and the reply and the approval its
+    /// answer needs go out as one pointer — not a reply pointer first that would hold the approval behind the floor. Every
+    /// step is the product's own: the verdict's writer, the work item service, the claim's park and the notifier.
     /// </summary>
     [Fact]
     public async Task Under_every_message_the_reply_and_its_answer_s_approval_are_one_pointer()
     {
+        const string Mailbox = "mailbox";
         using var harness = await StartedAsync();
+        Jason.Runtime.Tests.Dispatch.InboundSyncHarvestTests.Load(harness, Jason.Runtime.Tests.Plugins.TestPlugins.Loaded(Mailbox, operations: ["conversation.reply"]));
+        Jason.Runtime.Tests.Dispatch.InboundSyncHarvestTests.RouteAll(harness, Mailbox);
         var tick = TimeSpan.FromSeconds(harness.Options.CurrentValue.TickSeconds);
         var before = harness.Queue.Requests.Count;
 
-        var run = await RunAsync(harness);
-        await VerdictAsync(harness, run, "sha256:reply-1");
-        await harness.Runner.ScanOnceAsync(Ct);
-        harness.Clock.Advance(tick);
-        await EndAsync(harness, run);
-        await harness.Runner.ScanOnceAsync(Ct);
-
-        // The next claim, a tick after the run ended, parks the answer.
-        harness.Clock.Advance(tick);
-        await Waiting.ApprovalsAsync(harness, 1, Ct);
-        await harness.Runner.ScanOnceAsync(Ct);
-
-        // Scan by scan, nothing is said until the burst is quiet; then once.
-        for (var waited = TimeSpan.Zero; waited < TimeSpan.FromSeconds(120); waited += tick)
+        // A campaign, the person who replied, and the responder's run reading the reply.
+        var now = harness.Clock.Now.UtcDateTime;
+        Run run;
+        string person;
+        await using (var db = harness.Open())
         {
-            harness.Clock.Advance(tick);
-            await harness.Runner.ScanOnceAsync(Ct);
+            var owner = WorkItemFactory.NewCampaign(now: now);
+            var contact = new Contact { PublicId = Jason.Contracts.Ids.PublicId.New("cnt"), FirstName = "Dana", CreatedAt = now, UpdatedAt = now };
+            contact.Channels.Add(new ContactChannel { Channel = "email", Value = "dana@example.test", IsPrimary = true });
+            db.Campaigns.Add(owner);
+            db.Contacts.Add(contact);
+            db.CampaignContacts.Add(new CampaignContact { Campaign = owner, Contact = contact, State = MembershipState.Enrolled, AddedAt = now, UpdatedAt = now });
+            var responder = WorkItemFactory.NewAiRole(owner, "responder", now);
+            responder.Status = WorkItemStatus.Processing;
+            responder.AttemptCount = 1;
+            responder.Context = new JsonObject { ["inbound_reply"] = new JsonObject { ["plugin"] = Mailbox, ["thread"] = "501" } };
+            var attempt = WorkItemFactory.NewAttempt(responder, 1, AttemptStatus.Running, now);
+            db.WorkItems.Add(responder);
+            await db.SaveChangesAsync(Ct);
+            run = new Run(owner.PublicId, responder.PublicId, attempt.PublicId);
+            person = contact.PublicId;
         }
 
+        // The run records its verdict and drafts the answer, both as the run.
+        var asTheRun = new ActorRef(ActorType.Attempt, run.Attempt);
+        string draft;
+        using (var scope = harness.Scopes.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            await new Jason.Runtime.Replies.ReplyService(db, new JournalWriter(harness.Clock)).RecordAsync(
+                new ReplyRecordRequest(run.Campaign, Mailbox, "501", "msg-1", new DateTimeOffset(now.AddMinutes(-5)), "interested", 0.9, ReplyReaction.Draft, ContactId: person, Actor: asTheRun, Nature: ReplyNature.Person),
+                Ct);
+            draft = (await scope.ServiceProvider.GetRequiredService<Jason.Runtime.WorkItems.WorkItemService>().CreateAsync(
+                new WorkItemCreateRequest(
+                    run.Campaign,
+                    WorkItemKind.ProviderOp,
+                    Role: null,
+                    "conversation.reply",
+                    person,
+                    ExecutionProfile: null,
+                    Priority: null,
+                    NotBefore: null,
+                    DueAt: null,
+                    TimeoutSeconds: null,
+                    HeartbeatSeconds: null,
+                    MaxAttempts: null,
+                    new JsonObject
+                    {
+                        [Jason.Runtime.WorkItems.WorkItemService.InputKey] = new JsonObject
+                        {
+                            ["channel"] = "email",
+                            ["thread"] = new JsonObject { ["external_id"] = "501" },
+                            ["body"] = "Thursday at 10 works.",
+                        },
+                    },
+                    ResultFormat: null,
+                    asTheRun,
+                    Reason: null),
+                Ct)).Id;
+        }
+
+        await harness.Runner.ScanOnceAsync(Ct);
+        harness.Clock.Advance(tick);
+
+        // The run ends, its item and its attempt with it, and its end is said as the routine that ends work says it.
+        await using (var db = harness.Open())
+        {
+            var item = await db.WorkItems.SingleAsync(w => w.PublicId == run.Item, Ct);
+            var attempt = await db.Attempts.SingleAsync(a => a.PublicId == run.Attempt, Ct);
+            item.Status = WorkItemStatus.Succeeded;
+            item.FinishedAt = harness.Clock.Now.UtcDateTime;
+            attempt.Status = AttemptStatus.Succeeded;
+            attempt.FinishedAt = harness.Clock.Now.UtcDateTime;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await EndAsync(harness, run);
+
+        // Scan by scan: the campaign's next claim parks the draft for the person, and nothing is said until the burst is
+        // quiet; then once.
+        for (var waited = TimeSpan.Zero; waited < TimeSpan.FromSeconds(120); waited += tick)
+        {
+            await harness.Runner.ScanOnceAsync(Ct);
+            harness.Clock.Advance(tick);
+        }
+
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await harness.ReadItemAsync(draft, Ct)).Status);
         var request = Assert.Single(harness.Queue.Requests.Skip(before));
         var toast = FakeChannel.Delivering();
         var line = await Sender(harness, toast).SendAsync(request, Ct);

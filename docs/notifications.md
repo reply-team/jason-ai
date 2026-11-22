@@ -42,9 +42,9 @@ Eight things, and only these:
 - **a reply a person wrote** — a reply a role judged, inside a run, a person's own: a `reply_classified` verdict with the
   nature `person` that names the run's attempt ([inbound-sync.md](inbound-sync.md)). It wakes a pointer when the run that
   judged it ends — its `workitem_succeeded`, `workitem_failed` or `workitem_expired` line — so the approval the answer
-  the responder drafted needs, parked at the claim a tick later, is said in the same pointer; a verdict recorded after its
-  run already ended wakes one by its own line. The pointer counts each reply once, by the key every verdict on it
-  carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
+  the responder drafted needs, parked at the campaign's next claim, which in a quiet campaign is the next scan, is said
+  in the same pointer; a verdict recorded after its run already ended wakes one by its own line.
+  The pointer counts each reply once, by the key every verdict on it carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
   person records outside a run is one they already know of, the desktop chat's is never a person's, and an automatic
   answer, a bounce, an opt-out and a verdict that does not say are no person's reply: none of them is counted, and an
   opt-out tells nobody. `Notifications:Replies` turns this one off alone (§9). Who replied, and in which campaign, the
@@ -120,7 +120,7 @@ And where items wait on a daily limit of launches:
 
 ```text
 Jason
-2 items wait on a daily limit. To go on today, tell your agent: ignore the limit, or run jason launches lift.
+2 items wait on a daily limit. To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.
 Ask your agent what is held, or run jason workitem list --status waiting.
 ```
 
@@ -160,7 +160,7 @@ each thing alone, in the order they are said — "Ask your agent, or run jason a
 workitem list --status failed --status expired, jason block list and jason events sources." — and failed protective
 work and a hold share one command, jason workitem list --status failed --status expired --status waiting.
 A hold also says the way out for today, straight after its count: "To go on today, tell your agent: ignore the limit, or run
-jason launches lift." — the person's word that the day's limits do not hold, until the installation's next midnight
+jason launches lift --actor human:<your name>." — the person's word that the day's limits do not hold, until the installation's next midnight
 ([work-execution.md](work-execution.md)). It is fixed words with no count, role or name in them, so the pointer stays
 counts and where to look. It is said beside failed protective work and beside the other things too, but only where the
 pointer still fits the message the delivery contract takes and still names every command it would have named without

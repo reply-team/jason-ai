@@ -230,7 +230,7 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   with the detail `invalid` on `name`, here and by `campaign.update`.
 - `campaign.get`: Jason's campaign, read without calling a provider. Every answer that carries a campaign whole says, in
   `deep_review_due_at`, the next moment of its deep review's grid: written when it goes live and moved by each deep
-  review, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
+  review the summon makes, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
   at that moment ([the campaign manager](campaign-manager.md) §4).
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
@@ -250,8 +250,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   that is not active, a draft, a paused or an archived one, `409` `campaign_not_active`; a check-in open, one held at the
   manager's daily limit included, `409` `review_already_open`, which names it; and the manager's launches of the day
   spent, as the claim counts them, `409` `launches_spent`, whose message names the way out: "To go on today, tell your
-  agent: ignore the limit, or run jason launches lift." [The campaign manager](campaign-manager.md) §4 is the
-  contract.
+  agent: ignore the limit, or run jason launches lift --actor human:<your name>." [The campaign manager](campaign-manager.md)
+  §4 is the contract.
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`
