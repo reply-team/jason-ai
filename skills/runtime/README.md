@@ -24,10 +24,13 @@ description that promises everything matches nothing.
 - [`quick-start`](quick-start/SKILL.md) — The first minutes after an install: one question about what the person sells and
   who should buy it, the connected channels read and not asked, and the plan said in one message that ends with
   "Say what to change, or say go."
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — Turning an objective into durable campaign work and following it: the provider check, what the person has
-  already written down, the campaign and its goals, the people it is about, from a list or from a search the planner
-  forms, provider operations and AI role work, what the
-  runtime does with them afterwards, answering a conversation after the responder has been at it, and stopping or holding work.
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — Turning an objective into durable campaign work and following it: the provider check, the chat of
+  Jason Desktop's differences in one passage, whose name a session's acts carry, what the person has already written
+  down, a campaign set up with the person and started on their yes, with `campaign-launch` and `audience-building` as
+  its method, a draft campaign filled in rather than a second one made, its goals, the people it is about, from a list
+  or from a search the planner forms, and its first batch of twenty, with the messages left to the roles after the
+  start; provider operations and AI role work, what the runtime does with them afterwards, answering a conversation
+  after the responder has been at it, and stopping or holding work.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign, or for the
