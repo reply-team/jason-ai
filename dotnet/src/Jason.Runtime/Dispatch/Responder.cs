@@ -128,6 +128,14 @@ public sealed class Responder(
         new EventId(4, nameof(Failed)),
         "The respond step for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
 
+    private static readonly Action<ILogger, string, string, Exception?> NotHeld = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(6, nameof(NotHeld)),
+        "The respond step could not hold the line a reply of campaign {CampaignId} names: {Code}");
+
+    /// <summary>Where the transaction that passes a line goes back to when the hold there is refused: past the watermark's move.</summary>
+    private const string HoldSavepoint = "hold";
+
     private static readonly Action<ILogger, string, Exception?> Moved = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(5, nameof(Moved)),
@@ -291,7 +299,24 @@ public sealed class Responder(
             return new Acted(LineOutcome.Moved);
         }
 
-        await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
+        // The hold here is the line's too: one the domain or the database refuses is said once and taken back to where the
+        // watermark had moved, which still commits, so the campaign's respond step never stops on one line.
+        await passing.CreateSavepointAsync(HoldSavepoint, ct).ConfigureAwait(false);
+        try
+        {
+            await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DomainException || Refused(ex))
+        {
+            await passing.RollbackToSavepointAsync(HoldSavepoint, ct).ConfigureAwait(false);
+            db.ChangeTracker.Clear();
+            var code = ex is DomainException domain ? domain.Code : "write_refused";
+            if (skips.FirstTime(campaign.Id, "hold " + code))
+            {
+                NotHeld(logger, campaign.PublicId, code, null);
+            }
+        }
+
         await passing.CommitAsync(ct).ConfigureAwait(false);
         db.ChangeTracker.Clear();
         return new Acted(LineOutcome.Read);
@@ -301,8 +326,8 @@ public sealed class Responder(
     /// The hold a reply line sets (<see cref="LineHold"/>): the person the line names by its contact column, when they are
     /// an enrolled member of the campaign and the line is not Jason's own letter moving the thread, read by the line's
     /// thread and moment, is held, and what the provider still holds for them there is taken back
-    /// (<see cref="HeldSendCancels"/>). A line that names nobody holds nobody. A take-back the domain refuses is said once
-    /// and costs neither the hold nor the line.
+    /// (<see cref="HeldSendCancels"/>). A line that names nobody holds nobody. A take-back the domain or the database
+    /// refuses is said once, under the take-back's own event, and costs neither the hold nor the line.
     /// </summary>
     private async Task HoldAsync(JasonDbContext db, Active campaign, Line line, CancellationToken ct)
     {
@@ -323,17 +348,7 @@ public sealed class Responder(
             return;
         }
 
-        try
-        {
-            await cancels.CancelForAsync(db, campaign.Id, campaign.PublicId, [contact], now, ct).ConfigureAwait(false);
-        }
-        catch (DomainException refused)
-        {
-            if (skips.FirstTime(campaign.Id, refused.Code))
-            {
-                PassedOver(logger, campaign.PublicId, refused.Code, null);
-            }
-        }
+        await cancels.TakeBackAsync(db, campaign.Id, campaign.PublicId, [contact], now, ct).ConfigureAwait(false);
     }
 
     private async Task<Acted> ActAsync(JasonDbContext db, Active campaign, Line line, Reply reply, ResponderOptions options, CancellationToken ct)

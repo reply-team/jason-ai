@@ -7,6 +7,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.WorkItems;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -28,6 +29,10 @@ namespace Jason.Runtime.Routing;
 /// and account for <c>message.cancel</c>, or the plugin performs none, nothing is queued for that send, since the claim
 /// would refuse it: the act that called goes on, and the log says so once per campaign, by the campaign and the code
 /// <see cref="NotRouted"/>, never by anything a send says.
+/// </para>
+/// <para>
+/// A fourth caller comes after the hold: a touch that was on its way when the person was held, and whose attempt then
+/// succeeds, is taken back where attempts end (<see cref="Execution.AttemptOutcomes"/>), once the success is saved.
 /// </para>
 /// </summary>
 public sealed class HeldSendCancels(
@@ -53,6 +58,41 @@ public sealed class HeldSendCancels(
         LogLevel.Warning,
         new EventId(1, nameof(Skipped)),
         "A send the provider holds for campaign {CampaignId} was not taken back: {Code}");
+
+    private static readonly Action<ILogger, string, string, Exception?> Refused = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(2, nameof(Refused)),
+        "A held send of campaign {CampaignId} could not be taken back: {Code}");
+
+    /// <summary>
+    /// The same take-back, as best effort, for a caller that has saved everything it changed: the hold a reply sets and
+    /// the end of a touch's attempt. A cancel the domain or the database refuses is said once per campaign and code, under
+    /// an event of its own, and what its failed save left tracked is let go, so the caller's next save does not try it
+    /// again; the cancels queued before it stand. Answers how many it queued.
+    /// </summary>
+    public async Task<int> TakeBackAsync(JasonDbContext db, int campaignId, string campaignPublicId, IReadOnlyCollection<int> contactIds, DateTimeOffset now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        try
+        {
+            return await CancelForAsync(db, campaignId, campaignPublicId, contactIds, now, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DomainException || ex is DbUpdateException { InnerException: SqliteException { SqliteErrorCode: 19 } })
+        {
+            foreach (var entry in db.ChangeTracker.Entries().Where(entry => entry.State != EntityState.Unchanged).ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            var code = ex is DomainException domain ? domain.Code : "write_refused";
+            if (skips.FirstTime(campaignId, "refused " + code))
+            {
+                Refused(logger, campaignPublicId, code, null);
+            }
+
+            return 0;
+        }
+    }
 
     /// <summary>
     /// Queues the cancels for the people named, by their rows, in the campaign, and answers how many it queued. Called
