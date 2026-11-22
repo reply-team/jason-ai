@@ -191,6 +191,24 @@ public class DeepReviewScheduleTests
         Assert.Equal(Now(clock).AddSeconds(7_200), (await db.Campaigns.SingleAsync(Ct)).DeepReviewDueAt);
     }
 
+    /// <summary>
+    /// Through the runtime as it is composed: a campaign started over the API takes its grid from the installation's
+    /// setting, and the answer carries the moment.
+    /// </summary>
+    [Fact]
+    public async Task A_running_runtime_starts_the_grid_from_the_installation_s_setting()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Manager":{"DeepReviewSeconds":3600}}"""),
+            clock: new FixedClock(Noon));
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn" }, Ct)).Id;
+
+        var started = await api.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = campaign, actor = new { type = "human", id = "ada" } }, Ct);
+
+        Assert.Equal(new DateTimeOffset(Noon).AddHours(1), started.DeepReviewDueAt);
+    }
+
     private static DateTime Now(TimeProvider clock) => clock.GetUtcNow().UtcDateTime;
 
     private static async Task<Campaign> LiveAsync(JasonDbContext db, TimeProvider clock, ManagerOptions options)
