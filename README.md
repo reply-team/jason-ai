@@ -284,7 +284,7 @@ Day to day, it goes like this:
 3. **Bring contacts or let Jason find them:** Reply's Live Data API, your own search tools, a CSV, a Google Sheet, your CRM,
    or public research.
 4. **Approve the first message.** Until you say otherwise, it waits for your yes. Your feedback ("too formal", "always mention a customer result") becomes a rule.
-5. **Start small.** A pilot of ten, and each message waits for you until you choose that some go automatically. Jason reports what's working; you decide whether to grow it.
+5. **Start small.** A first batch of twenty, and each message waits for you until you choose that some go automatically. Jason reports what's working; you decide whether to grow it.
 6. **It reacts.** Replies, objections, out-of-office and silence each change the plan for that one person.
 
 ---
