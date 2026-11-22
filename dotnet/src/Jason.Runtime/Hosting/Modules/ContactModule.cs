@@ -42,6 +42,9 @@ public static class ContactModule
         // belongs to the contact slice, which owns every rule about who a contact is.
         app.MapOperation<MembershipService, AddContactsRequest, AddContactsResult>(Operations.CampaignAddContacts, (service, request, ct) => service.AddAsync(request, ct));
         app.MapOperation<MembershipService, RemoveContactsRequest, RemoveContactsResult>(Operations.CampaignRemoveContacts, (service, request, ct) => service.RemoveAsync(request, ct));
+        app.MapOperation<MembershipService, FinishContactsRequest, FinishContactsResult>(Operations.CampaignFinishContacts, (service, request, ct) => service.FinishAsync(request, ct));
+        app.MapOperation<MembershipService, ContinueContactsRequest, ContinueContactsResult>(Operations.CampaignContinueContacts, (service, request, ct) => service.ContinueAsync(request, ct));
+        app.MapOperation<MembershipService, ReopenContactsRequest, ReopenContactsResult>(Operations.CampaignReopenContacts, (service, request, ct) => service.ReopenAsync(request, ct));
         app.MapOperation<MembershipService, ListContactsRequest, Page<MembershipItemDto>>(Operations.CampaignListContacts, (service, request, ct) => service.ListAsync(request, ct));
 
         app.MapOperation<SuppressionService, SuppressionAddRequest, SuppressionDto>(Operations.SuppressionAdd, (service, request, ct) => service.AddAsync(request, ct));

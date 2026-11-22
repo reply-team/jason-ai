@@ -287,7 +287,8 @@ campaign at a time, and no more responder runs started in a campaign in the inst
 as many as that allows over a few hours and the rest from the installation's next midnight, or sooner where a person
 lifts the day's limits, and other campaigns are not held up; a responder over the day's limit
 waits, with no attempt and its thread's further moves still recorded on it, as [work execution](work-execution.md) says
-under the claim rule.
+under the claim rule. The number is one entry of the table of defaults that every role Jason ships has, in the settings table of
+[work execution](work-execution.md).
 Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
 sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
 campaign's next read is claimed ahead of the responders still queued — those queued before an edit that lowered

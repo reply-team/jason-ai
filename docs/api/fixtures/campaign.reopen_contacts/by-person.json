@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.reopen_contacts",
+  "case": "by-person",
+  "request": {
+    "campaign_id": "cmp_1",
+    "contact_ids": [
+      "cnt_1"
+    ],
+    "reason": "She wrote to say the timing is better now.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "reopened": 1,
+      "not_finished": 0,
+      "not_member": 0,
+      "excluded": 0,
+      "not_in_decision": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "reopened",
+        "contact_id": "cnt_1",
+        "error": null
+      }
+    ]
+  }
+}

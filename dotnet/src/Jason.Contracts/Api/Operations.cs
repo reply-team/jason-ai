@@ -34,6 +34,9 @@ public static class Operations
     public const string CampaignSetSendMode = "campaign.set_send_mode";
     public const string CampaignAddContacts = "campaign.add_contacts";
     public const string CampaignRemoveContacts = "campaign.remove_contacts";
+    public const string CampaignFinishContacts = "campaign.finish_contacts";
+    public const string CampaignContinueContacts = "campaign.continue_contacts";
+    public const string CampaignReopenContacts = "campaign.reopen_contacts";
     public const string CampaignListContacts = "campaign.list_contacts";
     public const string CampaignSummary = "campaign.summary";
     public const string CampaignActivity = "campaign.activity";

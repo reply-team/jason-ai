@@ -109,7 +109,10 @@ the body is read, and record nothing; the grants, the default and the channels s
 nothing inside a run changes Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. Nor does `reply.record` read past it: it records a verdict that names
-a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
+a `human` actor from there as that run's, so that it lifts no opt-out's lock. Nor does `campaign.reopen_contacts`: a
+reopen is the person's decision, which a run carries only as the question the person answered, so one sent from there
+that names no `decision_id` is answered `403` `decided_inside_a_run` by the operation itself, whatever person it names,
+and changes nothing. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -154,7 +157,8 @@ so in one line on stderr, naming the variable and never its value.
   handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
   `launches.lift`, `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that
-  names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  names the person, and `report.submit` needs a named reporter of any type but `system`.
+  `campaign.reopen_contacts` needs a named actor, of type `human` unless it names the question the person answered. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
@@ -164,8 +168,9 @@ so in one line on stderr, naming the variable and never its value.
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
   `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
-  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove`
-  set it no limit of their own. One operation is a declared exception and refuses a `reason` at that field:
+  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `campaign.finish_contacts`,
+  `campaign.continue_contacts`, `campaign.reopen_contacts`, `suppression.add` and `suppression.remove` set it no limit of
+  their own. One operation is a declared exception and refuses a `reason` at that field:
   `workitem.review`, because a reason is journaled and the line it writes must not carry the doubt's sentence, which
   goes as its `note` instead.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is
@@ -242,6 +247,26 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
 - `campaign.remove_contacts`
+- `campaign.finish_contacts`: ends the line with each person named, at most 1000: an `enrolled` or `paused` member
+  becomes `finished`, and their open touches in the campaign, the provider operations whose document says
+  `touch: true`, are cancelled in the same save; their conversation, a reply in it and a take-back go on. Any named
+  actor may, a role from its run among them. `reason` is required: a missing or blank one is `validation_failed` with
+  the detail `required` on `reason`. The answer is `remove_contacts`'s shape, each item `finished`, `already_finished`,
+  `not_member`, `excluded` or `rejected`, under a `summary` that counts each, and the request writes one
+  `contacts_finished` line ([docs/work-execution.md](work-execution.md), "A person's line in a campaign").
+- `campaign.continue_contacts`: a `paused` member is enrolled again; each item `continued`, `not_paused`,
+  `not_member`, `excluded` or `rejected`, and one `contacts_continued` line. Any named actor may.
+- `campaign.reopen_contacts`: a `finished` member is enrolled again, on the person's decision, carried one of two ways:
+  their own word, a named `human` from outside any run, or a run that names in `decision_id` the campaign's question
+  that a named person answered and that references, as a `journal_entry`, the campaign's `contacts_finished` line that
+  ended those lines. The runtime does not read the answer's words: the manager reopens only on an answer that says yes.
+  Refused, in this order: no named actor, `actor_required`; with no `decision_id`, a request from inside a run, `403`
+  `decided_inside_a_run`, and an actor that is no person, `reopen_not_human`; then the question: not one of the
+  campaign's, `decision_not_found`; not answered, `decision_not_answered`; not answered by a named person,
+  `decision_not_human`; referencing no `contacts_finished` line of the campaign, `decision_not_about_finish`. Each item
+  is `reopened`, `not_finished`, `not_member`, `excluded`, `not_in_decision` — a person the line the question is about
+  does not name — or `rejected`, and the request writes one `contacts_reopened` line, with the reason and, from a run,
+  the question's id. Touches counted before the line ended stay counted.
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
   the search and when they landed; `exclude_archived_contacts` leaves out the people whose own record is archived.
