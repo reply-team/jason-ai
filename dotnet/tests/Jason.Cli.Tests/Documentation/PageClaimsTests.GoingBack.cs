@@ -27,6 +27,7 @@ public partial class PageClaimsTests
     [
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid",
     ];
 
     /// <summary>

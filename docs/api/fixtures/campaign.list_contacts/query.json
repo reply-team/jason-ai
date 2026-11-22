@@ -99,7 +99,9 @@
           {
             "campaign_id": "cmp_1"
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

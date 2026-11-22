@@ -15,7 +15,7 @@ public sealed class SettingsAllowlistTests
     /// <summary>The settings that are a switch, or a word from a closed set: the values that say how the runtime is set up.</summary>
     internal static readonly string[] Switches =
     [
-        "Dispatcher:Enabled", "Update:CheckEnabled", "Notifications:Enabled", "Notifications:Toast",
+        "Dispatcher:Enabled", "Update:CheckEnabled", "Notifications:Enabled", "Notifications:Toast", "Notifications:Replies",
         "Notifications:Plugins:fake-provider:Enabled", "Inbound:Enabled", "Responder:OnReply",
     ];
 
@@ -36,7 +36,7 @@ public sealed class SettingsAllowlistTests
         "Dispatcher:AiRole:MaxWaitSeconds", "Dispatcher:AiRole:MaxWaits",
         "Dispatcher:Blocks:TrialSeconds",
         "Dispatcher:ProviderOp:TimeoutSeconds", "Dispatcher:ProviderOp:HeartbeatSeconds", "Dispatcher:ProviderOp:MaxAttempts",
-        "Manager:ReviewSeconds", "Manager:TimeoutSeconds", "Manager:MaxAttempts", "Manager:Priority", "Manager:MaxEntriesPerScan",
+        "Manager:ReviewSeconds", "Manager:DeepReviewSeconds", "Manager:TimeoutSeconds", "Manager:MaxAttempts", "Manager:Priority", "Manager:MaxEntriesPerScan",
         "Roles:MaxStdoutBytes", "Roles:MaxSkillBytes",
         "Update:InitialDelayMinutes", "Update:IntervalHours",
         "Notifications:QuietSeconds", "Notifications:MaxWaitSeconds", "Notifications:MinIntervalMinutes",

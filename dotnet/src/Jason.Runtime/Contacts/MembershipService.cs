@@ -696,6 +696,11 @@ public sealed class MembershipService(
             counted = [.. counted.Where(membership => why!.ContainsKey((membership.ContactId, membership.CampaignId)))];
         }
 
+        // How many touches each listed membership has had, read once for the page by the ceiling's own definition.
+        var touches = counted.Count == 0
+            ? []
+            : await CampaignPeople.TouchesAsync(db, [.. counted.Select(membership => membership.CampaignId).Distinct()], people, cancellationToken).ConfigureAwait(false);
+
         var items = new List<MembershipItemDto>(page.Count);
         foreach (var (contact, dto) in page.Zip(contacts))
         {
@@ -711,6 +716,7 @@ public sealed class MembershipService(
             }
 
             var lead = mine[0];
+            var (touched, lastTouch) = touches.GetValueOrDefault((contact.Id, lead.Membership.CampaignId));
             items.Add(new MembershipItemDto(
                 dto,
                 lead.Membership.State,
@@ -720,7 +726,9 @@ public sealed class MembershipService(
                 [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))],
                 lead.Membership.Source is { } source
                     ? new MembershipSource(new AudienceRef(source.Audience, source.Number), source.Search, ContactMapper.ToOffset(source.LandedAt))
-                    : null));
+                    : null,
+                touched,
+                lastTouch is { } at ? ContactMapper.ToOffset(at) : null));
         }
 
         return new Page<MembershipItemDto>(items, next);

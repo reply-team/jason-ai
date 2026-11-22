@@ -31,7 +31,8 @@ public sealed class NotificationLineTests
         1,
         4,
         5,
-        6);
+        6,
+        7);
 
     [Fact]
     public void The_line_is_the_published_shape()
@@ -39,7 +40,7 @@ public sealed class NotificationLineTests
         var expected = JsonNode.Parse("""
             {
               "notification_id": "ntf_one",
-              "counts": { "approvals": 3, "decisions": 1, "protective_failures": 2, "event_gaps": 1, "blocks": 4, "held": 5, "bounces": 6 },
+              "counts": { "approvals": 3, "decisions": 1, "protective_failures": 2, "event_gaps": 1, "blocks": 4, "held": 5, "bounces": 6, "replies": 7 },
               "covered_through": "jrn_covered",
               "channels": [
                 { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
@@ -84,6 +85,16 @@ public sealed class NotificationLineTests
         earlier["counts"]!.AsObject().Remove("bounces");
 
         Assert.Equal(0, NotificationLine.Read(earlier)!.Bounces);
+    }
+
+    /// <summary>A line an earlier release wrote names no reply, and reads as none.</summary>
+    [Fact]
+    public void A_line_written_before_replies_were_counted_reads_none()
+    {
+        var earlier = Sample().ToJson();
+        earlier["counts"]!.AsObject().Remove("replies");
+
+        Assert.Equal(0, NotificationLine.Read(earlier)!.Replies);
     }
 
     /// <summary>A line that names no delivery yet carries no time, rather than a made-up one.</summary>

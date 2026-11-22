@@ -32,9 +32,16 @@ public sealed class CampaignService(
     TimeProvider clock,
     WorkItemCanceller canceller,
     HarnessFolders folders,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null,
+    LiveSettings<ManagerOptions>? manager = null)
 {
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
+    /// <summary>
+    /// The deep review's interval as the runtime holds it now, read at the moment a campaign goes live. A service made
+    /// without the manager's settings, as a test makes one, reads the shipped default.
+    /// </summary>
+    private int DeepReviewSeconds() => (manager?.Current ?? new ManagerOptions()).DeepReviewSeconds;
 
     public const int MaxNameLength = 200;
 
@@ -619,6 +626,10 @@ public sealed class CampaignService(
         if (target == CampaignStatus.Active)
         {
             campaign.ManagerReviewAnchor = campaign.UpdatedAt;
+
+            // The deep review's grid starts at every going live, a resume included, from the interval in force now: the
+            // days a campaign stood paused are not days a deep review is owed for.
+            campaign.DeepReviewDueAt = DeepReviewSchedule.AtGoingLive(campaign.UpdatedAt, DeepReviewSeconds());
 
             // The inbound read starts from the first time only: what a person's conversations held before the campaign
             // went live is history, while a reply that came in during a pause is still one the manager has not seen.

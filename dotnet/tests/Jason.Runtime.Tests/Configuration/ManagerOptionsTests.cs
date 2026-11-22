@@ -90,7 +90,8 @@ public class ManagerOptionsTests
         Assert.DoesNotContain(JournalKinds.AudienceReserveRecovered, options.Triggers);
         Assert.DoesNotContain(JournalKinds.AudiencePeopleLanded, options.Triggers);
         Assert.DoesNotContain(JournalKinds.ProviderSendObserved, options.Triggers);
-        Assert.Equal(18_000, options.ReviewSeconds);
+        Assert.Equal(21_600, options.ReviewSeconds);
+        Assert.Equal(86_400, options.DeepReviewSeconds);
         Assert.Equal(900, options.TimeoutSeconds);
         Assert.Equal(1, options.MaxAttempts);
         Assert.Equal(0, options.Priority);
@@ -125,6 +126,8 @@ public class ManagerOptionsTests
     [Theory]
     [InlineData("Manager:ReviewSeconds", 299)]
     [InlineData("Manager:ReviewSeconds", 604_801)]
+    [InlineData("Manager:DeepReviewSeconds", 299)]
+    [InlineData("Manager:DeepReviewSeconds", 604_801)]
     [InlineData("Manager:TimeoutSeconds", 29)]
     [InlineData("Manager:TimeoutSeconds", 86_401)]
     [InlineData("Manager:MaxAttempts", 0)]
@@ -140,6 +143,7 @@ public class ManagerOptionsTests
             switch (setting)
             {
                 case "Manager:ReviewSeconds": options.ReviewSeconds = value; break;
+                case "Manager:DeepReviewSeconds": options.DeepReviewSeconds = value; break;
                 case "Manager:TimeoutSeconds": options.TimeoutSeconds = value; break;
                 case "Manager:MaxAttempts": options.MaxAttempts = value; break;
                 case "Manager:Priority": options.Priority = value; break;
@@ -153,17 +157,17 @@ public class ManagerOptionsTests
     [Theory]
     [InlineData("Manager:ReviewSeconds", 300)]
     [InlineData("Manager:ReviewSeconds", 604_800)]
+    [InlineData("Manager:DeepReviewSeconds", 300)]
+    [InlineData("Manager:DeepReviewSeconds", 604_800)]
     [InlineData("Manager:MaxEntriesPerScan", 50)]
     public void The_bound_itself_is_allowed(string setting, int value)
     {
         var options = new ManagerOptions();
-        if (setting == "Manager:ReviewSeconds")
+        switch (setting)
         {
-            options.ReviewSeconds = value;
-        }
-        else
-        {
-            options.MaxEntriesPerScan = value;
+            case "Manager:ReviewSeconds": options.ReviewSeconds = value; break;
+            case "Manager:DeepReviewSeconds": options.DeepReviewSeconds = value; break;
+            default: options.MaxEntriesPerScan = value; break;
         }
 
         Assert.True(new ManagerOptionsValidator().Validate(null, options).Succeeded);
@@ -216,13 +220,14 @@ public class ManagerOptionsTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(
             dir.Paths.UserSettingsFile,
-            """{"Manager":{"ReviewSeconds":600,"Triggers":["workitem_failed"],"MaxAttempts":2}}""");
+            """{"Manager":{"ReviewSeconds":600,"DeepReviewSeconds":3600,"Triggers":["workitem_failed"],"MaxAttempts":2}}""");
 
         var options = new ManagerOptions();
         using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
         ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
 
         Assert.Equal(600, options.ReviewSeconds);
+        Assert.Equal(3_600, options.DeepReviewSeconds);
 
         // Narrowed, not widened. The standard binder appends to a list that already holds values, so this line
         // read "workitem_failed, approval_rejected, external_effect_reported, workitem_failed" until the section

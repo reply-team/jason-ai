@@ -286,7 +286,8 @@ linked active campaign, and about 384 lifecycle lines in the chronicle (each rea
 succeeded), besides the lines that say a reply. A read lists every thread that moved within the look-back, 100 to a
 page, so a busy campaign may take two or three read work items a cadence rather than one: as many pages as the threads
 that moved in the last four hours fill. A thread listed again says nothing: its key holds a move already said. A
-manager reading everything in the chronicle since its last review reads those too, about 80 in five hours; reading by
+manager reading everything in the chronicle since its last review reads those too, about 96 in the six hours between
+two quick looks; reading by
 kind (`jason journal list --kind inbound_reply_observed`) passes over them, and one person's replies are
 `jason journal list --contact cnt_… --kind inbound_reply_observed`.
 
@@ -324,7 +325,10 @@ line.
 
 - **Reading a reply for meaning.** A line names a thread; the respond step (§1) queues the `conversation.get` that reads
   it and the responder that decides what it calls for. Nothing in the runtime reads what it says.
-- **Telling a person.** A reply is not notified; the responder and the manager's check-in are what it wakes.
+- **Telling a person of a reply no role judged.** A thread that moved is not notified by its line here; the responder
+  and the manager's check-in are what it wakes. A person hears of a reply once a role, inside a run, judges it a
+  person's own, when that run ends ([notifications](notifications.md) §1); a reply no responder was made for and no
+  role judged is not said.
 - **A cadence per campaign,** and a read of any plugin but the one the campaign's route names.
 - **Telling a person that a source of events keeps failing.** Nothing notifies it; while it fails, its campaigns are
   read here.

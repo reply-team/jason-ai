@@ -29,7 +29,10 @@ public sealed record CampaignSummaryDto(
 /// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
 /// <c>send_modes</c> is the campaign's own mode for its cold contacts and its warm ones, each null where it sets none;
 /// <c>send_modes_in_force</c> is the mode a send to each would go under now, with where it comes from: the campaign, the
-/// installation's preference, or the default, which is every message.
+/// installation's preference, or the default, which is every message. <c>deep_review_due_at</c> is the next moment of the
+/// deep review's grid, read-only: written when the campaign goes live and moved by each deep review, and null until it next
+/// goes live where it has none, as for a campaign never started or one paused when the grid was added; no request takes
+/// it. Only an active campaign is ever reviewed at that moment.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -50,7 +53,8 @@ public sealed record CampaignDto(
     string? FolderPath = null,
     int? AudienceThreshold = null,
     SendModesDto? SendModes = null,
-    SendModesInForce? SendModesInForce = null);
+    SendModesInForce? SendModesInForce = null,
+    DateTimeOffset? DeepReviewDueAt = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign
@@ -134,6 +138,8 @@ public sealed record CampaignSummaryRow(
     int Idle,
     int Sequence,
     int Out,
+    int Paused,
+    int Finished,
     int Removed,
     bool SequenceLinked);
 
@@ -142,7 +148,7 @@ public sealed record CampaignSummaryRow(
 /// may still be in two counts, as in one campaign. There is no <c>sequence_linked</c>: a campaign not linked counts nobody
 /// in the sequence.
 /// </summary>
-public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);
+public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Paused, int Finished, int Removed);
 
 /// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
 public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns, CampaignSummaryTotal Total);

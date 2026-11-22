@@ -127,7 +127,7 @@ public class SkillSequenceTests
             + $"campaign.enroll --contact cnt_{Placeholder} --input \"{{\\\"campaign\\\":{{\\\"external_id\\\":"
             + "\\\"7\\\"},\\\"channel\\\":\\\"email\\\",\\\"collision\\\":\\\"skip\\\",\\\"start\\\":"
             + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\" --idempotency-key q3-latam-enrol-marta";
-        const string Start = $"jason campaign start cmp_{Placeholder}";
+        const string Start = $"jason campaign start cmp_{Placeholder} --actor human:Marta --reason 'Marta said: start it'";
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
         const string Planned = $"jason workitem list --campaign cmp_{Placeholder} --status created --order due";
         const string HowMany = $"jason workitem count --campaign cmp_{Placeholder}";

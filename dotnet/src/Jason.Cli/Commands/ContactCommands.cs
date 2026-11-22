@@ -86,7 +86,7 @@ public static class ContactCommands
         var summary = Choice<CampaignSummaryFilter>.Only(new Option<string?>("--summary")
         {
             Description = "Only the people one count of campaign summary counts in at least one campaign not archived, or in the one --campaign names: "
-                + "waiting, failed, working, new, idle, sequence, out or removed. Not with --channel or --value.",
+                + "waiting, failed, working, new, idle, sequence, out, paused, finished or removed. Not with --channel or --value.",
         });
         var order = Choice<ContactListOrder>.Only(new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." });
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };

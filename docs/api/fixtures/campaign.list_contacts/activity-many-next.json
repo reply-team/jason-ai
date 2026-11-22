@@ -64,7 +64,9 @@
               "decision_id": null
             }
           }
-        ]
+        ],
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

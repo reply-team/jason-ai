@@ -39,10 +39,10 @@ public class CampaignPeopleAudienceTests
         }
 
         Assert.Equal(
-            new SummaryCounts(world.Spring.Id, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
+            new SummaryCounts(world.Spring.Id, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Paused: 0, Finished: 1, Removed: 1),
             Assert.Single(await CampaignPeople.SummaryCountsAsync(db, spring, first.Id, withoutArchived, Ct)).Value);
         Assert.Equal(
-            new SummaryCounts(0, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
+            new SummaryCounts(0, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Paused: 0, Finished: 1, Removed: 1),
             await CampaignPeople.SummaryTotalAsync(db, spring, first.Id, withoutArchived, Ct));
     }
 
@@ -86,7 +86,7 @@ public class CampaignPeopleAudienceTests
         int[] spring = [world.Spring.Id];
 
         Assert.Empty(await CampaignPeople.SummaryCountsAsync(db, spring, empty.Id, withoutArchived: false, Ct));
-        Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, withoutArchived: false, Ct));
+        Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, withoutArchived: false, Ct));
         Assert.Empty(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
         Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
         Assert.Empty(await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.People, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));

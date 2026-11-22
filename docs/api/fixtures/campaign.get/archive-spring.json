@@ -40,6 +40,7 @@
         "mode": "every_message",
         "source": "default"
       }
-    }
+    },
+    "deep_review_due_at": "2026-10-17T09:00:00.000Z"
   }
 }

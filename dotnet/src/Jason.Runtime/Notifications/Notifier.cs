@@ -81,10 +81,10 @@ public sealed class Notifier(
 
             if (!state.Started)
             {
-                await StartAsync(db, ct).ConfigureAwait(false);
+                await StartAsync(db, options.Replies, ct).ConfigureAwait(false);
             }
 
-            await ReadAsync(db, ct).ConfigureAwait(false);
+            await ReadAsync(db, options.Replies, ct).ConfigureAwait(false);
 
             // Until this runtime has a start to count the grace from, nothing is due.
             if (status.RuntimeStartedAt is not { } startedAt)
@@ -129,7 +129,7 @@ public sealed class Notifier(
         }
     }
 
-    private async Task StartAsync(JasonDbContext db, CancellationToken ct)
+    private async Task StartAsync(JasonDbContext db, bool replies, CancellationToken ct)
     {
         var last = await db.Journal.AsNoTracking()
             .Where(e => e.Kind == JournalKinds.NotificationSent)
@@ -167,7 +167,7 @@ public sealed class Notifier(
                 return;
             }
 
-            state.Start(head.Value.Id, head.Value.PublicId, lastDeliveredAt, await FoldAsync(db, resume, head.Value.Id, ct).ConfigureAwait(false), deliveredThrough);
+            state.Start(head.Value.Id, head.Value.PublicId, lastDeliveredAt, await FoldAsync(db, resume, head.Value.Id, replies, ct).ConfigureAwait(false), deliveredThrough);
             return;
         }
 
@@ -193,9 +193,10 @@ public sealed class Notifier(
 
     /// <summary>
     /// The triggers in <c>(after, upTo]</c>, as one burst: one aggregate — a count and the oldest and newest times — over
-    /// the index on <c>kind</c>; null when there are none.
+    /// the index on <c>kind</c>; null when there are none. The replies' lines, which only a read around them decides, while
+    /// <paramref name="replies"/> says they are said at all.
     /// </summary>
-    private static async Task<Burst?> FoldAsync(JasonDbContext db, int after, int upTo, CancellationToken ct)
+    private static async Task<Burst?> FoldAsync(JasonDbContext db, int after, int upTo, bool replies, CancellationToken ct)
     {
         var folded = await db.Journal.AsNoTracking()
             .Where(e => e.Id > after && e.Id <= upTo && (e.Kind == JournalKinds.ApprovalRequested || e.Kind == JournalKinds.DecisionRaised))
@@ -228,7 +229,28 @@ public sealed class Notifier(
         var blocked = blocks is null || blocks.Lines == 0 ? null : new Burst(blocks.Lines, blocks.Oldest, blocks.Newest);
         var held = await KeptAsync(BudgetHoldLines.Of(db), BudgetHoldLines.Holds, after, upTo, ct).ConfigureAwait(false);
         var bounced = await KeptAsync(BounceLines.Of(db), BounceLines.Bounced, after, upTo, ct).ConfigureAwait(false);
-        return Joined(Joined(Joined(Joined(Joined(asked, protective), unread), blocked), held), bounced);
+        var replied = replies ? await RepliedAsync(db, after, upTo, ct).ConfigureAwait(false) : null;
+        return Joined(Joined(Joined(Joined(Joined(Joined(asked, protective), unread), blocked), held), bounced), replied);
+    }
+
+    /// <summary>
+    /// The lines in <c>(after, upTo]</c> that wake a pointer for a reply, as one burst: their positions decided in the database,
+    /// then their times read by position, a batch at a time.
+    /// </summary>
+    private static async Task<Burst?> RepliedAsync(JasonDbContext db, int after, int upTo, CancellationToken ct)
+    {
+        var waking = await ReplyLines.Waking(db, after + 1, upTo).ToListAsync(ct).ConfigureAwait(false);
+        Burst? kept = null;
+        foreach (var batch in waking.Chunk(ReadBatch))
+        {
+            var times = await db.Journal.AsNoTracking().Where(e => batch.Contains(e.Id)).Select(e => e.Ts).ToListAsync(ct).ConfigureAwait(false);
+            foreach (var at in times)
+            {
+                kept = kept?.With(at) ?? new Burst(1, at, at);
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>
@@ -270,7 +292,7 @@ public sealed class Notifier(
         : other is null ? one
         : new Burst(one.Lines + other.Lines, other.Oldest < one.Oldest ? other.Oldest : one.Oldest, other.Newest > one.Newest ? other.Newest : one.Newest);
 
-    private async Task ReadAsync(JasonDbContext db, CancellationToken ct)
+    private async Task ReadAsync(JasonDbContext db, bool replies, CancellationToken ct)
     {
         var cursor = state.Cursor;
         var lines = await db.Journal.AsNoTracking()
@@ -311,10 +333,16 @@ public sealed class Notifier(
             ? (await BounceLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => new { e.Id, e.New }).ToListAsync(ct).ConfigureAwait(false))
                 .Where(line => BounceLines.Bounced(line.New)).Select(line => line.Id).ToHashSet()
             : new HashSet<int>();
+
+        // A run's end wakes one only when the run judged a reply a person's own, first; a verdict only when its run had
+        // already ended. Neither line says so alone, and while the switch is off, neither wakes anything.
+        var replied = replies && lines.Any(line => ReplyLines.MayWake(line.Kind))
+            ? (await ReplyLines.Waking(db, oldest, newest.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet()
+            : new HashSet<int>();
         state.Advance(
             newest.Id,
             newest.PublicId,
-            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id) || holds.Contains(line.Id) || bounces.Contains(line.Id)).Select(line => line.Ts));
+            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id) || holds.Contains(line.Id) || bounces.Contains(line.Id) || replied.Contains(line.Id)).Select(line => line.Ts));
         if (lines.Count < ReadBatch)
         {
             return;
@@ -325,7 +353,7 @@ public sealed class Notifier(
         var head = await NewestAsync(db, ct).ConfigureAwait(false);
         if (head is { } top && top.Id > newest.Id)
         {
-            state.Advance(top.Id, top.PublicId, await FoldAsync(db, newest.Id, top.Id, ct).ConfigureAwait(false));
+            state.Advance(top.Id, top.PublicId, await FoldAsync(db, newest.Id, top.Id, replies, ct).ConfigureAwait(false));
         }
     }
 }

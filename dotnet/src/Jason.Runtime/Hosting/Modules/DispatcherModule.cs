@@ -96,7 +96,8 @@ public static class DispatcherModule
         // scan rather than the setting.
         services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
-        services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
+        // Tried rather than added: the campaigns module states it too, for a campaign going live, and one seam is one value.
+        services.TryAddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
         services.AddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
