@@ -619,7 +619,9 @@ their own: who was worked on, contacted, replied or opted out since they landed.
   anything.
 - **Knowing what a reply says.** The runtime records that a thread moved (`inbound_reply_observed`,
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
-  campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
-  one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
+  campaign's own, and wakes the manager; it never reads or classifies the reply itself. A person is told one came only
+  once a role, inside a run, has judged it a person's own, by a pointer at the end of that run
+  ([notifications](notifications.md) §1). Reading it, and answering it, is the responder's; what it means for the
+  campaign is the manager's.
 - **Allowing in Jason Desktop.** The approval panel in Jason Desktop approves or rejects a search; allowing more people under its
   audience is `jason approval approve --allow` or `jason approval set-standing` for now.

@@ -309,7 +309,10 @@ line.
 
 - **Reading a reply for meaning.** A line names a thread; the respond step (§1) queues the `conversation.get` that reads
   it and the responder that decides what it calls for. Nothing in the runtime reads what it says.
-- **Telling a person.** A reply is not notified; the responder and the manager's check-in are what it wakes.
+- **Telling a person of a reply no role judged.** A thread that moved is not notified by its line here; the responder
+  and the manager's check-in are what it wakes. A person hears of a reply once a role, inside a run, judges it a
+  person's own, when that run ends ([notifications](notifications.md) §1); a reply no responder was made for and no
+  role judged is not said.
 - **A cadence per campaign,** and a read of any plugin but the one the campaign's route names.
 - **Telling a person that a source of events keeps failing.** Nothing notifies it; while it fails, its campaigns are
   read here.

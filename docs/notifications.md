@@ -7,7 +7,7 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Seven things, and only these:
+Eight things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
@@ -39,16 +39,26 @@ Seven things, and only these:
   history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified. Which
   campaign a bounce was in, and whose email it was where the line names a contact, the person's agent reads
   from those lines; the pointer says only how many.
+- **a reply a person wrote** — a reply a role judged, inside a run, a person's own: a `reply_classified` verdict with the
+  nature `person` that names the run's attempt ([inbound-sync.md](inbound-sync.md)). It wakes a pointer when the run that
+  judged it ends — its `workitem_succeeded`, `workitem_failed` or `workitem_expired` line — so the approval the answer
+  the responder drafted needs, parked at the claim a tick later, is said in the same pointer; a verdict recorded after its
+  run already ended wakes one by its own line. The pointer counts each reply once, by the key every verdict on it
+  carries, however many campaigns judged it, and never again once a pointer that reached anybody said it. A verdict a
+  person records outside a run is one they already know of, the desktop chat's is never a person's, and an automatic
+  answer, a bounce, an opt-out and a verdict that does not say are no person's reply: none of them is counted, and an
+  opt-out tells nobody. `Notifications:Replies` turns this one off alone (§9). Who replied, and in which campaign, the
+  person's agent reads from those lines; the pointer says only how many.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
-that failed, not a block that cleared, not a reply the provider detected or an invitation accepted, and not a
+that failed, not a block that cleared, not a reply no role judged a person's own or an invitation accepted, and not a
 protective action somebody cancelled — a cancellation is a decision. A person who answers a question is not told that
 they answered it.
 
-A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many
-accounts have events Jason did not read, how many provider blocks hold how many work items, how many items wait on a
-launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to
-it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through their
+A notification is a pointer: how many approvals and questions are waiting, how many replies came in, how many
+protective actions failed, how many accounts have events Jason did not read, how many provider blocks hold how many work
+items, how many items wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and
+nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through their
 agent, or `jason approval list` and `jason approval approve`.
 
 ## 2. When
@@ -122,10 +132,27 @@ Jason
 Ask your agent what bounced.
 ```
 
+And where replies came in:
+
+```text
+Jason
+2 replies came in.
+Ask your agent who replied.
+```
+
+And where a reply came in and the answer the responder drafted waits for a yes, under the default send mode:
+
+```text
+Jason
+1 approval is waiting in Jason. 1 reply came in.
+Ask your agent, or run jason approval list and jason decision list.
+```
+
 The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
-answered before it was said says nothing at all; how many protective actions failed, how many accounts have events
-Jason did not read, how many provider blocks opened, and how many emails bounced, **since the last notification that
-reached anybody** — counted from that one's line, so a notification that reached nobody leaves them for the next; of
+answered before it was said says nothing at all; how many replies came in, how many protective actions failed, how many
+accounts have events Jason did not read, how many provider blocks opened, and how many emails bounced, **since the last
+notification that reached anybody** — counted from that one's line, so a notification that reached nobody leaves them
+for the next; of
 those blocks, only the ones still open when it is sent, with the work items they hold then; how many items wait on a
 daily limit, counted when it is sent, as approvals are; and where to look. Said beside anything else, a hold, a
 provider block, an account whose events were not read or an email that bounced makes where to look the commands of
@@ -142,8 +169,12 @@ agent.
 A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations
 accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named
 in the order the things are said until the next would not fit the message the delivery contract takes, and the things
-after it are left to the agent the pointer names first: the things said first keep their commands, and seven things
-said at once still fit. Beside a provider block or a hold, failed protective work names one campaign and counts the
+after it are left to the agent the pointer names first: the things said first keep their commands, and eight things
+said at once still fit. A reply has no command of its own either: the journal's list of verdicts shows the automatic
+answers, the bounces, the opt-outs and a person's own verdicts beside the replies it counts, so a reply is left to the
+agent too. It is said straight after the approvals and questions, since the approval an answer needs is said in the
+sentence before it, and its count is always said: where the pointer is full, the hold's way out is left out first, and
+then the commands of the things said last. Beside a provider block or a hold, failed protective work names one campaign and counts the
 rest, and beside both it names none. Past three campaigns, the rest are counted:
 "… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the longest pointer fits
 whatever the counts are; the line keeps the counts themselves. That is every field.
@@ -156,7 +187,9 @@ nothing travels but how many such accounts there are. Of a provider block, nothi
 and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
 Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that
 bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the
-bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the
+bounce, the plugin or a campaign. Of a reply, nothing travels but how many came in: not the person, the address, what
+they wrote, the thread, the verdict's words, the plugin or a campaign. The pointer is made from eight counts, those
+ids, and nothing else — and in the
 Windows toast alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a
 click opens on (§7). That id is never in the words, never in a plugin channel's input, and never in a toast on macOS or
 Linux. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written by the person
@@ -261,6 +294,15 @@ is one. It is carried forward by a notification that reached nobody the same way
 a line written before 0.43.0 has none. An event the store keeps as history says no line and is not counted; a span read
 again that says an older bounce as a line counts it then ([events.md](events.md) §6).
 
+`counts.replies` is how many replies a role judged a person's own in the same window, counted by reply: by the key
+every `reply_classified` verdict on one reply carries, in each campaign that judged it, of the verdicts that name an
+attempt, say the nature `person` and carry no `confined` mark, less the replies such a verdict had already said at or
+before the window's start — so one reply judged in two campaigns is one, and a reply judged again later, as the manager
+does when it records a person's answer on it, is not counted again. It is carried forward by a notification that
+reached nobody the same way, and sent to a channel only as words; it is 0 while `Notifications:Replies` is `false`, and a
+line written before 0.50.0 has none. The verdict's position decides what is counted, the run's end only when it is
+said: a run whose reply an earlier pointer already counted ends into a burst that says nothing new.
+
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the
 delivery contract refuses before the plugin runs, `input_invalid` (`validation`); or `not_attempted`, with its reason,
@@ -286,10 +328,10 @@ times the channel was tried.
 
 A transient failure is tried once more, thirty seconds later, and nothing else is ever repeated: a pointer that may
 have arrived is not sent twice. Three cases write no line — every channel off (nothing is read at all), nothing of the
-seven things of §1 to say by the time it is sent, and a runtime that stops while it sends, whose successor reads the
+eight things of §1 to say by the time it is sent, and a runtime that stops while it sends, whose successor reads the
 same lines and sends once. One case writes a line though nothing reached anybody: channels exist and none could, which
 moves the watermark so the same lines are not said again — except what is counted in a window, failed protective work,
-accounts not read, provider blocks and bounces, whose window moves only when somebody was reached.
+accounts not read, provider blocks, bounces and replies, whose window moves only when somebody was reached.
 
 ```sh
 jason journal list --kind notification_sent
@@ -385,6 +427,7 @@ the setting's path and expected type for a mistyped one.
 |---|---|---|
 | `Notifications:Enabled` | `true` | off means nothing is read, sent or written; no verb writes it |
 | `Notifications:Toast` | `true` | the operating system's own notification; `jason notification enable` or `disable` `toast` writes it |
+| `Notifications:Replies` | `true` | whether a reply a role judged a person's own is said (§1); off, none wakes a pointer and `counts.replies` is 0; no verb writes it |
 | `Notifications:QuietSeconds` | `60` | how long the newest line of a burst must be quiet, 1 to 3600 |
 | `Notifications:MaxWaitSeconds` | `600` | how long the oldest line of a burst that never settles may wait, from `QuietSeconds` to 86400 |
 | `Notifications:MinIntervalMinutes` | `30` | the least time between two notifications that reached anybody, 0 to 1440; 0 is no floor |
@@ -403,7 +446,8 @@ the desktop's chat never runs them.
 
 - There is no verb for every notification at once: `Notifications:Enabled` is a line of the settings file. While it is
   `false`, turning a channel on is refused as `notifications_off`, which names that line; turning one off is still
-  written.
+  written. Nor is there one for replies alone: `Notifications:Replies` is a line of the file too, and it changes what
+  is said, never a channel.
 - A plugin is a channel only where §8 names it, with its binding, which a switch cannot write: an installed plugin
   nothing names is refused as `notification_channel_not_configured`, and so is turning on a named one a notification
   would not be tried on — the plugin not loaded, not declaring the delivery contract, or its binding refused by its own
