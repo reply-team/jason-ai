@@ -40,7 +40,8 @@
         "finished_at": "2026-10-16T08:41:00.000Z",
         "campaign_name": "Autumn outreach",
         "contact_name": "Ada Lovelace",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_10",
@@ -68,7 +69,8 @@
         "finished_at": "2026-10-16T08:10:00.000Z",
         "campaign_name": "SMB test",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_11",
@@ -101,7 +103,8 @@
         "finished_at": "2026-10-16T07:58:00.000Z",
         "campaign_name": "Autumn outreach",
         "contact_name": "Tomás Aguilar",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_12",
@@ -129,7 +132,8 @@
         "finished_at": "2026-10-16T06:00:00.000Z",
         "campaign_name": "Autumn outreach",
         "contact_name": null,
-        "running_since": null
+        "running_since": null,
+        "entry": null
       }
     ],
     "next_cursor": null

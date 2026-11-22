@@ -55,6 +55,7 @@
     },
     "campaign_name": "Spring launch",
     "contact_name": "Ines Duarte",
-    "review_hash": "sha256:recorded-4"
+    "review_hash": "sha256:recorded-4",
+    "entry": null
   }
 }

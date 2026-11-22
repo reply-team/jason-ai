@@ -39,7 +39,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": "Ines Duarte",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       },
       {
         "id": "wi_2",
@@ -67,7 +68,8 @@
         "finished_at": null,
         "campaign_name": "Spring launch",
         "contact_name": null,
-        "running_since": "2026-10-15T12:00:00.000Z"
+        "running_since": "2026-10-15T12:00:00.000Z",
+        "entry": null
       }
     ],
     "next_cursor": null
