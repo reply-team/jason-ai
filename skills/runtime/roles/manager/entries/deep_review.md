@@ -104,12 +104,22 @@ touch goes three days after the first and the third four days after the second.
 **The next touch is yours, one at a time, at a review.** For a person whose last touch is older than the line's days,
 who has not replied and whose line is neither held nor over, create the next touch at this review: never earlier, and
 never the whole line at once. A touch created only once it is due is never waiting when a reply comes; a line queued
-ahead would make every reply a race against letters already waiting. You write no message yourself. Where a
-copywriter's or a personalizer's item has already answered with this touch's text, create the send from it, as written,
-a template where the copywriter gave one; otherwise create that item now — the copywriter's for a text the batch's touch
-shares, the personalizer's for one person — and the send at the review after it has answered. Carry any doubt their
-answer names, as "A send you create carries the doubt it came with" in your skill says. Each touch's send has its own
-key, naming the person and the touch:
+ahead would make every reply a race against letters already waiting. You write no message yourself.
+
+**A follow-up is the copywriter's general template.** At the first batch the planner had the copywriter write the
+campaign's line, the first letter's frame and each follow-up as a general template, and the follow-ups of every batch
+are sent from it: create the send from that template, as written, with no role run. Only where you decide that one
+person needs words of their own — something known of them that the template cannot carry, which your line says —
+create a personalizer's item for that person alone, and the send at the review after it has answered; never one for a
+batch. Where the copywriter's answer holds no template for this touch, create one copywriter's item for the text the
+batch's touch shares, and the sends at the review after it has answered. Carry any doubt their answer names, as "A send
+you create carries the doubt it came with" in your skill says. The copywriter's answer is a read away:
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role copywriter --order finished
+```
+
+Each touch's send has its own key, naming the person and the touch:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"ann@example.com"},"message":{"format":"email","subject":"Following up on my letter","body":"A short note after my letter last week: the price list is ready whenever it is useful to you."}}' --reason "touch 2 of 3: the first went five days ago and there is no reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-touch-2-cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
@@ -142,18 +152,29 @@ what came of it before you widen:
   is not widened: a second batch would only stack approvals in front of the person.
 - **Stop and ask.** Failures the failed inbox cannot explain, bounces above what `sending-guardrails` allows, or a
   provider block: widen nothing, and ask one question as those sections of your skill say.
+- **The first batch is read before the campaign widens.** The deep review that first finds every first touch of the
+  first batch gone, and the days the line gives before the next touch passed for them, creates one analyst's item to
+  read that batch — the audience, the messages and the delivery, with the replies, bounces and failures that came in —
+  once for the campaign; the widening after the first batch waits for its answer. At the review after it has answered,
+  take the turn: where its reading says the batch works and the campaign's context already allows going on, widen at
+  that review; otherwise raise one question with its reading and your recommendation — go on, change course, or stop —
+  and widen on an answer to go on, at the review that answer wakes. A change of course is the planner's, on the
+  analyst's reading.
 - **Widen.** Once every first touch of the batch has gone and nothing of it says stop, the next batch goes, the same
-  size as the first, from the people nobody has started on, on the messages the first was planned with. Where the
-  planner's pilot asked the person whether to go on, their answer is the word: widen on an answer to go on, at the
-  review that answer wakes; where the campaign's context already allows going on, widen at this review. A change of
-  course is the analyst's reading at the pilot's end, and then the planner's.
+  size as the first, from the people nobody has started on, on the messages the first was planned with; after the
+  first batch, only once the turn above has been taken.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --context '{"brief":"the first batch has gone out cleanly: plan the next batch of 20 people from those nobody has started on, on the same messages, and create the first touch for each","batch":20}' --reason "the first batch went out cleanly" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-batch-2
 ```
 
-Reply rates take days, and widening does not wait for them: it waits for the batch to have gone out cleanly. Whether the
-campaign works at all is the analyst's judgement, at the end of the pilot the planner runs.
+Reply rates take days, and widening does not wait for them: it waits for the batch to have gone out cleanly, and the
+first batch for the analyst's reading too. Whether the campaign works at all is the analyst's judgement, which you ask
+for once at the first batch and again only where the replies are not coming, below.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role analyst --context '{"brief":"the first batch of 20 has had its first letters and the days before the second: read whether the audience, the messages and the delivery work, before the campaign widens"}' --reason "the first batch is read before widening" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-read-first-batch
+```
 
 ## When to tell the person
 

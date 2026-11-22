@@ -57,10 +57,12 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind campaign_sta
    jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner
    ```
 
-3. **Hand the first batch to the planner, by one item.** The planner runs the first batch as its pilot and raises each
-   role's work itself — research where the plan needs it, the first touch for each person of the batch, the hold for
-   their replies and the analyst's reading — so you create no researcher's, copywriter's, personalizer's or critic's
-   item beside it:
+3. **Hand the first batch to the planner, by one item.** The planner runs the first batch as its pilot, the medium
+   chain its skill orders, and raises each role's work itself — one copywriter's item for the campaign's line, research
+   for one person only where the person asked or it can say why, one personalizer's item for each person's first letter,
+   and the first touch for each person of the batch — so you create no researcher's, copywriter's, personalizer's or
+   critic's item beside it. What follows the first touches is yours, at the deep reviews: the follow-ups, the end of each
+   line, the analyst's reading of the first batch and the widening:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role planner --context '{"brief":"the campaign has started: run its first batch of 20 people, from those nobody has started on, as your pilot","batch":20,"started":"jrn_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"}' --reason "the campaign started" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-first-batch

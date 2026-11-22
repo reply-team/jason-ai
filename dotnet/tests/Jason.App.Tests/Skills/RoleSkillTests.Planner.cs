@@ -225,10 +225,12 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// The pilot is several runs of the planner, each raising the next step's work and ending by waiting for it, in the
-    /// order the runtime's own end-to-end chain takes: research, the sends a person approves, a hold for the replies, the
-    /// analyst, and the turn taken back to the person. Said in the launched planner's own part of the file, because the
-    /// judgement it shares with the session file is the same wherever the planner works, and a session does not wait.
+    /// The pilot is the medium chain: three runs of the planner, each raising the next step's work and ending by waiting
+    /// for it — the line's messaging by one copywriter's item, with research only where the person asked or the planner can
+    /// say why; one personalizer's item per person for the first letter, written from what is already known; and one send
+    /// per person. The replies, the follow-ups, the analyst's reading and the turn after it are the manager's, at its deep
+    /// reviews. Said in the launched planner's own part of the file, because the judgement it shares with the session file
+    /// is the same wherever the planner works, and a session does not wait.
     /// </summary>
     [Fact]
     [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
@@ -237,7 +239,7 @@ public partial class RoleSkillTests
         var file = SkillPack.Find("planner").File;
         var skill = Flattened("planner");
 
-        var steps = new[] { "**Research.**", "**The sends.**", "**The replies.**", "**The reading.**", "**The turn.**" };
+        var steps = new[] { "### The medium chain", "**The line.**", "**The first letters.**", "**The sends.**", "**A later batch**" };
         var at = steps.Select(step => skill.IndexOf(step, StringComparison.Ordinal)).ToList();
         Assert.True(
             at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
@@ -245,17 +247,38 @@ public partial class RoleSkillTests
 
         Assert.Contains("each run raises the next step's work, waits for it with `jason workitem wait`, and ends", skill, StringComparison.Ordinal);
         Assert.Contains("A pilot is the campaign's first batch: twenty people, unless the campaign's context names another number as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
-        Assert.Contains("Raise a researcher's item for each person of the batch, and wait on all of them.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("For a pilot of ten people", skill, StringComparison.Ordinal);
+
+        // The line is the copywriter's, once for the campaign; research for one person is raised only where it was asked
+        // for or the planner can say why, and nobody is researched by default.
+        Assert.Contains("Raise one copywriter's item for the campaign's line: the first letter's frame, and each follow-up as a general template, one message for the batch rather than one per person.", skill, StringComparison.Ordinal);
+        Assert.Contains("Raise a researcher's item for one person only where the person who owns the campaign asked for research, or you can say why this person needs it, and say why in its brief; nobody is researched by default.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Raise a researcher's item for each person of the batch, and wait on all of them.", skill, StringComparison.Ordinal);
+
+        // One personalizer per person, never one for the batch, writing from what is already known, carried in its context.
+        Assert.Contains("raise one personalizer's item for each person of the batch, never one for the whole batch", skill, StringComparison.Ordinal);
+        Assert.Contains("each writes that person's first letter from what is already known", skill, StringComparison.Ordinal);
+        Assert.Contains("its context carries all of it, since a personalizer does not read the campaign", skill, StringComparison.Ordinal);
 
         // The judgement both seats share says the same number where it names the pilot.
         Assert.Contains("The deep work per person and the first outreach go to a pilot, the campaign's first batch: twenty people, or the number the person named, which the campaign's context keeps as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
         Assert.Contains("Each send goes to its claim: it parks for a person to approve what it would send, unless they have chosen that this kind of contact goes automatically", skill, StringComparison.Ordinal);
-        Assert.Contains("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
+        Assert.Contains("Under an automatic mode the runtime adds one critic for each send by itself.", skill, StringComparison.Ordinal);
         Assert.Contains("A reply that arrives meanwhile is the manager's and the responder's, never yours.", skill, StringComparison.Ordinal);
-        Assert.Contains("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
-        Assert.Contains("Their answer wakes the manager, not you.", skill, StringComparison.Ordinal);
         Assert.Contains("rather than wait for the same thing again", skill, StringComparison.Ordinal);
+
+        // The pilot ends with the sends: no hold for the replies and no analyst of the planner's own. The follow-ups, the
+        // analyst's reading and the turn are the manager's deep reviews', and a follow-up is the copywriter's template.
+        Assert.Contains("Your pilot ends with the sends.", skill, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups, the end of each line, the analyst's reading of the first batch and the turn after it are the manager's, at its deep reviews", skill, StringComparison.Ordinal);
+        Assert.Contains("each follow-up is a send from the copywriter's template, written for one person by a personalizer only where the manager decides so", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Their answer wakes the manager, not you.", skill, StringComparison.Ordinal);
+
+        // A later batch skips the line and is two runs.
+        Assert.Contains("is the same chain without the line, which the first batch's copywriter already wrote", skill, StringComparison.Ordinal);
+        Assert.Contains("so it is two runs of you", skill, StringComparison.Ordinal);
 
         // A printed moment is in the past by the time a planner reads it, and a wait until a past moment is refused.
         Assert.Contains("The moments in these two lines are examples: work yours out from now", skill, StringComparison.Ordinal);
@@ -264,9 +287,9 @@ public partial class RoleSkillTests
             .Where(line => line.StartsWith("jason workitem wait ", StringComparison.Ordinal))
             .ToList();
         Assert.True(
-            waits.Any(line => line.Contains(" --on ", StringComparison.Ordinal))
-            && waits.Any(line => line.Contains(" --until ", StringComparison.Ordinal) && !line.Contains(" --on ", StringComparison.Ordinal)),
-            $"The planner prints [{string.Join(" | ", waits)}]: a wait on the items a step raised, and a hold with --until alone.");
+            waits.Count(line => line.Contains("the first letters", StringComparison.Ordinal) || line.Contains("the line and the research", StringComparison.Ordinal)) == 2
+            && waits.All(line => line.Contains(" --on ", StringComparison.Ordinal) && line.Contains(" --until ", StringComparison.Ordinal)),
+            $"The planner prints [{string.Join(" | ", waits)}]: a wait on the line and one on the first letters, each on the items its step raised with a deadline of its own, and no hold.");
 
         // The craft block is the session file's as well, and a session never waits: the pilot as waits is the launched planner's.
         var craft = CraftBlock.Extract(file) ?? string.Empty;
