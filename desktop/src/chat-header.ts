@@ -114,13 +114,18 @@ export interface TurnStart {
     program: 'claude' | 'codex';
     /** A Claude Code start given none of the person's own settings, servers or plugins (`claudeSealed`). */
     sealed: boolean;
+    /**
+     * Whether a Full access turn could follow in this conversation in this run of the desktop: false where this start was
+     * narrowed from Full access, or where Full access is not available here now (not offered, held off, below the floor).
+     */
+    fullAccess: boolean;
 }
 
 /**
  * What the header says of the start: the mode it runs in and what the AI does in it, in the menu's own words for the mode
  * (`modeSays`, Codex's where they differ), every turn, since the person may change the mode between turns and the
  * history says only the modes of earlier ones; and, for a sealed Claude Code start, that the person's own configuration
- * is not loaded, which only a Full access turn on their own sign-in loads.
+ * is not loaded, and, where a Full access turn could follow, that only one on their own sign-in loads it.
  */
 export function startSentences(start: TurnStart): string {
     const says = (start.program === 'codex' ? codexModeSays[start.mode] : undefined) ?? modeSays[start.mode];
@@ -129,7 +134,8 @@ export function startSentences(start: TurnStart): string {
         "The person may change the mode between turns, so earlier turns' modes say nothing of this one; each turn's first paragraph names its own.",
     ];
     if (start.program === 'claude' && start.sealed) {
-        parts.push("This turn does not load the person's own Claude Code settings, MCP servers or plugins; only a Full access turn on the person's own sign-in does.");
+        const notLoaded = "This turn does not load the person's own Claude Code settings, MCP servers or plugins";
+        parts.push(start.fullAccess ? `${notLoaded}; only a Full access turn on the person's own sign-in does.` : `${notLoaded}.`);
     }
     return parts.join(' ');
 }

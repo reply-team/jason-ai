@@ -385,9 +385,10 @@ does not find it.
 Each conversation has a mode, chosen from the menu beside the composer (`chat.setMode`, `src/chat-modes.ts`). The mode
 applies to the turns a person starts by sending, from the next one on. Every start's first paragraph, the desktop's own,
 names the mode that start runs in and what the AI does in it, in the menu's words (`startSentences`,
-`src/chat-header.ts`; `modeSays`, held word for word to the page's by a test), and says the mode may change between
-turns, so a resumed conversation's earlier turns never stand for this one's mode; a start sealed from the person's own
-Claude Code configuration also says that only a Full access turn on their own sign-in loads it.
+`src/chat-header.ts`; the words are `modeNames`, `modeSays` and `codexModeSays` in `src/chat-modes.ts`, held word for
+word to the page's by a test), and says that the mode may change between turns and that earlier turns' modes say
+nothing of this one. A start sealed from the person's own Claude Code configuration also says that it does not load it,
+and, where a Full access turn could follow in this run, that only a Full access turn on their own sign-in does.
 
 - **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply
   (below). Claude Code starts with `--permission-mode default`, named every time so that no `defaultMode` of a settings

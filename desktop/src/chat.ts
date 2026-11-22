@@ -1991,8 +1991,14 @@ export class Chat {
         const memory = await this.#memoryFiles(places, memoryGivenTo(conversation, resolved.host, resume));
         const held = digestsOf(memory);
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
+        // Whether a Full access turn could follow in this conversation now, from what the desktop already holds: not where
+        // this start runs in another mode than the conversation's Full access, nor where Full access is not offered, is held
+        // off for this run, or is below the host's floor.
+        const fullAccessFollows = () =>
+            running.mode === 'full_access' ||
+            (this.#modeOf(conversation) !== 'full_access' && this.#fullAccessOffered() && this.bypassUnavailable() === null && fullAccessSentence(version) === null);
         const headFor = (resumed: string | undefined): string =>
-            [header(about, this.#options.account, { mode: running.mode, program: resolved.program, sealed: claudeSealed(running.mode, resolved.keyed) }), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
+            [header(about, this.#options.account, { mode: running.mode, program: resolved.program, sealed: claudeSealed(running.mode, resolved.keyed), fullAccess: fullAccessFollows() }), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
         // Every turn of a conversation runs in its folder, in every mode and on every host: its own, or the shared chat
         // folder for one an earlier desktop made.
         const own = conversation.folder === 'own';

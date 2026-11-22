@@ -210,7 +210,7 @@ test('a title drops every default-ignorable code point, so a name of fillers alo
     assert.equal(nameOf('Spring\u115f outreach'), 'Spring outreach');
 });
 
-const claudeStart = (mode: ChatMode, sealed = mode !== 'full_access') => ({ mode, program: 'claude' as const, sealed });
+const claudeStart = (mode: ChatMode, sealed = mode !== 'full_access', fullAccess = true) => ({ mode, program: 'claude' as const, sealed, fullAccess });
 
 test('the header ends by naming the mode the start runs in and what the AI does in it, in the menu\'s own words, every mode, on one line', () => {
     const expected: Record<ChatMode, string> = {
@@ -229,7 +229,7 @@ test('the header ends by naming the mode the start runs in and what the AI does 
 });
 
 test('on Codex the header says a mode in Codex\'s own words where the menu does', () => {
-    const codex = (mode: ChatMode) => header({ campaign: null }, 'ada', { mode, program: 'codex', sealed: false });
+    const codex = (mode: ChatMode) => header({ campaign: null }, 'ada', { mode, program: 'codex', sealed: false, fullAccess: true });
     assert.match(codex('ask_first'), /This turn runs in Ask first: in it the AI reads and proposes\. Codex cannot ask before it acts\./);
     assert.match(codex('full_access'), /This turn runs in Full access: in it the AI runs commands on this computer without asking, with no sandbox\./);
     assert.match(codex('plan_only'), /This turn runs in Plan only: in it the AI reads and proposes, and changes nothing\./);
@@ -245,16 +245,43 @@ test('a sealed Claude Code start is told the person\'s own configuration is not 
     assert.ok(keyed.endsWith(` ${sealedWords}`));
 });
 
-/** The string each mode has in one `Record` of the page's source, read from its text: the page's code is not the desktop's to import. */
-function pageWords(file: string, name: string): Record<string, string> {
-    const source = readFileSync(new URL(`../../ui/src/${file}`, import.meta.url), 'utf8');
+test('a sealed start Full access cannot follow in this run is told what it does not load, and never that a Full access turn would load it', () => {
+    const notLoaded = "This turn does not load the person's own Claude Code settings, MCP servers or plugins.";
+    for (const mode of ['ask_first', 'auto_edit', 'plan_only'] as const) {
+        const said = header({ campaign: null }, 'ada', claudeStart(mode, true, false));
+        assert.ok(said.endsWith(` ${notLoaded}`), mode);
+        assert.doesNotMatch(said, /only a Full access turn/);
+    }
+});
+
+/**
+ * The string each key has in one `Record` of a page's source, read from its text: the page's code is not the desktop's
+ * to import. Every entry must be a key and one plain string literal; anything else in the record (a concatenation, a
+ * spread, a call, a comment) fails here, so a value the page builds otherwise can never pass on a part of it.
+ */
+function recordWords(source: string, name: string): Record<string, string> {
     const start = source.indexOf(`const ${name}`);
-    assert.ok(start >= 0, `${name} in ${file}`);
-    const body = source.slice(start, source.indexOf('};', start));
+    assert.ok(start >= 0, `${name} in the page's source`);
+    const open = source.indexOf('= {', start);
+    const end = source.indexOf('};', open);
+    assert.ok(open >= 0 && end > open, `${name} is a record`);
+    const body = source.slice(open + 3, end);
+    const entry = /(\w+):\s*(['"])((?:\\.|(?!\2).)*)\2/g;
     const words: Record<string, string> = {};
-    for (const [, mode, quote, text] of body.matchAll(/(\w+):\s*(['"])((?:\\.|(?!\2).)*)\2/g)) words[mode as string] = (text as string).split(`\\${quote}`).join(quote as string);
+    for (const [, key, quote, text] of body.matchAll(entry)) words[key as string] = (text as string).split(`\\${quote}`).join(quote as string);
+    const rest = body.replace(entry, '').replace(/[\s,]/g, '');
+    assert.equal(rest, '', `${name} holds something other than keys and plain string literals: ${rest}`);
     return words;
 }
+
+const pageWords = (file: string, name: string) => recordWords(readFileSync(new URL(`../../ui/src/${file}`, import.meta.url), 'utf8'), name);
+
+test('the reader of the page\'s words fails loudly on a value that is not one plain string literal', () => {
+    assert.deepEqual(recordWords("const a: R = {\n    x: 'one',\n    y:\n        \"two's\",\n};", 'a'), { x: 'one', y: "two's" });
+    for (const source of ["const a: R = { x: 'one' + suffix };", "const a: R = { ...other, x: 'one' };", "const a: R = { x: t('one') };", "const a: R = { x: `one` };", "const a: R = { x: 'one', // more\n};"]) {
+        assert.throws(() => recordWords(source, 'a'), /holds something other than keys and plain string literals/, source);
+    }
+});
 
 test('the desktop says the modes in the page\'s own words, word for word: their names, what each does, and Codex\'s', () => {
     assert.deepEqual(pageWords('console/chat-model.ts', 'modeWords'), { ...modeNames });

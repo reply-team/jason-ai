@@ -26,9 +26,9 @@ const words = 'Which campaigns are waiting on me?';
  * What a set-up chat's turn writes on the host's standard input: the desktop's header, ending with what the start is (by
  * default a Claude Code start in Ask first, the rig's mode, sealed), then the person's words.
  */
-const asked = (text: string, start: TurnStart = { mode: 'ask_first', program: 'claude', sealed: true }) => turnInput(header({ campaign: null }, undefined, start), null, text);
+const asked = (text: string, start: TurnStart = { mode: 'ask_first', program: 'claude', sealed: true, fullAccess: true }) => turnInput(header({ campaign: null }, undefined, start), null, text);
 /** A Codex start in Ask first, as the rig's Codex turns run. */
-const codexAsked = (text: string) => asked(text, { mode: 'ask_first', program: 'codex', sealed: false });
+const codexAsked = (text: string) => asked(text, { mode: 'ask_first', program: 'codex', sealed: false, fullAccess: true });
 
 interface Rig {
     b: Bench;

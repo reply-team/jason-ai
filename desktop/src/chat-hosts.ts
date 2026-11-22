@@ -259,6 +259,14 @@ export const searchRules: readonly string[] = searchVariables.flatMap((name) => 
 export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 
 /**
+ * Whether a Claude Code start is sealed from the person's own configuration (`claudeArguments`): every mode but Full
+ * access, and a turn on a provider's key in every mode, Full access included.
+ */
+export function claudeSealed(mode: ChatMode, keyed: boolean): boolean {
+    return mode !== 'full_access' || keyed;
+}
+
+/**
  * The command line of one Claude Code turn, in the chat's mode, its permission mode named every time
  * (`permissionModes`). Ask first: the host's default, with the turn's settings file, whose hook refuses three kinds
  * before the host's own rules (`hookedSettings`), from the floor of Full access; below it, the inline settings and no
@@ -295,14 +303,6 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
  * does (`hookedSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives, so
  * a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
-/**
- * Whether a Claude Code start is sealed from the person's own configuration (`claudeArguments`): every mode but Full
- * access, and a turn on a provider's key in every mode, Full access included.
- */
-export function claudeSealed(mode: ChatMode, keyed: boolean): boolean {
-    return mode !== 'full_access' || keyed;
-}
-
 export function claudeArguments(turn: ClaudeTurn): string[] {
     const mode = turn.mode ?? 'ask_first';
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');

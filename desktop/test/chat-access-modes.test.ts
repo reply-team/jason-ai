@@ -188,7 +188,7 @@ test('every start\'s first paragraph names the mode that start runs in: the turn
     assert.match(planned ?? '', /This turn runs in Plan only: /);
     assert.match(asked ?? '', /This turn runs in Ask first: /);
     assert.doesNotMatch(asked ?? '', /This turn runs in Plan only/);
-    assert.match(asked ?? '', /does not load the person's own Claude Code settings/);
+    assert.match(asked ?? '', /does not load the person's own Claude Code settings, MCP servers or plugins; only a Full access turn on the person's own sign-in does\./);
     assert.ok(flag(r.hosts()[1]?.args ?? [], '--resume') !== undefined, 'the same conversation, resumed');
     // A Full access start refused by the host is started again in Ask first, and is told so.
     const refused = rig(t, { env: { STUB_BYPASS: 'refused' } });
@@ -199,7 +199,42 @@ test('every start\'s first paragraph names the mode that start runs in: the turn
     assert.match(starts[0]?.stdin ?? '', /This turn runs in Full access: /);
     assert.doesNotMatch(starts[0]?.stdin ?? '', /Claude Code settings/, 'a Full access start on the sign-in loads them');
     assert.match(starts[1]?.stdin ?? '', /This turn runs in Ask first: /);
-    assert.match(starts[1]?.stdin ?? '', /does not load the person's own Claude Code settings/);
+    assert.match(starts[1]?.stdin ?? '', /does not load the person's own Claude Code settings, MCP servers or plugins\./);
+    assert.doesNotMatch(starts[1]?.stdin ?? '', /only a Full access turn/, 'Full access cannot follow in this run: nothing invites it');
+});
+
+test('a Full access start on a provider\'s key is sealed, and its first paragraph says Full access and what stays true of it: only a Full access turn on the person\'s own sign-in loads their configuration', async (t) => {
+    const r = rig(t, { chat: { keyFor: (id) => (id === 'claude-api-key' ? 'sk-planted-anthropic' : undefined) } });
+    const { id } = await r.chat.create();
+    const other = await r.chat.create();
+    await r.turn(id, 'on a key', { host: 'claude-api-key' });
+    await r.turn(other.id, 'on my sign-in', claude);
+    const [onKey, onSignIn] = r.hosts();
+    assert.equal(flag(onKey?.args ?? [], '--permission-mode'), 'bypassPermissions');
+    assert.match(onKey?.stdin ?? '', /This turn runs in Full access: /);
+    assert.match(onKey?.stdin ?? '', /This turn does not load the person's own Claude Code settings, MCP servers or plugins; only a Full access turn on the person's own sign-in does\./);
+    assert.match(onSignIn?.stdin ?? '', /This turn runs in Full access: /);
+    assert.doesNotMatch(onSignIn?.stdin ?? '', /Claude Code settings/);
+});
+
+test('while Full access is held off for this run, a Full access chat\'s turn started in Ask first says Ask first, and no sealed start is invited to a Full access that cannot follow', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    plan(r, [{ unhooked: { tool: 'Bash', input: { command: 'git status' } } }]);
+    await r.turn(id, 'go', claude);
+    assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null });
+    plan(r, [{ say: 'next' }]);
+    await r.turn(id, 'again', claude);
+    const chosen = await r.chat.create();
+    await r.chat.setMode(chosen.id, 'ask_first');
+    await r.turn(chosen.id, 'hello', claude);
+    const [, narrowed, asked] = r.hosts();
+    assert.equal(flag(narrowed?.args ?? [], '--permission-mode'), 'default');
+    for (const start of [narrowed, asked]) {
+        assert.match(start?.stdin ?? '', /This turn runs in Ask first: /);
+        assert.match(start?.stdin ?? '', /This turn does not load the person's own Claude Code settings, MCP servers or plugins\./);
+        assert.doesNotMatch(start?.stdin ?? '', /only a Full access turn/);
+    }
 });
 
 test('Ask first\'s hook stands in front of the host\'s allow rules: a verb the host would run with no card, fed the settings file or the run file, is refused', async (t) => {
