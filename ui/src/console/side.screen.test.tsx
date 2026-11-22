@@ -498,17 +498,35 @@ describe('the sidebar’s look', () => {
         expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
     });
 
-    it('draws each plus as the header’s small quiet button, as the filter is drawn', async () => {
+    it('draws each plus as the header’s small bordered square, where the filter stays quiet', async () => {
         renderConsole(stubDesktop(), 'live');
         await settled();
         for (const each of [newAgent(), newChat()])
             expect(styleOf(each), each.getAttribute('aria-label') ?? '').toMatchObject({
-                width: '25px',
-                height: '25px',
-                border: '0',
-                background: 'none',
-                color: 'var(--mute)',
+                width: '20px',
+                height: '20px',
+                'border-radius': '5px',
+                border: '1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg))',
+                background: 'color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg))',
+                color: 'var(--accent-text)',
             });
+        // The tint is a percentage of the accent that each theme sets, and a hover or a disabled plus reads the same way,
+        // so neither can be beaten by a theme's rest rule: hover is stronger than rest, and disabled has none.
+        const root = styleOf(document.querySelector<HTMLElement>('.jc-console')!);
+        expect([root['--plus-tint'], root['--plus-edge'], root['--plus-tint-hover']]).toEqual(['14%', '38%', '26%']);
+        // Each dark theme (the one chosen and the system's) sets the three, stronger on hover than at rest; the stylesheet
+        // is read as text because the harness reads no rule under @media or a :root selector.
+        const text = readFileSync('src/console/console.css', 'utf8');
+        for (const head of [":root[data-theme='dark'] .jc-console", ":root:not([data-theme='light']) .jc-console"]) {
+            const body = ['--plus-tint: 20%;', '--plus-edge: 45%;', '--plus-tint-hover: 32%;'];
+            expect(text.replace(/\s+/g, ' ').includes(`${head} { ${body.join(' ')} }`), head).toBe(true);
+        }
+        const rule = (selector: string) => styleOf({ matches: (each: string) => each === selector } as never);
+        expect(rule('.jc-console .rbtn.plus:hover')).toMatchObject({
+            background: 'color-mix(in srgb, var(--accent) var(--plus-tint-hover), var(--side-bg))',
+            'border-color': 'var(--accent)',
+        });
+        expect(rule('.jc-console .rbtn.plus[disabled]')).toMatchObject({ background: 'none', color: 'var(--faint)' });
         // Neither is marked: a plus makes its kind, it brings no page forward.
         expect(newAgent().getAttribute('aria-current')).toBeNull();
         expect(newChat().getAttribute('aria-current')).toBeNull();
@@ -522,7 +540,11 @@ describe('the sidebar’s look', () => {
         expect(dots === null || dots.closest('.rrow') !== null).toBe(true);
         expect(rule('.jc-console .rdots')).toMatchObject({ position: 'absolute', opacity: '0' });
         expect(rule('.jc-console .rrow:hover .rdots')).toMatchObject({ opacity: '1' });
-        expect(rule('.jc-console .rrow:focus-within .rdots')).toMatchObject({ opacity: '1' });
+        expect(rule('.jc-console .rrow:has(:focus-visible) .rdots')).toMatchObject({ opacity: '1' });
+        // A row selected by a click keeps focus, which is not keyboard focus: :focus-within must not show the dots.
+        expect(rule('.jc-console .rrow:focus-within .rdots').opacity).toBeUndefined();
+        // :has() has a rule of its own, so an engine without it still shows the dots on hover and while the menu is open.
+        expect(rule('.jc-console .rrow.menu-open .rdots')).toMatchObject({ opacity: '1' });
         // A row with no age keeps the dots' room, so they never cover an amber count; a busy plus looks off.
         expect(rule('.jc-console .recent-row .t:empty')).toMatchObject({ flex: 'none', width: '22px' });
         expect(rule('.jc-console .rbtn[disabled]')).toMatchObject({ color: 'var(--faint)', cursor: 'default' });
