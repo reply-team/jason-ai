@@ -102,7 +102,7 @@ public partial class RoleSkillTests
         Assert.Contains("It is `finished` once it was ended", head, StringComparison.Ordinal);
         Assert.Contains("**You never plan past the ceiling, and you never touch a setting.**", head, StringComparison.Ordinal);
         Assert.Contains("A day's limit is lifted only on the person's word, `jason launches lift` run on their word, by them or by their own session, never by you", head, StringComparison.Ordinal);
-        Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift --actor human:<their name>`", head, StringComparison.Ordinal);
+        Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names it: they tell their agent to ignore the limit, or run `jason launches lift` under their own name", head, StringComparison.Ordinal);
         Assert.Contains("**end a person's line** in this campaign, with a reason", head, StringComparison.Ordinal);
     }
 
