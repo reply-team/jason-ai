@@ -416,7 +416,7 @@ approval row of its own is covered when, in this order: its operation is one a s
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
 (its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
-and its drafts are asked), or by a person who gave their name outside the desktop's chat, or carries a person's answer — a verdict whose
+and its drafts are asked), or by a person who gave their name, outside any run and not under the chat's mark (§The chat's mark), or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
@@ -548,7 +548,7 @@ send waiting on it, after any items its `wait_on` named. A keyed repeat answers 
 create that loses the race on its key leaves no critic behind. A create or a patch that names `send_review` is refused
 `not_allowed` at that field, on every item, whoever sends it, so an item that carries the key was made by the runtime
 and its brief was never changed. Nothing is created under `every_message`, for a send that carries `ask_person`, for one
-written in the desktop's chat, for one about nobody, or where no critic could be launched (no profile resolves for it
+written under the chat's mark, for one about nobody, or where no critic could be launched (no profile resolves for it
 and no entry command does), and the send is then not held. The modes and the contact's kind are read for this once, when
 the send is created: a later change neither adds nor removes the critic, and the claim reads them again when it decides,
 so a contact cold at the create and warm by the claim has no pass and parks `not_reviewed`. No second critic is created
@@ -603,7 +603,7 @@ guard as a standing approval, and in this order:
    that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
    or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
 7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
-   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   wrote it, outside a run and not under the chat's mark, or where the critic the runtime created for this send did:
    the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
    actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
    and whose context was changed since by nobody but the runtime's own actors: a change by a person, a role or the
@@ -623,8 +623,8 @@ above, and its preview carries `send_mode`, the facts and never the code: the `m
 `campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
 and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
 no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
-approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
-a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written under the chat's
+mark, a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
 its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written under the chat's
 mark always waits for the person, whatever the send mode, `every_message` included; one the desktop's chat writes in Ask
 first, Auto-edit or Full access is not marked and follows the campaign's send mode.

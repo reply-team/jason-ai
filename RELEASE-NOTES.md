@@ -19,22 +19,17 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.2-rc.5
-
-This is a candidate, published as a pre-release. It is built on 0.49.1 and carries 0.49.2's work on Jason Desktop's
-chat, with the fixes below. It follows 0.49.2-rc.4 and replaces it. Beside the chat it carries a set of smaller
-changes: the console's left column has an Agents section and a Chats section, an agent's menus open its agent host in
-a terminal, Open in on Windows opens Windows Terminal, Update has a section of its own in Settings, the console says
-when a plugin your routes name cannot run, `--human` says an error as a sentence, the runtime starts at logon by
-default, and the Reply package needs reply-cli 0.22.0.
-
-0.49.1 made Jason on Linux one installation, as on macOS and Windows: Jason Desktop and the `jason` it carries,
-installed, updated and removed once. This candidate carries all of it.
+# Jason 0.49.2
 
 The chat in Jason Desktop now works as a full session. Every new chat starts in Full access, with no box to confirm,
 and does on this computer what a session in a terminal does. It acts on your word: when you say so, it approves and
 answers what waits for you, starts, pauses and archives the campaigns you name, and sets your sender's name and tone of
 voice.
+
+Beside the chat, 0.49.2 brings a set of smaller changes: the console's left column has an Agents section and a Chats
+section, an agent's menus open its agent host in a terminal, Open in on Windows opens Windows Terminal, Update has a
+section of its own in Settings, the console says when a plugin your routes name cannot run, `--human` says an error as
+a sentence, the runtime starts at logon by default, and the Reply package needs reply-cli 0.22.0.
 
 ## What is new since 0.49.1
 
@@ -87,9 +82,10 @@ voice.
   standing approval, and sets the sender's name or tone of voice, with no card; each is recorded under the person the
   command names, as it would be from a terminal. It acts only on your word for that item, by name or as "all of these"
   about a list it showed.
-- **A message the chat writes follows its campaign's send mode.** Outside Plan only, a message the chat writes is
-  treated as one written from a terminal: it follows its campaign's send mode, and under "every message" it still waits
-  for your approval.
+- **A message the chat writes follows its campaign's send mode.** In Ask first, Auto-edit and Full access on Claude
+  Code, and in Full access on Codex, a message the chat writes is treated as one written from a terminal: it follows
+  its campaign's send mode, and under "every message" it still waits for your approval. One written in a turn that can
+  only read and propose, as Plan only and a Codex chat's other modes are, always waits for you.
 - **It asks in words before what cannot be undone.** A direct command is done at once, with no
   "shall I?" and no `--help` first. Before an irreversible or bulk act you did not spell out, "archive all my campaigns"
   say, it says in a sentence or two what will happen, how many and that it cannot be undone, and asks once; your answer
@@ -108,7 +104,7 @@ voice.
   begins, and has a close control; none stays until a restart. The line under the composer still says why a mode fell
   back.
 - **Agents and Chats in the left column.** In the console's left column, Recent is now two sections, **Agents** above
-  **Chats**, each with a small plus, under Search, Needs you, the Feed and Accounts.
+  **Chats**, each with a plus in a small square tinted with the accent, under Search, Needs you, the Feed and Accounts.
   - **Agents** lists your agents by name, the one active most recently first, an agent made from the command line
     among them. Under All it shows the first ten, then **All agents**, which opens the Agents page; under any other
     filter (Needs you, Live, Paused, Draft) it shows every agent the filter keeps.
@@ -121,11 +117,13 @@ voice.
   reach?", with the box and the chips. There is no dialog: rename it when you like. If no AI is connected yet, your
   first message waits, with **Take back**, and goes into the agent's conversation once one is. The palette's New GTM
   agent makes the agent the same way. The plus over Chats and Ctrl+N (⌘N) start a chat about no agent, as before.
-- **A row's menu, behind three dots or a right-click.** Every row of the left column shows a **⋯** button on hover and
-  on focus, which opens the row's menu, as a right-click does. An agent's row offers the actions its own "..." menu
-  offers, among them Open and Archive; a chat's menu has no Archive. For an agent pinned to a provider's campaign,
-  where its route can pause that campaign, Archive... there offers Jason's pause first, as the same dialog in the
-  agent's Settings does: ask in the agent's chat to pause that campaign, and archive once that work has finished.
+- **A row's menu, behind three dots or a right-click.** Every row of the left column shows a **⋯** button while the
+  pointer is over it, while the keyboard's focus is in it and while its menu is open, which opens the row's menu, as a
+  right-click does. A row you clicked shows its time, not the dots, once the pointer leaves it. An agent's row offers
+  the actions its own "..." menu offers, among them Open and Archive; a chat's menu has no Archive. For an agent pinned
+  to a provider's campaign, where its route can pause that campaign, Archive... there offers Jason's pause first, as
+  the same dialog in the agent's Settings does: ask in the agent's chat to pause that campaign, and archive once that
+  work has finished.
 - **Rename in the row.** A row's Rename makes the name a field in place. Enter keeps it, Escape or a click away keeps
   nothing, and a refusal is said under the field. On an agent's row it renames the agent itself, and the new name shows
   in the row, the agent's header and the Agents page at once; the agent's folder stays where it is. On a chat's row it
@@ -203,37 +201,18 @@ voice.
 - **A new campaign's folder is named by when it was made**, for example `2026-11-21-143005-k3x9qa`: the moment in the
   local time of the computer the runtime runs on, then the end of its id. A rename never moves it, and a move to
   another project keeps it. Existing campaigns keep their folders. `jason campaign get --human` shows a `Folder:` line.
-- **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install this candidate as "Upgrading"
-  says. On a Mac where Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the
-  application, its link and its state under `~/Library` to Homebrew, and its report names
-  `brew uninstall --zap --cask jason`, which takes them off. On macOS and Linux, where the older Homebrew formula is
+- **Jason and Homebrew.** Jason Desktop is not yet offered in Homebrew's tap: install it with the one line. On a Mac
+  where Homebrew has placed Jason Desktop, `jason uninstall` takes off what Jason set up and leaves the application, its
+  link and its state under `~/Library` to Homebrew, and its report names `brew uninstall --zap --cask jason`, which
+  takes them off. On macOS and Linux, where the older Homebrew formula is
   still linked beside the `jason` Jason Desktop carries, set-up says so and stops a runtime started from it, and set-up
   and `jason status` name `brew uninstall --formula jason`, which takes it off; every command Jason prints for the
   formula now says `--formula`.
 
 ## Fixed since 0.49.1
 
-- **A new chat's first message no longer falls back to Ask first.** In rc.1 a turn in Full access could be stopped and
-  run again in Ask first, with a box naming a setting you had not made, and the menu dropped to Ask first. A turn now
-  starts in Full access as the menu says.
-- **A question is no longer answered as if you asked it twice.** A conversation whose message had to be started again
-  in Ask first now holds that message once; before, the session it went on in could hold it twice.
-- **A refused Full access turn keeps the whole conversation.** When Claude Code refuses Full access on a turn of a
-  conversation it already holds, and no Full access turn has worked since Jason Desktop started or since Full access
-  was last refused, Jason Desktop now runs that turn in Ask first in that conversation itself, with all of it in
-  Claude Code's memory, instead of in a fresh session given a recap of it. The first refusal after a Full access turn
-  worked still takes the fresh session with the recap.
-- **A tool the mode takes out is no longer taken for a tool that ran unchecked.** In Ask first and Auto-edit, where
-  Claude Code refuses a tool the mode takes out, PowerShell say, in a conversation that used it in Full access, the
-  chat no longer says that Jason's check before each tool did not run, and Full access is still offered afterwards,
-  with no restart. Such a tool that did run keeps the full warning.
-- **The first turn after a change of mode acts in the new mode.** In rc.4, after a turn in Plan only, the first turn
-  in Ask first could still answer that the chat was in Plan only and change nothing; it now acts in Ask first.
 - **Needs you speaks only of what left in sight.** "What you had open is no longer waiting" is said only when the item
   you had open was decided or withdrawn while Needs you was on screen, not on a later visit with other items waiting.
-- **A dialog from a row's menu no longer darkens the whole window.** Archive..., Pause and Start opened from a row of
-  the left column drew a solid box, near black in the dark theme, over the sidebar and the chat behind the dialog;
-  the page now shows through it.
 - **A start at logon that Homebrew's formula registered is moved to the `jason` Jason Desktop carries** on macOS and
   Linux, where the formula is still linked beside it. Before, such a start kept bringing the formula's older runtime
   back at every logon, beside the application's own. Set-up rewrites it and starts nothing. A start naming another
@@ -261,27 +240,12 @@ voice.
 
 ## Upgrading from 0.49.1
 
-- **Installing this candidate.** A candidate is never the latest release, so no update reaches it: an installed Jason
-  Desktop does not move to it, and its `jason update apply` finds nothing newer than 0.49.1. It is installed by naming
-  its version, over 0.49.1, rc.1, rc.2, rc.3 or rc.4, once Jason Desktop is quit (Quit in its tray menu); while Jason
-  Desktop runs it installs nothing and says to quit it. On Windows (PowerShell):
-  ```powershell
-  & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
-  ```
-  On macOS the install line keeps an installed Jason Desktop of another version as it is, so take the installed one off
-  first with `jason uninstall`, which keeps your data directory, then run:
-  ```sh
-  curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
-  ```
-- **On Linux.** The same line, `install.sh` with `--version`, installs this candidate. Where you installed the deb, apt
-  installs this version's deb over 0.49.1's and asks for an administrator's password once, as it did the first time.
-  Where you installed the AppImage, an AppImage already at
-  `~/Applications/jason-desktop-linux-x64.AppImage` stays the installation, so take it off first with `jason
-  uninstall`, which keeps your data directory, then run the line. The first start of this version then sets Jason up
-  again, as after any update. The final 0.49.2 reaches a deb with the system's own updates, Software Updater or
-  `sudo apt update && sudo apt upgrade`, and an AppImage by its own update item or `jason update apply`.
-- **From 0.49.0, rc.1, rc.2, rc.3 or rc.4.** This version adds no migration to the database, so each opens the same
-  data as it is. 0.49.1's Linux work comes with it.
+- **Updating from 0.49.1.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
+  `jason update apply` in a terminal, which hands the update to Jason Desktop. On Linux, a deb takes it with the
+  system's own updates, Software Updater or `sudo apt update && sudo apt upgrade`, and an AppImage by its own update
+  item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
+- **Your data opens as it is.** This version adds no migration to the database, so it opens the data 0.49.1 or 0.49.0
+  left as it is.
 - **Your agents and chats move into the two sections by themselves.** Nothing to do: a chat that set up an agent is
   that agent's conversation and appears under Agents, and agents made before keep their names and folders.
 - **The runtime now starts at logon by default:** installing or updating registers it once, unless you turned it off
@@ -297,8 +261,8 @@ voice.
   it was installed, with `npm install -g reply-cli`; where npm's global folder is not your account's own,
   `npm install -g --prefix ~/.local reply-cli`.
 - **Your chats run in Full access.** A chat made before this release opens in Full access, as a new one does; a chat
-  in Plan only keeps Plan only. 0.49.0 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
-  again from the menu; from now on it is kept. The standing choice of Full access that 0.49.0 offered is gone, and its
+  in Plan only keeps Plan only. 0.49.1 did not keep Ask first or Auto-edit with a chat, so choose such a chat's mode
+  again from the menu; from now on it is kept. The standing choice of Full access that 0.49.1 offered is gone, and its
   file is removed at the first start.
 - **Going back.** If you go back to an earlier Jason Desktop and then return to this one, the chats that earlier
   version used open in Ask first, a chat in Plan only keeps it, and each says why once. The earlier version does not
