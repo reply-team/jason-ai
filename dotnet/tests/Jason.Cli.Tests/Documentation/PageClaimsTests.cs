@@ -1341,6 +1341,42 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The desktop's page says that a chat the person opens has the caret in its box, so they can type at once, and that
+    /// nothing else moves it there; Start opened by Jason's mark too. The console notes the focus at each of those acts
+    /// and the dock gives the box of the pane it shows the focus, with the caret at the end; a move given no act moves none.
+    /// </summary>
+    [Fact]
+    public void The_desktop_page_says_a_chat_you_open_has_the_caret_in_its_box_and_the_console_puts_it_there()
+    {
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains("A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in **Agents** or **Chats**, the Feed, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
+        Assert.Contains("in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.", desktop, StringComparison.Ordinal);
+
+        // The box takes the focus once its pane is drawn, at the end of its words, and only for an act that opened it.
+        var focus = Flat(Page("ui", "src", "console", "box-focus.ts"));
+        Assert.Contains("if (opened === undefined || box === null) return dropBox();", focus, StringComparison.Ordinal);
+        Assert.Contains("if (field.disabled) return;", focus, StringComparison.Ordinal);
+        Assert.Contains("field.focus(); const end = field.value.length; field.setSelectionRange(end, end);", focus, StringComparison.Ordinal);
+        Assert.Contains("chat: 'textarea[aria-label=\"Your message\"]',", focus, StringComparison.Ordinal);
+        Assert.Contains("start: 'textarea[aria-label=\"Who do you want to reach?\"]',", focus, StringComparison.Ordinal);
+
+        // Each road the page names notes the act: a row, the Feed, each plus, Search, Jason's mark, Back and Forward.
+        var side = Flat(Page("ui", "src", "console", "side.ts"));
+        Assert.Contains("export function openRow(id: string, opened: Opened = openedHere()): void {", side, StringComparison.Ordinal);
+        Assert.Contains("export function openAgentRow(id: string, opened: Opened = openedHere()): void {", side, StringComparison.Ordinal);
+        Assert.Contains("here().dock.showChat(held, opened);", side, StringComparison.Ordinal);
+        Assert.Contains("void newAgent(undefined, opened);", side, StringComparison.Ordinal);
+        Assert.Contains("here().dock.chat(undefined, opened);", side, StringComparison.Ordinal);
+        Assert.Contains("const opened = panel === 'start' ? openedHere() : undefined;", side, StringComparison.Ordinal);
+        var palette = Flat(Page("ui", "src", "console", "palette.tsx"));
+        Assert.Contains("if (chat !== null) here().dock.showChat(chat, opened);", palette, StringComparison.Ordinal);
+        var shell = Flat(Page("ui", "src", "console", "console.tsx"));
+        Assert.Contains("const opened = href(parseRoute(location.hash)) === address ? openedHere() : undefined;", shell, StringComparison.Ordinal);
+        Assert.Contains("giveBox(chatPane(chatId), opened);", shell, StringComparison.Ordinal);
+        Assert.Contains("giveBox(chatPane(id), opened);", shell, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Starting the runtime at logon is done at install, by the set-up an install ends in: the guide marks it so, says it
     /// starts nothing now, and gives the line that turns it off, so no agent asks for it or registers it again by hand.
     /// </summary>
