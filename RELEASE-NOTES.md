@@ -177,6 +177,8 @@ rule of the skills.
 - **A reply Jason drafts in somebody's thread is plain text:** a draft that carried the thread's own HTML, such as
   `<br>`, is refused when it is written instead of reaching you with its tags on the card, and with the Reply plugin an
   email reply now goes out as HTML that shows exactly the text you approved, line breaks included.
+- **An approval's summary no longer says a send is "outside any campaign".** It names the person, the format, the
+  account, the subject, the text and the send time.
 
 ## Upgrading from 0.49.3
 

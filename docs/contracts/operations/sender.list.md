@@ -11,8 +11,8 @@ the two seem to differ, the document is right and this page is a bug.
 ## What it is for
 
 "What can we send from?" — the mailboxes and social accounts of the provider's account, one page of them, each with
-the identifier a send names it by, the address it sends from and whether it can send now. A send outside any campaign
-names its sender by what this read returns.
+the identifier a send names it by, the address it sends from and whether it can send now. A send that does not go through one of the provider's
+campaigns names its sender by what this read returns.
 
 **A colleague's account is never offered unasked.** A provider that shares accounts across a team lists a teammate's
 mailbox beside the caller's own, and a message sent from it goes out under that person's name and address. So
