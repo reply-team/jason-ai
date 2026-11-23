@@ -120,10 +120,10 @@ public partial class InteractiveSkillTests
         }
 
         var printed = SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)).ToList();
-        var counted = printed.FindIndex(line => line == "jason launches list --human");
         var read = printed.FindIndex(line => line == "jason workitem list --status waiting --kind ai_role");
+        var counted = read - 1;
         var lift = printed.FindIndex(line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
-        Assert.True(counted >= 0 && read > counted, "The troubleshooting skill prints `jason launches list --human` before the read of the held items.");
+        Assert.True(read > 0 && printed[counted] == "jason launches list --human", "The troubleshooting skill prints `jason launches list --human` before the read of the held items.");
         Assert.True(read >= 0 && lift > read, $"The troubleshooting skill prints the read of what is held at {read} and the lift at {lift}: the read comes first.");
     }
 
