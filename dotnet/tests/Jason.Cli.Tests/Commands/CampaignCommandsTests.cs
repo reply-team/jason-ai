@@ -1082,6 +1082,39 @@ public class CampaignCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The people's table says how many touches each has had in the campaign and when the latest was, as the JSON carries
+    /// them: a count and a UTC moment, and a person nobody touched yet shows 0 and a dash.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_lists_the_touches_and_the_last_touch_of_each_person()
+    {
+        static ContactDto Person(string id, string first) =>
+            new(id, first, "Lovelace", null, null, null, [], [], [], Moment, Moment, null);
+        var page = JsonSerializer.Serialize(
+            new Page<MembershipItemDto>(
+                [
+                    new MembershipItemDto(Person("cnt_A", "Ada"), MembershipState.Enrolled, Moment, Moment, Touches: 3, LastTouchAt: new DateTimeOffset(2026, 10, 16, 9, 30, 0, TimeSpan.Zero)),
+                    new MembershipItemDto(Person("cnt_B", "Byron"), MembershipState.Enrolled, Moment, Moment),
+                ],
+                null),
+            JasonJson.Options);
+        using var cli = new CliRun(page);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", "list-contacts", "cmp_A", "--human"));
+
+        var lines = cli.Text.Split(Environment.NewLine);
+        var header = lines[0];
+        Assert.Contains("TOUCHES", header, StringComparison.Ordinal);
+        Assert.Contains("LAST TOUCH", header, StringComparison.Ordinal);
+        var ada = lines.Single(line => line.StartsWith("cnt_A ", StringComparison.Ordinal));
+        Assert.Equal("3", ada[header.IndexOf("TOUCHES", StringComparison.Ordinal)..].Split("  ", StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+        Assert.StartsWith("2026-10-16 09:30:00 UTC", ada[header.IndexOf("LAST TOUCH", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        var byron = lines.Single(line => line.StartsWith("cnt_B ", StringComparison.Ordinal));
+        Assert.Equal("0", byron[header.IndexOf("TOUCHES", StringComparison.Ordinal)..].Split("  ", StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+        Assert.StartsWith("-", byron[header.IndexOf("LAST TOUCH", StringComparison.Ordinal)..], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_summarizes_an_import_and_names_every_rejected_item()
     {
