@@ -127,6 +127,7 @@ import workitemGetNeedsMessageCancelled from '../../../docs/api/fixtures/workite
 import approvalListCardMessageAllApproved from '../../../docs/api/fixtures/approval.list/card-message-all-approved.json';
 import approvalListCardMessageItemApproved from '../../../docs/api/fixtures/approval.list/card-message-item-approved.json';
 import workitemGetCardMessageRequeued from '../../../docs/api/fixtures/workitem.get/card-message-requeued.json';
+import workitemGetCardReplyParked from '../../../docs/api/fixtures/workitem.get/card-reply-parked.json';
 import workitemGetNeedsMessageRequeued from '../../../docs/api/fixtures/workitem.get/needs-message-requeued.json';
 import workitemGetCardMessageReparked from '../../../docs/api/fixtures/workitem.get/card-message-reparked.json';
 import approvalListCardMessagePending from '../../../docs/api/fixtures/approval.list/card-message-pending.json';
@@ -506,6 +507,7 @@ import workitemListUnknownCampaign from '../../../docs/api/fixtures/workitem.lis
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
 import workitemUpdateCardMessageEdited from '../../../docs/api/fixtures/workitem.update/card-message-edited.json';
+import workitemUpdateCardReplyMarkupRefused from '../../../docs/api/fixtures/workitem.update/card-reply-markup-refused.json';
 import workitemUpdateNeedsMessageEdited from '../../../docs/api/fixtures/workitem.update/needs-message-edited.json';
 // The person panel's recordings.
 import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
@@ -778,6 +780,7 @@ export const fixtures = {
         { work_item_id: string },
         WorkItem
     >,
+    'workitem.get/card-reply-parked': workitemGetCardReplyParked satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/card-message-reparked': workitemGetCardMessageReparked satisfies Exchange<
         { work_item_id: string },
         WorkItem
@@ -1778,6 +1781,10 @@ export const fixtures = {
     'workitem.update/card-message-edited': workitemUpdateCardMessageEdited satisfies Exchange<
         WorkItemUpdateRequest,
         WorkItem
+    >,
+    'workitem.update/card-reply-markup-refused': workitemUpdateCardReplyMarkupRefused satisfies Exchange<
+        WorkItemUpdateRequest,
+        ErrorEnvelope
     >,
     'workitem.update/needs-message-edited': workitemUpdateNeedsMessageEdited satisfies Exchange<
         WorkItemUpdateRequest,

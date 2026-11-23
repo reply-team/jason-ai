@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, type Api } from '../../api/client';
+import { FakeApi } from '../../test/fake-api';
 import { ApiProvider } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { fixtures } from '../../test/fixtures';
@@ -34,7 +35,7 @@ const email = () => structuredClone(fixtures['approval.get/email-message'].respo
 const argsOf = (a: Approval) => (a.subject['input'] as { args: Record<string, unknown> }).args;
 
 function mount(
-    held: Held,
+    held: Api,
     approval: Approval,
     onApprove = vi.fn(),
     onReasked = vi.fn(),
@@ -302,5 +303,27 @@ describe('editing a message before it is approved', () => {
         mount(held, approval);
         expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
         expect(held.calls).toHaveLength(0);
+    });
+});
+
+describe('a reply edited with markup left in it', () => {
+    // The runtime's recording (`CardExchangesTests`): a reply parked on its card, and the edit that kept a `<br>` in the
+    // text, refused. The card says what to remove in the runtime's own words, the detail the refusal carries, and keeps
+    // what was typed.
+    it('is refused, and the card says what the text may not hold', async () => {
+        const approval = structuredClone(fixtures['approval.get/card-reply'].response) as unknown as Approval;
+        const fake = new FakeApi()
+            .answerAnyRequest('workitem.get', 'workitem.get/card-reply-parked')
+            .answer('workitem.update', 'workitem.update/card-reply-markup-refused');
+        mount(fake, approval);
+        await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        const typed = 'Thanks Kai,<br><br>Thursday at ten works for me.';
+        fireEvent.change(screen.getByLabelText('Body'), { target: { value: typed } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByText(/never a tag and never an entity/)).toBeTruthy());
+        expect(screen.getByText(/^Validation failed/).textContent).toContain('a tag such as `<br>`');
+        expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe(typed);
+        expect(screen.queryByText(QUEUED_SENTENCE)).toBeNull();
     });
 });

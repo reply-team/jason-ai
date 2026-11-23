@@ -183,6 +183,23 @@ public partial class CardExchangesTests
         var seen = asked.Preview["highlights"]!.AsObject();
         Assert.Equal("t_501", (string?)seen["/args/thread"]!["external_id"]);
         Assert.False(seen.ContainsKey("/args/sender"), "a reply names no account it goes from");
+
+        // The item the card reads before it writes an edit, then the text edited on the card with markup left in it, as a
+        // draft that imitated the thread's HTML holds it: the edit is refused, and the refusal's detail says what the text
+        // may not hold, which is what the card shows.
+        var parked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-reply-parked", new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, parked.Status);
+        var marked = new JsonObject
+        {
+            ["channel"] = "email",
+            ["thread"] = new JsonObject { ["external_id"] = "t_501" },
+            ["body"] = "Thanks Kai,<br><br>Thursday at ten works for me.",
+        };
+        var refused = await api.RecordErrorAsync(Operations.WorkItemUpdate, "card-reply-markup-refused", new { work_item_id = item, set = new { input = marked }, reason = EditReason, actor = Ada }, System.Net.HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("validation_failed", refused.Code);
+        var detail = Assert.Single(refused.Details!);
+        Assert.Equal(("context.input/body", "invalid"), (detail.Field, detail.Code));
+        Assert.Contains("never a tag and never an entity", detail.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
