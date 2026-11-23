@@ -1270,6 +1270,18 @@ describe('a choice the AI asked', () => {
             expect(state(received(ended, spring), clear)).toEqual({ state: 'locked' });
         });
 
+        it('is locked by a picked campaign that arrives while an export runs, which is no turn', () => {
+            const picking = received(
+                received(said(newChat('c1', 'claude'), 'Set it up'), { kind: 'text', text: 'Who?', at }),
+                { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] },
+            );
+            const exporting = said(received(picking, { kind: 'done', error: null }), '/export x.md');
+            expect(exporting).toMatchObject({ running: true, exporting: '/export x.md' });
+            const attached = received(exporting, spring);
+            expect(attached.entries.at(-1)).toEqual({ kind: 'attached', title: 'Spring' });
+            expect(state(attached, clear)).toEqual({ state: 'locked' });
+        });
+
         it('is answered by the message of a later turn, which a hand-over of that turn does not undo', () => {
             const picking = received(
                 received(said(newChat('c1', 'claude'), 'Set it up'), { kind: 'text', text: 'Who?', at }),

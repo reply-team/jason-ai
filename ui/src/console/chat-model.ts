@@ -70,7 +70,8 @@ export type Entry =
     /**
      * The set-up chat became the conversation of the campaign named: said in the page, not kept by the desktop. `ofTurn`
      * when the turn that made the campaign said it at its end, before its `done`; absent when the person picked the
-     * campaign afterwards, which the desktop refuses while a turn runs.
+     * campaign afterwards, which the desktop refuses while a turn runs. An export is no turn: the desktop takes a pick
+     * while one runs, and no hand-over comes during one, so what arrives while the page exports is never marked.
      */
     | { kind: 'attached'; title: string; ofTurn?: true }
     /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
@@ -674,7 +675,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                 title: event.title,
                 entries: [
                     ...chat.entries,
-                    chat.running
+                    chat.running && chat.exporting === null
                         ? { kind: 'attached', title: event.title, ofTurn: true }
                         : { kind: 'attached', title: event.title },
                 ],
