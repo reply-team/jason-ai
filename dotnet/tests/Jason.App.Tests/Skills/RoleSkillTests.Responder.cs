@@ -226,6 +226,9 @@ public partial class RoleSkillTests
             "What a read returns may carry the provider's markup; what you write is plain text with ordinary line breaks, never a tag such as `<br>` and never an entity such as `&nbsp;`.",
             skill,
             StringComparison.Ordinal);
+
+        // A provider may cut the text at a `<` it takes for a tag's start, so an address goes without its angle brackets.
+        Assert.Contains("Write an address or a link without angle brackets, and put no `<` right before a letter.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then `-reply-501-2` — so that two replies in one thread are two keys.",
             skill,
