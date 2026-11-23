@@ -131,7 +131,8 @@ rule of the skills.
   until the installation's midnight. The agent says until when, in your own time and naming the zone, and how long from now. The notification
   of an item held at a daily limit says how to go on today.
 - **"Ignore the limit" lifts what is held.** Where something is held at a daily limit, that is what the word means and
-  it is lifted as you; the agent asks which limit only where nothing is held.
+  it is lifted as you; the agent asks which limit only where nothing is held. Asked what the daily limits are, the chat
+  runs `jason launches list`.
 - **Read the limits.** `jason launches list` says the installation's day and when it ends, each role's limit and
   whether it comes from the default or from your settings, a lift that stands and how many items are held. With
   `--campaign`, it also says how many each role started there today. A limit is still set in the settings file.
