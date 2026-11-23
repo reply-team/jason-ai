@@ -1,0 +1,27 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "a text whose angle brackets and ampersands are prose, not markup: a comparison, a heart, an address between angle brackets, a word between them with a space, and a company's name are plain text",
+  "input": {
+    "args": {
+      "channel": "email",
+      "thread": { "external_id": "t_99812" },
+      "body": "If a < b and c > d, Thursday works <3\nWrite to <marta@example.com> or to <the team lead>; AT&T; R & D agrees."
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}
