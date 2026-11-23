@@ -104,8 +104,11 @@ The desktop wears the console: a sidebar and one area beside it that shows one t
 its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in
-**Agents** or **Chats**, the Feed, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there:
-not moving along the rows, a row's menu or a rename, nor an answer or a card arriving.
+**Agents** or **Chats** or on the Agents page, an agent's **Chat** tab, the Feed, a link to it you click in a notification
+or a card, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows
+or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving. A screen reader
+hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name
+of their row.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
