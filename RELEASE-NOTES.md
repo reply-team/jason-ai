@@ -205,8 +205,8 @@ rule of the skills.
   is sent no more there. A campaign already live is given no reserve threshold: only a first start sets one.
 - **Your chats.** A chat about no agent made before this version reads as a plain chat.
 - **A reply drafted before this release with HTML in its text, such as `<br>`, still waits for your approval.**
-  Approved as it is, it is refused before anything is sent; edit the tags out on its card first, and the card says what
-  to remove, or have the responder draft it again.
+  Approve refuses it and says what to remove, and the card stays; edit the tags out on the card and approve it again
+  when Jason asks, or reject it.
 
 ## Known issues
 
