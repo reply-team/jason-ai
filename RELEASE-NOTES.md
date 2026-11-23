@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.3-rc.1
+# Jason 0.49.3
 
 Jason Desktop is now the one window onto Jason. `jason ui open`, and a click on Jason's notification on Windows and now
 on Linux, open Jason Desktop at what waits for you, and never a browser: the browser tab's own screens and the chat in a
