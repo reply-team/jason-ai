@@ -4,6 +4,7 @@ import { session } from '../../api/session';
 import type { Approval, ApprovalSummary, Decision, DecisionSummary, Page } from '../../api/types';
 import { mergePage } from '../../lists/paging';
 import { pendingMark } from '../../shell/attention-mark';
+import { sentence } from './message-edit';
 import { keepEdited, keptReads, withdrawn } from './reasking';
 
 export type Kind = 'approvals' | 'questions';
@@ -71,12 +72,17 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         }
     }
 
+    /**
+     * What the runtime refused, in its own words: the summary, and the first detail after it where the refusal names a
+     * field, which says what to change: a yes refused because the item's text no longer holds to its operation's document
+     * says what the text may not hold, as an edit refused for it does.
+     */
     function fail(error: unknown): void {
         if (error instanceof Unpaired) {
             session.clear();
             return;
         }
-        failure.value = error instanceof ApiError ? error.message : String(error);
+        failure.value = sentence(error);
         failureCode.value = error instanceof ApiError ? error.code : null;
     }
 
