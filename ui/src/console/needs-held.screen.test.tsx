@@ -204,6 +204,29 @@ describe('the line for work held at a daily limit', () => {
         expect(held()).toBeNull();
     });
 
+    it('drops a read that began before the lift and answered after it: the lifted line stays, with no button', async () => {
+        const journal = stubStream();
+        const fake = empty(HELD).answer('launches.lift', LIFT);
+        await renderConsole(fake, journal);
+        await waitFor(() => expect(held()).not.toBeNull());
+
+        // A read begins and is held open, still saying two are held.
+        const release = fake.hold('launches.list');
+        const asked = sent(fake, 'launches.list').length;
+        await line(journal, 'jrn_lift_stale');
+        await waitFor(() => expect(sent(fake, 'launches.list').length).toBe(asked + 1));
+
+        fireEvent.click(lift());
+        await waitFor(() => expect(words(held()!)).toBe(LIFTED_WORDS));
+
+        // It answers after the lift, with items held: what it says is old and is not drawn.
+        release();
+        await settle();
+        await settle();
+        expect(words(held()!)).toBe(LIFTED_WORDS);
+        expect(within(held()!).queryByRole('button')).toBeNull();
+    });
+
     it('says a refusal in the runtime’s own words, and stays with its button', async () => {
         const fake = empty(HELD).answerAnyRequest('launches.lift', 'launches.lift/not-human');
         await renderConsole(fake);

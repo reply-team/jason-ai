@@ -32,11 +32,18 @@ const lifting = signal(false);
 /** What the runtime said when the last lift failed, in its own words, until the next press or a read with nothing held. */
 const refused = signal<{ code: string | null; message: string } | null>(null);
 
+/** The number of the last read started, and the number current when the last lift's answer landed: a read numbered no higher began before the lift and is stale. */
+let readNo = 0;
+let liftedAt = 0;
+
 /** Reads the limits again; a read that fails says nothing, and the line it would draw is not drawn. */
 export async function readHeld(api: Api): Promise<void> {
     if (mode.value === 'demo') return;
+    const seen = ++readNo;
     try {
         const read = await api.call<LaunchesList>('launches.list', {});
+        // A read that began before the lift answered says what was held before it: dropped, never drawn.
+        if (seen <= liftedAt) return;
         limits.value = read;
         // Held again after a lift (the next day's limits), the line is the held line again.
         if (read.held > 0) lifted.value = null;
@@ -58,6 +65,8 @@ export function forgetHeld(): void {
     lifted.value = null;
     lifting.value = false;
     refused.value = null;
+    readNo = 0;
+    liftedAt = 0;
 }
 
 const until = (at: string): { until: string; zone: string } => ({ until: clockAt(new Date(at), zone), zone });
@@ -110,6 +119,7 @@ define('needs.lift', (_, __, event) => {
     refused.value = null;
     api.call<LaunchesLift>('launches.lift', { reason: NEEDS_LIFT_REASON }, 'write')
         .then((answer) => {
+            liftedAt = readNo;
             lifted.value = answer;
             if (limits.value !== null) limits.value = { ...limits.value, held: 0 };
         })
