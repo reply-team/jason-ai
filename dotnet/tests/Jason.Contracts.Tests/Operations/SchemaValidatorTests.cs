@@ -639,6 +639,17 @@ public class SchemaValidatorTests
         Assert.Equal("The value here is one this schema excludes: a text with an angle bracket.", problem.Message);
     }
 
+    /// <summary>A description written as a sentence, its full stop included, ends the refusal with one full stop.</summary>
+    [Fact]
+    public void Not_ends_its_description_with_one_full_stop_whether_or_not_the_description_has_one()
+    {
+        const string schema = """{"type":"object","properties":{"v":{"type":"string","not":{"pattern":"<","description":"a text with an angle bracket."}}}}""";
+
+        var problem = Refuses(schema, """{"v":"a <"}""");
+
+        Assert.Equal("The value here is one this schema excludes: a text with an angle bracket.", problem.Message);
+    }
+
     [Fact]
     public void Format_date_time_accepts_an_iso_timestamp_and_refuses_prose()
     {

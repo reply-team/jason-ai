@@ -1048,12 +1048,12 @@ public static class SchemaValidator
         if (branchProblems.Count == 0)
         {
             // The excluded schema's own description, where it has one, is the only place a document says what a value
-            // has to stop being, so the refusal says it.
+            // has to stop being, so the refusal says it, ending with one full stop whether the description has its own.
             problems.Add(new SchemaProblem(
                 pointer,
                 "not",
                 forbidden["description"] is JsonValue described && described.TryGetValue<string>(out var excluded) && excluded.Length > 0
-                    ? $"The value here is one this schema excludes: {excluded}."
+                    ? $"The value here is one this schema excludes: {(excluded.EndsWith('.') ? excluded[..^1] : excluded)}."
                     : "The value here is one this schema excludes."));
         }
         else if (Unmeasured(branchProblems))
