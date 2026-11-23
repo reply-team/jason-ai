@@ -701,7 +701,8 @@ Seven details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to, and `anyOf` and `allOf` say
-  it in that branch's own words. Listing every road not taken buries the one thing a caller has to change. The
+  it in that branch's own words. A `not` has no branch that objected, so it says the value is one its schema excludes,
+  and, where that schema carries a `description`, says what it excludes in the description's words. Listing every road not taken buries the one thing a caller has to change. The
   exception is a branch no pattern could finish measuring: unless a measured branch has already decided the
   combinator, its `pattern_timed_out` is passed up as it stands, at its own pointer, because a branch nobody measured
   gives the combinator no verdict to report.

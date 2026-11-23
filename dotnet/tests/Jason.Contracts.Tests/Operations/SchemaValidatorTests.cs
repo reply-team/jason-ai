@@ -620,6 +620,23 @@ public class SchemaValidatorTests
 
         Assert.Equal("/v", problem.Pointer);
         Assert.Equal("not", problem.Reason);
+        Assert.Equal("The value here is one this schema excludes.", problem.Message);
+    }
+
+    /// <summary>
+    /// A `not` names nothing the value has to change unless its schema says what it excludes: where that schema carries a
+    /// description, the refusal says it in those words, after the same opening.
+    /// </summary>
+    [Fact]
+    public void Not_says_what_it_excludes_in_its_schema_s_own_description()
+    {
+        const string schema = """{"type":"object","properties":{"v":{"type":"string","not":{"pattern":"<","description":"a text with an angle bracket"}}}}""";
+        Accepts(schema, """{"v":"plain"}""");
+
+        var problem = Refuses(schema, """{"v":"a <"}""");
+
+        Assert.Equal(("/v", "not"), (problem.Pointer, problem.Reason));
+        Assert.Equal("The value here is one this schema excludes: a text with an angle bracket.", problem.Message);
     }
 
     [Fact]
