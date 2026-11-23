@@ -42,6 +42,39 @@ public class ProseOnStandardInputTests
 
     private static readonly string[] OperationWords = ["body", "note", "statement"];
 
+    /// <summary>What a PowerShell pipe into jason sets first, so Windows PowerShell before 7 sends UTF-8.</summary>
+    private const string Utf8Pipe = "$OutputEncoding = [Text.UTF8Encoding]::new($false)";
+
+    /// <summary>
+    /// Windows PowerShell before 7 encodes what it pipes to a program by <c>$OutputEncoding</c>, ASCII by default, so every
+    /// character outside ASCII reaches jason as <c>?</c>, which no reader can tell from a question mark. No skill shows a
+    /// here-string piped into jason without setting the encoding first, in the same paragraph.
+    /// </summary>
+    [Fact]
+    public void No_skill_shows_a_powershell_pipe_into_jason_without_setting_utf8_first()
+    {
+        var skills = Path.Combine(SkillPack.RepositoryRoot(), "skills");
+        var offences = new List<string>();
+        var pipes = 0;
+        foreach (var page in Directory.EnumerateFiles(skills, "*.md", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(page).Replace("\r\n", "\n", StringComparison.Ordinal);
+            foreach (var paragraph in text.Split("\n\n"))
+            {
+                if (!paragraph.Contains("'@", StringComparison.Ordinal) || !paragraph.Contains("| jason", StringComparison.Ordinal))
+                    continue;
+                pipes++;
+                if (!paragraph.Contains(Utf8Pipe, StringComparison.Ordinal))
+                    offences.Add(Path.GetRelativePath(SkillPack.RepositoryRoot(), page).Replace('\\', '/'));
+            }
+        }
+
+        Assert.True(pipes > 0, "No skill shows a PowerShell pipe into jason any longer: the guard reads nothing.");
+        Assert.True(offences.Count == 0, $"A PowerShell pipe into jason without {Utf8Pipe} first: {string.Join(", ", offences)}");
+        var managed = File.ReadAllText(Path.Combine(skills, "runtime", "managed-campaign-work", "SKILL.md")).ReplaceLineEndings(" ");
+        Assert.Contains("Windows PowerShell before 7 turns every character outside ASCII into `?` on a pipe before Jason sees it, and Jason cannot tell", managed, StringComparison.Ordinal);
+    }
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]

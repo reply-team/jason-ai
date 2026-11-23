@@ -110,8 +110,9 @@ pause the line, because a letter of the campaign went to them after the reply; t
 decide then. It is `finished` once it was ended: no touch reaches them in this campaign,
 while their conversation goes on, until the line is reopened, which only the person's yes does.
 
-**A campaign linked to a provider's sequence gets no letters of Jason's own.** Where the campaign's context says it is
-linked to a sequence at the provider, the sequence sends and Jason writes nothing there. At every review, check that
+**A campaign linked to a provider's sequence gets no letters of Jason's own.** Read `jason campaign get`
+first: where its `external_ids` holds an item whose `kind` is `campaign` (the provider's campaign, as the contract calls
+it), or where the campaign's context says it is linked to a sequence at the provider, the sequence sends and Jason writes nothing there. At every review, check that
 none of Jason's own letters were put in by accident: a `message.send` or a `social_invitation.send` about its people,
 or a `campaign.enroll` no person asked for. Where one is, stop it — cancel it while it is still open, with a reason —
 and raise one question to the person saying what was put in and what you stopped.

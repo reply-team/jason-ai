@@ -82,6 +82,7 @@ public partial class InteractiveSkillTests
             "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
             "When the person tells you to ignore the limit, or names the lift, read first what is held",
             "the waiting items whose `last_error` is `launches_spent`, each with its campaign and its role",
+            "Where something is held, that is what they mean; only where nothing is held, ask which limit they mean, and lift nothing.",
             "Then run the lift as the person, under their own name, with a short reason of your own that says it is their word.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
             "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight",
@@ -340,6 +341,13 @@ public partial class InteractiveSkillTests
     {
         Assert.Contains(
             "collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.",
+            SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
+            StringComparison.Ordinal);
+
+        // The notification of a hold says "tell your agent: ignore the limit", and a session in a terminal chooses its skill
+        // by the description: the words are there, so the skill that reads the hold and lifts it is the one loaded.
+        Assert.Contains(
+            "Also when the person says ignore the limit: read what Jason holds at a daily limit of launches, and lift it on their word.",
             SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
             StringComparison.Ordinal);
     }

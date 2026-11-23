@@ -14,7 +14,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { hostAsked, type FullAccessWhy } from './chat-full-access-why.ts';
-import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
+import { planExitRefusal, planRefusal, planWriteRefusal, type ChatMode } from './chat-modes.ts';
 import type { HookAnswer } from './chat-permission-endpoint.ts';
 import { askedCard, autoEditJudgement, fullAccessJudgement, judge, type ChatScope } from './chat-permission-model.ts';
 
@@ -143,7 +143,7 @@ export class PermissionBroker {
         const mode = turn.mode;
         const refused = (message: string) => Promise.resolve(this.#decided({ behavior: 'deny', message }, { outcome: 'refused', by: 'model', mode }));
         if (mode === 'plan_only' && tool === 'ExitPlanMode') return refused(planExitRefusal);
-        if (mode === 'plan_only' && writers.has(tool)) return refused(planRefusal);
+        if (mode === 'plan_only' && writers.has(tool)) return refused(planWriteRefusal);
         // In Full access the host asks only what it asks about in its bypass mode too: Full access's three refusals hold
         // here as at the hook, whichever way the request came, and anything else is a card. Ask first's judgement neither
         // allows nor refuses it, so an ask rule of the person's is the person's to answer.

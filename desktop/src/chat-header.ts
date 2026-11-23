@@ -6,7 +6,7 @@
 
 import type { KeptEntry } from './chat-conversations.ts';
 import type { LineEntry } from './feed.ts';
-import { codexModeSays, modeNames, modeSays, type ChatMode } from './chat-modes.ts';
+import { codexModeSays, modeNames, modeSays, planReads, type ChatMode } from './chat-modes.ts';
 
 /** The longest campaign name a header or a title carries, in characters. */
 export const nameLimit = 120;
@@ -137,6 +137,8 @@ export function startSentences(start: TurnStart): string {
     const says = (start.program === 'codex' ? codexModeSays[start.mode] : undefined) ?? modeSays[start.mode];
     const parts = [
         `This turn runs in ${modeNames[start.mode]}: in it the AI ${says.charAt(0).toLowerCase()}${says.slice(1)}`,
+        // Claude Code's Plan only refuses a shell listing and runs its reading tools; Codex's read-only sandbox runs both.
+        ...(start.mode === 'plan_only' && start.program === 'claude' ? [planReads] : []),
         "The person may change the mode between turns, so earlier turns' modes say nothing of this one; each turn's first paragraph names its own.",
     ];
     if (start.program === 'claude' && start.sealed) {
