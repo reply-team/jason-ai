@@ -1350,7 +1350,7 @@ public partial class PageClaimsTests
     public void The_desktop_page_says_a_chat_you_open_has_the_caret_in_its_box_and_the_console_puts_it_there()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
-        Assert.Contains("A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at once. Nothing else moves it there: not moving along the rows or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
+        Assert.Contains("A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at once, unless that same act opened a control of the chat's own that takes the focus, a name's field or a question's **Keep**, or opened nothing, as removing a chat, which leaves Start in its place. Nothing else moves it there: not moving along the rows or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
         Assert.Contains("A screen reader hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name of their row.", desktop, StringComparison.Ordinal);
         Assert.Contains("in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.", desktop, StringComparison.Ordinal);
 

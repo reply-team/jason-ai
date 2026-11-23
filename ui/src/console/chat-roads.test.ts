@@ -72,7 +72,7 @@ const rows: readonly Row[] = [
         at: 'ConversationMenu › show',
         call: 'navigate(agentChatRoute(agent))',
         box: 'no',
-        why: 'The agent’s own menu shows its Chat for Rename or Remove: the name’s field, or the question’s Keep, takes the focus.',
+        why: 'The act opened a control of the chat’s own that takes the focus: the agent’s menu shows its Chat for Rename or Remove, and the name’s field, or the question’s Keep, takes it.',
     },
     // The Agents page.
     {
@@ -216,7 +216,7 @@ const rows: readonly Row[] = [
         at: 'makeDock › dropChat',
         call: "reveal('start')",
         box: 'no',
-        why: 'A chat taken away leaves Start in its place: the person removed a chat and opened nothing.',
+        why: 'The act opened nothing: a chat taken away leaves Start in its place.',
     },
     {
         file: 'console/console.tsx',
@@ -330,7 +330,7 @@ const rows: readonly Row[] = [
         at: 'RowMenu › choose',
         call: 'here().dock.showChat(held)',
         box: 'no',
-        why: 'Remove conversation shows the chat to ask before removing it: the question’s Keep takes the focus, and the box is held while it stands.',
+        why: 'The act opened a control of the chat’s own that takes the focus: Remove conversation shows the chat to ask first, and the question’s Keep takes it; the box is held while the question stands.',
     },
     // The sidebar.
     {

@@ -104,7 +104,8 @@ The desktop wears the console: a sidebar and one area beside it that shows one t
 its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at
-once. Nothing else moves it there: not moving along the rows
+once, unless that same act opened a control of the chat's own that takes the focus, a name's field or a question's
+**Keep**, or opened nothing, as removing a chat, which leaves Start in its place. Nothing else moves it there: not moving along the rows
 or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving. A screen reader
 hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name
 of their row.
