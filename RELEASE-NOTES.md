@@ -116,7 +116,7 @@ rule of the skills.
   [A person's line in a campaign](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-persons-line-in-a-campaign)
   says what each state means.
 
-- **An opt-out with no provider sequence is completed.** Where a campaign is not linked to a provider's sequence, as
+- **An opt-out with no provider sequence is completed.** Where the campaign holds no provider's campaign, as
   with Jason's own direct letters, recording the opt-out completes it, and the summary says no sequence was linked,
   with no stop that could only fail.
 
