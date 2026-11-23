@@ -911,6 +911,10 @@ lists.
   plugin does at the provider grows. The operation's page says in one sentence what the policy was before. A refusal
   that protects a person — `suppressed`, a channel conflict, a stop the register or the provider holds — never relaxes:
   taking such a refusal away is breaking.
+- **Tightening** — an input the schema newly refuses, as `conversation.reply` refuses markup in its `body` from 0.50.0,
+  keeps the version: every input a plugin is still handed is one it was handed before, the caller meets the refusal
+  when the work item is written, and work written before it is refused at its claim as `input_invalid`, final, before
+  anything is sent.
 
 A branch added to an output's `anyOf` keeps the version too, as a new kind of event under `events.read` does: a
 runtime that predates the branch refuses a page that carries it as `result_invalid`, stores nothing from it, keeps the
