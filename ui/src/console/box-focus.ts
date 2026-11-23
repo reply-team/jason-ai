@@ -52,7 +52,8 @@ export function giveBox(pane: string, opened: Opened | undefined): void {
     if (opened === undefined || box === null) return dropBox();
     const mine = ++asks;
     const attempt = (tries: number): void => {
-        if (mine !== asks) return;
+        // A retry that outlives its page (a test's environment torn down between frames) has nothing left to focus.
+        if (mine !== asks || typeof document === 'undefined') return;
         const section = document.querySelector<HTMLElement>(`.jc-console .area > .pane[data-pane="${pane}"]`);
         const field = section?.hidden === false ? section.querySelector<HTMLTextAreaElement>(box) : null;
         // A menu closing as the pane is drawn (a row menu's Open) is waited for, as a pane not drawn yet is.
