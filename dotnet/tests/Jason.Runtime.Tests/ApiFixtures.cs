@@ -502,6 +502,7 @@ public static class ApiFixtures
         "journal.list/search-first",
         "journal.list/summer",
         "launches.lift/already-lifted",
+        "launches.lift/from-needs-you",
         "launches.lift/lifted",
         "launches.lift/not-human",
         "launches.list/campaign",
