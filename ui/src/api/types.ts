@@ -616,3 +616,9 @@ export type WorkItemCreateRequest = {
 export type WorkItemGetRequest = { work_item_id: string };
 /** A work item as workitem.get answers it, with what it produced once it finished. */
 export type WorkItemWithResult = WorkItem & { result: unknown };
+/** The installation's daily limits of launches, as Needs you reads them: the day's end and how many items are held. */
+export type LaunchesListRequest = Record<string, never>;
+export type LaunchesList = { day: { end: string }; held: number };
+export type LaunchesLiftRequest = { reason?: string; actor: ActorRef };
+/** A lift as it stands: when the limits hold again, in which zone, and how many held items it let go. */
+export type LaunchesLift = { until: string; time_zone: string; released: number; already_lifted: boolean };

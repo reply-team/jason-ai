@@ -1823,7 +1823,8 @@ body,
 .jc-console .needs-save-says {
     margin: 4px 0 0;
 }
-.jc-console .needs-left {
+.jc-console .needs-left,
+.jc-console .needs-held {
     margin: 0 0 12px;
 }
 .jc-console .needs-panel .needs-pane {

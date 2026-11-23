@@ -208,7 +208,8 @@ tells them once, with a pointer: how many, and where to look. A pointer that say
 events Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that
 says provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where
 the person clears it. One that says items wait on a daily limit gives the person's way out itself, "tell your agent:
-ignore the limit"; read what is held and lift it only on their word, as `managed-campaign-work`'s "Ignore the limit"
+ignore the limit"; read what is held (`jason launches list` for how many and the limits, then the waiting items whose
+`last_error` is `launches_spent` for which) and lift it only on their word, as `managed-campaign-work`'s "Ignore the limit"
 says. `jason launches list` says what the daily limits of launches are: each role's limit a day as the runtime reads it
 now, from the default or the settings, the installation's day they count in, a lift that stands, and how many items
 are held; `troubleshooting-jason` says how to read it. One that says emails bounced names no command and leaves them

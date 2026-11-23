@@ -147,6 +147,7 @@ describe('the console', () => {
                     'campaign.list',
                     'campaign.summary',
                     'decision.list',
+                    'launches.list',
                     'plugin.list',
                     'route.list',
                     'system.info',

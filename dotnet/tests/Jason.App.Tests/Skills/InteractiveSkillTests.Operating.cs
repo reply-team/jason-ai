@@ -243,7 +243,7 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "One that says items wait on a daily limit gives the person's way out itself, \"tell your agent: ignore the limit\"; read what is held and lift it only on their word, as `managed-campaign-work`'s \"Ignore the limit\" says.",
+            "One that says items wait on a daily limit gives the person's way out itself, \"tell your agent: ignore the limit\"; read what is held (`jason launches list` for how many and the limits, then the waiting items whose `last_error` is `launches_spent` for which) and lift it only on their word, as `managed-campaign-work`'s \"Ignore the limit\" says.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(

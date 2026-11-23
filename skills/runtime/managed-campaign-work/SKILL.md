@@ -844,8 +844,8 @@ jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason '
 
 **"Ignore the limit" lets held work go today, and only on the person's word.** Work held at a daily limit of launches
 waits until the installation's next midnight, and a notification tells the person so. When the person tells you to
-ignore the limit, or names the lift, read what is held first, `jason launches list` and the held items as
-`troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name. It lets go every item
+ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says: `jason launches list` for how many
+items are held and the limits, then the waiting items whose `last_error` is `launches_spent` for which; then run `jason launches lift` as the person, under their own name. It lets go every item
 held at a daily limit, in every campaign holding one and for every role, until the installation's next midnight. Then say three things: which campaigns and roles it
 released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in
 brackets how long from now, such as "until 00:00 Europe/Berlin (in five and a half hours)"; and that the items it
