@@ -78,7 +78,7 @@ export function ownMessages(chat: Chat): string[] {
         if (reading.state !== 'card') continue;
         const labels = optionsOf(reading.card).map((option) => option.label);
         if (choiceState(chat, index, labels, null, false).state !== 'chosen') continue;
-        clicked.add(chat.entries.findIndex((entry, at) => at > index && locksChoice(entry.kind)));
+        clicked.add(chat.entries.findIndex((entry, at) => at > index && locksChoice(entry)));
     }
     return chat.entries.flatMap((entry, at) => (entry.kind === 'user' && !clicked.has(at) ? [entry.text] : []));
 }

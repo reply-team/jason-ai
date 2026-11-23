@@ -83,7 +83,7 @@ function put(chatId: string, index: number, press: Press): void {
  */
 function pressable(chat: Chat, index: number): boolean {
     let last = chat.entries.length - 1;
-    while (last >= 0 && !locksChoice(chat.entries[last]!.kind)) last--;
+    while (last >= 0 && !locksChoice(chat.entries[last]!)) last--;
     return !chat.running && last === index;
 }
 
