@@ -1,4 +1,4 @@
-# `message.send` — send a person a message, outside any campaign, from one of the provider's accounts
+# `message.send` — send a person a message from one of the provider's accounts, not through one of its campaigns
 
 **Version 1.** The machine-readable contract is [`message.send.json`](message.send.json); this page explains it. Where
 the two seem to differ, the document is right and this page is a bug.
@@ -176,7 +176,7 @@ cannot read as a provider block. Where it can — the provider refused for a blo
 
 ## What a person reads before deciding
 
-> Send marta@example.com a message by email, from the provider's account 12 (ann@example.com), outside any campaign —
+> Send marta@example.com a message by email, from the provider's account 12 (ann@example.com) —
 > subject: The Lisbon meetup; text: Hi Marta, thanks for the chat at the meetup.; send after: 2026-11-03T09:00:00-05:00
 
 The summary names the person by the value the message consumes, the format, and the account by its identifier and
@@ -215,7 +215,7 @@ fallback or as `[name]`, and listed under `unfilled`. The fixtures
 | under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent. |
-| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}), outside any campaign — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message`, `/args/message/compose`, `/args/send_after` |
+| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message`, `/args/message/compose`, `/args/send_after` |
 | pinned identifiers | `contact` names a contact; `send` names a work_item |
 | recovery read | The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. The plugin repeats only where it knows the provider keeps such keys, by what it knows of the provider or by a read before the repeat; where it does not, the repeat fails `send_not_settled` and nothing is sent. |
 | after an ambiguous end | `after_recovery_read`, by the work item's key — a later attempt performs the recovery read above and answers from it when the effect already happened, and only under a plugin whose manifest lists the operation under `settles_by_key` |

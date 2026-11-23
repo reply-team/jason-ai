@@ -91,7 +91,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
 | [`message.cancel`](operations/message.cancel.md) | `scheduled_message.cancel` | `control` | `auto` | `safe` | `not_used` | stop a send the provider still holds for its moment |
-| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | send a person a message from one of the provider's accounts, not through one of its campaigns |
 | [`message.status`](operations/message.status.md) | `scheduled_message.list` | `read` | `auto` | `safe` | `not_used` | read one send by the reference the provider gave it |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 | [`schedule.list`](operations/schedule.list.md) | `schedule.resolve` | `read` | `auto` | `safe` | `not_used` | the provider's sending schedules, with the windows each one sets |
