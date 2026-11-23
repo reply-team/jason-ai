@@ -285,8 +285,10 @@ hours or lengthens to 25 is counted from midnight to midnight as it is. The clai
 scan. It counts the attempts of the campaign's `ai_role` items of the item's role that started since the local midnight,
 as a UTC instant — an attempt the claim refused never started and spends nothing, and an item queued by hand counts like
 one the runtime made — and holds the item in the same transaction: it moves to `waiting` with no attempt, its wait is
-the next local midnight, as a UTC instant, its `last_error` is `launches_spent`, whose message names the midnight it
-counted from with the zone, and one `workitem_waiting` line says `held_by` with the code, the limit and the role. A held
+the next local midnight, as a UTC instant, its `last_error` is `launches_spent`, whose message says how many runs
+started since the midnight it counted from, with the zone, and the limit as a limit beside them — a limit lowered during
+the day can stand below the count — and names `jason launches list`, and one `workitem_waiting` line says `held_by` with
+the code, the limit and the role. A held
 item does not make its campaign busy, so the campaign's other work is claimed at the next scan. There are four ways out.
 At the next local midnight the resume step releases it and the claim counts the new day as usual, so a day already spent
 by then holds it again. `workitem.resume` lets that one item go past the limit under the person's name: the claim takes
@@ -310,6 +312,11 @@ the wait its own run ended in, since the hold's wait has no attempt (§The launc
 applies at the next scan to work not yet held, while an item already held keeps its moment. A held item keeps its due
 date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
 ([docs/campaign-manager.md](campaign-manager.md) §1).
+
+The limits are read where they stand with `launches.list` (`jason launches list`): the installation's day, the lift that
+stands today, each role's limit as the claim reads it now, from the default or the settings, and how many items are held
+at a limit; with a campaign, each role's runs that started there today, counted as the claim counts them. It is a read,
+open inside a run as outside one. Setting a limit is the settings file's: no operation writes one.
 
 **The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
 a campaign releases in a UTC day without asking a person. The ceiling keeps the UTC day, 00:00Z to 00:00Z, whatever the
