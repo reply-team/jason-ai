@@ -396,17 +396,13 @@ role that cannot decide *what to do next* raises a question instead — a decisi
 attempt that asked it and whose answer wakes the review that carries the work on.
 [docs/campaign-manager.md](campaign-manager.md) §6 is the contract for that.
 
-- **approve** releases the item to the next scan with its due date, priority and place untouched. It first reads the
-  item's `context.input` as it stands against the operation's document as this build publishes it, by the check
-  `workitem.create` and `workitem.update` make, and refuses the yes with `validation_failed`, the document's reason in
-  its `details`, where it does not satisfy it. A document can refuse what it once accepted, and work parked before then
-  waits as it was: a reply drafted with a tag in its text before `conversation.reply` refused one, say. The claim would
-  refuse such work once approved (`input_invalid`, before any child), so the yes is refused first, while the person can
-  still edit it; nothing is written, the approval stays pending and the item parked, and an edit that satisfies the
-  document withdraws the question as any edit does. The arguments are what is read, not the composed input: the rest
-  of it is what the runtime reads at the claim, which a person does not write and which may move before the claim. The
-  claim's own check is unchanged. The read is a read before the one guarded write: an edit that commits between the two
-  supersedes the question, and the approval then writes nothing and answers `approval_not_pending`.
+- **approve** releases the item to the next scan with its due date, priority and place untouched. It is refused with
+  `validation_failed`, the document's reason in its `details`, while the item's `context.input` does not satisfy the
+  operation's document as this build publishes it (by the check `workitem.create` and `workitem.update` make: a document
+  can refuse what it once accepted), and nothing is written; it reads the arguments, not the composed input, and the
+  claim's own check is unchanged. An edit that commits between this read and the guarded write withdraws the question,
+  and the approval then writes nothing and answers `approval_not_pending`. A message's card offers an edit, after which
+  Jason asks again; other work has no Edit on its card, so there the way out is a rejection or `jason workitem update`.
 - **reject** ends the item as `failed`, with `approval_rejected` and the person's reason as its last
   error, and no attempt invented to carry it, whatever the item's input holds.
 - **cancelling the work, or its due date passing**, ends the decision with it: a live approval about
