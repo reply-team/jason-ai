@@ -30,6 +30,11 @@ public partial class PageClaimsTests
         Assert.Contains("If you go back to an earlier version of Jason Desktop and then return, a chat that version used opens in Ask first, unless it is in Plan only, and says once why: an earlier version keeps no chat's mode but Plan only.", desktop, StringComparison.Ordinal);
         Assert.Contains("drawn in the sidebar under **Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen; Search opens it too, as its page **Feed**.", desktop, StringComparison.Ordinal);
 
+        // Codex in exec never asks, so its Ask first, and the Auto-edit it runs as, only read and propose: a send such a turn
+        // writes waits for the person whatever the send mode, and the empty chat says the Plan only line there.
+        Assert.Contains("in Ask first and Auto-edit on Claude Code \"A message written here follows its campaign's send mode; the AI approves when you tell it to.\"; on Codex, whose Ask first and Auto-edit only read and propose, so that a send the chat writes waits for you, the Plan only line.", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("in Ask first and Auto-edit \"A message written here follows its campaign's send mode", desktop, StringComparison.Ordinal);
+
         var ui = Flat(Page("docs", "ui.md"));
         Assert.DoesNotContain("it sends only to a chat in", ui, StringComparison.Ordinal);
     }
