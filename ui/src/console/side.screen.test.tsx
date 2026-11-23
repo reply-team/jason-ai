@@ -504,8 +504,8 @@ describe('the sidebar’s look', () => {
         await settled();
         for (const each of [newAgent(), newChat()])
             expect(styleOf(each), each.getAttribute('aria-label') ?? '').toMatchObject({
-                width: '20px',
-                height: '20px',
+                width: '16px',
+                height: '16px',
                 'border-radius': '5px',
                 border: '1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg))',
                 background: 'color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg))',
@@ -531,6 +531,59 @@ describe('the sidebar’s look', () => {
         // Neither is marked: a plus makes its kind, it brings no page forward.
         expect(newAgent().getAttribute('aria-current')).toBeNull();
         expect(newChat().getAttribute('aria-current')).toBeNull();
+    });
+
+    it('draws each plus at the filter’s size and weight, its cross on the square’s centre', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        const px = (value: string | null | undefined): number => Number(/^([\d.]+)(px)?$/.exec(value ?? '')?.[1]);
+        const filter = document.querySelector<SVGElement>('.jc-console .recent .rbtn:not(.plus) svg')!;
+        for (const button of [newAgent(), newChat()]) {
+            const name = button.getAttribute('aria-label') ?? '';
+            const box = styleOf(button);
+            const glyph = button.querySelector<SVGElement>('svg')!;
+            const drawn = styleOf(glyph);
+            // The square: its border inside its size, no padding of the browser's own, its one child on both centres.
+            expect(box, name).toMatchObject({
+                'box-sizing': 'border-box',
+                padding: '0',
+                border: expect.stringMatching(/^1px solid /),
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+            });
+            const side = px(box.width);
+            expect(px(box.height), name).toBe(side);
+            // The glyph is the size its markup says, which the stylesheet does not override.
+            const size = px(glyph.getAttribute('width'));
+            expect(px(glyph.getAttribute('height')), name).toBe(size);
+            expect(drawn.width ?? glyph.getAttribute('width'), name).toBe(String(size));
+            expect(drawn.height ?? glyph.getAttribute('height'), name).toBe(String(size));
+            expect(drawn.flex, name).toBe('none');
+            // The cross, on a 24-unit grid: two arms of the same length crossing at the grid's centre, so it is centred
+            // in its icon, and the icon is centred in the square.
+            expect(glyph.getAttribute('viewBox'), name).toBe('0 0 24 24');
+            const arms = [...glyph.querySelectorAll('path')].map((each) => each.getAttribute('d')).join('');
+            const [, x, y1, run, x1, y, across] = /^M(\d+) (\d+)v(\d+)M(\d+) (\d+)h(\d+)$/.exec(arms)!.map(Number);
+            expect([x, y, y1! + run! / 2, x1! + across! / 2, run], name).toEqual([12, 12, 12, 12, across]);
+            // The icon is the square's own size, so the two share one origin and one size and a scale's rounding moves
+            // both alike. At 150% a button's own padding (1px 6px) and a 22px icon in a 20px square left the icon's origin
+            // a half device pixel off the square's, which is what put the cross off the centre.
+            expect(size, name).toBe(side);
+            // Smaller than the 20px square and the 22px icon it replaced, and no larger than the filter's own button.
+            expect(side, name).toBeLessThanOrEqual(16);
+            // The margins keep the 20px square's place, 5px after the filter: the CHATS header keeps its height, the
+            // filter does not move, and the square's right edge stays on the rows' right edge.
+            const [top, right, bottom, left] = (box.margin ?? '').split(' ').map(px);
+            expect([side + top! + bottom!, side + left! + right!, right], name).toEqual([20, 25, 0]);
+            expect(size, name).toBeLessThan(22);
+            // The stroke is the filter's in pixels: the filter's 2 units of 24 at its size, the plus's units at its size.
+            const filterStroke = (2 * px(filter.getAttribute('width'))) / 24;
+            const stroke = (Number(drawn['stroke-width'] ?? glyph.getAttribute('stroke-width')) * size) / 24;
+            expect(stroke, name).toBeCloseTo(filterStroke, 3);
+            // The cross spans what the filter's lines span: 14 units of the plus at its size, 16 of the filter's at 14.
+            expect((run! * size) / 24, name).toBeCloseTo((16 * px(filter.getAttribute('width'))) / 24, 3);
+        }
     });
 
     it('shows a row’s three dots on hover and on focus alone, over the row’s right end', async () => {
