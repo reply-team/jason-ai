@@ -514,6 +514,27 @@ describe('a choice in an agent’s chat', () => {
         expect(reads(fake)).toEqual([]);
     });
 
+    it('stays live when the turn that asked it made the chat the agent’s conversation, and a click sends its label', async () => {
+        const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts-none');
+        const { desktop } = renderConsole([setUp(opened)], fake);
+        const pane = await openChat('Sending');
+        fireEvent.change(box(), { target: { value: 'Set up a campaign' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        // The turn asks, and at its end the desktop hands the chat over to the campaign it made, before its done.
+        flush(() => {
+            desktop.emit(setupChat, { kind: 'text', text: `Two ways to send it.\n\n${fenced(choice)}`, at });
+            desktop.emit(setupChat, { kind: 'attached', campaignId: 'cmp_1', title: 'Spring launch' });
+            desktop.emit(setupChat, { kind: 'done', error: null });
+        });
+        await waitFor(() => within(pane).getByText('This chat is now the conversation of Spring launch.'));
+        fireEvent.click(await live(pane));
+        await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+        expect((sends(desktop)[1]!.args as [string, string])[1]).toBe('From me');
+        // The agent's rule still holds it: the person's acts on the campaign since it was asked were read.
+        expect(reads(fake)).toEqual([expect.objectContaining({ campaign_id: 'cmp_1', since: at })]);
+    });
+
     it('reads no act in a set-up chat or in the Feed, where only what follows it locks it', async () => {
         const fake = new FakeApi();
         // The Feed's row is in the demo's sidebar.
