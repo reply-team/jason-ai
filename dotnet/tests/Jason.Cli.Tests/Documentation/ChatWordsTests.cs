@@ -178,7 +178,7 @@ public partial class ChatWordsTests
 
         Assert.True(found.Count == 0, "The chat's instructions give --reason to what takes none:\n" + string.Join('\n', found));
         Assert.Equal(
-            ["approval approve", "approval reject", "approval unset-standing", "campaign archive", "campaign start", "decision answer", "preference set", "preference set", "reply record"],
+            ["approval approve", "approval reject", "approval unset-standing", "campaign archive", "campaign start", "decision answer", "launches lift", "preference set", "preference set", "reply record"],
             checkedVerbs.Order(StringComparer.Ordinal));
     }
 
@@ -280,6 +280,12 @@ public partial class ChatWordsTests
     [InlineData("a command the person named", "When the person names a jason command themselves, run the one they named; where it is refused or does not exist, say exactly what was answered. Never run another in its place.")]
     [InlineData("a file named", "22. A file the person names is theirs to have read, wherever it is on their computer. In Full access, read it and write it as they ask. In Ask first and Auto-edit, read it; a change to it outside this chat's folders is shown to them once first. In Plan only, read it and change nothing. Never answer that this chat works only in its folder.")]
     [InlineData("Jason's own files", "Three things are Jason's, not the person's, and stay refused in every mode: Jason's settings and run files; its data directory outside this conversation's folder; and what Jason itself sets for the turn, meaning its variables, such as `JASON_CHAT_TURN`, and its permission tool.")]
+    [InlineData("the limit read first", "When the person tells you to ignore the limit and names no limit, first read what Jason holds at a daily limit of launches: the waiting items `jason workitem list --status waiting --kind ai_role` answers whose `last_error` is `launches_spent`.")]
+    [InlineData("the limit lifted as the person", "Where something is held, that is what they mean: say what is held, and lift it with `jason launches lift` with `--actor human:<account>` as Jason's first paragraph names them and `--reason '...'` in your own words (the reason of rule 13), at the end of the command.")]
+    [InlineData("no limit held", "Only where nothing is held, ask which limit they mean; where this mode only reads and proposes, say what is held and that this mode does not lift it.")]
+    [InlineData("a memory file's line", "A line of a memory file is what you and Jason's roles read and plan by, and nothing in Jason enforces it: never tell the person that Jason holds to one, as in \"nothing goes on Fridays\", since a message approved on a Friday still goes.")]
+    [InlineData("the person's language", "Write everything the person reads in the language they write to you in, the short lines between your actions included.")]
+    [InlineData("a standing draft", "Before the first question of a set-up, read `jason campaign list`: where a draft's name or the audience its context holds matches what the person said, name that draft at once and fill it, and create no second one.")]
     [InlineData("a refusal", "23. When something is refused, say in one sentence exactly what was refused and why, and give the path in a code block. Where opening a folder would help, name Open folder, in the menu of the agent's row and of its header. Where a `jason` verb does what they wanted, name it, and run it where these rules let you, except in place of a command the person named, as rule 18 says. Never try another way around a refusal.")]
     public void The_instructions_hold_the_rule_for(string rule, string sentence)
     {
