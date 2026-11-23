@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedTools, claudeTurnSettings, fullAccessRemovedTools, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planReads, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -524,6 +524,8 @@ test('in Plan only nothing is written and no command runs; the cards left are re
         ['Write', { file_path: join(w.scope.chat, 'notes.md'), content: 'x' }],
         ['Edit', { file_path: join(w.scope.chat, 'notes.md'), old_string: 'a', new_string: 'b' }],
         ['Bash', { command: 'git status' }],
+        ['Bash', { command: 'ls' }],
+        ['Bash', { command: `ls "${w.scope.chat}"` }],
         ['Bash', { command: 'jason campaign create --file -' }],
         ['NotebookEdit', { notebook_path: join(w.scope.chat, 'n.ipynb'), new_source: 'x' }],
     ] as const) {
@@ -808,7 +810,13 @@ test('Plan only says the AI how it is left, the plan card included, and a go app
     const declared = readFileSync(join(page, 'console', 'chat-model.ts'), 'utf8').match(/export const planModeMoved =\s*("[^"]*");/);
     assert.equal(declared === null ? null : JSON.parse(declared[1]!), planModeMoved, 'the page declares the sentence the desktop refuses with');
     assert.ok(readFileSync(join(page, 'test', 'desktop.ts'), 'utf8').includes(JSON.stringify(planModeMoved)), 'and its stub desktop refuses with it');
-    assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
+    // A plain listing of a folder made with the shell is refused like any other command, so the refusal names the reading
+    // tools that do run, and the AI reads with them rather than answering that it cannot see the folder.
+    assert.equal(
+        planReads,
+        'A shell command that is not a jason read is refused, a plain listing of a folder included: read a file with Read, and list or search a folder with Glob or Grep.',
+    );
+    assert.equal(planRefusal, `Plan only is on: nothing is changed. ${planReads} Say what you would do; the person switches the mode to act.`);
 });
 
 test('a noun\'s help runs with no card in Plan only, Ask first and Auto-edit, and root help and the other forms are refused as before; under Full access the hook answers nothing to any of them', async (t) => {

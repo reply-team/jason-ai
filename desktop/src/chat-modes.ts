@@ -298,8 +298,16 @@ export function askFirstThisTurn(why: string, kept: ChatMode): string {
 export const earlierDesktopAskFirst =
     "This chat was last used in an earlier version of Jason Desktop, which does not keep a chat's mode, so it is in Ask first now. To give it Full access, choose it from its menu.";
 
+/**
+ * What a Plan only turn on Claude Code is told of reading, in its header and in every refusal: a shell command is refused
+ * there unless it is a jason read, a plain listing of a folder among them, while the host's own reading tools run, so the
+ * AI is named the tools to read with rather than left to say it cannot see a folder.
+ */
+export const planReads =
+    'A shell command that is not a jason read is refused, a plain listing of a folder included: read a file with Read, and list or search a folder with Glob or Grep.';
+
 /** What a chat in Plan only answers every request it does not take. */
-export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
+export const planRefusal = `Plan only is on: nothing is changed. ${planReads} Say what you would do; the person switches the mode to act.`;
 
 /** What a chat in Plan only answers the host's own way out of planning: only the person changes the mode. */
 export const planExitRefusal =
