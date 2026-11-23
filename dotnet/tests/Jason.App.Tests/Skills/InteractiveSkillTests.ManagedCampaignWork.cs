@@ -1334,9 +1334,9 @@ public partial class InteractiveSkillTests
         var section = Whitespace().Replace(raw, " ");
         foreach (var fact in new[]
         {
-            "The message ends with exactly: \"Everything is ready. Start it?\"",
+            "End the message with one question and nothing after it, in the language the person writes in: whether to start it now. In English it is exactly \"Everything is ready. Start it?\"; in another language, say that one question in it, never the English beside it.",
             "**Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then read it back.",
-            "Say \"Started, as you said. It is recorded under your name, {name}.\" only once `jason campaign get` answers the status `active`.",
+            "Once `jason campaign get` answers the status `active`, and not before, say in the language the person writes in that it started on their word and is recorded under their name, {name}; in English, exactly \"Started, as you said. It is recorded under your name, {name}.\"",
             "A yes to that question starts the campaign and nothing else: it lets no message go, answers no question and sets no send mode.",
             "Jason has no start at a moment the person names, \"Monday at nine\", and a session cannot wake itself: say so plainly where they ask for one, and never promise it.",
             "No launched role can start it for them: a start from inside a run is refused, because it is a person's word.",
