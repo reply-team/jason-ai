@@ -107,6 +107,13 @@ function same(element: Element, identity: Identity): boolean {
     );
 }
 
+/** Whether two elements are one control: the same element, or the one a repaint drew in its place (`paint`). */
+export function sameControl(was: Element, now: Element): boolean {
+    if (was === now) return true;
+    const identity = was.isConnected ? null : identify(was);
+    return identity !== null && same(now, identity);
+}
+
 /** The selection of a text field; null for a control that has none (a button, a checkbox). */
 function selectionOf(element: Element): Selection | null {
     if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return null;

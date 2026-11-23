@@ -5,6 +5,7 @@ import type { JournalEntry } from '../api/types';
 import type { DesktopConversation, DesktopSetup, JasonDesktop } from '../platform/desktop';
 import type { StreamState } from '../platform/journal-stream';
 import type { Route } from '../router';
+import type { Opened } from './box-focus';
 import type { Chat } from './chat-model';
 
 // What the console holds while its window is open: nothing of it is kept anywhere else, and nothing of it is the
@@ -77,19 +78,23 @@ export const messageOf = (error: unknown): string =>
 /** The panels the console's one area shows, by their names; `page` holds the browser shell's screens. */
 export type PanelName = 'start' | 'dashboard' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
-/** The console's one area: it shows exactly one thing at a time, and nothing in it is closed, only chosen. */
+/**
+ * The console's one area: it shows exactly one thing at a time, and nothing in it is closed, only chosen. A move made for
+ * a person's act that opens a chat, or Start, is given where the focus stood (`opened`, `box-focus.ts`): the box of what
+ * it shows takes the focus once drawn. A move given none moves no focus.
+ */
 export interface Dock {
-    show(panel: PanelName): void;
+    show(panel: PanelName, opened?: Opened): void;
     /**
      * Shows a conversation: the campaign's one, made on first use, when a campaign is given, else a new set-up chat.
      */
-    chat(campaign?: { id: string; name: string }): void;
+    chat(campaign?: { id: string; name: string }, opened?: Opened): void;
     /** Shows a chat that is open. */
-    showChat(id: string): void;
+    showChat(id: string, opened?: Opened): void;
     /** Forgets a chat that was taken away; when it was the one shown, Start is shown. */
     dropChat(id: string): void;
-    /** Shows one of the browser shell's screens. */
-    page(to: Route): void;
+    /** Shows one of the browser shell's screens; an agent's Chat tab is its conversation, as `chat` shows it. */
+    page(to: Route, opened?: Opened): void;
 }
 
 export interface Console {
