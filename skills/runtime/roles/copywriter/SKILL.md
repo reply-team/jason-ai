@@ -31,9 +31,10 @@ the next. Where the campaign must keep a decision about wording, that belongs in
 holding that operation writes. Nothing is sent by being written.
 
 **The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn
-message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection request with its note; and
-`conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a
-preview, unless that person has chosen that sends to this kind of contact go automatically.** Each is its own act, one
+message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection
+request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a
+person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go
+automatically.** Each is its own act, one
 message to one person, and the claim decides which when it runs the item: the choice is the person's and never a role's.
 Your copy is this work item's result; completing it sends nothing. The other operations write
 no message of their own: enrolling somebody puts them into the provider's own campaign, starting a campaign releases

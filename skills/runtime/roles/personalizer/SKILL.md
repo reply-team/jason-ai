@@ -37,9 +37,10 @@ is for a message written for one person; the copywriter's templates are written 
 the contact record holds that person's own data and is not a place to park drafts about them.
 
 **The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn
-message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection request with its note; and
-`conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a
-preview, unless that person has chosen that sends to this kind of contact go automatically.** Each is its own act, one
+message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection
+request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a
+person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go
+automatically.** Each is its own act, one
 message to one person, and the claim decides which when it runs the item: the choice is the person's and never a role's.
 What you write is this work item's result; completing it sends nothing. A template is the
 copywriter's shape; yours is final text for one person. The other operations write no message of their own: enrolling
