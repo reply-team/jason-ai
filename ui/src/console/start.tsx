@@ -1,4 +1,5 @@
 import { effect, signal } from '@preact/signals-react';
+import { openedHere, type Opened } from './box-focus';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { t } from '../platform/i18n';
@@ -126,7 +127,7 @@ const aiConnected = (): boolean | null => {
  * Makes the set-up chat, shows it and sends the message in it as the waiting message, so an AI that went in the
  * meantime gives the words back with its reason; a refused chat gives the words back to the box.
  */
-async function begin(text: string): Promise<void> {
+async function begin(text: string, opened?: Opened): Promise<void> {
     startMaking.value = text;
     let id: string | null;
     // A mode the person chose beside the box is asked of the desktop once the chat is made; none chosen asks for none.
@@ -161,7 +162,7 @@ async function begin(text: string): Promise<void> {
             changeChat(id, (each) => told(each, messageOf(error)));
         }
     }
-    here().dock.showChat(id);
+    here().dock.showChat(id, opened);
     sendTurn(id, text, true, undefined, true);
 }
 
@@ -170,15 +171,26 @@ effect(() => {
     const text = startWaiting.value;
     if (text === null || startMaking.value !== null || aiConnected() !== true) return;
     startWaiting.value = null;
-    void begin(text);
+    void begin(text, sending);
 });
+
+/**
+ * The person's send, while it is being taken: a message that goes at once is their act, and the chat it makes has the
+ * caret in its box; one that waits for an AI goes later, by no act of theirs, and moves no focus.
+ */
+let sending: Opened | undefined;
 
 /** What the person sent from the start screen; empty words send nothing, nor do words while one message is in hand. */
 export function submitStart(text: string): void {
     const words = text.trim();
     if (!words || startWaiting.value !== null || startMaking.value !== null) return;
     startDraft.value = '';
-    startWaiting.value = words;
+    sending = openedHere();
+    try {
+        startWaiting.value = words;
+    } finally {
+        sending = undefined;
+    }
 }
 
 /** The waiting message back into the box. */

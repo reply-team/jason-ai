@@ -1,4 +1,5 @@
 import { route, type Route } from '../../router';
+import { openedHere } from '../../console/box-focus';
 import { activePanel, here } from '../../console/state';
 
 // The way out of Settings. The place the person was in when Settings opened is held here, in the page's memory and
@@ -24,15 +25,20 @@ export function forgetPlace(): void {
     before = null;
 }
 
-/** Leaves Settings for the place it was opened from, else for the start place. */
+/**
+ * Leaves Settings for the place it was opened from, else for the start place. It is the person's act, by Back or Escape:
+ * a chat or Start it goes back to has the caret in its box.
+ */
 export function leaveSettings(): void {
+    const opened = openedHere();
     const place = before;
     before = null;
     const dock = here().dock;
-    if (place === null || place.pane === 'start') return dock.show('start');
-    if (place.pane === 'page') return place.route.screen === 'settings' ? dock.show('start') : dock.page(place.route);
+    if (place === null || place.pane === 'start' || (place.pane === 'page' && place.route.screen === 'settings'))
+        return dock.show('start', opened);
+    if (place.pane === 'page') return dock.page(place.route);
     // A chat, an agent's or any other, is shown again by its id.
-    if (place.pane.startsWith('chat:')) return dock.showChat(place.pane.slice('chat:'.length));
+    if (place.pane.startsWith('chat:')) return dock.showChat(place.pane.slice('chat:'.length), opened);
     return dock.show(place.pane as Parameters<typeof dock.show>[0]);
 }
 
