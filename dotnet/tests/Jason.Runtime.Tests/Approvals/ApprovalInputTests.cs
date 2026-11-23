@@ -114,6 +114,40 @@ public class ApprovalInputTests
     }
 
     /// <summary>
+    /// Parked work that holds no arguments at all: an operation that requires some is refused its yes as the claim would
+    /// refuse the composed input, with nothing changed; one that requires none goes through, as the claim composes it.
+    /// </summary>
+    [Theory]
+    [InlineData("campaign.enroll", true)]
+    [InlineData("campaign.pause", false)]
+    public async Task A_yes_on_work_that_holds_no_arguments_is_refused_only_where_the_operation_requires_some(string operation, bool refused)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approval) = await ParkedWork.WriteAsync(db, Ct);
+        item.Operation = operation;
+        item.Context = new JsonObject();
+        approval.Operation = operation;
+        await db.SaveChangesAsync(Ct);
+
+        var request = new ApprovalDecisionRequest(approval.PublicId, Operator, null);
+        if (refused)
+        {
+            var error = await Assert.ThrowsAsync<ValidationException>(() => Service(db).ApproveAsync(request, Ct));
+            Assert.Equal(("context.input", "required"), (Assert.Single(error.Details!).Field, error.Details![0].Code));
+        }
+        else
+        {
+            await Service(db).ApproveAsync(request, Ct);
+        }
+
+        await using var fresh = database.Open();
+        Assert.Equal(refused ? ApprovalStatus.Pending : ApprovalStatus.Approved, (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Equal(refused ? WorkItemStatus.AwaitingApproval : WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
+        Assert.Equal(refused ? 0 : 2, await fresh.Journal.AsNoTracking().CountAsync(Ct));
+    }
+
+    /// <summary>
     /// A reply parked with <paramref name="body"/> as its text, as the claim parked it under the document of its day: the
     /// item holds the arguments and the question was asked about them.
     /// </summary>

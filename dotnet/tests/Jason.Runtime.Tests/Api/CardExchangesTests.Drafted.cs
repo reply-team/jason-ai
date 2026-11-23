@@ -91,6 +91,11 @@ public partial class CardExchangesTests
     /// The parked reply as it stood under the document of its day: its arguments, its question and the preview the person
     /// reads all carry the drafted text where the claim put <paramref name="written"/>.
     /// </summary>
+    /// <remarks>
+    /// The approval's subject hash is deliberately left as the claim computed it for the plain text: the yes reads the
+    /// item's arguments, never the hash; the edit withdraws the question before any claim compares a hash; and the
+    /// recording writes every hash as a placeholder.
+    /// </remarks>
     private static async Task DraftedBeforeTheUpdateAsync(RuntimeApiFixture api, string item, string written, string drafted)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
