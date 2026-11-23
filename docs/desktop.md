@@ -103,9 +103,9 @@ runs commands is called the AI.
 The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
 its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
-A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in
-**Agents** or **Chats** or on the Agents page, an agent's **Chat** tab, the Feed, a link to it you click in a notification
-or a card, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows
+A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at
+once, unless that same act opened a control of the chat's own that takes the focus, a name's field or a question's
+**Keep**, or opened nothing, as removing a chat, which leaves Start in its place. Nothing else moves it there: not moving along the rows
 or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving. A screen reader
 hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name
 of their row.
@@ -1000,8 +1000,9 @@ and then is not run, and the turn goes on; one line under its title says that Cl
 "Allow for this chat" works on it as in Ask first. Jason does not read a
 program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
 can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
-Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
-here follows its campaign's send mode; the AI approves when you tell it to." A turn in Full access uses your own Claude
+Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit on Claude Code "A
+message written here follows its campaign's send mode; the AI approves when you tell it to."; on Codex, whose Ask first
+and Auto-edit only read and propose, so that a send the chat writes waits for you, the Plan only line. A turn in Full access uses your own Claude
 Code configuration, and a turn in any other mode does not (see Hosts); Jason's check does not see the commands a skill
 of yours runs from its `!` lines, which Claude Code runs itself. A folder an earlier version gave a chat in Full access is moved aside when Jason starts; the chat says
 where it is, with an Open folder button, and Jason removes it after seven days.

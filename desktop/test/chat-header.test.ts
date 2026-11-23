@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { feedBlock, givenTitle, header, nameLimit, nameOf, recap, recapLimit, titleLimit, titleOf, turnInput } from '../src/chat-header.ts';
 import type { LineEntry } from '../src/feed.ts';
 import { readFileSync } from 'node:fs';
-import { chatModes, codexModeSays, modeNames, modeSays, type ChatMode } from '../src/chat-modes.ts';
+import { chatModes, codexModeSays, modeNames, modeSays, planReads, type ChatMode } from '../src/chat-modes.ts';
 
 const campaign = (name: string | null, fields: { status?: string; folder?: string | null } = {}) => ({
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
@@ -239,6 +239,14 @@ test('the header ends by naming the mode the start runs in and what the AI does 
         assert.doesNotMatch(said, /\n/);
         for (const other of chatModes) if (other !== mode) assert.ok(!said.includes(expected[other]), `${mode} names ${other}`);
     }
+});
+
+test('a Plan only start on Claude Code is told, right after its mode, which reading tools run where a shell listing is refused, and no other start is', () => {
+    const planned = header(campaign('Spring'), 'ada', claudeStart('plan_only'));
+    assert.ok(planned.includes(`This turn runs in Plan only: in it the AI reads and proposes, and changes nothing. ${planReads} The person may change the mode`), planned);
+    for (const mode of chatModes.filter((each) => each !== 'plan_only')) assert.ok(!header(campaign('Spring'), 'ada', claudeStart(mode)).includes(planReads), mode);
+    // Codex runs a Plan only turn in its read-only sandbox, where a listing made with the shell runs.
+    assert.ok(!header({ campaign: null }, 'ada', { mode: 'plan_only', program: 'codex', sealed: false, fullAccess: true }).includes(planReads));
 });
 
 test('on Codex the header says a mode in Codex\'s own words where the menu does', () => {

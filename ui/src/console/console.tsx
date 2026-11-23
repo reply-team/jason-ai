@@ -91,9 +91,10 @@ consoleShell.settingsSections = LiveSettingsSections;
 // one of the browser shell's screens. Nothing is closed, only chosen; every window opens on Start.
 
 /** What a campaign's Chat on the browser shell's screens does: shows the campaign's one conversation, made on first
- *  use; with no campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. */
+ *  use; with no campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. It is
+ *  a click of the person's, so the chat's box takes the focus. */
 function chatAbout(campaign?: { id: string; name: string }): void {
-    here().dock.chat(campaign);
+    here().dock.chat(campaign, openedHere());
 }
 
 /** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */

@@ -25,6 +25,36 @@ public partial class RoleSkillTests
         CarriesTheLaunchContract("responder");
     }
 
+    /// <summary>
+    /// The skills decide whether a campaign is linked to a provider's sequence by the pin `jason campaign get` answers,
+    /// so the field names they use are held to the DTOs as they serialize: a skill cannot name a field that is not there.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
+    public void The_pin_fields_the_skills_name_are_the_ones_the_dto_serializes()
+    {
+        var naming = Jason.Contracts.Json.JasonJson.Options.PropertyNamingPolicy!;
+        var list = naming.ConvertName(nameof(Jason.Contracts.Api.CampaignDto.ExternalIds));
+        var kind = naming.ConvertName(nameof(Jason.Contracts.Api.ExternalIdDto.Kind));
+        Assert.Equal("external_ids", list);
+        Assert.Equal("kind", kind);
+        Assert.NotNull(typeof(Jason.Contracts.Api.CampaignDto).GetProperty(nameof(Jason.Contracts.Api.CampaignDto.ExternalIds)));
+        Assert.NotNull(typeof(Jason.Contracts.Api.ExternalIdDto).GetProperty(nameof(Jason.Contracts.Api.ExternalIdDto.Kind)));
+
+        var sentences = new[]
+        {
+            Flattened("responder"),
+            Flattened("manager"),
+            FlattenedEntry("manager", "start"),
+            FlattenedEntry("manager", "resume"),
+        };
+        foreach (var text in sentences)
+        {
+            Assert.Contains($"`{list}`", text, StringComparison.Ordinal);
+            Assert.Contains($"whose `{kind}` is `campaign`", text, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_a_stop_in_order_and_proposes_taking_the_person_out()
@@ -40,6 +70,15 @@ public partial class RoleSkillTests
         Assert.True(register >= 0 && optout > register && stop > optout, "the register, then the opt-out, then the proposed stop");
         Assert.Contains("runs even while the campaign is paused", skill, StringComparison.Ordinal);
         Assert.Contains("waits for a person", skill, StringComparison.Ordinal);
+
+        // A stop takes a person out of a provider's campaign, and a campaign of Jason's own direct letters has none: there
+        // the proposal fails at its claim and costs a person a review at every opt-out, while `optout.record` already
+        // completed it.
+        Assert.Contains("Read `jason campaign get` first, and propose it only where its `external_ids` holds an item whose `kind` is `campaign`", skill, StringComparison.Ordinal);
+        Assert.Contains("which the contract calls `campaign.external_ids.campaign`, and the operation cannot run without it, whatever the context says.", skill, StringComparison.Ordinal);
+        Assert.Contains("your summary says in one clause that the campaign holds no provider's campaign, so nothing was stopped there.", skill, StringComparison.Ordinal);
+        Assert.Contains("jason campaign get cmp_", skill, StringComparison.Ordinal);
+        Assert.Contains("`optout.record` completes the opt-out, you propose no `enrollment.stop`", skill, StringComparison.Ordinal);
 
         // A campaign that is archived takes no new work, and the provider's opt-out is account-wide.
         Assert.Contains("record the opt-out through any active or paused campaign they are a member of that is routed to the same provider account", skill, StringComparison.Ordinal);

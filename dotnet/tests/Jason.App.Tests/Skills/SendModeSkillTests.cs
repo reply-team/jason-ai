@@ -80,7 +80,7 @@ public partial class SendModeSkillTests
         var skill = RoleSkillTests.Flattened("responder");
 
         Assert.Contains("the claim refuses, in every campaign, every provider operation about them that the register gates, on a value they gain later too", skill, StringComparison.Ordinal);
-        Assert.Contains("What is for exactly such a person still runs: the provider's `optout.record` and a proposed `enrollment.stop`, below.", skill, StringComparison.Ordinal);
+        Assert.Contains("What is for exactly such a person still runs: the provider's `optout.record` and, where the campaign holds a provider's campaign, a proposed `enrollment.stop`, below.", skill, StringComparison.Ordinal);
         Assert.Contains("and that an answer naming another category has the register's entries taken off but leaves the lock, which only a verdict the person records themselves lifts", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("refuses any work about them", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("only the person's own word lifts it", skill, StringComparison.Ordinal);

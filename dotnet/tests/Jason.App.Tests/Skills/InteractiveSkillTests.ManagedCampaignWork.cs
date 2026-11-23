@@ -1090,6 +1090,13 @@ public partial class InteractiveSkillTests
             "Where a draft campaign already exists, made by `quick-start` or by New agent in Jason Desktop, the set-up fills that one: read what it holds, ask only for what is missing, and make no second campaign.",
             section,
             StringComparison.Ordinal);
+
+        // A session that asked "what do you sell" first found the draft on its second turn: the list is read before the
+        // first question, and a draft that matches is named at once.
+        Assert.Contains(
+            "Read `jason campaign list` before your first question: where a draft's name, or the audience its context holds, matches what the person said, name that draft in your first answer and take it up, rather than asking as if from nothing.",
+            section,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1161,6 +1168,10 @@ public partial class InteractiveSkillTests
             "How messages go is said as a fact, read from `send_modes_in_force` in what `jason campaign get` answers.",
             "Where a kind goes automatically, say which kind, and that the critic reads each such message before it goes.",
             "Never ask the person to choose here, and never set a mode: `approvals-and-questions` asks it at an approval.",
+
+            // A line of a memory file is what the roles read and plan by, and nothing in Jason holds a send by it: a
+            // summary that said "nothing goes on Fridays" as a fact told the person of a guard that does not exist.
+            "A rule from a memory file, such as \"nothing goes on Fridays\", is said as what the roles read and plan by, never as something Jason enforces: nothing in Jason holds a message by it, and one approved on a Friday goes.",
         })
         {
             Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
@@ -1186,6 +1197,8 @@ public partial class InteractiveSkillTests
         foreach (var fact in new[]
         {
             "These reads speak only where something is wrong: where every one passes, say nothing of them and go on to the question.",
+            "**Read that it is ready before you ask.** These reads speak only where something is wrong",
+            "Do not say that the roles launch, that the notifications reach the person, or that any other check passed.",
             "**Can a role run here?** Read the `roles_launchable` check in what `jason status` answers.",
             "Do not ask the question and do not start the campaign: say plainly that no role can run here yet, and give the repair the check names, in its own words.",
             "It is an operator's act on this machine, `operating-the-installation`'s: propose it, and run it only when the person asks.",
@@ -1193,6 +1206,11 @@ public partial class InteractiveSkillTests
         {
             Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"{SetUp}\" does not say: {fact}");
         }
+
+        // The rule stands before the reads it governs, so a session reads it before it reads them.
+        var rule = section.IndexOf("These reads speak only where something is wrong", StringComparison.Ordinal);
+        var reads = section.IndexOf("jason campaign list-contacts cmp_", StringComparison.Ordinal);
+        Assert.True(rule >= 0 && reads > rule, $"\"{SetUp}\" says the rule of the readiness reads at {rule} and prints them at {reads}: the rule comes first.");
 
         var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
         var status = printed.IndexOf("jason status");

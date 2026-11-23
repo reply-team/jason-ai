@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics. Also when the person says ignore the limit: read what Jason holds at a daily limit of launches, and lift it on their word.
 metadata:
   status: draft
 ---
@@ -365,10 +365,11 @@ jason launches list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 
 **"Ignore the limit" is the person's word, and the lift is its verb.** When the person tells you to ignore the limit, or
 names the lift, read first what is held, so that you can say what the lift let go: the waiting items whose `last_error`
-is `launches_spent`, each with its campaign and its role. Then run the lift as the person, under their own name, with a
-short reason of your own that says it is their word. It lets go every item held at a daily limit, in every campaign
-holding one and for every role, and holds nothing more until the installation's next midnight. Then say three things:
-which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's
+is `launches_spent`, each with its campaign and its role. Where something is held, that is what they mean; only where
+nothing is held, ask which limit they mean, and lift nothing. Then run the lift as the person, under their own name,
+with a short reason of your own that says it is their word. It lets go every item held at a daily limit, in every
+campaign holding one and for every role, and holds nothing more until the installation's next midnight. Then say three
+things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's
 `time_zone`, naming the zone, and in brackets how long from now, such as "until 00:00 Europe/Berlin (in five and a half
 hours)"; and that the items it released are counted again after that midnight, like any other of the new day. Where the
 answer says `already_lifted`, today was lifted already, and it still let go what was held since. Never lift on your own

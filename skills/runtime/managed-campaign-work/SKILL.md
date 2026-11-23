@@ -178,7 +178,9 @@ this section holds.
 `quick-start` is the opening for a person's first campaign, and `planner-in-session` is how a direction is planned
 with a person who wants to plan it; both end here. Where a draft campaign already exists, made by `quick-start` or by
 New agent in Jason Desktop, the set-up fills that one: read what it holds, ask only for what is missing, and make no
-second campaign.
+second campaign. Read `jason campaign list` before your first question: where a draft's name, or the audience its
+context holds, matches what the person said, name that draft in your first answer and take it up, rather than asking
+as if from nothing.
 
 Collect what is missing one question at a time, in your own words, when the set-up needs it. Read whatever can be read
 instead of asking for it, never ask again for what the person has said, and record each answer when it comes, not at
@@ -213,7 +215,9 @@ jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason 'the perso
 EOF
 ```
 
-**Read that it is ready before you ask.**
+**Read that it is ready before you ask.** These reads speak only where something is wrong: where every one passes, say
+nothing of them and go on to the question. Do not say that the roles launch, that the notifications reach the person,
+or that any other check passed.
 
 ```
 jason status
@@ -222,9 +226,6 @@ jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op
 ```
-
-These reads speak only where something is wrong: where every one passes, say nothing of them and go on to the
-question.
 
 - **Can a role run here?** Read the `roles_launchable` check in what `jason status` answers. A start summons the
   campaign's manager at once, and the manager is a role: where the check is anything but `ok`, a start would end in a
@@ -246,7 +247,9 @@ question.
 **The last step: the question, and the start.** One message says what is set up, in plain words and with no list of
 questions: the campaign's name; what it sells and to whom; what it is for; where its people come from and how many
 there are; that the first work is for the first twenty people, or the number they named; the channel and the account
-it goes from; who it is written as, and the tone; and how messages go.
+it goes from; who it is written as, and the tone; and how messages go. A rule from a memory file, such as "nothing goes
+on Fridays", is said as what the roles read and plan by, never as something Jason enforces: nothing in Jason holds a
+message by it, and one approved on a Friday goes.
 
 How messages go is said as a fact, read from `send_modes_in_force` in what `jason campaign get` answers. Where every
 message waits, say: "Every message waits for your yes. Later you can let messages go on their own, for people who have
@@ -313,8 +316,10 @@ a message or a preference, takes its body on standard input. Write `--file -` (f
 then `<<'EOF'` with the quotes, the JSON on the lines after it, and `EOF` alone on the last line. The reason: an
 apostrophe in somebody's words ends a JSON argument written on the line in single quotes, and what a broken command
 does depends on the shell. Identifiers and numbers may stay on the line. PowerShell has no here-document, so there you
-pipe a here-string in: `@'` at the end of a line, the JSON, `'@` at the start of its own line, then `| jason` and the
-command with `--file -`.
+pipe a here-string in: first `$OutputEncoding = [Text.UTF8Encoding]::new($false)` as its own statement, then `@'` at the
+end of a line, the JSON, `'@` at the start of its own line, then `| jason` and the command with `--file -`. The first
+statement is not optional: Windows PowerShell before 7 turns every character outside ASCII into `?` on a pipe before
+Jason sees it, and Jason cannot tell.
 
 A campaign is started on the person's yes to the question the set-up ends with, with the person named as the one who
 starts it, and resumed after a pause on their word, the same way, in a person's own session and in the chat of Jason
