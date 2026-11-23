@@ -316,8 +316,10 @@ a message or a preference, takes its body on standard input. Write `--file -` (f
 then `<<'EOF'` with the quotes, the JSON on the lines after it, and `EOF` alone on the last line. The reason: an
 apostrophe in somebody's words ends a JSON argument written on the line in single quotes, and what a broken command
 does depends on the shell. Identifiers and numbers may stay on the line. PowerShell has no here-document, so there you
-pipe a here-string in: `@'` at the end of a line, the JSON, `'@` at the start of its own line, then `| jason` and the
-command with `--file -`.
+pipe a here-string in: first `$OutputEncoding = [Text.UTF8Encoding]::new($false)` as its own statement, then `@'` at the
+end of a line, the JSON, `'@` at the start of its own line, then `| jason` and the command with `--file -`. The first
+statement is not optional: Windows PowerShell before 7 turns every character outside ASCII into `?` on a pipe before
+Jason sees it, and Jason cannot tell.
 
 A campaign is started on the person's yes to the question the set-up ends with, with the person named as the one who
 starts it, and resumed after a pause on their word, the same way, in a person's own session and in the chat of Jason
