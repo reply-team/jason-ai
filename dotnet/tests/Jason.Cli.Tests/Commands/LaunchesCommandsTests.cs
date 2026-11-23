@@ -92,6 +92,90 @@ public class LaunchesCommandsTests
         }
     }
 
+    private const string Limits = """{"day":{"start":"2026-10-15T15:00:00.000Z","end":"2026-10-16T15:00:00.000Z","time_zone":"Asia/Tokyo"},"lift":null,"roles":[{"role":"manager","max_per_day":25,"source":"default"},{"role":"planner","max_per_day":2,"source":"settings"},{"role":"scout","max_per_day":null,"source":"default"}],"held":2}""";
+
+    private const string InACampaign = """{"day":{"start":"2026-10-15T15:00:00.000Z","end":"2026-10-16T15:00:00.000Z","time_zone":"Asia/Tokyo"},"lift":{"until":"2026-10-16T15:00:00.000Z","actor":{"type":"human","id":"ada"},"lifted_at":"2026-10-16T09:00:00.000Z"},"roles":[{"role":"manager","max_per_day":25,"source":"default","started_today":0},{"role":"planner","max_per_day":2,"source":"settings","started_today":4}],"held":1}""";
+
+    /// <summary>A read sends nothing but the campaign it is asked about, and no actor: the default is a writer's name.</summary>
+    [Fact]
+    public async Task List_sends_nothing_or_the_campaign_and_no_actor()
+    {
+        using var cli = new CliRun(Limits);
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("--actor", "human:marta@example.com", "launches", "list"));
+        cli.AssertPosted(Operations.LaunchesList, "{}");
+
+        using var campaign = new CliRun(InACampaign);
+        Assert.Equal(ExitCodes.Success, await campaign.RunAsync("launches", "list", "--campaign", "cmp_A"));
+        campaign.AssertPosted(Operations.LaunchesList, "{\"campaign_id\":\"cmp_A\"}");
+    }
+
+    [Fact]
+    public async Task List_prints_the_answer_as_it_came()
+    {
+        using var cli = new CliRun(Limits);
+
+        await cli.RunAsync("launches", "list");
+
+        Assert.Equal(Limits + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary>
+    /// For a person: one line for the day, in its own zone's clock, and a table of each role's limit and where it comes
+    /// from; a role with none says so; no lift, no line for one; and what is held.
+    /// </summary>
+    [Fact]
+    public async Task List_for_a_person_says_the_day_and_a_table_of_the_limits()
+    {
+        using var cli = new CliRun(Limits);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("launches", "list", "--human"));
+
+        var lines = cli.Text.Split(Environment.NewLine);
+        Assert.Equal("Today runs until 00:00, Asia/Tokyo.", lines[0]);
+        Assert.Equal(["ROLE", "LIMIT", "A", "DAY", "FROM"], lines[1].Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal(["manager", "25", "default"], Cells(lines, "manager"));
+        Assert.Equal(["planner", "2", "settings"], Cells(lines, "planner"));
+        Assert.Equal(["scout", "none", "default"], Cells(lines, "scout"));
+        Assert.DoesNotContain(lines, line => line.Contains("lifted", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Held at a daily limit now: 2 items.", lines);
+    }
+
+    /// <summary>With a campaign: the lift that stands, and the runs each role started there today beside its limit.</summary>
+    [Fact]
+    public async Task List_for_a_person_in_a_campaign_says_the_lift_and_the_runs_started_today()
+    {
+        using var cli = new CliRun(InACampaign);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("launches", "list", "--campaign", "cmp_A", "--human"));
+
+        var lines = cli.Text.Split(Environment.NewLine);
+        Assert.Equal("Today runs until 00:00, Asia/Tokyo.", lines[0]);
+        Assert.Equal("Today's limits are lifted until 00:00, by human:ada at 2026-10-16 09:00:00 UTC.", lines[1]);
+        Assert.Equal(["ROLE", "LIMIT", "A", "DAY", "FROM", "STARTED", "TODAY"], lines[2].Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal(["planner", "2", "settings", "4"], Cells(lines, "planner"));
+        Assert.Contains("Held at a daily limit now in this campaign: 1 item.", lines);
+    }
+
+    /// <summary>The help says what is read, that it is a read, and that a limit is set in the settings file.</summary>
+    [Fact]
+    public async Task The_list_help_states_the_contract()
+    {
+        using var cli = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("launches", "list", "--help"));
+
+        var text = string.Join(' ', cli.Text.Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        foreach (var words in (string[])[
+            "--campaign", "--human", "Runtime:TimeZone", "started_today", "held",
+            "A limit is set in the settings file, under Launches:MaxPerDay:<role>; no command sets one."])
+        {
+            Assert.True(text.Contains(words, StringComparison.Ordinal), $"The help of launches list does not say '{words}':{Environment.NewLine}{cli.Text}");
+        }
+    }
+
+    private static string[] Cells(string[] lines, string role) =>
+        lines.Single(line => line.StartsWith(role + " ", StringComparison.Ordinal)).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
     [Theory]
     [InlineData("lift_not_human", HttpStatusCode.BadRequest)]
     [InlineData("actor_required", HttpStatusCode.BadRequest)]
