@@ -1320,6 +1320,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The desktop's page says that a click on Jason's mark at the top of the sidebar opens Start again, with the words
+    /// typed there and not sent, closing nothing; the sidebar draws the mark and the wordmark as one button named for
+    /// Start that shows Start, with the Alpha badge outside it, and Start's own words are where the typed words live.
+    /// </summary>
+    [Fact]
+    public void The_desktop_page_says_the_mark_opens_start_again_and_the_sidebar_draws_it_so()
+    {
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains("Start opens every time the window opens, also when campaigns exist, and a click on Jason's mark at the top of the sidebar opens it again, with the words you typed there and did not send; it closes nothing, and in the Demo it opens the Demo's Start.", desktop, StringComparison.Ordinal);
+
+        var side = Flat(Page("ui", "src", "console", "side.ts"));
+        Assert.Contains("<button class=\"home\" type=\"button\" aria-label=\"${t('start.title')}\" ${act('side.show', 'start')}> <img class=\"mark\"", side, StringComparison.Ordinal);
+        Assert.Contains("</button> <span class=\"alpha\">Alpha</span> </div>", side, StringComparison.Ordinal);
+        Assert.Contains("panel === 'start' ||", side, StringComparison.Ordinal);
+        Assert.Contains("'start.title': 'Start',", Page("ui", "src", "locale", "en.ts"), StringComparison.Ordinal);
+
+        // What is typed in Start's box is a signal of the module's own, so showing Start again keeps it.
+        Assert.Contains("export const startDraft = signal('');", Page("ui", "src", "console", "start.tsx"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Starting the runtime at logon is done at install, by the set-up an install ends in: the guide marks it so, says it
     /// starts nothing now, and gives the line that turns it off, so no agent asks for it or registers it again by hand.
     /// </summary>
