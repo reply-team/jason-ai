@@ -219,6 +219,13 @@ public partial class RoleSkillTests
             "Its `channel` is the thread's, as the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding.",
             skill,
             StringComparison.Ordinal);
+
+        // The read hands each message as the provider holds it, markup included, and a responder imitates what it read:
+        // the document refuses a text with a tag or an entity in it, so the skill says what the text is.
+        Assert.Contains(
+            "What a read returns may carry the provider's markup; what you write is plain text with ordinary line breaks, never a tag such as `<br>` and never an entity such as `&nbsp;`.",
+            skill,
+            StringComparison.Ordinal);
         Assert.Contains(
             "Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then `-reply-501-2` — so that two replies in one thread are two keys.",
             skill,
