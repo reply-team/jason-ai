@@ -893,6 +893,13 @@ export const ROWS = {
         "class": "validation",
         "note": "The text carries a double opening brace, which Reply may read as a placeholder it fills in for each person, so what would go out might not be the text a person approved. Nothing was sent. Write the text without one and propose the reply again."
       },
+      "tag_in_the_text": {
+        "when": "An email reply's text holds a `<` an HTML reader takes as the start of a tag: one followed by an ASCII letter, `/`, `!` or `?`. The text goes to Reply as HTML that shows it, and Reply decodes an email's body before it reads it and drops a tag it does not know with everything after it, so what went out would stop there. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "quotes": "reason",
+        "note": "Nothing was sent. Write the text without a `<` right before a letter, `/`, `!` or `?`, an address without its angle brackets, and propose the reply again."
+      },
       "text_reply_would_render": {
         "when": "The CLI answered `reply.refused` with Reply's code `inboxThread.invalidInput` and a sentence whose first word is `RenderingFail`: Reply read part of the text as a placeholder of its own, could not fill it in, and refused the send.",
         "code": "message_invalid",

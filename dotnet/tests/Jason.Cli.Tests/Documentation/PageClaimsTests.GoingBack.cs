@@ -49,13 +49,15 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The lines each package's digest list holds after the one 0.49 published, in order, each a version a release after
-    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes. A package
-    /// a later release placed is data in the data directory that no release after 0.49 has opened, as the section's steps
-    /// say of every such data, and a package that moves in 0.50 is appended here.
+    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes, and Reply's
+    /// 0.19.1, which 0.50 places for a reply's text written as the person it reaches reads it. A package a later release
+    /// placed is data in the data directory that no release after 0.49 has opened, as the section's steps say of every such
+    /// data, and a package that moves in 0.50 is appended here.
     /// </summary>
     private static readonly (string Plugin, string Line)[] PackagesAfter049 =
     [
         ("journal-forwarder", "1.8.0 sha256:1af0e45e1a40781bc011a2968317a9bae1320cd4b6bb4a86d1567807bd86000e"),
+        ("reply", "0.19.1 sha256:ca88629f7971c5f2062db155920218fc0de59ddfd2ec183acfe94d8344998825"),
     ];
 
     /// <summary>
