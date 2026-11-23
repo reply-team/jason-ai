@@ -67,8 +67,12 @@ export type Entry =
     | { kind: 'error'; text: string }
     /** The campaigns a set-up turn made, for the person to pick the one this chat is about. */
     | { kind: 'pick'; campaignIds: string[] }
-    /** The set-up chat became the conversation of the campaign named: said in the page, not kept by the desktop. */
-    | { kind: 'attached'; title: string }
+    /**
+     * The set-up chat became the conversation of the campaign named: said in the page, not kept by the desktop. `ofTurn`
+     * when the turn that made the campaign said it at its end, before its `done`; absent when the person picked the
+     * campaign afterwards, which the desktop refuses while a turn runs.
+     */
+    | { kind: 'attached'; title: string; ofTurn?: true }
     /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
     | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
     /** The person started the conversation fresh: said in the page, not kept by the desktop. */
@@ -324,7 +328,7 @@ export function planElsewhere(chat: Chat, host: string | null): boolean {
  * sentence beside the conversation is not one that follows it.
  */
 export function lastEntryOf(chat: Chat): Entry | undefined {
-    for (let at = chat.entries.length - 1; at >= 0; at--) if (locks[chat.entries[at]!.kind]) return chat.entries[at];
+    for (let at = chat.entries.length - 1; at >= 0; at--) if (locksChoice(chat.entries[at]!)) return chat.entries[at];
     return undefined;
 }
 
@@ -668,7 +672,12 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                 ...chat,
                 campaignId: event.campaignId,
                 title: event.title,
-                entries: [...chat.entries, { kind: 'attached', title: event.title }],
+                entries: [
+                    ...chat.entries,
+                    chat.running
+                        ? { kind: 'attached', title: event.title, ofTurn: true }
+                        : { kind: 'attached', title: event.title },
+                ],
             };
         case 'fresh':
             return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
@@ -984,9 +993,10 @@ export function shown(chat: Chat): Shown[] {
 }
 
 /**
- * Whether an entry that follows a choice locks it: anything of the person's or the AI's, and anything the desktop says
- * of the conversation's own turns and session. The journal's own entries in the Feed and a pick do not: a choice in the
- * Feed would die within seconds of a line, and one that ends a set-up turn would never be live.
+ * Whether an entry of a kind that follows a choice locks it: anything of the person's or the AI's, and anything the
+ * desktop says of the conversation's own turns and session. The journal's own entries in the Feed and a pick do not: a
+ * choice in the Feed would die within seconds of a line, and one that ends a set-up turn would never be live. Nor does
+ * the hand-over a set-up turn says at its end (`locksChoice`), for the same reason.
  */
 const locks: Readonly<Record<Entry['kind'], boolean>> = {
     user: true,
@@ -1004,8 +1014,14 @@ const locks: Readonly<Record<Entry['kind'], boolean>> = {
     gap: false,
 };
 
-/** Whether an entry of this kind, following a choice, locks it. */
-export const locksChoice = (kind: Entry['kind']): boolean => locks[kind];
+/**
+ * Whether an entry, following a choice, locks it: by its kind (`locks`), but the chat made a campaign's conversation by
+ * the turn that asked the choice does not. Every turn begins with the person's message, which locks, so a hand-over
+ * marked `ofTurn` never stands between a choice and a later turn; one the person picked afterwards locks as before. In
+ * that agent's chat a person's act on the agent at or after the choice's moment still locks it (`choiceState`).
+ */
+export const locksChoice = (entry: Entry): boolean =>
+    entry.kind === 'attached' ? entry.ofTurn !== true : locks[entry.kind];
 
 /** The journal's kinds of a person's acts on an agent that lock the agent's choice asked before them. */
 export const actKinds = [
@@ -1071,7 +1087,7 @@ export function choiceState(
     maySend: boolean,
 ): ChoiceState {
     const entry = chat.entries[index];
-    const next = chat.entries.slice(index + 1).find((each) => locks[each.kind]);
+    const next = chat.entries.slice(index + 1).find(locksChoice);
     if (next?.kind === 'user') {
         const said = next.text.trim();
         const label = labels.find((each) => each.trim() === said);
