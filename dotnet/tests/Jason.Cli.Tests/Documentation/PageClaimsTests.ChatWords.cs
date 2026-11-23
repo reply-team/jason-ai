@@ -21,11 +21,12 @@ public partial class PageClaimsTests
         Assert.Contains("a file in the turn's folder named like one of the six", desktop, StringComparison.Ordinal);
         Assert.Contains("a read or a write that names a path under the data directory outside the turn's folder (the settings file", desktop, StringComparison.Ordinal);
         Assert.Contains("to the `.claude`, `.agents` and `.codex` folders of the turn's folder and to its `.mcp.json`.", desktop, StringComparison.Ordinal);
-        Assert.Contains("a write outside the turn's folder and the added folders, or in a campaign's or a project's folder", desktop, StringComparison.Ordinal);
-        Assert.Contains("a file tool outside the chat's folders is refused by Claude Code itself, with no card, and the chat says so and that changing the mode lets it read there.", desktop, StringComparison.Ordinal);
-        Assert.Contains("a shell command that names such a path asks you first.", desktop, StringComparison.Ordinal);
+        Assert.Contains("a read outside the turn's folder and the added folders by a command, on an older Claude Code; a write outside them, or in a campaign's or a project's folder", desktop, StringComparison.Ordinal);
+        Assert.Contains("a file tool outside the chat's folders is refused by Claude Code itself, with no card, and the chat says so and that another mode may let it read there (Ask first and Auto-edit, from Claude Code 2.1.322 on).", desktop, StringComparison.Ordinal);
+        Assert.Contains("in Plan only it is refused, as any shell command is.", desktop, StringComparison.Ordinal);
         Assert.DoesNotContain("The cards left in Plan only are a read outside the chat's folders", desktop, StringComparison.Ordinal);
         Assert.DoesNotContain("in Plan only and on an older Claude Code; a write outside them", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("changing the mode lets it read there", desktop, StringComparison.Ordinal);
         foreach (var old in new[] { "strictly inside the chat folder", "a file in the chat folder named", "outside the chat folder (the settings file", "folders of the chat folder", "a read outside the chat folder" })
         {
             Assert.DoesNotContain(old, desktop, StringComparison.Ordinal);
