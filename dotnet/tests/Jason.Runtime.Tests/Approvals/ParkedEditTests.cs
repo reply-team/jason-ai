@@ -78,6 +78,7 @@ public class ParkedEditTests
         await using var db = database.Open();
         var (item, approval) = await ParkedWork.WriteAsync(db, Ct);
         item.Operation = "campaign.pause";
+        item.Context = new JsonObject();
         approval.Operation = "campaign.pause";
         await db.SaveChangesAsync(Ct);
 

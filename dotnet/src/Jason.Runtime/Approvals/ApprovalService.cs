@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Contacts;
 using Jason.Contracts.Plugins;
@@ -16,9 +17,11 @@ namespace Jason.Runtime.Approvals;
 /// The four verbs a person decides through. Nothing inside the runtime calls them: the dispatcher parks work and
 /// reads decisions, and the only way one is made is a request that arrives here naming the person who made it.
 /// </summary>
-public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, TimeProvider clock, PatternTiming? timing = null)
 {
     public const int MaxReasonLength = 2000;
+
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
     /// <summary>
     /// What is waiting, newest question last. Pending by default, because the question a person opens this with
@@ -102,6 +105,11 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
+        if (decision == ApprovalStatus.Approved)
+        {
+            RefuseBrokenInput(item);
+        }
+
         var now = clock.GetUtcNow().UtcDateTime;
 
         ApprovalGate.Resolve(db, journal, item, approval, decision, actor, reason, now);
@@ -138,6 +146,32 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
 
         // The decision is written; what follows reads only, and is not cancelled once it is.
         return Detail(approval, await UnsetAsync(CancellationToken.None).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// A yes is refused, before anything is written, when the arguments the item holds now do not satisfy the operation's
+    /// document as this build publishes it: a document can refuse what it once accepted, and work parked before then waits
+    /// as it was. The claim would refuse such work once approved (<c>input_invalid</c>, final, before any child), so the
+    /// person learns it at the act that would otherwise let it go to fail, with the document's own reason, while the card
+    /// is in front of them and can still be edited. The rule is the one <c>workitem.create</c> and <c>workitem.update</c>
+    /// read the arguments by, never a copy of it; the claim's own reading of the composed input stays as it is. A no is
+    /// never refused for the draft it turns down.
+    /// </summary>
+    /// <remarks>
+    /// The arguments, not the composed input: the composed input is the arguments, copied as they are, beside what the
+    /// runtime reads at the claim — the routed plugin's pins, the send or the search named, the person — which a person
+    /// does not write, and which may move between a yes and the claim whatever is checked here.
+    /// </remarks>
+    private void RefuseBrokenInput(WorkItem item)
+    {
+        if (item.Kind != WorkItemKind.ProviderOp || item.Operation is not { } operation)
+        {
+            return;
+        }
+
+        var errors = new ValidationErrors();
+        WorkItemValidation.ValidateProviderInput(operation, item.Context[WorkItemService.InputKey], _timing, errors);
+        errors.ThrowIfAny();
     }
 
     /// <summary>

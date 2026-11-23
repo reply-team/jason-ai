@@ -85,6 +85,7 @@ public class SummaryNamesTests
         var campaign = WorkItemFactory.NewCampaign("Autumn outreach", now: Noon);
         var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
         item.Status = WorkItemStatus.AwaitingApproval;
+        item.Context = new JsonObject { ["input"] = ParkedWork.Enrolment() };
         item.Contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = first, LastName = last, CreatedAt = Noon, UpdatedAt = Noon };
         db.Campaigns.Add(campaign);
         db.WorkItems.Add(item);

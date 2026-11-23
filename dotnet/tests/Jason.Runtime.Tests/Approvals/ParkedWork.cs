@@ -25,6 +25,9 @@ internal static class ParkedWork
         db.Campaigns.Add(campaign);
         var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
         item.Status = WorkItemStatus.AwaitingApproval;
+
+        // The arguments the claim parked it with, which the document accepts: a yes reads them again before it is taken.
+        item.Context = new JsonObject { ["input"] = Enrolment() };
         item.DueAt = dueAt;
         item.Priority = priority;
         db.WorkItems.Add(item);
@@ -59,4 +62,14 @@ internal static class ParkedWork
         await db.SaveChangesAsync(ct);
         return (item, approval);
     }
+
+    /// <summary>An enrolment's arguments that <c>campaign.enroll</c>'s document accepts, as a claim parks them.</summary>
+    public static JsonObject Enrolment() => new()
+    {
+        ["campaign"] = new JsonObject { ["external_id"] = "seq_8811" },
+        ["channel"] = "email",
+        ["collision"] = "skip",
+        ["start"] = new JsonObject { ["position"] = "first_step" },
+        ["first_touch"] = "authored_delay",
+    };
 }
