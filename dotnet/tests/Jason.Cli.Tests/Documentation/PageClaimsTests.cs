@@ -1405,13 +1405,14 @@ public partial class PageClaimsTests
     {
         var desktop = Flat(Page("docs", "desktop.md"));
         Assert.Contains("While work items wait on a daily limit of launches, one line at the top of Needs you says how many and until when, the day's end on your clock with its zone named, says that a lift lets every role in every agent run past today's limits until then, and offers **Lift today's limits**, which lifts as you, the person who approves there, with the reason \"Lifted from Needs you.\";", desktop, StringComparison.Ordinal);
-        Assert.Contains("The line is no item of the list: no number on Needs you, in the sidebar or on the tray counts it, and the Demo has none.", desktop, StringComparison.Ordinal);
+        Assert.Contains("While the line shows and nothing else waits, Needs you does not say you are caught up, and still says nothing is waiting for your decision. The line is no item of the list: no number on Needs you, in the sidebar or on the tray counts it, and the Demo has none.", desktop, StringComparison.Ordinal);
         Assert.Contains("It opens Jason Desktop, on Needs you, as `jason ui open` does. Above that list, Needs you shows the work held at a daily limit of launches and the lift that lets it go.", Flat(Page("docs", "notifications.md")), StringComparison.Ordinal);
 
         var held = Flat(Page("ui", "src", "console", "needs-held.ts"));
         Assert.Contains("export const NEEDS_LIFT_REASON = 'Lifted from Needs you.';", held, StringComparison.Ordinal);
         Assert.Contains("api.call<LaunchesLift>('launches.lift', { reason: NEEDS_LIFT_REASON }, 'write')", held, StringComparison.Ordinal);
         Assert.Contains("if (mode.value === 'demo') return null;", held, StringComparison.Ordinal);
+        Assert.Contains("heldShown() ? null : html`<div class=\"bd\">You're all caught up</div>`", Flat(Page("ui", "src", "console", "needs.ts")), StringComparison.Ordinal);
         Assert.Contains("await Promise.all([attention.load(api, false, followed), readHeld(api)]);", Flat(Page("ui", "src", "console", "needs.ts")), StringComparison.Ordinal);
         Assert.Contains("'needs.held.lift': \"Lift today's limits\",", Page("ui", "src", "locale", "en.ts"), StringComparison.Ordinal);
     }

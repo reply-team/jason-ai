@@ -62,6 +62,12 @@ export function forgetHeld(): void {
 
 const until = (at: string): { until: string; zone: string } => ({ until: clockAt(new Date(at), zone), zone });
 
+/** Whether the line is drawn: never in the demo; after a lift made here, or while a read says items are held. */
+export function heldShown(): boolean {
+    if (mode.value === 'demo') return false;
+    return lifted.value !== null || (limits.value?.held ?? 0) > 0;
+}
+
 /** The line, or nothing: in the demo, before a read, and while nothing is held and no lift was made here. */
 export function heldLine(): Html | null {
     if (mode.value === 'demo') return null;

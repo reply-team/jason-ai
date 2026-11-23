@@ -28,7 +28,7 @@ import { html, type Html } from './html';
 import { svg } from './icons';
 import { ageOf, searchLines, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { chatWaits } from './needs-chats';
-import { forgetHeld, heldLine, readHeld, sightHeld } from './needs-held';
+import { forgetHeld, heldLine, heldShown, readHeld, sightHeld } from './needs-held';
 import {
     agentsOf,
     countWords,
@@ -1037,7 +1037,11 @@ export function needsView(): Html {
                 : none
                   ? html`<div class="card needs-empty">
                         <span class="needs-disc">${svg('check', 28)}</span>
-                        <div class="bd">You're all caught up</div>
+                        ${
+                            // Under the line for held work the person is not caught up: the heading is not drawn, and
+                            // the sentence below it, about decisions, stays true.
+                            heldShown() ? null : html`<div class="bd">You're all caught up</div>`
+                        }
                         <div class="needs-none-says">Nothing is waiting for your decision.</div>
                         <div class="ask-a">
                             <button class="btn sm p" type="button" ${act('side.start')}>New GTM agent</button>
