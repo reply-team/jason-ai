@@ -164,6 +164,24 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// The lift Needs you makes, as the paired person with Needs you's reason, in an installation whose zone is Asia/Tokyo:
+    /// it lets go the two items held at a daily limit in two campaigns and says until the next local midnight.
+    /// </summary>
+    [Fact]
+    public async Task Launches_lift_from_needs_you_lets_go_what_was_held()
+    {
+        var clock = new FixedClock(Nine) { Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: clock);
+        var spring = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct)).Id;
+        var autumn = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn outreach" }, Ct)).Id;
+        await Seed.HeldAsync(api, spring, "planner", 2, 2);
+        await Seed.HeldAsync(api, autumn, "planner", 2, 2);
+
+        var lifted = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "from-needs-you", new { actor = new { type = "human", id = "ada" }, reason = "Lifted from Needs you." }, Ct);
+        Assert.Equal(new LaunchesLiftDto(new DateTimeOffset(2026, 10, 16, 15, 0, 0, TimeSpan.Zero), "Asia/Tokyo", 2, AlreadyLifted: false), lifted);
+    }
+
+    /// <summary>
     /// A person's review asked of a campaign's manager: a deep review of an active campaign answers the check-in it made,
     /// a second while that one is open is refused naming it, a role is refused, and a draft is refused.
     /// </summary>
