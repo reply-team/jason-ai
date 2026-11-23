@@ -76,6 +76,7 @@ export const en = {
     'start.voice.name': 'Name and tone',
     'voice.save': 'Save',
     'voice.saved': 'Saved.',
+    'start.title': 'Start',
     'start.placeholder': 'Tell Jason what you sell and who you want to reach.',
     'start.placeholder.site': 'A website link is enough to start.',
     'start.send': 'Send',

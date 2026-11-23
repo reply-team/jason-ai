@@ -443,6 +443,20 @@
     gap: 6px;
     padding: 18px 18px 12px;
 }
+/* The mark and the wordmark are one button that shows Start: at rest it is drawn as the strip it stands in, with no
+   ground, border or padding of its own, the pointer every button has and the console's focus ring; no hover, no mark. */
+.jc-console .brand .home {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+}
 .jc-console .brand .mark {
     width: 20px;
     height: 20px;

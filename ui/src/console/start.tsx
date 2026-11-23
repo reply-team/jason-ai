@@ -20,7 +20,8 @@ import { changeChat, chats, conversations, here, messageOf, setup, setupError } 
 // connected. Reply is not asked for here: its card comes up in a chat when the work needs a way to send.
 //
 // Start is the window's opening page and there is one of it in a window: it opens each time the window opens, also when
-// campaigns exist, it cannot be closed while a message waits, and the one way back to it is to open the window again.
+// campaigns exist, and it cannot be closed while a message waits. Jason's mark at the top of the sidebar shows it again,
+// with what is typed in its box, and closes nothing (`side.ts`).
 // New chat, in the sidebar and on the empty pages, makes a chat directly and never goes through it.
 
 /** What is typed in the start screen's box. */
@@ -291,7 +292,7 @@ function StartChat() {
                         </div>
                     </div>
                 )}
-                <form className="cform" onSubmit={send} aria-label="Start">
+                <form className="cform" onSubmit={send} aria-label={t('start.title')}>
                     <div className="composer">
                         {drop.said !== null && (
                             <div className="note am" role="status">

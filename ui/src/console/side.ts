@@ -17,12 +17,13 @@ import { closeFilterMenu, closeRowMenu, drawnRow, recentView, rowElement, rowMen
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 import { updateMark } from '../screens/settings/update-state';
 
-// The console's sidebar, top to bottom: the brand, Search, Dashboard, Needs you with the number of what waits, the Feed,
-// People, Agents, Accounts, More (the screens with no row of their own), the two sections AGENTS and CHATS, each with a
-// plus that makes one (`recent.ts`), and Settings in the foot. The menu and the sections scroll between the brand and
-// the foot, so Settings stays at the foot of the window. Live draws the essentials alone, in the same order: the brand,
-// Search, Needs you, the Feed, Accounts, AGENTS, CHATS and Settings. The rows left out are only not drawn: each page
-// keeps its route and its code, and Search finds every page in both modes. Demo draws the whole list.
+// The console's sidebar, top to bottom: the brand (Jason's mark and wordmark, one button that shows Start), Search,
+// Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More (the screens with no row
+// of their own), the two sections AGENTS and CHATS, each with a plus that makes one (`recent.ts`), and Settings in the
+// foot. The menu and the sections scroll between the brand and the foot, so Settings stays at the foot of the window.
+// Live draws the essentials alone, in the same order: the brand, Search, Needs you, the Feed, Accounts, AGENTS, CHATS
+// and Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds every
+// page in both modes. Demo draws the whole list.
 
 /** Whether the sidebar's menu, More, is open. */
 const open = signal<'more' | null>(null);
@@ -185,9 +186,12 @@ define('side.allAgents', () => {
     closeMenus();
     here().dock.show('campaigns');
 });
+// Start too, from Jason's mark: by the dock's own road, as closing the chat shown leads there, so nothing is closed,
+// only chosen, and Back comes back to a page it left.
 define('side.show', ([panel]) => {
     closeMenus();
     if (
+        panel === 'start' ||
         panel === 'dashboard' ||
         panel === 'needs' ||
         panel === 'campaigns' ||
@@ -237,9 +241,11 @@ export function sideView(): Html {
                   ></button>`
         }
         <div class="brand">
-            <img class="mark" src="${assets}favicon.svg" alt="" />
-            <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
-            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            <button class="home" type="button" aria-label="${t('start.title')}" ${act('side.show', 'start')}>
+                <img class="mark" src="${assets}favicon.svg" alt="" />
+                <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
+                <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            </button>
             <span class="alpha">Alpha</span>
         </div>
         <div class="sscroll">
