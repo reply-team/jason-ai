@@ -15,8 +15,9 @@ absorbed by a release of this package alone.
   for one, is now refused before anything is called, `message_invalid`, as a direct email is: Reply decodes an email's
   body before it reads it and drops a tag it does not know with everything after it, so the reply would have arrived cut
   there. The reason names the character without quoting the text. Write the address without its angle brackets.
-- A text with a tag or an HTML entity in it is refused by Jason itself from 0.50.0, when the work item is written, before
-  anybody is asked; the package needs nothing of it. Update the package (`jason update apply`) to have it.
+- From 0.50.0, Jason itself refuses a reply's text with a tag or an HTML entity in it, when the work item is written,
+  before anybody is asked, whatever package performs the reply; this package needs nothing of it. `jason update apply`
+  brings Jason 0.50.0 and this package together.
 
 ## 0.19.0
 

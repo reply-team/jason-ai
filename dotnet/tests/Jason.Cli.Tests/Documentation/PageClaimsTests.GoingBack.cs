@@ -57,7 +57,7 @@ public partial class PageClaimsTests
     private static readonly (string Plugin, string Line)[] PackagesAfter049 =
     [
         ("journal-forwarder", "1.8.0 sha256:1af0e45e1a40781bc011a2968317a9bae1320cd4b6bb4a86d1567807bd86000e"),
-        ("reply", "0.19.1 sha256:ca88629f7971c5f2062db155920218fc0de59ddfd2ec183acfe94d8344998825"),
+        ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
     ];
 
     /// <summary>
