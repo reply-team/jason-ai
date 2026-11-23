@@ -86,6 +86,31 @@ public class CampaignReviewTests
         Assert.Equal(1, await CheckInCountAsync(harness));
     }
 
+    /// <summary>
+    /// A limit lowered during the day stands below the runs that started: the refusal says how many started and the limit
+    /// as a limit beside them, never the limit as the count, and names the read that shows the limits.
+    /// </summary>
+    [Fact]
+    public async Task The_refusal_says_the_runs_that_started_and_the_limit_as_a_limit()
+    {
+        using var harness = Harness(managerLimit: 1);
+        var campaign = await CampaignAsync(harness, CampaignStatus.Active);
+        foreach (var hours in new[] { 4, 3, 2, 1 })
+        {
+            await LaunchedAsync(harness, campaign, Noon.AddHours(-hours));
+        }
+
+        var spent = await RefusalAsync(harness, Request(campaign));
+
+        Assert.Equal(AttemptErrors.LaunchesSpent, spent.Code);
+        Assert.Contains(
+            $"The manager of campaign '{campaign}' has started 4 runs since the installation's midnight (2026-09-14T00:00:00Z, UTC), "
+            + "and the limit Launches:MaxPerDay:manager sets is 1 run a day, so a review asked for now would wait until the next one. "
+            + "jason launches list shows the limits as they stand. ",
+            spent.Message,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A draft and an archived campaign are refused as a paused one is: only an active campaign is reviewed.</summary>
     [Theory]
     [InlineData(CampaignStatus.Draft)]
@@ -469,7 +494,7 @@ public class CampaignReviewTests
         var item = await db.WorkItems.SingleAsync(w => w.PublicId == checkIn, Ct);
         var day = harness.Resolve<InstallationDay>().Of(Noon);
         scope.ServiceProvider.GetRequiredService<AttemptOutcomes>()
-            .Hold(db, item, day.End, Claimer.LaunchesSpent(ManagerCheckIn.Role, 1, day), 1, Actors.Dispatcher);
+            .Hold(db, item, day.End, Claimer.LaunchesSpent(ManagerCheckIn.Role, 1, 1, day), 1, Actors.Dispatcher);
         await db.SaveChangesAsync(Ct);
     }
 

@@ -68,9 +68,9 @@ public sealed class CampaignReviews(
         }
 
         var day = installation.Of(clock.GetUtcNow().UtcDateTime);
-        if (await Claimer.SpentTodayAsync(db, campaign.Id, ManagerCheckIn.Role, limits, day, cancellationToken).ConfigureAwait(false))
+        if (await Claimer.SpentTodayAsync(db, campaign.Id, ManagerCheckIn.Role, limits, day, cancellationToken).ConfigureAwait(false) is { } started)
         {
-            throw DomainErrors.ReviewLaunchesSpent(campaign.PublicId, limits[ManagerCheckIn.Role], Zulu(day.Start), day.TimeZone);
+            throw DomainErrors.ReviewLaunchesSpent(campaign.PublicId, limits[ManagerCheckIn.Role], started, Zulu(day.Start), day.TimeZone);
         }
 
         WorkItem item;
