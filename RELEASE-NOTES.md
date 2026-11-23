@@ -172,6 +172,9 @@ rule of the skills.
 - **The skills' examples pass long text on standard input.** A campaign's context, a role's brief or a note goes through
   a here-document, so an agent copying an example no longer breaks it on an apostrophe or shows the text in the list of
   running processes.
+- **A reply Jason drafts in somebody's thread is plain text:** a draft that carried the thread's own HTML, such as
+  `<br>`, is refused when it is written instead of reaching you with its tags on the card, and with the Reply plugin an
+  email reply now goes out as HTML that shows exactly the text you approved, line breaks included.
 
 ## Upgrading from 0.49.3
 
@@ -197,6 +200,9 @@ rule of the skills.
   update on. The ceiling of touches counts the touches already made, so a person who has had five touches in a campaign
   is sent no more there. A campaign already live is given no reserve threshold: only a first start sets one.
 - **Your chats.** A chat about no agent made before this version reads as a plain chat.
+- **A reply drafted before this release with HTML in its text, such as `<br>`, still waits for your approval.**
+  Approved as it is, it is refused before anything is sent; edit the tags out on its card first, and the card says what
+  to remove, or have the responder draft it again.
 
 ## Known issues
 
