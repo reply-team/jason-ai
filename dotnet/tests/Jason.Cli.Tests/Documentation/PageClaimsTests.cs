@@ -1396,6 +1396,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The desktop's page says that Needs you shows one line for work held at a daily limit of launches, with the lift as
+    /// the person and its reason, counted nowhere and absent from the Demo, and the notifications' page says a click's list
+    /// shows it; the console draws that line from its own module, reads it beside the lists, and lifts with that reason.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_needs_you_shows_held_work_and_its_lift_and_the_console_draws_it_so()
+    {
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains("While work items wait on a daily limit of launches, one line at the top of Needs you says how many and until when, the day's end on your clock with its zone named, says that a lift lets every role in every agent run past today's limits until then, and offers **Lift today's limits**, which lifts as you, the person who approves there, with the reason \"Lifted from Needs you.\";", desktop, StringComparison.Ordinal);
+        Assert.Contains("The line is no item of the list: no number on Needs you, in the sidebar or on the tray counts it, and the Demo has none.", desktop, StringComparison.Ordinal);
+        Assert.Contains("It opens Jason Desktop, on Needs you, as `jason ui open` does. Above that list, Needs you shows the work held at a daily limit of launches and the lift that lets it go.", Flat(Page("docs", "notifications.md")), StringComparison.Ordinal);
+
+        var held = Flat(Page("ui", "src", "console", "needs-held.ts"));
+        Assert.Contains("export const NEEDS_LIFT_REASON = 'Lifted from Needs you.';", held, StringComparison.Ordinal);
+        Assert.Contains("api.call<LaunchesLift>('launches.lift', { reason: NEEDS_LIFT_REASON }, 'write')", held, StringComparison.Ordinal);
+        Assert.Contains("if (mode.value === 'demo') return null;", held, StringComparison.Ordinal);
+        Assert.Contains("await Promise.all([attention.load(api, false, followed), readHeld(api)]);", Flat(Page("ui", "src", "console", "needs.ts")), StringComparison.Ordinal);
+        Assert.Contains("'needs.held.lift': \"Lift today's limits\",", Page("ui", "src", "locale", "en.ts"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Starting the runtime at logon is done at install, by the set-up an install ends in: the guide marks it so, says it
     /// starts nothing now, and gives the line that turns it off, so no agent asks for it or registers it again by hand.
     /// </summary>

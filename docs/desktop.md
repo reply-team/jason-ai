@@ -155,7 +155,12 @@ agent's header instead, and the Feed by its own.
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
   and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
   if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
-  agents**.
+  agents**. While work items wait on a daily limit of launches, one line at the top of Needs you says how many and until
+  when, the day's end on your clock with its zone named, says that a lift lets every role in every agent run past
+  today's limits until then, and offers **Lift today's limits**, which lifts as you, the person who approves there, with
+  the reason "Lifted from Needs you."; it then says how many items the lift let go and until when, until you next come
+  to Needs you, and a lift that fails is said on the line in Jason's own words. The line is no item of the list: no
+  number on Needs you, in the sidebar or on the tray counts it, and the Demo has none.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a
   reply in a conversation, from the account this conversation is in, which it does not name), on which channel, and

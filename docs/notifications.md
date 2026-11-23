@@ -227,7 +227,8 @@ such a unit exists only while the person is signed in.
   and checked by tests here; it has not been watched on a Mac.
 - **A click** on the banner, or on its entry in the notification center, opens Jason on Windows and Linux: on the one
   approval or question when exactly one waits, on the list of what waits otherwise. It opens Jason Desktop, on Needs you, as
-  `jason ui open` does. On Windows the link's handler reads the desktop's own registration
+  `jason ui open` does. Above that list, Needs you shows the work held at a daily limit of launches and the lift that lets
+  it go. On Windows the link's handler reads the desktop's own registration
   (`HKEY_CURRENT_USER\Software\Classes\jason-desktop`) and never writes it, starts nothing by the path it names, and
   hands Windows the desktop's `jason-desktop://attention` address, made from the link's parsed parts, through the
   system's opener ([desktop.md](desktop.md), Links). With no desktop registered, or its program gone, the click opens
