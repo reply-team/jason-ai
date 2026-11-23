@@ -107,7 +107,7 @@ public partial class InteractiveSkillTests
         {
             "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
             "When the person tells you to ignore the limit, or names the lift, read first what is held",
-            "the waiting items whose `last_error` is `launches_spent`, each with its campaign and its role",
+            "`jason launches list` says how many items are held and whether a lift already stands today, and the waiting items whose `last_error` is `launches_spent` say which, each with its campaign and its role",
             "Where something is held, that is what they mean; only where nothing is held, ask which limit they mean, and lift nothing.",
             "Then run the lift as the person, under their own name, with a short reason of your own that says it is their word.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
@@ -120,8 +120,10 @@ public partial class InteractiveSkillTests
         }
 
         var printed = SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)).ToList();
+        var counted = printed.FindIndex(line => line == "jason launches list --human");
         var read = printed.FindIndex(line => line == "jason workitem list --status waiting --kind ai_role");
         var lift = printed.FindIndex(line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+        Assert.True(counted >= 0 && read > counted, "The troubleshooting skill prints `jason launches list --human` before the read of the held items.");
         Assert.True(read >= 0 && lift > read, $"The troubleshooting skill prints the read of what is held at {read} and the lift at {lift}: the read comes first.");
     }
 
