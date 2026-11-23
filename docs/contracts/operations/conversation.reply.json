@@ -75,6 +75,7 @@
             "maxLength": 12000,
             "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
             "not": {
+              "type": "string",
               "pattern": "</?[A-Za-z][A-Za-z0-9]*(?::[A-Za-z][A-Za-z0-9]*)?(?:[\\t\\n\\f\\r ]*/?|[\\t\\n\\f\\r ]+[A-Za-z][A-Za-z0-9_:.-]*[\\t\\n\\f\\r ]*=[^<>]*)>|&(?:[A-Za-z][A-Za-z0-9]+|#[0-9]+|#[xX][0-9A-Fa-f]+);",
               "description": "a text holding markup, a tag such as `<br>`, `<p>` or `</div>` or an HTML entity such as `&nbsp;` or `&lt;`; a reply is plain text, with a line break written as a line break, never a tag and never an entity"
             },
