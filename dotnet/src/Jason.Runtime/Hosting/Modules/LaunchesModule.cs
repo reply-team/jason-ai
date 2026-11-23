@@ -9,8 +9,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Jason.Runtime.Hosting.Modules;
 
 /// <summary>
-/// The daily limits of launches as a person speaks to them: a lift of today's, on their word. Nothing inside the runtime
-/// calls it: the claim holds work at the limits and lets it go at the installation's midnight.
+/// The daily limits of launches as a person speaks to them: a read of where they stand, and a lift of today's, on their
+/// word. Nothing inside the runtime calls either: the claim holds work at the limits and lets it go at the installation's
+/// midnight.
 /// </summary>
 public static class LaunchesModule
 {
@@ -22,6 +23,10 @@ public static class LaunchesModule
         // module names both too; either may be composed first.
         services.TryAddSingleton(DispatcherModule.Seam<RuntimeOptions>(RuntimeOptions.Section));
         services.TryAddSingleton<InstallationDay>();
+
+        // The limits a read says are the ones the claim reads, through the same seam.
+        services.TryAddSingleton(DispatcherModule.Seam<LaunchesOptions>(LaunchesOptions.Section));
+        services.AddScoped<LaunchLimitsReader>();
         return services.AddScoped<LaunchesService>();
     }
 
@@ -29,6 +34,8 @@ public static class LaunchesModule
     {
         ArgumentNullException.ThrowIfNull(app);
 
+        app.MapOperation<LaunchLimitsReader, LaunchesListRequest, LaunchesListDto>(
+            Operations.LaunchesList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<LaunchesService, LaunchesLiftRequest, LaunchesLiftDto>(
             Operations.LaunchesLift, (service, request, cancellationToken) => service.LiftAsync(request, cancellationToken));
     }

@@ -247,6 +247,10 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
+            "`jason launches list` says what the daily limits of launches are: each role's limit a day as the runtime reads it now, from the default or the settings, the installation's day they count in, a lift that stands, and how many items are held",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "A pointer that says an account has events Jason did not read sends you to `jason events sources`, as \"The accounts whose events it reads\" says.",
             skill,
             StringComparison.Ordinal);

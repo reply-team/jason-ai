@@ -113,8 +113,9 @@ public static class CampaignRenderers
         RenderText.Lines([$"Project: {RenderText.Shown(project)}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
 
     /// <summary>
-    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them,
-    /// the audience a search brought them from and, under a count, what it counts them for.
+    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, how many touches they have had
+    /// and when the latest was, the campaigns that list them, the audience a search brought them from and, under a count,
+    /// what it counts them for.
     /// </summary>
     public static string? Members(string json)
     {
@@ -124,7 +125,7 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "CAMPAIGNS", "SOURCE", "WHY");
+        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "TOUCHES", "LAST TOUCH", "CAMPAIGNS", "SOURCE", "WHY");
         foreach (var member in page.Items)
         {
             var names = (member.Contact?.Campaigns ?? []).ToDictionary(campaign => campaign.CampaignId, campaign => campaign.CampaignName, StringComparer.Ordinal);
@@ -133,6 +134,8 @@ public static class CampaignRenderers
                 RenderText.Name(member.Contact?.FirstName, member.Contact?.LastName),
                 RenderText.Snake(member.State),
                 RenderText.Email(member.Contact?.Channels),
+                member.Touches.ToString(CultureInfo.InvariantCulture),
+                RenderText.Moment(member.LastTouchAt),
                 string.Join(", ", (member.Counted ?? []).Select(counted => names.GetValueOrDefault(counted.CampaignId, counted.CampaignId))),
                 member.Source is { } source ? string.Create(CultureInfo.InvariantCulture, $"audience {source.Audience.Number}") : null,
                 member.Why is { } why ? string.Join(" ", new[] { why.Text ?? why.Code, RenderText.Moment(why.At) }.Where(part => part is not null)) : null);

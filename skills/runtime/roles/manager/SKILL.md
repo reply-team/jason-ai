@@ -610,6 +610,9 @@ by them or by their own session, never by you; where your work is held at one,
 say so in your line and leave it. Where you meet a held check-in or a role's work held at a day's limit, the lift is the
 person's word, and a question you raise about it names the way: they tell their agent to ignore the limit, or type the
 command the held item's notification prints, and it holds until the installation's next midnight.
+Where you need the limits themselves, read them: `jason launches list --campaign <cmp>` says each role's limit a day as
+it stands, whether a lift stands today, and the runs each role started in your campaign today, counted as the claim
+counts them; a held item's message says the runs that started and the limit beside them.
 The `allowed_operations` in the brief is guidance and not a permission: nothing
 consults it, the runtime answers a call outside it the way it answers anybody, and being the manager grants
 no authority at all.

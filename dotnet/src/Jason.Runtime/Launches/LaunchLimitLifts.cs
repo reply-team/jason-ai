@@ -17,6 +17,16 @@ public static class LaunchLimitLifts
         return db.LaunchLimitLifts.AsNoTracking().AnyAsync(l => l.LocalDate == day.Date && l.TimeZone == day.TimeZone, ct);
     }
 
+    /// <summary>The lift that covers <paramref name="day"/>, by the row <see cref="CoverAsync"/> finds, or null where none does.</summary>
+    public static Task<LaunchLimitLift?> OfAsync(JasonDbContext db, LocalDay day, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.LaunchLimitLifts.AsNoTracking()
+            .Where(l => l.LocalDate == day.Date && l.TimeZone == day.TimeZone)
+            .OrderBy(l => l.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
     /// <summary>
     /// Whether a person's release at <paramref name="releasedAt"/> was a lift's: made once a lift was taken and within the
     /// day it covers, in the zone it was taken in. A lift lets go the holds of its day as a person's resume, and the claim

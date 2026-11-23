@@ -50,6 +50,32 @@ public partial class InteractiveSkillTests
         Assert.Contains(sentence, Flattened("troubleshooting-jason"), StringComparison.Ordinal);
 
     /// <summary>
+    /// The limits are read, never guessed: the skill names the read, what it answers — the day, a lift, each role's limit
+    /// and where it comes from, none for a role with none, what is held, and with a campaign the runs started there — that
+    /// the hold's message says the runs beside the limit, and that a limit is set in the settings file and by no command.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_reads_the_limits_with_launches_list()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "**The limits are read, never guessed: `jason launches list`.**",
+            "each role's limit a day as the runtime reads it now, `default` where it is the number Jason ships and `settings` where the settings set another, and `none` for a role with no limit",
+            "and `held`, how many work items wait on a daily limit now",
+            "With `--campaign`, each role also says the runs it started in that campaign today, counted as the claim counts them, and `held` is that campaign's.",
+            "says how many runs started since then and the limit beside them",
+            "Setting a limit is the person's, in the settings file under `Launches:MaxPerDay:<role>`; no command sets one.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("jason launches list --human", SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)));
+    }
+
+    /// <summary>
     /// The day of a launch limit is the installation's, so no sentence of the skill says a UTC day, a wait until 00:00Z, or
     /// the notification's old words, and the ways out are four.
     /// </summary>

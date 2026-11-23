@@ -381,21 +381,15 @@ public sealed class NotificationSender(
     }
 
     /// <summary>
-    /// The items that wait on a daily limit of launches as this one is sent, in every campaign: a wait with no attempt and
-    /// no block, on an item whose last error carries either word. Counted now, as approvals are, so a hold let go before
-    /// the send is not said and one still standing is said again beside whatever woke the next pointer. The error is a
-    /// converted column, so the word is read here rather than in the query.
+    /// The items that wait on a daily limit of launches as this one is sent, in every campaign, as <c>launches.list</c>
+    /// counts them (<see cref="Launches.LaunchHolds"/>). Counted now, as approvals are, so a hold let go before the send is
+    /// not said and one still standing is said again beside whatever woke the next pointer.
     /// </summary>
     private async Task<int> HeldAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-        var errors = await db.WorkItemWaits.AsNoTracking()
-            .Where(wait => wait.Status == WaitStatus.Open && wait.AttemptId == null && wait.ProviderBlockId == null)
-            .Select(wait => wait.WorkItem!.LastError)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        return errors.Count(error => AttemptErrors.IsDailyHold(error?.Code));
+        return await Launches.LaunchHolds.CountAsync(db, campaignId: null, ct).ConfigureAwait(false);
     }
 
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>

@@ -209,9 +209,11 @@ events Jason did not read sends you to `jason events sources`, as "The accounts 
 says provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where
 the person clears it. One that says items wait on a daily limit gives the person's way out itself, "tell your agent:
 ignore the limit"; read what is held and lift it only on their word, as `managed-campaign-work`'s "Ignore the limit"
-says. One that says emails bounced names no command and leaves them to you: a bounce is a
-`provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its
-campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
+says. `jason launches list` says what the daily limits of launches are: each role's limit a day as the runtime reads it
+now, from the default or the settings, the installation's day they count in, a lift that stands, and how many items
+are held; `troubleshooting-jason` says how to read it. One that says emails bounced names no command and leaves them
+to you: a bounce is a `provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign
+it reached, naming its campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
 beside the replies the provider detected and the invitations accepted, so keep the bounces and say in which campaigns
 they were and, where a line names a contact, whose email it was. You may also read the period's `bounced` count with
 `jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. One that says

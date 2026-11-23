@@ -338,7 +338,8 @@ again or resumed, parks on the same block.
 many runs of a role one campaign starts in the installation's day, from its midnight to the next in `Runtime:TimeZone`, or
 in the machine's own zone where that is not set, and the item that would start one more is held, not failed, before any
 attempt. It reads as this same `waiting` state: its wait is the installation's next midnight, its `last_error` is
-`launches_spent`, whose message names the setting and the midnight it counted from, with the zone, and its
+`launches_spent`, whose message names the setting and the midnight it counted from, with the zone, says how many runs
+started since then and the limit beside them — a limit lowered during the day can stand below that count — and its
 `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role. A notification counts it
 among the items that wait on a daily limit, and the campaign's other work goes on. There are four ways out: at the
 installation's next midnight the runtime releases the item by itself and counts the new day, so a day already spent by
@@ -347,6 +348,20 @@ counted like any other; a person lifts today's limits, `jason launches lift`, be
 applies from the next scan to work not yet held, while an item already held keeps its moment. It keeps its due date and
 expires by it like any waiting item. Do not cancel or recreate it: it is not stuck, and the same work asked again counts
 against the same day.
+
+**The limits are read, never guessed: `jason launches list`.** It says the installation's day the limits count in, from
+its midnight to the next in its zone; a lift that stands today, with whose word it was; each role's limit a day as the
+runtime reads it now, `default` where it is the number Jason ships and `settings` where the settings set another, and
+`none` for a role with no limit, which is a role of the person's own the settings do not name; and `held`, how many work
+items wait on a daily limit now. With `--campaign`, each role also says the runs it started in that campaign today,
+counted as the claim counts them, and `held` is that campaign's. When the person asks what the limits are, or why work
+is held, read it and say the numbers it gives. Setting a limit is the person's, in the settings file under
+`Launches:MaxPerDay:<role>`; no command sets one.
+
+```
+jason launches list --human
+jason launches list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
 
 **"Ignore the limit" is the person's word, and the lift is its verb.** When the person tells you to ignore the limit, or
 names the lift, read first what is held, so that you can say what the lift let go: the waiting items whose `last_error`
