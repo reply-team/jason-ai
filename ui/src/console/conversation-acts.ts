@@ -1,9 +1,8 @@
-import { can } from '../platform/places';
 import { hostOf, openConversation, restartChat } from './chat';
 import { newChat, type Chat } from './chat-model';
 import { conversationItems, type ConversationAct, type ConversationFacts, type Gates } from './conversation-items';
 import { folderWord, hostsOffered } from './open-folder';
-import { changeChat, chats, conversations, inTab } from './state';
+import { changeChat, chats, conversations } from './state';
 
 // The conversation's acts as they are taken, wherever they are offered: the agent's "…" and the menu on a row of the sidebar.
 // Each shows the conversation first and begins there, so the person sees what is renamed, started fresh or removed.
@@ -15,14 +14,14 @@ import { changeChat, chats, conversations, inTab } from './state';
  */
 export const runsOn = (chat: Chat | undefined): string | null => hostOf(chat ?? newChat('', null))?.id ?? null;
 
-/** What the place lets the person do, read now. */
+/** What the desktop's window lets the person do, read now: every act of a conversation, and what Open in found. */
 export function placeGates(): Gates {
     return {
-        create: can('chat.create'),
-        rename: can('chat.rename'),
-        restart: can('chat.restart'),
-        remove: can('chat.remove'),
-        tab: inTab(),
+        create: true,
+        rename: true,
+        restart: true,
+        remove: true,
+        tab: false,
         folder: folderWord(),
         hosts: hostsOffered(),
     };

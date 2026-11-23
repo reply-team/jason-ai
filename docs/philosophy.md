@@ -29,7 +29,7 @@ keep doing it. It has four parts, and each has one job.
   of your own. It keeps campaigns, the people in them, the work to be done about them, approvals, questions and an
   append-only history, and it carries the work on between sessions: a dispatcher claims work items and hands them to
   whatever performs them, and a campaign is reviewed when something happens and on a cadence when nothing does. You
-  and your agents reach it through its command line and its API; the [browser UI](ui.md) is one more client of the
+  and your agents reach it through its command line and its API; [Jason Desktop](desktop.md) is one more client of the
   same API.
 - **Your agents think and decide, inside what you allowed.** Jason ships no AI model and holds no model credentials.
   Your own interactive session plans and decides with you; background work runs as roles, launched in an agent host
@@ -96,7 +96,7 @@ Jason is built to do as much as it can on its own and nothing that should be you
 
 - **Approvals.** An operation that reaches a real person is parked, with a record of exactly what would be done, until
   a person decides, and nothing is sent in the meantime; nothing runs but what they approved, and the approval is
-  given under a person's name, through the command line or the browser UI. Whether an operation needs one is written
+  given under a person's name, through the command line or Jason Desktop. Whether an operation needs one is written
   in its published contract, not in a setting.
 - **The do-not-contact register.** Work that would reach somebody on it fails before it starts. That floor never
   relaxes.

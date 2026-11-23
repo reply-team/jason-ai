@@ -227,7 +227,6 @@ test('a record an earlier desktop wrote with no mode opens in Full access, in th
     const planned = earlierRecord(r, { mode: 'plan_only' });
     const chat = r.restart();
     assert.equal(chat.open(plain).mode, 'full_access');
-    assert.equal(chat.modeNow(plain), 'full_access');
     assert.equal(chat.list().find((each) => each.id === plain)?.mode, 'full_access');
     assert.equal(chat.open(planned).mode, 'plan_only');
     await r.turn(plain, 'hello', claude);

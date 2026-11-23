@@ -46,7 +46,7 @@ describe('the shell', () => {
         expect(head.querySelector('.alpha')?.textContent).toBe('Alpha');
         unmount();
         renderApp(new FakeApi(), { paired: false });
-        await waitFor(() => expect(screen.getByText(/jason ui open/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/jason ui pair/)).toBeTruthy());
         expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
     });
 
@@ -63,7 +63,7 @@ describe('the shell', () => {
     it('shows pair-again with no pairing at all and no ticket in the link', async () => {
         const fake = new FakeApi();
         renderApp(fake, { paired: false });
-        await waitFor(() => expect(screen.getByText(/jason ui open/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/jason ui pair/)).toBeTruthy());
         expect(fake.calls).toEqual([]);
     });
 

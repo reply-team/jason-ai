@@ -130,11 +130,12 @@ test('the arguments a crafted address would give a start open nothing: a quote, 
     }
 });
 
-test('links are taken by a packaged application on Windows, macOS and the deb, and by no other form', () => {
+test('links are taken by a packaged application on Windows, macOS, the deb and an AppImage, and by no other form', () => {
     assert.equal(linksTaken({ packaged: true, platform: 'win32', form: null }), true);
     assert.equal(linksTaken({ packaged: true, platform: 'darwin', form: null }), true);
     assert.equal(linksTaken({ packaged: true, platform: 'linux', form: { form: 'deb' } }), true);
-    assert.equal(linksTaken({ packaged: true, platform: 'linux', form: { form: 'appimage', file: '/home/a/Jason.AppImage' } }), false);
+    // The install line's menu entry, the move's and the one jason install brings up to date declare the scheme for the file.
+    assert.equal(linksTaken({ packaged: true, platform: 'linux', form: { form: 'appimage', file: '/home/a/Jason.AppImage' } }), true);
     assert.equal(linksTaken({ packaged: true, platform: 'linux', form: { form: 'folder' } }), false);
     assert.equal(linksTaken({ packaged: false, platform: 'win32', form: null }), false);
     assert.equal(linksTaken({ packaged: false, platform: 'darwin', form: null }), false);

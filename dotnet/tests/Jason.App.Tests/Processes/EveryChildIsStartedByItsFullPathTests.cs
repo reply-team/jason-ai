@@ -24,7 +24,7 @@ public partial class EveryChildIsStartedByItsFullPathTests
     [
         ("Jason.Cli/Autostart/AutostartRegistrars.cs", "command[0], ChildKind.SystemTool",
             "Jason.Cli.Tests/Autostart/AutostartArtifactsTests.cs:Every_command_a_registration_holds_names_its_program_by_its_full_path"),
-        ("Jason.Cli/Process/IUrlOpener.cs", "opener",
+        ("Jason.Cli/Process/IUrlOpener.cs", "opener, ChildKind.SystemToolWithInput",
             "Jason.Cli.Tests/Process/PlatformUrlOpenerTests.cs:The_opener_is_named_by_its_full_path"),
         ("Jason.Cli/Process/ProgramRunner.cs", "fullPath, ChildKind.SystemTool",
             "Jason.Cli.Tests/Process/ProgramRunnerTests.cs:A_bare_name_is_started_by_the_full_path_the_search_path_gives"),

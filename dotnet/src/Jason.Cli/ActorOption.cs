@@ -55,7 +55,7 @@ public static class ActorOption
     {
         Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor. "
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
-            + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
+            + "the name Jason Desktop writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "setting a campaign's send mode, "
             + "clearing a block, resuming a work item, reviewing a send, rewinding a subscription, submitting a report, "

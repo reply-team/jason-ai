@@ -16,7 +16,7 @@ import './agent-head.css';
 import './settings.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */
-export async function mount(element: HTMLElement, desktop: JasonDesktop, bootstrapped = false): Promise<void> {
+export async function mount(element: HTMLElement, desktop: JasonDesktop): Promise<void> {
     activatePlugins(browserPlugins);
     // The desktop's kept theme is read before the first paint, so the page opens in it.
     await bindDesktopTheme(desktop.theme);
@@ -24,5 +24,5 @@ export async function mount(element: HTMLElement, desktop: JasonDesktop, bootstr
     await loadMode(desktop);
     startTheme();
     startLocale();
-    createRoot(element).render(<Console desktop={desktop} bootstrapped={bootstrapped} />);
+    createRoot(element).render(<Console desktop={desktop} />);
 }

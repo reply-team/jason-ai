@@ -6,8 +6,6 @@ import { agentFacts } from './agent-facts';
 import { shownAgent } from './agent-place';
 import { campaigns, read } from './campaigns';
 import { agentMaking } from './new-agent';
-import { offUnless } from './off';
-import { can } from '../platform/places';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
@@ -359,7 +357,7 @@ export function recentView(): Html {
         title="${t('side.newAgent')}"
         aria-label="${t('side.newAgent')}"
         ${act('side.start')}
-        ${offUnless('chat.createAgent') ?? (agentMaking.value ? html`disabled aria-busy="true"` : null)}
+        ${agentMaking.value ? html`disabled aria-busy="true"` : null}
     >
         ${svg('plus', 14)}
     </button>`;
@@ -369,28 +367,17 @@ export function recentView(): Html {
         title="${t('side.newChat')}"
         aria-label="${t('side.newChat')}"
         ${act('side.new')}
-        ${offUnless('chat.create')}
     >
         ${svg('plus', 14)}
     </button>`;
     // Said once the list of agents is read, and CHATS' once the desktop listed its conversations: before that, none is
-    // not yet known. The plus is named only where it can be pressed.
+    // not yet known.
     const agentsEmpty =
         agentsShown.length > 0 || !read.value
             ? null
-            : html`<div class="rnone">
-                  ${
-                      agents.length > 0
-                          ? t('recent.none.match')
-                          : can('chat.createAgent')
-                            ? t('side.none.agents')
-                            : t('side.none.agentsBare')
-                  }
-              </div>`;
+            : html`<div class="rnone">${agents.length > 0 ? t('recent.none.match') : t('side.none.agents')}</div>`;
     const chatsEmpty =
-        talks.length > 0 || !conversationsListed.value
-            ? null
-            : html`<div class="rnone">${can('chat.create') ? t('side.none.chats') : t('side.none.chatsBare')}</div>`;
+        talks.length > 0 || !conversationsListed.value ? null : html`<div class="rnone">${t('side.none.chats')}</div>`;
     // One landmark for both sections, each a named group of its own under its header.
     return html`<nav class="sections" aria-label="${t('side.sections')}">
         ${header(t('side.agents'), filterButton, newAgent)}

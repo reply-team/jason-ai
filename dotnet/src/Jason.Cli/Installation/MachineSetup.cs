@@ -254,6 +254,10 @@ public static class MachineSetup
                 run.RepointCopy();
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
+
+            // An earlier version's line or move wrote its menu entry in an earlier form, which an update of the file leaves as
+            // it was: brought to this version's, so the system hands this Jason Desktop its links.
+            await run.Step("Bringing Jason Desktop's menu entry up to date", () => run.MenuEntryAsync(cancellationToken)).ConfigureAwait(false);
         }
 
         // The runtime's start at logon, once a retired install's registration has been moved: registered where it is wanted
@@ -930,6 +934,19 @@ public static class MachineSetup
                 ? $"Retired the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}."
                 : $"Retired the command-line install at {old}.");
             return new InstallRetired(old, aside, removed, reregistered);
+        }
+
+        /// <summary>
+        /// An AppImage's menu entry that Jason wrote for this file, in an earlier form, brought to this version's
+        /// (<see cref="AppImageMenuEntry.BringUpToDateAsync"/>); one that is not there or not Jason's is left alone.
+        /// </summary>
+        public async Task MenuEntryAsync(CancellationToken cancellationToken)
+        {
+            var file = AppImageCopy.FileOf(carried.Executable, places.Home);
+            if (await AppImageMenuEntry.BringUpToDateAsync(env, Path.Combine(places.Share, "applications"), file, cancellationToken).ConfigureAwait(false) is { } said)
+            {
+                (said.Changed ? Done : Problems).Add(said.Said);
+            }
         }
 
         /// <summary>

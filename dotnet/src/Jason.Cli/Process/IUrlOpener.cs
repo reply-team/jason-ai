@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Programs;
 
@@ -33,15 +34,17 @@ public interface IUrlOpener
     bool Open(string url);
 
     /// <summary>
-    /// Hands <paramref name="url"/> to the platform's opener and waits up to <paramref name="wait"/> for it to finish,
-    /// for a caller that has somewhere else to go when the hand-on fails: a click on a toast that opens the desktop,
-    /// and the browser UI when the desktop cannot be reached. Without a wait of its own, an opener answers whether it
-    /// started.
+    /// Hands <paramref name="url"/> to the platform's opener and waits up to <paramref name="wait"/> for it to finish, for
+    /// a caller that says how the hand-on ended: Jason Desktop's address, which opens nothing else when it fails. Without a
+    /// wait of its own, an opener answers whether it started.
     /// </summary>
     UrlHandOff HandOn(string url, TimeSpan wait) => Open(url) ? UrlHandOff.Handed : UrlHandOff.NotStarted;
 }
 
-/// <summary>xdg-open, open, or Windows's own URL handler, each a child with no window and no shell.</summary>
+/// <summary>
+/// xdg-open, open, or Windows's own URL handler, each a child with no window and no shell. On Linux nothing is handed to
+/// xdg-open outside a graphical session (<see cref="InGraphicalSession"/>).
+/// </summary>
 public sealed class PlatformUrlOpener : IUrlOpener
 {
     public bool Open(string url)
@@ -83,29 +86,66 @@ public sealed class PlatformUrlOpener : IUrlOpener
         : OperatingSystem.IsMacOS() ? "/usr/bin/open"
         : ProgramLookup.FullPathOf("xdg-open", new ProgramSearchPath(searchPath, pathExtensions));
 
+    /// <summary>
+    /// Whether a Linux session can show a window: <c>DISPLAY</c> or <c>WAYLAND_DISPLAY</c> is set. Without either, xdg-open
+    /// never asks which program takes an address and goes straight to a list of text browsers.
+    /// </summary>
+    internal static bool InGraphicalSession(string? display, string? waylandDisplay) =>
+        !string.IsNullOrEmpty(display) || !string.IsNullOrEmpty(waylandDisplay);
+
     private static System.Diagnostics.Process? Start(string url)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        if (OperatingSystem.IsLinux() && !InGraphicalSession(Environment.GetEnvironmentVariable("DISPLAY"), Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            return null;
+        }
+
         if (Opener(Environment.GetEnvironmentVariable("PATH"), Environment.GetEnvironmentVariable("PATHEXT")) is not { } opener)
         {
             return null;
         }
 
-        var arguments = OperatingSystem.IsWindows() ? new[] { "url.dll,FileProtocolHandler", url } : new[] { url };
-        var start = ChildProcess.StartInfo(opener);
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
+        var start = StartOf(opener, url);
         try
         {
             StandardStreams.KeepOutOfChildren();
-            return ChildProcess.Start(start);
+            if (ChildProcess.Start(start) is not { } process)
+            {
+                return null;
+            }
+
+            process.StandardInput.Close();
+            process.OutputDataReceived += Discard;
+            process.ErrorDataReceived += Discard;
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return process;
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// The opener's start, with three streams of the CLI's own: what the opener starts inherits them, and outside GNOME and
+    /// KDE xdg-open runs the program it starts to its end, so the caller's own streams would stay open in Jason Desktop's
+    /// window, and whoever reads the caller's output to its end would wait for that window to close.
+    /// </summary>
+    internal static ProcessStartInfo StartOf(string opener, string url)
+    {
+        var start = ChildProcess.StartInfo(opener, ChildKind.SystemToolWithInput);
+        if (OperatingSystem.IsWindows())
+        {
+            start.ArgumentList.Add("url.dll,FileProtocolHandler");
+        }
+
+        start.ArgumentList.Add(url);
+        return start;
+    }
+
+    private static void Discard(object sender, DataReceivedEventArgs e)
+    {
     }
 }

@@ -10,7 +10,6 @@ import {
     type ReactNode,
     type RefObject,
 } from 'react';
-import { can, cannotHere } from '../platform/places';
 import type { DesktopChatMode, DesktopEffort, DesktopHost } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { hostOf, heldHostOf } from './chat';
@@ -31,7 +30,7 @@ import {
     type Chat,
 } from './chat-model';
 import { chatHosts } from './live';
-import { inTab, setup } from './state';
+import { setup } from './state';
 
 // The two buttons in a composer's row, each opening a menu: the access mode a chat works in, and what it runs on (host,
 // model, effort). The start screen's box and a chat's own composer draw the same two; `change` and `choose` say where a
@@ -76,7 +75,7 @@ const markOf: Readonly<Record<DesktopChatMode, Mark>> = {
 };
 
 /** The mark of a chat's access mode, drawn where the mode is named: the plain shield for a mode this page does not know. */
-export function ModeMark({ mode }: { mode: DesktopChatMode }) {
+function ModeMark({ mode }: { mode: DesktopChatMode }) {
     return <Glyph name={(markOf as Partial<Record<string, Mark>>)[mode] ?? 'shield'} size={15} />;
 }
 
@@ -350,7 +349,7 @@ export function AccessButton({
     const host = hostOf(chat);
     const listed = modeChoices(host);
     const choices = order ? [...listed].sort((a, b) => order.indexOf(a.mode) - order.indexOf(b.mode)) : listed;
-    const drawn = drawnMode(chat, host, inTab() ? 'tab' : 'window').mode;
+    const drawn = drawnMode(chat, host, 'window').mode;
     const current = choices.find((each) => each.mode === drawn)?.label ?? drawn;
     const tone = drawn === 'full_access' ? ' acc-full' : drawn === 'plan_only' ? ' acc-plan' : '';
     return (
@@ -373,7 +372,6 @@ export function AccessButton({
                         {header}
                     </div>
                     {choices.map((each) => {
-                        const elsewhere = each.mode !== drawn && !can('chat.setMode');
                         return (
                             <Item
                                 key={each.mode}
@@ -383,11 +381,8 @@ export function AccessButton({
                                 label={each.label}
                                 value={each.mode}
                                 checked={each.mode === drawn}
-                                disabled={each.disabled !== null || elsewhere}
-                                small={
-                                    each.disabled?.replaceAll('`', '') ??
-                                    (elsewhere ? cannotHere() : modeSaysOn(host, each.mode))
-                                }
+                                disabled={each.disabled !== null}
+                                small={each.disabled?.replaceAll('`', '') ?? modeSaysOn(host, each.mode)}
                                 onChoose={() => {
                                     close();
                                     if (each.mode !== chat.mode) choose(each.mode);

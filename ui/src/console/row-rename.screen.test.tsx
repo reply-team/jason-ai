@@ -1,14 +1,11 @@
 import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
 import { loadMode, mode } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -25,8 +22,6 @@ import { activePanel, chats, conversations, feedId, here, lines } from './state'
 // row renames its conversation through the desktop. The name becomes a field in place: Enter keeps it, Escape and losing
 // the focus leave it as it was, and a refusal is said under the field, which stays open with what was typed. No chat is
 // shown. Read against the recorded draft "New agent 1" (cmp_1) and its rename.
-
-type Place = 'window' | 'tab';
 
 function api(update: FixtureName = 'campaign.update/new-agent-rename'): FakeApi {
     return new FakeApi()
@@ -49,22 +44,11 @@ function api(update: FixtureName = 'campaign.update/new-agent-rename'): FakeApi 
 }
 
 /** The console over the draft, its agent with a conversation unless `spoken` is false, and a chat about no agent. */
-async function renderAt(
-    place: Place,
-    fake: FakeApi = api(),
-    spoken = true,
-): Promise<{ desktop: StubDesktop; fake: FakeApi }> {
+async function renderAt(fake: FakeApi = api(), spoken = true): Promise<{ desktop: StubDesktop; fake: FakeApi }> {
     const desktop = stubDesktop({ ...setupFound });
     if (spoken) desktop.keep({ id: 'conv_a', campaignId: 'cmp_1', title: 'New agent 1' });
     desktop.keep({ id: 'conv_n', campaignId: null, title: 'Help me start' });
-    let used: Parameters<typeof Console>[0]['desktop'] = desktop;
-    let held: Bridge | null = null;
-    if (place === 'tab') {
-        held = new Bridge({ port: 43210, secret: standInSecret }, standInBridge(desktop).fetch);
-        used = tabDesktop(held);
-        setPlace('tab', used);
-    } else setPlace('window');
-    await loadMode(used);
+    await loadMode(desktop);
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -76,8 +60,7 @@ async function renderAt(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    session.bridge.value = held;
-    render(<Console api={fake} desktop={used} stream={stubStream().stream} bootstrapped />);
+    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
     return { desktop, fake };
@@ -121,14 +104,12 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
-    setPlace('window');
     mode.value = 'live';
-    session.bridge.value = null;
 });
 
-describe.each<Place>(['window', 'tab'])('An agent’s row renamed in place, in the %s', (place) => {
+describe('An agent’s row renamed in place, from its row', () => {
     it('renames the campaign with the person as actor, shows no chat, and the row keeps the focus', async () => {
-        const { desktop, fake } = await renderAt(place);
+        const { desktop, fake } = await renderAt();
         const before = activePanel.value;
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
@@ -151,7 +132,7 @@ describe.each<Place>(['window', 'tab'])('An agent’s row renamed in place, in t
 
 describe('An agent’s row renamed in place', () => {
     it('is renamed in the row, in the agent’s header and on the Agents page at once, with no list read again', async () => {
-        const { fake } = await renderAt('window');
+        const { fake } = await renderAt();
         fireEvent.click(await rowIn(agentsList, 'New agent 1'));
         await waitFor(() => expect(document.querySelector('.agent-head h2')?.textContent).toBe('New agent 1'));
         const lists = fake.calls.filter((each) => each.operation === 'campaign.list').length;
@@ -171,7 +152,7 @@ describe('An agent’s row renamed in place', () => {
     });
 
     it('says the runtime’s refusal under the field, keeps what was typed, and Escape puts the old name back', async () => {
-        const { fake } = await renderAt('window', api('campaign.update/new-agent-name-too-long'));
+        const { fake } = await renderAt(api('campaign.update/new-agent-name-too-long'));
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         const long = 'n'.repeat(201);
@@ -194,7 +175,7 @@ describe('An agent’s row renamed in place', () => {
     });
 
     it('closes with no request on an unchanged name, and refuses an empty one in the row', async () => {
-        const { fake } = await renderAt('window');
+        const { fake } = await renderAt();
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         fireEvent.keyDown(await waitFor(() => field('Agent name')), { key: 'Enter' });
         await waitFor(() => expect(side().queryByRole('textbox')).toBeNull());
@@ -209,7 +190,7 @@ describe('An agent’s row renamed in place', () => {
     });
 
     it('keeps nothing when the field loses the focus: a stray click renames nothing', async () => {
-        const { fake } = await renderAt('window');
+        const { fake } = await renderAt();
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: 'Polish finance' } });
@@ -222,7 +203,7 @@ describe('An agent’s row renamed in place', () => {
     });
 
     it('renames an agent with no conversation yet: its rename is never held', async () => {
-        const { fake } = await renderAt('window', api(), false);
+        const { fake } = await renderAt(api(), false);
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: 'Polish finance' } });
@@ -236,7 +217,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
     async function sent(update: FixtureName, typing: string, spoken = true) {
         const fake = api(update);
         const release = fake.hold('campaign.update');
-        await renderAt('window', fake, spoken);
+        await renderAt(fake, spoken);
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: typing } });
@@ -272,7 +253,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
     });
 
     it('says any other refusal in the runtime’s own words', async () => {
-        await renderAt('window', api('campaign.get/unknown'));
+        await renderAt(api('campaign.get/unknown'));
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: 'Polish finance' } });
@@ -281,7 +262,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
     });
 
     it('keeps the field, its text, its focus and its refusal’s one node when the lists change under it', async () => {
-        await renderAt('window', api('campaign.update/new-agent-name-too-long'));
+        await renderAt(api('campaign.update/new-agent-name-too-long'));
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: 'n'.repeat(201) } });
@@ -329,7 +310,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
         async function timedOut(update: FixtureName, typing: string) {
             const fake = api(update);
             const release = fake.hold('campaign.update');
-            await renderAt('window', fake);
+            await renderAt(fake);
             await chooseFor(agentsList, 'New agent 1', 'Rename');
             const box = await waitFor(() => field('Agent name'));
             vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -375,7 +356,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
     });
 
     it('says a refusal said again anew: the region is cleared first', async () => {
-        await renderAt('window');
+        await renderAt();
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         const box = await waitFor(() => field('Agent name'));
         fireEvent.input(box, { target: { value: '   ' } });
@@ -390,7 +371,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
     });
 
     it('is closed when its row is no longer drawn', async () => {
-        await renderAt('window', api(), false);
+        await renderAt(api(), false);
         await chooseFor(agentsList, 'New agent 1', 'Rename');
         await waitFor(() => field('Agent name'));
         flush(() => {
@@ -402,7 +383,7 @@ describe('An agent’s rename while its request is in flight, and the row painte
 
 describe('A chat’s row renamed in place', () => {
     it('renames the conversation through the desktop, with no campaign changed and no chat shown', async () => {
-        const { desktop, fake } = await renderAt('window');
+        const { desktop, fake } = await renderAt();
         const before = activePanel.value;
         await chooseFor(chatsList, 'Help me start', 'Rename conversation');
         const box = await waitFor(() => field('Conversation name'));
@@ -419,7 +400,7 @@ describe('A chat’s row renamed in place', () => {
     });
 
     it('says the desktop’s refusal under the field in its own words, and keeps what was typed', async () => {
-        const { desktop } = await renderAt('window');
+        const { desktop } = await renderAt();
         desktop.refuse.set('chat.rename', 'That name is too long. Keep it to a short line.');
         await chooseFor(chatsList, 'Help me start', 'Rename conversation');
         const box = await waitFor(() => field('Conversation name'));
@@ -433,7 +414,7 @@ describe('A chat’s row renamed in place', () => {
     });
 
     it('cuts what is typed at the conversation name’s sixty characters', async () => {
-        await renderAt('window');
+        await renderAt();
         await chooseFor(chatsList, 'Help me start', 'Rename conversation');
         const box = await waitFor(() => field('Conversation name'));
         fireEvent.input(box, { target: { value: 'x'.repeat(70) } });

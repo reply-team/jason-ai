@@ -1,7 +1,7 @@
 # Jason Desktop
 
-An Electron window onto the installation the `jason` command line uses. It is one more client of that installation, as
-the browser UI is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise `~/.jason`), shows the UI the
+An Electron window onto the installation the `jason` command line uses. It is one more client of that installation: it
+finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise `~/.jason`), shows the UI the
 runtime serves at its loopback address, and changes the installation only through CLI verbs and the settings file a
 person would edit.
 
@@ -20,9 +20,9 @@ that a person needs.
 | Know whether a runtime is up and whether it is this build | `jason status` |
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
-| Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
+| Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries: the three once for each version it carries, recorded as `skills_deployed_for` in `<data>/desktop/settings.json`, and again where a chat folder's record under `<data>/desktop/skills-records/` is missing; the role skills alone again where the `role_skills` check of `jason status` carries no details, its role root holding no readable record of a deployment, as after `jason uninstall` with the data kept; the role skills only when the runtime is the version the desktop carries |
 | Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started, no folder of an installation made and no host name resolved |
-| Load the window | the link `jason ui open --no-open` prints |
+| Load the window | the link `jason ui pair` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
@@ -52,7 +52,7 @@ of its own rather than a TOML package. Both are read from the desktop's own envi
 Dock or the Start menu without a `CLAUDE_CONFIG_DIR` that the person's shell sets names the servers of the home's file
 instead; a wrong guess names other servers and harms nothing. Only the main process reads the files, whole, and only the
 names leave them, each made one line, its unseen characters taken out and drawn in forty characters at most, on
-`setup.status()`'s host, which a paired browser tab reads too. A file that is not there lists nothing; one that cannot be
+`setup.status()`'s host. A file that is not there lists nothing; one that cannot be
 read or parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No file
 can fail or hang the listing: only a regular file is opened, none over 64 MiB is read, and one nested more than 64 deep
 or naming more than 1,000 servers lists nothing. Each file's last answer, its names or its kind and never its text, is
@@ -864,7 +864,7 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   in the page, on the link or anywhere else, gives the page one second in which that one address may open, at most one
   tab per act. Both moments are read from a monotonic clock (`performance.now()`), and a moment before the gesture is
   refused. Any other address opens nothing. The view's pop-ups stay denied, the policy is
-  unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
+  unchanged and the page's file is not edited. The open is logged as
   `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
   all: a name the page names ahead (`<link rel="dns-prefetch">`) is looked up below every guard above, and this is what
@@ -921,8 +921,8 @@ a chat, no card, approval or question answered, no chat mode, no setting (`src/d
 desktop's own on every platform. `jason:` is the runtime's: on Windows its toast host registers it for the command line,
 which handles `jason://attention...` ([`docs/notifications.md`](../docs/notifications.md), section 7); the desktop never
 registers, declares or removes it. Where the desktop's registration names a program that is there, the command line
-hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens the browser UI
-otherwise. The addresses are a closed table:
+hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens nothing
+otherwise, never a browser. The addresses are a closed table:
 
 | Address | Opens |
 | --- | --- |
@@ -956,8 +956,10 @@ when Windows did not take the registration.
 - **macOS.** The bundle declares the scheme in `Info.plist`, and the system hands a link to the application by its
   `open-url` event, running or not; a link in a start's arguments is refused there.
 - **Linux.** The deb's menu entry declares `MimeType=x-scheme-handler/jason-desktop;` and starts the program with `--`
-  before the address (`Exec=/opt/Jason/jason-desktop-app -- %U`). The AppImage declares no scheme and takes no link,
-  and neither does a development build.
+  before the address (`Exec=/opt/Jason/jason-desktop-app -- %U`). An AppImage's entry, which the install line, the move
+  from a command-line install and `jason install` write under the account's own `applications` folder, does the same
+  for its file, its path bare wherever nothing in it needs quoting; the folder's cache is written again after it. A
+  development build takes no link.
 
 A link that comes before the page is loaded waits for it, the newest replacing an older one; the window comes forward,
 also when the link is refused.

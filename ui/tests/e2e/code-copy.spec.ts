@@ -10,7 +10,7 @@ test('Copy code is centred on a block of one line and stays at the top right of 
 }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.addInitScript(talkingDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
 
     const start = page.getByRole('form', { name: 'Start' });

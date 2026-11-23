@@ -13,7 +13,7 @@ const MEASURE = 880;
 test('in the console a screen shown in the one area fills it, whichever screen it is', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.locator('.jc-console .area')).toBeVisible();
 
@@ -47,7 +47,7 @@ test('in the console a screen shown in the one area fills it, whichever screen i
 test('in the console Agents and Activity keep a measure in the wide area, centred in it', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.locator('.jc-console .area')).toBeVisible();
     await page.waitForFunction(
@@ -98,7 +98,7 @@ test('in the console Agents and Activity keep a measure in the wide area, centre
 test('in the console Needs you is drawn across the whole wide area, as its two panes need', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.locator('.jc-console .area')).toBeVisible();
     await page.waitForFunction(
@@ -130,7 +130,7 @@ test('in the console a dialog a row menu opens draws nothing between its layer a
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);
     await jason.campaignCreate('Row dialog');
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.locator('.jc-console .area')).toBeVisible();
     const side = page.locator('.jc-console .side');

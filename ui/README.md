@@ -1,37 +1,37 @@
 # Jason UI
 
-The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One more client of the Runtime API
-(`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired once with
-`jason ui open`, then bookmarked. Nothing in the runtime knows a screen exists.
+The UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/` and Jason Desktop draws in its window. One more client
+of the Runtime API (`POST /v1/<noun>.<verb>`, and the one `GET`, the journal stream `GET /v1/journal.stream`), paired by
+the link `jason ui pair` prints, which the desktop loads at each start. Nothing in the runtime knows a screen exists.
 
 ## Build
 
 Node 24. `npm ci`, then `npm run build` writes `dist/`, with the `THIRD-PARTY-NOTICES` of exactly the packages the
 bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
-`manifest.json`, `favicon.svg` (the mark), `brand-wordmark.svg` and `brand-wordmark-dark.svg` (the wordmark for a light and a dark ground), `assets/*`, `THIRD-PARTY-NOTICES` at the root, and `sealed/demo.html`: the desktop's demo page,
-`../desktop/demo/index.html`, copied byte for byte, which a browser tab shows at `#/demo` and the runtime serves unable
-to act ([docs/ui.md](../docs/ui.md#the-demo-in-a-browser-tab)). The notices name what that page carries in a part of
-their own. The build refuses a package it carries that has no licence file, and the package step refuses notices that
-leave out a package `package.json` names as a dependency, a directory other than `assets/` and `sealed/`, and anything
-under `sealed/` but a page.
+`manifest.json`, `favicon.svg` (the mark), `brand-wordmark.svg` and `brand-wordmark-dark.svg` (the wordmark for a light and a dark ground), `assets/*` and `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries that
+has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
+dependency, and a directory other than `assets/`.
 
 The brand files are the mark, the two wordmarks and the app icons under `desktop/`; the small `Alpha` label beside the wordmark
-is text in the page, in the browser and in the desktop alike, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
+is text in the page, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
 
 ## Where it lands
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build: the release's own, which `jason ui install` places (a release builds
 `ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
-`jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
+`jason-ui.zip` into `~/.jason/ui/custom/` and start Jason Desktop, whose window draws whatever the runtime serves;
+`jason status` says which build is served. Delete `custom/` to go back.
 
-## One console, three places
+## One console
 
 The words of the page: an **agent** is the harness's campaign with its chat, and only on the screen. Identifiers, routes,
 API fields, file names, test ids and fixtures keep `campaign`. The AI that runs commands is "the AI", never "the agent".
 
-The page mounts the console, in one of three places that differ by what each can do (`src/main.tsx`, chosen by
-`src/start.ts` once as the page loads). The console (`src/console/`) is a sidebar and one area that shows exactly one
+The page mounts the console in Jason Desktop's own window (`src/main.tsx`, chosen by `src/start.ts` once as the page
+loads); any other browser tab gets one sentence, that this is the place for a web interface of one's own and to ask
+one's agent how to build one (`src/own-place.ts`), and nothing else: it reads no pairing and asks the runtime nothing. The
+console (`src/console/`) is a sidebar and one area that shows exactly one
 thing at a time, chosen from the sidebar's menu, its two sections, Agents and Chats, or the palette: Start, one chat, what needs the person
 (approvals and questions), the agents, the journal's activity, Connect, which shows the AI hosts found on the computer,
 the model keys, the Reply connection and the notification channels, or one of the screens under `src/screens/`. Nothing
@@ -42,26 +42,8 @@ The console reaches the desktop only through the seam typed in
 `src/platform/desktop.d.ts`, and the runtime only through the API client and the journal stream
 (`src/platform/journal-stream.ts`, a WebSocket at `GET /v1/journal.stream` under the page's own pairing).
 
-**Three places, one console.** The console is always handed an object of the desktop's whole shape, built in
-`src/platform/places.ts`:
-
-- **Jason Desktop's own window**: the desktop puts `window.jasonDesktop` on the page before the page runs; it can do
-  everything, and the console starts at once.
-- **A tab the desktop opened, with a bridge**: the object is built over the bridge, which carries one table of members
-  (`src/platform/bridge.ts`); every other member is present and answers the refusal its own type has, and `platform` is the
-  browser's own.
-- **A tab with no desktop**: every act refuses, and a read says what a page with no desktop can truthfully say. The
-  console is not drawn there: `showsConsole()` in `src/platform/places.ts` is the one place that says which places draw it, and a
-  tab with no desktop gets one page (`src/console/no-desktop.tsx`) that says Live Mode is only available in Jason
-  Desktop, links to where to get it, and, while something waits, says what and where to decide; the Demo | Live switch
-  is the only control. The tab opens on the demo when nothing waits (`src/platform/tab-choice.ts` keeps the person's own
-  choice of Demo or Live in the tab's session storage, over a reload).
-
-The page asks one question before it draws or does anything a place may not, `can(member)`, and draws what the place
-cannot do off, in its place, with one sentence. In a browser the pairing is read first, to learn whether the tab holds a
-bridge. `tests/guards/desktop-calls.test.ts` reads the page's source and holds every use of a member to the bridge's table
-or to that question, and the members' list is `desktop.d.ts` itself. The browser's older shell (`src/classic.tsx`, its
-sidebar and Chat screen) is started by nothing now; its code stays until it is taken out.
+The page asks the desktop only for the members of its seam, and a desktop of an earlier version may lack a part of it,
+which the page asks about before it reads it (`earlier` in `src/platform/window-desktop.ts`).
 
 The console's live panels read the same facts as the Attention and Agents screens, with the same operations, and for now
 duplicate them. Each panel keeps its lists apart from the screen's, so the area keeps that screen at a table or a filter
@@ -74,19 +56,20 @@ control in that markup carries `data-action` and its arguments, answered by one 
 an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses; and
 the tag refuses text inside a tag, where it could add an attribute of its own. A repaint keeps the control a person is
 in focused, with its selection. The
-classic screens in the area take the browser's stylesheet, scoped under `.harness` when the build runs
+classic screens in the area take their own stylesheet (`src/styles/`), scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
 **Words and theme.** The page's words are in `src/locale/en.ts`, one table read through `t()`. The theme
 (light, dark, or the system's) is chosen under Settings; light is what an installation that has chosen nothing meets.
-The choice is kept in this browser and never sent to the runtime; inside the desktop it is also told to the desktop, which
-keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the page's.
+The choice is told to the desktop, which keeps it so its window and starting page open in the same theme before the
+page loads, and never sent to the runtime. The document's `lang` is `en`. The console's own words are English in this release: the table serves the page's.
 
 ## Dev loop
 
 A scratch runtime (`JASON_DATA_DIR` set to a scratch directory, never `~/.jason`), `dist/` linked as that directory's
 `ui/custom/` (a symbolic link on Linux and macOS, a junction on Windows), `npm run dev` rebuilding `dist/` on every
-change, and `jason ui open` once. The build writes the `manifest.json` the runtime asks of a directory before it serves
+change, and Jason Desktop started on that data directory (`npm run dev` in `desktop/`, with the same `JASON_DATA_DIR`),
+whose window draws `dist/`; in a browser tab the build draws its one sentence and nothing else. The build writes the `manifest.json` the runtime asks of a directory before it serves
 it, so `dist/` is served as it stands. No hot reload, and no dev-only origin allowance in the runtime.
 
 ## Screens and their pieces
@@ -144,16 +127,12 @@ only with a recording whose request equals the one sent, and a request a test re
 even when the screen caught the error; the console's source makes markup only with its tag, writes it into the page
 only through its painter, and carries no inline handler or style attribute in markup or JSX
 (`tests/guards/console-templates.test.ts`, which reads the source as TypeScript); the desktop seam's members are
-named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build, and every use of one is held to the bridge's table or to the one question (`tests/guards/desktop-calls.test.ts`); the classic shell's chunk
-reaches no console file but the few it shares (`tests/guards/classic-chunk.test.ts`); only
+named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build; only
 `tests/e2e/harness.ts` may start a process, and it gives each runtime a data directory and a harness root of its own;
-the demo's frame is drawn in one place with its attributes from one constant, its switch as high as the strip the desktop
-stands its own over, and nothing listens for a message but the journal's socket (`tests/guards/demo-frame.test.ts`); the
-demo page's addresses are held to the counted list beside it (`tests/guards/sealed-page.test.ts`); the CI job runs all
-of it on every push.
+the CI job runs all of it on every push.
 
-**The sealed probe.** `tests/e2e/probe/` puts a hostile page where the demo page stands and has the console show it in
-its frame; every way out it can name aims at a witness, a server of the test's own on the loopback, or at a file the
+**The sealed probe.** `tests/e2e/probe/` puts a hostile page under `sealed/` of a build of one's own and opens it by
+itself; every way out it can name aims at a witness, a server of the test's own on the loopback, or at a file the
 UI serves, and the witness must hear nothing and the file must not be reached, which only the sealed content policy
 ensures; a probe that stays green with that policy's network rules removed proves nothing. It runs in the CI job alone, which sets
 `JASON_SEALED_PROBE=1`, in Chromium, Firefox and WebKit; without that variable `playwright test` leaves it out.

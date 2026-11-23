@@ -1,5 +1,5 @@
 import { t } from '../../platform/i18n';
-import { can, currentDesktop } from '../../platform/places';
+import { windowDesktop } from '../../platform/window-desktop';
 import { packageItemLabel, updateMark, updateShown } from './update-state';
 
 /**
@@ -9,7 +9,7 @@ import { packageItemLabel, updateMark, updateShown } from './update-state';
  * the item, what the check the person last asked for found, as the desktop words it and for as long as its answer carries
  * it. While the desktop knows of a version it has not installed, one quiet mark beside the item. The deb's item, which
  * checks nothing itself, is said as words: the system's packages update it; its restart, once the system did, is a button.
- * Nothing at all in a tab, in the Demo, and from a desktop that shows no item.
+ * Nothing at all in the Demo, and from a desktop that shows no item.
  */
 export function UpdateSection() {
     const shown = updateShown();
@@ -18,8 +18,8 @@ export function UpdateSection() {
     const said = typeof shown.said === 'string' && shown.said !== '' ? shown.said : null;
     const newer = updateMark();
     const press = (label: string) => {
-        const desktop = currentDesktop();
-        if (desktop === undefined || !can('updates.press')) return;
+        const desktop = windowDesktop();
+        if (desktop === undefined) return;
         // The press names the label drawn, which the desktop acts on only while its item still says it; what comes of it,
         // a box or a refusal, is the desktop's own, and the item follows through `onChanged`.
         desktop.updates.press(label).catch(() => undefined);

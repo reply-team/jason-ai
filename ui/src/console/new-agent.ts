@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import { earlier } from '../platform/places';
+import { earlier } from '../platform/window-desktop';
 import { reload as reloadCampaigns } from './campaigns';
 import { holdOpening, isRefusal } from './chat';
 import { startWaiting } from './start';

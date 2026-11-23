@@ -33,8 +33,8 @@ export type CampaignTab = (typeof agentTabs)[number];
 
 /**
  * The ONE place of the first-tab rule: the tab an agent opens on, whether its address names none, an older one, or it
- * is opened from the table, a link or a close. Sequence; in the console's Live, Chat where the place can make a chat and
- * People where it cannot (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
+ * is opened from the table, a link or a close. Sequence; in the console's Live, Chat (`loadMode` sets it as the page
+ * loads). An address that names a tab opens it in either mode.
  */
 export const firstCampaignTab: { value: CampaignTab } = { value: 'sequence' };
 export type CampaignView = 'summary' | 'activity';
@@ -68,8 +68,6 @@ export type Route =
     | { screen: 'accounts' }
     | { screen: 'settings' }
     | { screen: 'chat' }
-    /** The demo page, a view of a browser tab alone; in the desktop's own window the demo is the desktop's view. */
-    | { screen: 'demo' }
     | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
     | { screen: 'people'; id?: string; tab: PersonTab; filters: PeopleFilters }
     | {
@@ -108,7 +106,6 @@ export function parseRoute(hash: string): Route {
     if (segments[0] === 'accounts') return { screen: 'accounts' };
     if (segments[0] === 'settings') return { screen: 'settings' };
     if (segments[0] === 'chat') return { screen: 'chat' };
-    if (segments[0] === 'demo') return { screen: 'demo' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
     if (segments[0] === 'people') return people(segments.slice(1), query);
     if (segments[0] === 'campaigns') return campaigns(segments.slice(1), query);
@@ -279,7 +276,6 @@ export function href(route: Route): string {
     if (route.screen === 'accounts') return '#/accounts';
     if (route.screen === 'settings') return '#/settings';
     if (route.screen === 'chat') return '#/chat';
-    if (route.screen === 'demo') return '#/demo';
     if (route.screen === 'workitems') {
         const tab = route.tab !== 'now' || route.id ? `/${route.tab}` : '';
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';

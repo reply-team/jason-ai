@@ -155,6 +155,32 @@ switch (args[0])
         StartSelf("hold", args[1])?.Dispose();
         return 0;
 
+    case "say-and-hold" when args.Length > 2 && int.TryParse(args[2], CultureInfo.InvariantCulture, out var sayHoldMs):
+        // One line said and flushed, then nothing until the hold ends: a program that answered and stays, as notify-send
+        // waits on the bus with its notification.
+        await Console.Out.WriteLineAsync(args[1]);
+        await Console.Out.FlushAsync();
+        await Task.Delay(sayHoldMs);
+        return 0;
+
+    case "complain-and-hold" when args.Length > 2 && int.TryParse(args[2], CultureInfo.InvariantCulture, out var complainHoldMs):
+        // One line said on stderr and nothing on stdout, then nothing until the hold ends: notify-send 0.8.3 that could
+        // not show its notification and waits for it all the same.
+        await Console.Error.WriteLineAsync(args[1]);
+        await Console.Error.FlushAsync();
+        await Task.Delay(complainHoldMs);
+        return 0;
+
+    case "hold-with-child" when args.Length > 2:
+        {
+            // A child of its own, held as its child, its id written where the test reads it: a handler with the program it
+            // started still under it.
+            using var child = StartSelf("hold", args[2]);
+            await File.WriteAllTextAsync(args[1], child!.Id.ToString(CultureInfo.InvariantCulture));
+            await Task.Delay(Timeout.Infinite);
+            return 0;
+        }
+
     case "hold" when args.Length > 1 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var holdMs):
         // Writes nothing and reads nothing: the point is only that the inherited handles stay open.
         await Task.Delay(holdMs);

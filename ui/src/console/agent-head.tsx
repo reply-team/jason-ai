@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useApi } from '../api/context';
 import { essentials } from '../platform/console-shell';
 import { t } from '../platform/i18n';
-import { can } from '../platform/places';
 import { navigate, route, type CampaignTab, type Route } from '../router';
 import { Tabs } from '../layout/tabs';
 import { agentKind, firstTabName, kindWord } from '../screens/campaigns/kind';
@@ -188,12 +187,12 @@ export function AgentHead({ id, tab }: { id: string; tab: CampaignTab }) {
                             }}
                         />
                     )}
-                    {can('chat.create') && <ConversationMenu agent={id} />}
+                    <ConversationMenu agent={id} />
                 </div>
             </div>
             <Tabs
                 tabs={[
-                    ...(can('chat.create') ? [{ key: 'chat' as CampaignTab, label: 'Chat' }] : []),
+                    { key: 'chat' as CampaignTab, label: 'Chat' },
                     ...pages.map((each) => ({
                         key: each as CampaignTab,
                         label: label(each),

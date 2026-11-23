@@ -10,9 +10,10 @@ namespace Jason.App.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Six rules. No test names the real registry, the real clipboard, the real terminal starter or the real reader of the
-/// desktop's registration: each would act on, or answer from, the machine running the suite, whatever the data directory
-/// says, the third by opening a window with an agent host in it.
+/// Six rules. No test names the real registry, the real clipboard, the real terminal starter or a real reader of the
+/// desktop's registration (Windows' registry, this account's menu entries or Applications folders): each would act on, or
+/// answer from, the machine running the suite, whatever the data directory says, the third by opening a window with an
+/// agent host in it.
 /// No file reaches the link handler and the real CLI environment together, which carries the real opener, the real
 /// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No
 /// file runs the router beside a <c>jason:</c> link, since the router hands a link the real environment: choosing the
@@ -51,6 +52,9 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("real registry", "var registry = new Registry" + "UserRegistry();")]
     [InlineData("real clipboard", "IClipboard clipboard = new Windows" + "Clipboard();")]
     [InlineData("real desktop registration", "IDesktopRegistration desktop = new WindowsDesktop" + "Registration();")]
+    [InlineData("this machine's desktop registration", "var desktop = DesktopRegistrations" + ".ForThisMachine();")]
+    [InlineData("this account's menu entries", "var desktop = LinuxDesktopRegistration" + ".ForThisAccount();")]
+    [InlineData("this account's Applications folders", "var desktop = MacDesktopRegistration" + ".ForThisAccount();")]
     [InlineData("real terminal", "ITerminalStarter terminals = new PlatformTerminal" + "Starter();")]
     [InlineData("handler with the real environment", "await Link" + "Handler.RunAsync([link], CliEnvironment.Default(), ct);")]
     [InlineData("session verb with the real environment", "await CliApp.RunAsync([\"session\", \"open\", \"--approval\", id], CliEnvironment.Default(), ct);")]
@@ -68,6 +72,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("process start of its own with the session verb in one string", "using var started = Process.Start(exe, \"session open --approval apr_1\");")]
     [InlineData("start info with the session verb in one string", "var start = new ProcessStartInfo(exe, \"session open --approval apr_1\");")]
     [InlineData("process of its own with a link", "using var started = new Process { StartInfo = { FileName = exe, ArgumentList = { \"jason://attention\" } } };")]
+    [InlineData("process of its own with a link beside the path locator", "var self = new ProcessPathLocator().Command; using var started = new Process { StartInfo = { FileName = self[0], ArgumentList = { \"jason://attention\" } } };")]
     public void The_rule_finds_each_form(string form, string text) =>
         Assert.True(Offence("Mutant.cs", text) is not null, $"{form} passes the rule: {text}");
 
@@ -79,6 +84,7 @@ public sealed partial class NoTestClicksALinkTests
     [InlineData("await _run.Cli(\"session\", \"open\", \"--approval\", \"apr_1\");")]
     [InlineData("var session = Read(body); var env = CliEnvironment.Default();")]
     [InlineData("await GoldenPath.JasonAsync(it, \"--version\");")]
+    [InlineData("var self = new ProcessPathLocator().Command; Assert.Equal([.. self, \"jason://attention\"], Click(self, link));")]
     public void What_acts_on_nothing_is_no_offence(string text) => Assert.Null(Offence("Fine.cs", text));
 
     private static string? Offence(string file, string source)
@@ -103,6 +109,14 @@ public sealed partial class NoTestClicksALinkTests
             return $"{file} names {desktop}, which reads this account's registry for the desktop's link";
         }
 
+        foreach (var reader in new[] { string.Concat("DesktopRegistrations", ".ForThisMachine"), string.Concat("DesktopRegistration", ".ForThisAccount") })
+        {
+            if (text.Contains(reader, StringComparison.Ordinal))
+            {
+                return $"{file} names {reader}, which reads this account's own places for the desktop's link";
+            }
+        }
+
         if (text.Contains(terminal, StringComparison.Ordinal))
         {
             return $"{file} names {terminal}, which starts a terminal window on this machine";
@@ -125,7 +139,8 @@ public sealed partial class NoTestClicksALinkTests
             return $"{file} runs the router beside a jason: link";
         }
 
-        if (ProcessStarts.FirstOrDefault(start => text.Contains(start, StringComparison.Ordinal)) is { } how)
+        var starting = text.Replace(PathLocator, string.Empty, StringComparison.Ordinal);
+        if (ProcessStarts.FirstOrDefault(start => starting.Contains(start, StringComparison.Ordinal)) is { } how)
         {
             if (LinkLiteral().IsMatch(text) || text.Contains("AttentionLinks", StringComparison.Ordinal))
             {
@@ -147,6 +162,12 @@ public sealed partial class NoTestClicksALinkTests
     /// </summary>
     private static readonly string[] ProcessStarts =
         ["ProcessStartInfo", "ChildProcess", "JasonAsync(", "LauncherAsync(", "Process.Start(", "new Process"];
+
+    /// <summary>
+    /// The one type whose name <c>new Process</c> would take that starts nothing: it reads this executable's own path. Every
+    /// other type whose name begins so, the toast's own launcher among them, still counts as a start.
+    /// </summary>
+    private const string PathLocator = "new ProcessPathLocator(";
 
     private static string Joined(string text) => Concatenation().Replace(Uncommented(text), string.Empty);
 

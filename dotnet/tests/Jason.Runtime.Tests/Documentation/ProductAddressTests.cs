@@ -94,7 +94,7 @@ public sealed partial class ProductAddressTests : IDisposable
         new(
             ".github/workflows/release.yml",
             5,
-            "the installation proof takes the previous release's and the one-installation release's published files from GitHub directly, on each platform it proves, and the cask's proof the previous release's application and the older formula's command line, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
+            "the installation proof takes the previous release's and the one-installation release's published files from GitHub directly, on each platform it proves, and the cask's proof the previous release's application and the older formula's command line, and, run alone, the named release's application, checks each file it takes that the release's checksums.txt lists against it, and says the others are used as downloaded; it is CI's read and no person's install, so it is never a request to the address operated for the product"),
     ];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-tests", "product-address-" + Guid.NewGuid().ToString("N"));

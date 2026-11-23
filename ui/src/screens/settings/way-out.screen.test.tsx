@@ -6,28 +6,20 @@ import { newChat } from '../../console/chat-model';
 import { attention } from '../../console/needs';
 import { startDraft, startMaking, startMode, startPick, startWaiting } from '../../console/start';
 import { activePanel, chats, conversations, here, lines, setup, setupError } from '../../console/state';
-import { Bridge } from '../../platform/bridge';
-import { loadMode, mode } from '../../platform/mode';
-import { setPlace, tabDesktop } from '../../platform/places';
+import { mode } from '../../platform/mode';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { parseRoute, route } from '../../router';
-import { standInBridge, standInSecret } from '../../test/bridge';
-import { chatDesktop, setupFound, stubStream } from '../../test/desktop';
+import { setupFound, stubDesktop, stubStream } from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
 
 // The way out of Settings: Back at the head returns to the place the person was in when they opened Settings, else to
 // the start place; Escape does the same where nothing else takes the key. The place is held by the page alone.
 
 async function renderConsole(address = '#/chat') {
-    const desktop = chatDesktop({ ...setupFound });
+    // The window as a reload or a link leaves it, with no New chat from its menu: the console draws what an address names.
+    const desktop = stubDesktop({ ...setupFound });
     desktop.keep({ id: 'conv_1', title: 'Spring outreach' });
-    // The tab the desktop opened: the console there draws what an address names, as a reload or a link leaves it.
-    const stand = standInBridge(desktop);
-    const bridge = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch);
-    const used = tabDesktop(bridge);
-    setPlace('tab', used);
-    await loadMode(used);
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('sender.list', 'sender.list/card-message-sender')
@@ -52,8 +44,7 @@ async function renderConsole(address = '#/chat') {
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    session.bridge.value = bridge;
-    render(<Console api={fake} desktop={used} stream={stubStream().stream} bootstrapped />);
+    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
 }
 
@@ -76,9 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
-    setPlace('window');
     mode.value = 'live';
-    session.bridge.value = null;
 });
 
 const settingsPane = () => document.querySelector<HTMLElement>('[data-pane="page"]')!;

@@ -1,16 +1,17 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import type { Jason } from '../harness';
 
-// The seal in the browser, tried from inside: a hostile page stands where the demo page does, the console shows it in its
-// frame, and every way out it can name aims at a witness, a server of this test's own on the loopback that answers
-// anything. In a frame only the sealed set's content policy stands between the page's network and an address that
-// answers, so the witness hearing nothing is the policy at work, and so is the page reaching no file of the runtime's
-// own. The page's own word decides only what stays inside it: its origin, its storage and the page above it. The probe
-// runs in the pull request's CI alone, in each engine its workflow installs (playwright.config.ts).
+// The seal in the browser, tried from inside: a hostile page stands under sealed/ of a build of one's own, framed by a
+// page of that build or opened by itself, and every way out it can name aims at a witness, a server of this test's own on
+// the loopback that answers anything. Only the sealed set's headers stand between the page and an address that answers:
+// the frame carries no sandbox attribute of its own. So the witness hearing nothing is the policy at work, and so is the
+// page reaching no file of the runtime's own. The page's own word decides only what stays inside it: its origin, its
+// storage and the page above it. The probe runs in the pull request's CI alone, in each engine its workflow installs
+// (playwright.config.ts).
 
 const probe = join(import.meta.dirname, 'sealed-probe.html');
 
@@ -69,16 +70,28 @@ async function startWitness(): Promise<{ origin: string; heard: string[]; close:
     };
 }
 
-/** The probe placed where the build's demo page stands, aiming at the witness: a custom build, served over the default. */
+/** Where the probe stands: under sealed/ of a custom build, served over the default. */
+const probePath = '/ui/sealed/probe.html';
+
+/** A page of the build that frames the probe, with no script and no sandbox attribute: the headers alone hold the frame. */
+const hostPath = '/ui/host.html';
+const host =
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Host</title></head>' +
+    '<body><iframe class="probe-frame" src="sealed/probe.html" title="Probe"></iframe></body></html>';
+
+/** The probe placed under the custom build's sealed directory, aiming at the witness, with the page that frames it. */
 function placeProbe(jason: Jason, witness: string): void {
     jason.placeBuild('custom', 'probe');
     const page = readFileSync(probe, 'utf8').replaceAll('__WITNESS_ORIGIN__', witness);
-    writeFileSync(join(jason.dataDir, 'ui', 'custom', 'sealed', 'demo.html'), page);
+    const custom = join(jason.dataDir, 'ui', 'custom');
+    mkdirSync(join(custom, 'sealed'), { recursive: true });
+    writeFileSync(join(custom, 'sealed', 'probe.html'), page);
+    writeFileSync(join(custom, 'host.html'), host);
 }
 
 /** What the probe wrote: each try with its outcome and its own words. */
 async function outcomes(page: Page, framed: boolean): Promise<[string, string, string][]> {
-    const root = framed ? page.frameLocator('iframe.demo-frame').locator('body') : page.locator('body');
+    const root = framed ? page.frameLocator('iframe.probe-frame').locator('body') : page.locator('body');
     await expect(root).toHaveAttribute('data-done', '1', { timeout: 20_000 });
     return root
         .locator('li')
@@ -91,7 +104,7 @@ async function outcomes(page: Page, framed: boolean): Promise<[string, string, s
         );
 }
 
-/** Every request and WebSocket the page's documents make, from the frame or from a page opened by itself. */
+/** Every request and WebSocket the probe makes, from the frame or from a page opened by itself. */
 function watchNetwork(page: Page, framed: boolean) {
     const seen = { asked: [] as string[], finished: [] as string[], sockets: [] as string[], received: [] as string[] };
     const ours = (frame: ReturnType<Page['mainFrame']>) => (framed ? frame.parentFrame() !== null : true);
@@ -115,7 +128,7 @@ function record(info: TestInfo, seen: ReturnType<typeof watchNetwork>, heard: st
     });
 }
 
-test('a page under sealed/, in the console’s frame, reaches no address and changes nothing above it', async ({
+test('a page under sealed/, in a frame of a page of the build, reaches no address and changes nothing above it', async ({
     page,
     jason,
 }, info) => {
@@ -131,16 +144,13 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
         });
         page.on('popup', (popup) => popups.push(popup.url()));
         page.on('download', (download) => downloads.push(download.suggestedFilename()));
+        // Something of the build's origin for the frame to try to read: a value in its storage, kept before the frame loads.
+        await page.goto(`${jason.origin}/ui/manifest.json`);
+        await page.evaluate(() => localStorage.setItem('probe.mark', 'kept'));
         const seen = watchNetwork(page, true);
 
-        const { url } = await jason.uiOpen();
-        await page.goto(url);
-        // A plain tab, no desktop and nothing waiting, opens on the Demo by itself, in the frame a tab the desktop opened
-        // draws too (never the desktop's window); nothing is pressed.
-        await expect(page.locator('iframe.demo-frame')).toBeVisible();
-        const token = await page.evaluate(() => localStorage.getItem('jason.ui.session'));
-        expect(token).not.toBeNull();
-        await expect(page.locator('iframe.demo-frame')).toHaveAttribute('sandbox', 'allow-scripts');
+        await page.goto(`${jason.origin}${hostPath}`);
+        await expect(page.locator('iframe.probe-frame')).not.toHaveAttribute('sandbox');
 
         const written = await outcomes(page, true);
         expect(written.map(([name]) => name).sort()).toEqual([...inside, ...outside].sort());
@@ -150,15 +160,12 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
 
         record(info, seen, witness.heard);
         expect(witness.heard).toEqual([]);
-        expect(seen.finished.filter((each) => !each.startsWith('data:'))).toEqual([
-            `${jason.origin}/ui/sealed/demo.html`,
-        ]);
+        expect(seen.finished.filter((each) => !each.startsWith('data:'))).toEqual([`${jason.origin}${probePath}`]);
         expect(seen.received).toEqual([]);
 
-        // The page above is the tab's, where it was, holding what it held.
-        expect(page.url()).toMatch(/\/ui\/#\/demo$/);
-        expect(await page.evaluate(() => localStorage.getItem('jason.ui.session'))).toBe(token);
-        await expect(page.locator('.demo-over')).toBeVisible();
+        // The page above is where it was, holding what it held.
+        expect(page.url()).toBe(`${jason.origin}${hostPath}`);
+        expect(await page.evaluate(() => localStorage.getItem('probe.mark'))).toBe('kept');
         expect(dialogs).toEqual([]);
         expect(popups).toEqual([]);
         expect(downloads).toEqual([]);
@@ -180,9 +187,10 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         page.on('download', (download) => downloads.push(download.suggestedFilename()));
         page.on('dialog', (dialog) => void dialog.dismiss());
         const seen = watchNetwork(page, false);
-        await page.goto(`${jason.origin}/ui/sealed/demo.html`);
+        await page.goto(`${jason.origin}${probePath}`);
 
         const written = await outcomes(page, false);
+        expect(written.map(([name]) => name).sort()).toEqual([...inside, ...outside].sort());
         // Opened by itself the page is its own parent and top, so the tries of the page above are no tries here.
         const own = written.filter(([name]) => inside.includes(name) && !/^parent\./.test(name));
         expect(own.map(([name]) => name)).toContain('origin');
@@ -194,12 +202,12 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         // A tab's icon at the root of the address is the browser's own request, made for any page, not the page's.
         const browsers = `${jason.origin}/favicon.ico`;
         expect(seen.finished.filter((each) => !each.startsWith('data:') && each !== browsers)).toEqual([
-            `${jason.origin}/ui/sealed/demo.html`,
+            `${jason.origin}${probePath}`,
         ]);
         expect(seen.received).toEqual([]);
         expect(popups).toEqual([]);
         expect(downloads).toEqual([]);
-        expect(page.url()).toBe(`${jason.origin}/ui/sealed/demo.html`);
+        expect(page.url()).toBe(`${jason.origin}${probePath}`);
     } finally {
         await witness.close();
     }

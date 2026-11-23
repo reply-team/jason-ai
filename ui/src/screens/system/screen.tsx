@@ -4,7 +4,7 @@ import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import type { UiToken } from '../../api/types';
 import { clock, relative } from '../../time/format';
-import { can, currentDesktop, earlier, placeKind } from '../../platform/places';
+import { earlier, windowDesktop } from '../../platform/window-desktop';
 import * as store from './store';
 import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
@@ -19,14 +19,14 @@ import { ScrollBox } from '../../layout/scroll-box';
 
 /**
  * The key of the desktop's update item as the desktop spells it, where the item can act; null where it cannot (a build
- * that is not installed, or one whose updates come through the package), in a tab, and from a desktop of an earlier
- * version, which has no such key.
+ * that is not installed, or one whose updates come through the package), and from a desktop of an earlier version,
+ * which has no such key.
  */
 function useUpdateKey(): string | null {
     const [key, setKey] = useState<string | null>(null);
     useEffect(() => {
-        const desktop = currentDesktop();
-        if (desktop === undefined || !can('updates.key') || !earlier(desktop).updates) return;
+        const desktop = windowDesktop();
+        if (desktop === undefined || !earlier(desktop).updates) return;
         let live = true;
         desktop.updates
             .key()
@@ -47,22 +47,21 @@ const packageRestartLabel = 'Restart Jason and Its Runtime to Finish the Update 
 
 /** Whether this page can read the desktop's update item: in its own window, from a desktop that has one. */
 function itemReadable(): boolean {
-    const desktop = currentDesktop();
-    return desktop !== undefined && can('updates.item') && typeof earlier(desktop).updates?.item === 'function';
+    const desktop = windowDesktop();
+    return desktop !== undefined && typeof earlier(desktop).updates?.item === 'function';
 }
 
 /**
  * Whether the desktop's update item is the deb's, read from the item it shows (`updates.item`): the system updates that
  * desktop and the jason it carries. Null until the item has answered, so neither sentence is drawn before it is known.
- * False in a tab, where the item cannot be read, where it cannot be read at all, and from a desktop of an earlier
- * version, which has no such item, so the sentence stays as it was.
+ * False where the item cannot be read at all, and from a desktop of an earlier version, which has no such item, so the
+ * sentence stays as it was.
  */
 function usePackagedDesktop(): boolean | null {
     const [packaged, setPackaged] = useState<boolean | null>(() => (itemReadable() ? null : false));
     useEffect(() => {
-        const desktop = currentDesktop();
-        if (desktop === undefined || !can('updates.item') || typeof earlier(desktop).updates?.item !== 'function')
-            return;
+        const desktop = windowDesktop();
+        if (desktop === undefined || typeof earlier(desktop).updates?.item !== 'function') return;
         let live = true;
         desktop.updates
             .item()
@@ -90,7 +89,7 @@ export function SystemScreen() {
     const now = new Date();
     const info = store.info.value;
     const ui = info?.ui;
-    const inWindow = placeKind() === 'window' && currentDesktop() !== undefined;
+    const inWindow = windowDesktop() !== undefined;
     return (
         <div className="main single">
             <div className="list" style={{ borderRight: 0 }}>
@@ -269,7 +268,7 @@ export function SystemScreen() {
                                 <span className="hint">
                                     {' '}
                                     · the same list as <code>jason ui tokens</code>; pair another with{' '}
-                                    <code>jason ui open</code>
+                                    <code>jason ui pair</code>
                                 </span>
                             </h2>
                             <ScrollBox label="Paired browsers">
