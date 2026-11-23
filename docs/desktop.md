@@ -655,8 +655,9 @@ Claude Code.
   sentence that names the version found, the floor and how to update, it cannot be chosen, and a turn sent to it is
   refused before the host starts, a key provider's turn on it included. The reason is one setting: a turn in Plan only,
   and in Ask first and Auto-edit on a Claude Code older than 2.1.322, carries
-  `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders the chat
-  works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
+  `permissions.blockReadsOutsideWorkingDirectories`, so that a read outside the folders the chat works in is not run
+  without a card: Claude Code refuses a file tool there itself, with no card, and a shell command that names such a path
+  asks you first. A Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn that does not run in Full access also passes `--no-chrome`, the first version whose changelog
   names the flag; below it that turn's settings alone keep the browser out.
 - **In Full access on your own Claude Code sign-in the chat loads your own Claude Code configuration: your skills,
@@ -921,8 +922,8 @@ of every new chat. **Ask first** is the chat as the next section describes it. *
 passes only the allowed verbs that read and the nouns' help, Jason asks Claude Code for its plan mode with the exit from
 it removed, and every other request is refused. On macOS and Windows, where a Plan only turn carries
 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (below), Claude Code starts it in its default mode instead, and Jason's own rules hold
-the turn just the same. The cards left in Plan only are a read outside the chat's folders and a web
-page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
+the turn just the same. The card left in Plan only is a web
+page; a file tool outside the chat's folders is refused by Claude Code itself, with no card, and the chat says so and that changing the mode lets it read there. Every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
 access, where it runs with none.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as formatted text as any answer is, with **Approve and run** and
@@ -1138,8 +1139,8 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
   puts its own files back before the next turn.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included on
-  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the turn's
-  folder and the added folders, in Plan only and on an older Claude Code; a write outside them, or in a campaign's or a
+  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a write outside the turn's
+  folder and the added folders, or in a campaign's or a
   project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
   Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,

@@ -58,6 +58,8 @@ rule of the skills.
   propose, and the chat now says so: nothing written there reaches a person without your approval.
 - **Plan only on Claude Code reads a folder with its own tools.** Asked what is in a folder, the chat reads it with its
   reading tools instead of stopping at the refused shell line.
+- **In Plan only, a folder outside the chat's folders is not read.** The host refuses the read with no card, and the chat now
+  says so and that changing the mode lets it read there.
 
 **Setting a campaign up and starting it**
 
