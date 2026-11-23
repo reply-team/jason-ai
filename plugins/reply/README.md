@@ -480,7 +480,7 @@ route's binding names them.
 | `contact-list add-contact <list>` with `--contact-id` or `--contact -`, `--refuse-opted-out` | write | Puts the person on the list, importing them first when Reply holds nobody under the address and they are given by their details, and refuses a person Reply holds as opted out. |
 | `contact opt-out` with `--contact-id` or `--contact -` | write | Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address. This package never clears it. |
 | `sequence create --name -` | write | Makes the sequence `campaign.create` answers with: a draft of the name, on stdin, with one task step. |
-| `inbox reply <thread> --message -` | write | Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated. |
+| `inbox reply <thread> --message -` | write | Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin: on email the text a person approved written as HTML, on LinkedIn as written. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `inbox categorize <thread>` with `--category-id` or `--clear` | write | Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state. |
 | `inbox mark-read <thread>`, `inbox mark-unread <thread>` | write | Marks the thread read or unread: what `conversation.close` and `conversation.reopen` are at Reply, set outright. |
 | `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. Before a LinkedIn send it also gives a contact that carries no profile the one the send consumes, and nothing else. |
@@ -709,6 +709,7 @@ before it runs, and its work waits while its Jason campaign is paused.
 | The thread is on another channel than the one `args.channel` names, or on one Reply sends no reply on (`inbox.channel_mismatch` too). Nothing is sent. | `channel_mismatch` | validation | Name the channel the thread is on — `conversation.list` and `conversation.get` say which — and propose the reply again. |
 | The thread is not this person's: its person is not the contact pinned for them, its address or LinkedIn profile is not the channel's value, or it names nobody Reply still holds. Nothing is sent, and nobody is pinned. | `thread_contact_mismatch` | validation | Reply in a thread of this person's, or propose the reply for the person the thread is with. |
 | The text carries `{{`, which Reply reads as a placeholder of its own and fills in. Nothing is called. Or Reply refused the send because it read part of the text as a placeholder it could not fill in (`reply.refused`, with Reply's code `inboxThread.invalidInput` and a sentence that starts `RenderingFail`). Nothing is sent. | `message_invalid` | validation | Write the text without anything Reply reads as a placeholder and propose the reply again. |
+| An email reply's text holds a `<` right before an ASCII letter, `/`, `!` or `?`, which Reply would take for the start of a tag and cut the reply at. Nothing is called; the reason names the character without quoting the text. | `message_invalid` | validation | Write the text without such a `<`, an address without its angle brackets, and propose the reply again. |
 | Reply's own opt-out register holds the thread's person (`contact.opted_out`). Nothing is sent. | `suppressed` | permanent | Nothing, on purpose. |
 | Reply took the reply and could not deliver it (`inbox.send_failed`); Reply's reason for the failed message is in the trace as `provider_status_code`, null where it recorded none. | `delivery_refused` | permanent | A sending limit waits for its window; a disconnected account is connected again at Reply. Then propose the reply again. |
 | The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
@@ -731,6 +732,15 @@ as that message's `sent_at`, is the moment, in true UTC. `message.external_id` i
 gives no identifier; the thread holds Reply's identifier for the message afterwards, and `conversation.get` returns
 it. What Reply sends is the text followed by its own quote of the thread's earlier messages, and that is what the
 thread stores. A person approving the reply reads the text: the approval shows the text only, never the quote.
+
+**How the text goes.** The text a person approves is plain text, and the document refuses one with a tag or an HTML
+entity in it before anybody is asked. Reply takes an email reply's body as HTML — its API says the message may contain
+HTML — so on email the text is written as HTML that shows exactly it, as a direct email's is: every character HTML reads
+as markup escaped, and every line break a `<br>`. An email reply holding a `<` right before a letter, `/`, `!` or `?` is
+refused before anything is called, as a direct email is, because Reply decodes an email's body before it reads it and
+drops a tag it does not know with everything after it. Reply's API names no HTML for a LinkedIn reply, so its text goes
+as written, line breaks and all, as a direct LinkedIn message's does. What the thread stores, and `conversation.get`
+reads back, is that HTML on email.
 
 ### `conversation.classify`
 
@@ -1404,8 +1414,8 @@ answer is `available: true` and every other member null. The gates are the searc
   does not see and which may start with a letter. A comparison's text is held because whether Reply sanitizes a template
   before or after it fills it in has not been seen. Write an address without its angle brackets. On LinkedIn the package
   writes a text as written, and Reply converts it from HTML to text after filling it in; an invitation's note goes as
-  written. A reply on a thread, `conversation.reply`, is not held to this
-  yet, and its text goes as written.
+  written. A reply in an email thread, `conversation.reply`, is held to this as a final email text is, and a reply in a
+  LinkedIn thread goes as written.
 - **What counts as no value, and how two values compare, is Reply's.** As Reply's rendering reads a template, a fallback
   is written in place of a value that is null, empty, or exactly `false` or `0`; an `#if` takes its other branch on
   those, and on `false` written in any case; white space is a value; and a comparison compares the value as written, and
@@ -1447,7 +1457,8 @@ answer is `available: true` and every other member null. The gates are the searc
   a contact carries no LinkedIn profile. Where the lookup found nobody and the send's own command names a contact Reply
   already held, that contact is read and the command run once more. Against a rate limit they count.
 - **An email's text is sent as HTML written from it.** The text a person approves is plain text, and Reply takes an
-  email's body as HTML, so every character HTML reads as markup is escaped and every line break is a `<br>`. Spaces and
+  email's body as HTML, a direct email's and a reply's in an email thread alike, so every character HTML reads as markup
+  is escaped and every line break is a `<br>`. Spaces and
   tabs stay as written: a run of them collapses to one space in the reader's mail program, though the HTML Reply sends
   keeps it. The HTML is longer than the text it is written from, so an email whose text is near the document's bound can
   come back cut from `conversation.get`, which reads at most 12000 characters of what Reply holds.

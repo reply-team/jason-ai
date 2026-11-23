@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Approval, WorkItem } from '../../api/types';
 import { fixtures } from '../../test/fixtures';
-import { EDIT_REASON, awaitNewApproval, editPatch, editable, isStale } from './message-edit';
-import type { Api } from '../../api/client';
+import { EDIT_REASON, awaitNewApproval, editPatch, editable, isStale, sentence } from './message-edit';
+import { ApiError, type Api } from '../../api/client';
 
 const approval = (patch: (a: Approval) => void = () => {}): Approval => {
     const copy = structuredClone(fixtures['approval.get/email-message'].response) as unknown as Approval;
@@ -147,5 +147,19 @@ describe('waiting for the approval the runtime asks again', () => {
     it('gives up with null after its tries, and stops when told to', async () => {
         expect(await awaitNewApproval(listing([['apr_1']]), 'wi_1', 'apr_1', { tries: 3, delayMs: 0 })).toBeNull();
         expect(await awaitNewApproval(listing([['apr_2']]), 'wi_1', 'apr_1', { stopped: () => true })).toBeNull();
+    });
+});
+
+describe('the sentence a refusal is shown in', () => {
+    const refusal = fixtures['workitem.update/card-reply-markup-refused'].response.error;
+
+    it("is the runtime's summary followed by its first detail's words", () => {
+        const error = new ApiError(refusal.code, refusal.message, refusal.retryable, 400, refusal.details);
+        expect(sentence(error)).toBe(`${refusal.message} ${refusal.details[0]!.message}`);
+    });
+
+    it('is the summary alone where the runtime gave no detail', () => {
+        expect(sentence(new ApiError(refusal.code, refusal.message, refusal.retryable, 400))).toBe(refusal.message);
+        expect(sentence(new ApiError(refusal.code, refusal.message, refusal.retryable, 400, []))).toBe(refusal.message);
     });
 });

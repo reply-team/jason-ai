@@ -60,6 +60,17 @@ nothing: its person is not this one.
 - `body` is the text, exactly as the person approving it read it: at most 12000 characters on email, the most
   `conversation.get` reads back of one message, and at most 8000 on LinkedIn, the most a LinkedIn message holds. A text
   of nothing but white space is refused when the work item is written, before anybody is asked about an empty reply.
+- `body` is plain text, as `message.send`'s is: a line break is a line break. Your code makes of it whatever the
+  provider's thread takes — HTML that shows exactly this text where the provider takes HTML, the text as written where it
+  takes text — so that the person the reply reaches reads exactly what the person approving it read. A text holding
+  markup is refused when the work item is written, as `not` at `/args/body`, before anybody is asked: a tag, which is a
+  `<`, an optional `/`, a name of ASCII letters and digits that starts with a letter and may carry a prefix and a colon,
+  and then `>` or `/>`, either after white space or none, or an attribute written `name=` before the closing `>` (`<br>`,
+  `<br />`, `<p>`, `</div>`, `<o:p>`, `<w:br/>`, `<a href="…">`); or an entity, which is a `&`, then a name of two or more
+  ASCII letters and digits that starts with a letter, or `#` and a number, and then `;` (`&nbsp;`, `&lt;`, `&#39;`).
+  Nothing else is markup: a lone `<` or `>` in prose (`a < b`, `<3`), an address between angle brackets
+  (`<marta@example.com>`), words between them with a space and no `=` (`<the team lead>`), and an `&` that starts no
+  entity (`AT&T`, `R & D`) are text, sent as text. A single word between angle brackets, `<Name>`, is a tag.
 - `reply_to_message` names one message of an email thread to answer, by the identifier `conversation.get` returned;
   without it the reply answers the thread's latest message. A LinkedIn reply cannot name one, and is refused before
   your code runs if it does.
@@ -104,7 +115,8 @@ Where it does not, no line comes for Jason's own reply, and nothing wakes the ma
 Every refusal the document declares says nothing was sent, except one: `provider_answer_lost`, where the provider was
 called and no answer came back. `delivery_refused` is the provider taking the reply and saying it could not deliver
 it; its own reason belongs in the details. `message_invalid` is text the provider would read as markup of its own — a
-placeholder it fills in for each person — so that what would go out is not what a person approved.
+placeholder it fills in for each person, or a `<` it would take for the start of a tag and cut the text at — so that
+what would go out is not what a person approved.
 
 ## What a person reads before deciding
 

@@ -307,9 +307,11 @@ holds no first name, write no name in the greeting and say that too.
 **Your answer goes into the person's own thread, as a draft.** What you would write back is a
 `provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's
 thread: it answers inside that thread and reaches nobody else, never a new thread. Its `channel` is the thread's, as
-the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. Its context
-names the verdict it answers, `reply_verdict`, the `jrn_` id the record answered with. Its key is
-built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
+the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. What a read
+returns may carry the provider's markup; what you write is plain text with ordinary line breaks, never a tag such as
+`<br>` and never an entity such as `&nbsp;`. Write an address or a link without angle brackets, and put no `<` right
+before a letter. Its context names the verdict it answers, `reply_verdict`, the `jrn_` id the record answered with.
+Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
 `-reply-501-2` — so that two replies in one thread are two keys.
 
 ```

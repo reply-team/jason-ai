@@ -102,8 +102,15 @@ export function editPatch(
     return { work_item_id: workItemId, set: { input: { ...args, message: next } }, reason };
 }
 
-/** A sentence for what the runtime said, or for what went wrong; the runtime own words when it has them. */
-export const sentence = (error: unknown): string => (error instanceof ApiError ? error.message : String(error));
+/**
+ * A sentence for what the runtime said, or for what went wrong; the runtime own words when it has them. A refusal that
+ * names a field says why in its first detail, what the text may not hold, say, so that detail follows the summary.
+ */
+export const sentence = (error: unknown): string => {
+    if (!(error instanceof ApiError)) return String(error);
+    const why = error.details?.[0]?.message;
+    return why ? `${error.message} ${why}` : error.message;
+};
 
 export const readItem = (api: Api, id: string): Promise<WorkItem> =>
     api.call<WorkItem>('workitem.get', { work_item_id: id });
