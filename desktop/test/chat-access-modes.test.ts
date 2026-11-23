@@ -12,7 +12,7 @@ import { startHost } from '../src/chat-process.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { askingCardedForms, personsWordForms, readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox, planTurnSettings, rulePath } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassSentence, bypassSentences, codexAutoEdit, codexFullAccessNarrowed, codexFullAccessRefused, fullAccessCurrent, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, planModeMoved, planRefusal, planWriteRefusal, tabFullAccess, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { attemptRefusal, dataRefusal, settingsRefusal } from '../src/chat-permission-model.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
@@ -1402,7 +1402,7 @@ test('a Plan only turn whose start carries the scrub, under which Claude Code 2.
     assert.deepEqual(scrubOf(host), scrubbed, 'the scrub rides it off Linux');
     assert.equal(confinedOf(host), '1', 'the turn is confined');
     assert.ok((host?.args ?? []).includes('ExitPlanMode'), 'with no way out of planning');
-    assert.deepEqual(answersIn(said), [`decision deny: ${planRefusal}`], 'a write is refused');
+    assert.deepEqual(answersIn(said), [`decision deny: ${planWriteRefusal}`], 'a write is refused');
     assert.deepEqual(r.started, ['plan_only']);
     assert.deepEqual(notices(said), []);
 });
@@ -2283,7 +2283,7 @@ for (const mode of fenceModes) {
         answers.forEach((answer, at) => {
             const each = uses[at];
             // Plan only refuses a write before it looks at the path; every other refusal is the kind of the place.
-            const message = mode === 'plan_only' && (each?.use.tool === 'Edit' || each?.use.tool === 'Write') ? planRefusal : each?.settings === true ? settingsRefusal : dataRefusal;
+            const message = mode === 'plan_only' && (each?.use.tool === 'Edit' || each?.use.tool === 'Write') ? planWriteRefusal : each?.settings === true ? settingsRefusal : dataRefusal;
             assert.equal(answer, refusedAs(mode, message), `${mode}: ${each?.use.tool} ${JSON.stringify(each?.use.input)}`);
         });
     });

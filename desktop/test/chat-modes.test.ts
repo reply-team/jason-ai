@@ -12,7 +12,7 @@ import { Chat } from '../src/chat.ts';
 import { helpNouns, modeFence, readFence, type ChatFence } from '../src/chat-deny.ts';
 import * as modesModule from '../src/chat-modes.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeRemovedTools, claudeTurnSettings, fullAccessRemovedTools, hookedSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planReads, planRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
+import { askFirstThisTurn, bypassHeldMs, bypassLeadsTo, bypassSentence, bypassSentences, chatModes, claudeModeWords, codexAutoEdit, followsCodexRefusal, forcedDefault, forcedDefaultWords, fullAccessFloor, fullAccessNotYet, fullAccessOffered, fullAccessSentence, hookFilteredSentence, isChatMode, planExitRefusal, planModeMoved, planReads, planRefusal, planWriteRefusal, namedMode, tabFullAccess, turnMode, unguardedSentence, type Bypass } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -529,7 +529,8 @@ test('in Plan only nothing is written and no command runs; the cards left are re
         ['Bash', { command: 'jason campaign create --file -' }],
         ['NotebookEdit', { notebook_path: join(w.scope.chat, 'n.ipynb'), new_source: 'x' }],
     ] as const) {
-        assert.deepEqual(await w.broker.ask(w.id, tool, input), { behavior: 'deny', message: planRefusal }, tool);
+        const message = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(tool) ? planWriteRefusal : planRefusal;
+        assert.deepEqual(await w.broker.ask(w.id, tool, input), { behavior: 'deny', message }, tool);
     }
     assert.deepEqual(await w.broker.ask(w.id, 'ExitPlanMode', { plan: 'do it' }), { behavior: 'deny', message: planExitRefusal });
     assert.equal((await w.broker.ask(w.id, 'Read', { file_path: join(w.scope.chat, 'notes.md') })).behavior, 'allow', 'a read in the chat folder');

@@ -306,7 +306,10 @@ export const earlierDesktopAskFirst =
 export const planReads =
     'A shell command that is not a jason read is refused, a plain listing of a folder included: read a file with Read, and list or search a folder with Glob or Grep.';
 
-/** What a chat in Plan only answers every request it does not take. */
+/** What a chat in Plan only answers a write: nothing is changed, and the reading tools are not its business. */
+export const planWriteRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
+
+/** What a chat in Plan only answers every other request it does not take, a shell command among them. */
 export const planRefusal = `Plan only is on: nothing is changed. ${planReads} Say what you would do; the person switches the mode to act.`;
 
 /** What a chat in Plan only answers the host's own way out of planning: only the person changes the mode. */
