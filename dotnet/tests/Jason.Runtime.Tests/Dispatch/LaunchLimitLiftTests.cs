@@ -6,6 +6,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Launches;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Roles;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -309,7 +310,10 @@ public class LaunchLimitLiftTests
         Assert.Empty(await harness.ClaimAsync(Ct));
 
         var item = await ItemAsync(harness, held);
-        Assert.Contains($"since the installation's midnight ({midnight}, Europe/Berlin); this item waits until {next}.", item.LastError!.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            $"has started 1 run since the installation's midnight ({midnight}, Europe/Berlin), and the limit Launches:MaxPerDay:planner sets is 1 run a day; this item waits until {next}.",
+            item.LastError!.Message,
+            StringComparison.Ordinal);
         await using var db = harness.Open();
         var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
         Assert.Equal((DateTime?)end, wait.Until);
@@ -332,6 +336,157 @@ public class LaunchLimitLiftTests
         Assert.Empty(await harness.ClaimAsync(Ct));
 
         Assert.Equal(WorkItemStatus.Waiting, (await ItemAsync(harness, held)).Status);
+    }
+
+    /// <summary>
+    /// A limit lowered during the day stands below the runs that started: the hold says how many started and the limit as a
+    /// limit beside them, never the limit as the count, and names the read that shows the limits.
+    /// </summary>
+    [Fact]
+    public async Task A_hold_under_a_limit_lowered_during_the_day_says_the_runs_that_started_and_the_limit_as_a_limit()
+    {
+        using var harness = Harness(("planner", 1));
+        var campaign = await CampaignAsync(harness);
+        await LaunchedAsync(harness, campaign, "planner", LocalMidnight.AddMinutes(10), LocalMidnight.AddMinutes(20), LocalMidnight.AddMinutes(30), LocalMidnight.AddMinutes(40));
+        var held = await QueuedAsync(harness, campaign, "planner");
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        var message = (await ItemAsync(harness, held)).LastError!.Message;
+
+        Assert.StartsWith(
+            "Work of the planner role in this campaign has started 4 runs since the installation's midnight (2026-10-06T15:00:00Z, "
+            + "Asia/Tokyo), and the limit Launches:MaxPerDay:planner sets is 1 run a day; this item waits until 2026-10-07T15:00:00Z. "
+            + "jason launches list shows the limits as they stand.",
+            message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The read of the limits says the installation's day as the claim counts it, from its midnight to the next in its zone,
+    /// no lift, every role the installation has in the order the registry lists them with its limit as the claim reads it
+    /// and where the number comes from, and how many items wait on a limit in every campaign; no role carries a count of
+    /// runs when no campaign was asked about.
+    /// </summary>
+    [Fact]
+    public async Task The_list_says_the_day_each_role_s_limit_and_its_source_and_what_is_held()
+    {
+        using var harness = new DispatchHarness(Now);
+        harness.Clock.Zone = TimeZoneInfo.FindSystemTimeZoneById(Tokyo);
+        var options = new LaunchesOptions();
+        options.MaxPerDay["planner"] = 1;
+        harness.Launches.CurrentValue = options;
+        var first = await CampaignAsync(harness);
+        var second = await CampaignAsync(harness);
+        await LaunchedAsync(harness, first, "planner", LocalMidnight.AddMinutes(10));
+        await LaunchedAsync(harness, second, "planner", LocalMidnight.AddMinutes(10));
+        await HeldAsync(harness, first);
+        await HeldAsync(harness, second);
+
+        var list = await ListAsync(harness);
+
+        Assert.Equal(new LaunchesDayDto(new DateTimeOffset(LocalMidnight), new DateTimeOffset(NextLocalMidnight), Tokyo), list.Day);
+        Assert.Null(list.Lift);
+        Assert.Equal(ShippedRoles.Names, list.Roles.Select(role => role.Role));
+        Assert.Equal(new LaunchLimitDto("planner", 1, LaunchLimitSource.Settings), list.Roles.Single(role => role.Role == "planner"));
+        Assert.Equal(new LaunchLimitDto("manager", 25, LaunchLimitSource.Default), list.Roles.Single(role => role.Role == "manager"));
+        Assert.All(list.Roles, role => Assert.Null(role.StartedToday));
+        Assert.Equal(2, list.Held);
+    }
+
+    /// <summary>A live edit of the limits shows at the next read, as it applies at the claim's next scan: no restart, no cache.</summary>
+    [Fact]
+    public async Task A_live_edit_of_the_limits_shows_at_the_next_read()
+    {
+        using var harness = Harness(("planner", 3));
+        Assert.Equal(3, (await ListAsync(harness)).Roles.Single(role => role.Role == "planner").MaxPerDay);
+
+        Limits(harness, ("planner", 7));
+
+        Assert.Equal(new LaunchLimitDto("planner", 7, LaunchLimitSource.Settings), (await ListAsync(harness)).Roles.Single(role => role.Role == "planner"));
+    }
+
+    /// <summary>
+    /// With a campaign, each role says the runs that started there since the installation's midnight, counted as the claim
+    /// counts them (yesterday's and another campaign's spend nothing), and the held count is that campaign's alone.
+    /// </summary>
+    [Fact]
+    public async Task With_a_campaign_each_role_says_its_runs_today_there_and_held_is_that_campaign_s()
+    {
+        using var harness = Harness(("planner", 2), ("responder", 5));
+        var first = await CampaignAsync(harness);
+        var second = await CampaignAsync(harness);
+        await LaunchedAsync(harness, first, "planner", LocalMidnight.AddMinutes(-5), LocalMidnight.AddMinutes(5), LocalMidnight.AddMinutes(15));
+        await LaunchedAsync(harness, first, "responder", LocalMidnight.AddMinutes(25));
+        await LaunchedAsync(harness, second, "planner", LocalMidnight.AddMinutes(5), LocalMidnight.AddMinutes(15));
+        await HeldAsync(harness, first);
+        await HeldAsync(harness, second);
+        await HeldAsync(harness, second);
+
+        var list = await ListAsync(harness, await CampaignPublicIdAsync(harness, first));
+
+        Assert.Equal(2, list.Roles.Single(role => role.Role == "planner").StartedToday);
+        Assert.Equal(1, list.Roles.Single(role => role.Role == "responder").StartedToday);
+        Assert.Equal(0, list.Roles.Single(role => role.Role == "manager").StartedToday);
+        Assert.Equal(1, list.Held);
+        Assert.Equal(3, (await ListAsync(harness)).Held);
+    }
+
+    /// <summary>A lift that stands today is said: until the next local midnight, whose word it was, and when they said it.</summary>
+    [Fact]
+    public async Task The_list_says_a_lift_that_stands_today()
+    {
+        using var harness = Harness(("planner", 1));
+        await LiftAsync(harness);
+        harness.Clock.Advance(TimeSpan.FromHours(2));
+
+        var lift = (await ListAsync(harness)).Lift;
+
+        Assert.Equal(new LaunchesStandingLiftDto(new DateTimeOffset(NextLocalMidnight), Operator, new DateTimeOffset(Now)), lift);
+    }
+
+    /// <summary>
+    /// A role the limits do not name, a role the person added among them, has no limit: null, never a number standing for
+    /// none, and its source is the default, which names none.
+    /// </summary>
+    [Fact]
+    public async Task A_role_the_limits_do_not_name_has_no_limit_and_says_null()
+    {
+        using var harness = Harness(("planner", 1));
+        await using (var db = harness.Open())
+        {
+            await new RoleService(db, new JournalWriter(harness.Clock), harness.Clock)
+                .AddAsync(new RoleAddRequest("scout", null, null, null, null, Operator, null), Ct);
+        }
+
+        var list = await ListAsync(harness);
+
+        Assert.Equal(new LaunchLimitDto("scout", null, LaunchLimitSource.Default), list.Roles[^1]);
+    }
+
+    /// <summary>A campaign nobody holds is refused as every read of one refuses it.</summary>
+    [Fact]
+    public async Task A_campaign_nobody_holds_is_not_found()
+    {
+        using var harness = Harness(("planner", 1));
+
+        var refused = await Assert.ThrowsAnyAsync<DomainException>(() => ListAsync(harness, "cmp_01K7QN0000000000000000000Z"));
+
+        Assert.Equal("campaign_not_found", refused.Code);
+    }
+
+    private static async Task<LaunchesListDto> ListAsync(DispatchHarness harness, string? campaign = null)
+    {
+        await using var scope = harness.Scopes.CreateAsyncScope();
+        return await ActivatorUtilities.CreateInstance<LaunchLimitsReader>(scope.ServiceProvider).ListAsync(new LaunchesListRequest(campaign), Ct);
+    }
+
+    /// <summary>An item of the planner held at its limit in the campaign, by the one routine that holds.</summary>
+    private static Task<int> HeldAsync(DispatchHarness harness, int campaign) => HeldByHandAsync(harness, campaign, "planner");
+
+    private static async Task<string> CampaignPublicIdAsync(DispatchHarness harness, int campaignId)
+    {
+        await using var db = harness.Open();
+        return await db.Campaigns.Where(c => c.Id == campaignId).Select(c => c.PublicId).SingleAsync(Ct);
     }
 
     /// <summary>An item of the planner held at <see cref="Now"/>, its role's day spent by one run.</summary>
@@ -377,11 +532,11 @@ public class LaunchLimitLiftTests
         var item = await ItemAsync(harness, held);
         Assert.Equal(WorkItemStatus.Waiting, item.Status);
         Assert.Equal(
-            "Work of the planner role in this campaign has reached the limit Launches:MaxPerDay:planner sets, 2 runs started since the "
-            + "installation's midnight (2026-10-06T15:00:00Z, Asia/Tokyo); this item waits until 2026-10-07T15:00:00Z. A person's "
-            + "workitem.resume lets it go sooner, past the limit, jason launches lift lets every role in every campaign past it until "
-            + "the installation's next midnight, and a raised limit applies from the next scan to work not yet held, while this item "
-            + "keeps its moment.",
+            "Work of the planner role in this campaign has started 2 runs since the installation's midnight "
+            + "(2026-10-06T15:00:00Z, Asia/Tokyo), and the limit Launches:MaxPerDay:planner sets is 2 runs a day; this item "
+            + "waits until 2026-10-07T15:00:00Z. jason launches list shows the limits as they stand. A person's workitem.resume lets it "
+            + "go sooner, past the limit, jason launches lift lets every role in every campaign past it until the installation's "
+            + "next midnight, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
             item.LastError!.Message);
         await using var db = harness.Open();
         var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == held, Ct);
@@ -479,7 +634,7 @@ public class LaunchLimitLiftTests
         await db.SaveChangesAsync(Ct);
         var day = harness.Resolve<InstallationDay>().Of(harness.Clock.Now.UtcDateTime);
         scope.ServiceProvider.GetRequiredService<AttemptOutcomes>()
-            .Hold(db, item, day.End, Claimer.LaunchesSpent(role, 1, day), 1, Actors.Dispatcher);
+            .Hold(db, item, day.End, Claimer.LaunchesSpent(role, 1, 1, day), 1, Actors.Dispatcher);
         await db.SaveChangesAsync(Ct);
         return item.Id;
     }

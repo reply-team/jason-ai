@@ -1237,7 +1237,7 @@ public partial class InteractiveSkillTests
         foreach (var fact in new[]
         {
             "**\"Ignore the limit\" lets held work go today, and only on the person's word.**",
-            "When the person tells you to ignore the limit, or names the lift, read what is held first, as `troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name.",
+            "When the person tells you to ignore the limit, or names the lift, read what is held first, `jason launches list` and the held items as `troubleshooting-jason` says, then run `jason launches lift` as the person, under their own name.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, until the installation's next midnight.",
             "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight.",
             "Never lift on your own initiative: only the person's word lifts, and a role inside a run cannot.",
@@ -1246,9 +1246,10 @@ public partial class InteractiveSkillTests
             Assert.True(section.Contains(fact, StringComparison.Ordinal), $"\"Stopping or holding work\" does not say: {fact}");
         }
 
-        Assert.Contains(
-            SkillPack.PrintedCommands(raw.Split('\n')),
-            line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+        var printed = SkillPack.PrintedCommands(raw.Split('\n')).ToList();
+        var read = printed.FindIndex(line => line.StartsWith("jason launches list", StringComparison.Ordinal));
+        var lift = printed.FindIndex(line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+        Assert.True(read >= 0 && lift > read, $"\"Stopping or holding work\" prints the read of the limits at {read} and the lift at {lift}: the read comes first.");
     }
 
     /// <summary>

@@ -399,6 +399,7 @@ public class DefaultActorTests
         ["approval", "list-standing", "cmp_A"],
         ["block", "list"],
         ["block", "get", "blk_A"],
+        ["launches", "list", "--campaign", "cmp_A"],
         ["decision", "list"],
         ["decision", "get", "dec_A"],
         ["decision", "raise", "wi_A", "--attempt", "att_A", "--question", "Which tone?"],
