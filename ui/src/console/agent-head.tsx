@@ -6,7 +6,8 @@ import { navigate, route, type CampaignTab, type Route } from '../router';
 import { Tabs } from '../layout/tabs';
 import { agentKind, firstTabName, kindWord } from '../screens/campaigns/kind';
 import { CampaignMoves } from '../screens/campaigns/moves';
-import { agentChatRoute } from './agent-place';
+import { agentChatRoute, agentNameId } from './agent-place';
+import { openedHere } from './box-focus';
 import { agentFacts, peopleOf, readAgent } from './agent-facts';
 import { isUnmade, restartChat } from './chat';
 import type { Chat } from './chat-model';
@@ -16,7 +17,7 @@ import { begin, placeGates, runsOn } from './conversation-acts';
 import { conversationItems, type MenuItem } from './conversation-items';
 import { openFolder, openSession } from './open-folder';
 import { MenuEntries, menuItems, menuKeys } from './menu-entries';
-import { chats, conversations } from './state';
+import { chats, conversations, here } from './state';
 
 // The agent's header: one for every place the agent has in the console, its chat and its page's tabs, drawn by the area
 // above them and kept while the person moves between that agent's tabs. Its name, its state and its type are the
@@ -159,7 +160,7 @@ export function AgentHead({ id, tab }: { id: string; tab: CampaignTab }) {
         <div className="agent-head" role="region" aria-label="Agent">
             <div className="agent-bar">
                 <div className="agent-title">
-                    <h2>{name}</h2>
+                    <h2 id={agentNameId(id)}>{name}</h2>
                     {campaign && (
                         <span
                             className={`pillc agent-state ${toCampaignRow(campaign, undefined).tone}`}
@@ -201,6 +202,11 @@ export function AgentHead({ id, tab }: { id: string; tab: CampaignTab }) {
                 ]}
                 active={tab}
                 to={to}
+                activate={(each) =>
+                    // The Chat tab opened by a click, Enter or Space gives its box the focus (`box-focus.ts`); one the
+                    // arrows move to keeps the focus on the tab, as every other tab does.
+                    each === 'chat' ? here().dock.page(agentChatRoute(id), openedHere()) : navigate(to(each))
+                }
             />
         </div>
     );

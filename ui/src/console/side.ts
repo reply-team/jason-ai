@@ -287,7 +287,7 @@ export function sideView(): Html {
                               ${feed === currentChat.value ? html`aria-current="true"` : null}
                               ${act('side.feed')}
                           >
-                              ${svg('pulse', 15)}<span>Feed</span>
+                              ${svg('pulse', 15)}<span>${t('side.feed')}</span>
                               ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                           </button>`
                 }
