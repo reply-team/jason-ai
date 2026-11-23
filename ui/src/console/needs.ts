@@ -1,4 +1,5 @@
 import { batch, effect, signal } from '@preact/signals-react';
+import { openedHere } from './box-focus';
 import { Unpaired } from '../api/client';
 import type { Approval, ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { attentionStore, repeated } from '../screens/attention/store';
@@ -420,8 +421,9 @@ define('needs.more', () => {
 
 define('needs.campaigns', () => here().dock.show('campaigns'));
 
+// Open the chat: the agent's chat, opened by the person, has the caret in its box.
 define('needs.chat', ([id, name]) => {
-    if (typeof id === 'string' && typeof name === 'string') here().dock.chat({ id, name });
+    if (typeof id === 'string' && typeof name === 'string') here().dock.chat({ id, name }, openedHere());
 });
 
 // A read of an approval that failed is asked for again by the person: once it answers, its Approve is live.
