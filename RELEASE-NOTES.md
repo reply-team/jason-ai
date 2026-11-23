@@ -115,10 +115,11 @@ rule of the skills.
   that reopening alone sends nothing more.
   [A person's line in a campaign](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-persons-line-in-a-campaign)
   says what each state means.
-
+- **The people in a campaign, in a table.** `jason campaign list-contacts --human` shows each person's touches and the
+  last one.
 - **An opt-out with no provider sequence is completed.** Where the campaign holds no provider's campaign, as
-  with Jason's own direct letters, recording the opt-out completes it, and the summary says no sequence was linked,
-  with no stop that could only fail.
+  with Jason's own direct letters, recording the opt-out completes it, and the summary says nothing was stopped at the
+  provider, with no stop that could only fail.
 
 **Daily limits of launches**
 
@@ -138,8 +139,6 @@ rule of the skills.
   `--campaign`, it also says how many each role started there today. A limit is still set in the settings file.
 - **A line on Needs you while work is held.** It says how many items are held at a daily limit and until when, with a
   button that lifts today's limits as you. It is not counted among what waits for you.
-- **The people in a campaign, in a table.** `jason campaign list-contacts --human` shows each person's touches and the
-  last one.
 
 **Notifications**
 
