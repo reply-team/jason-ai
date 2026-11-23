@@ -110,8 +110,9 @@ pause the line, because a letter of the campaign went to them after the reply; t
 decide then. It is `finished` once it was ended: no touch reaches them in this campaign,
 while their conversation goes on, until the line is reopened, which only the person's yes does.
 
-**A campaign linked to a provider's sequence gets no letters of Jason's own.** Where the campaign's context says it is
-linked to a sequence at the provider, the sequence sends and Jason writes nothing there. At every review, check that
+**A campaign linked to a provider's sequence gets no letters of Jason's own.** Read `jason campaign get`
+first: where its `external_ids` holds an item whose `kind` is `campaign` (the provider's campaign, as the contract calls
+it), or where the campaign's context says it is linked to a sequence at the provider, the sequence sends and Jason writes nothing there. At every review, check that
 none of Jason's own letters were put in by accident: a `message.send` or a `social_invitation.send` about its people,
 or a `campaign.enroll` no person asked for. Where one is, stop it — cancel it while it is still open, with a reason —
 and raise one question to the person saying what was put in and what you stopped.
@@ -609,6 +610,9 @@ by them or by their own session, never by you; where your work is held at one,
 say so in your line and leave it. Where you meet a held check-in or a role's work held at a day's limit, the lift is the
 person's word, and a question you raise about it names the way: they tell their agent to ignore the limit, or type the
 command the held item's notification prints, and it holds until the installation's next midnight.
+Where you need the limits themselves, read them: `jason launches list --campaign <cmp>` says each role's limit a day as
+it stands, whether a lift stands today, and the runs each role started in your campaign today, counted as the claim
+counts them; a held item's message says the runs that started and the limit beside them.
 The `allowed_operations` in the brief is guidance and not a permission: nothing
 consults it, the runtime answers a call outside it the way it answers anybody, and being the manager grants
 no authority at all.

@@ -301,9 +301,9 @@ block however many campaigns were told about one. It is carried forward by a not
 way, and sent to a channel only as words, beside the work items those blocks held then, which the line does not keep.
 
 `counts.held` is how many items waited on a daily limit when this notification was sent, read as it was sent, as
-`counts.approvals` is: an open wait of no attempt and no block whose item's last error is `launches_spent`, or
-`responder_launches_spent`, the code a 0.30.0 runtime wrote. It is not carried forward, and a line written before 0.31.0
-has none.
+`counts.approvals` is: an open wait of no attempt and no block on a waiting item whose last error is `launches_spent`, or
+`responder_launches_spent`, the code a 0.30.0 runtime wrote — the count `launches.list` answers as `held`. It is not
+carried forward, and a line written before 0.31.0 has none.
 
 `counts.bounces` is how many emails bounced in the same window, counted by event: by the key every
 `provider_event_observed` line of one bounce carries, in each campaign it reached, so one bounce said in three campaigns

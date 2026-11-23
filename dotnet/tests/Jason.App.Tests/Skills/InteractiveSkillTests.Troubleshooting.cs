@@ -50,6 +50,32 @@ public partial class InteractiveSkillTests
         Assert.Contains(sentence, Flattened("troubleshooting-jason"), StringComparison.Ordinal);
 
     /// <summary>
+    /// The limits are read, never guessed: the skill names the read, what it answers — the day, a lift, each role's limit
+    /// and where it comes from, none for a role with none, what is held, and with a campaign the runs started there — that
+    /// the hold's message says the runs beside the limit, and that a limit is set in the settings file and by no command.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_reads_the_limits_with_launches_list()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "**The limits are read, never guessed: `jason launches list`.**",
+            "each role's limit a day as the runtime reads it now, `default` where it is the number Jason ships and `settings` where the settings set another, and `none` for a role with no limit",
+            "and `held`, how many work items wait on a daily limit now",
+            "With `--campaign`, each role also says the runs it started in that campaign today, counted as the claim counts them, and `held` is that campaign's.",
+            "says how many runs started since then and the limit beside them",
+            "Setting a limit is the person's, in the settings file under `Launches:MaxPerDay:<role>`; no command sets one.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("jason launches list --human", SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)));
+    }
+
+    /// <summary>
     /// The day of a launch limit is the installation's, so no sentence of the skill says a UTC day, a wait until 00:00Z, or
     /// the notification's old words, and the ways out are four.
     /// </summary>
@@ -82,6 +108,7 @@ public partial class InteractiveSkillTests
             "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
             "When the person tells you to ignore the limit, or names the lift, read first what is held",
             "the waiting items whose `last_error` is `launches_spent`, each with its campaign and its role",
+            "Where something is held, that is what they mean; only where nothing is held, ask which limit they mean, and lift nothing.",
             "Then run the lift as the person, under their own name, with a short reason of your own that says it is their word.",
             "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
             "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight",
@@ -340,6 +367,13 @@ public partial class InteractiveSkillTests
     {
         Assert.Contains(
             "collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.",
+            SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
+            StringComparison.Ordinal);
+
+        // The notification of a hold says "tell your agent: ignore the limit", and a session in a terminal chooses its skill
+        // by the description: the words are there, so the skill that reads the hold and lifts it is the one loaded.
+        Assert.Contains(
+            "Also when the person says ignore the limit: read what Jason holds at a daily limit of launches, and lift it on their word.",
             SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
             StringComparison.Ordinal);
     }

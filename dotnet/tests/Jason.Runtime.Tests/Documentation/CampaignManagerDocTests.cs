@@ -39,7 +39,7 @@ public partial class CampaignManagerDocTests
             Jason.Runtime.Domain.DomainErrors.CampaignNotFound("cmp_x").Code,
             Jason.Runtime.Domain.DomainErrors.CampaignNotActive("cmp_x", Jason.Contracts.Api.CampaignStatus.Paused).Code,
             Jason.Runtime.Domain.DomainErrors.ReviewAlreadyOpen("cmp_x", "wi_x").Code,
-            Jason.Runtime.Domain.DomainErrors.ReviewLaunchesSpent("cmp_x", 1, "2026-10-06T15:00:00Z", "UTC").Code,
+            Jason.Runtime.Domain.DomainErrors.ReviewLaunchesSpent("cmp_x", 1, 1, "2026-10-06T15:00:00Z", "UTC").Code,
         ];
         var section = page[page.IndexOf("**A review asked for.**", StringComparison.Ordinal)..];
         var at = order.Select(code => section.IndexOf($"`{code}`", StringComparison.Ordinal)).ToList();

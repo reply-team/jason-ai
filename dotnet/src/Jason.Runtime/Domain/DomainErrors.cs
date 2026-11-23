@@ -372,14 +372,15 @@ public static class DomainErrors
     /// <summary>
     /// A review asked of a campaign whose manager has started as many runs today as <c>Launches:MaxPerDay:manager</c> allows,
     /// counted as the claim counts them: the check-in would only be held to the installation's next midnight. The message
-    /// names the way out in the words a held item's notification uses.
+    /// says how many started and the limit as a limit beside them, since a limit lowered during the day can stand below that
+    /// count, names the read that shows the limits, and the way out in the words a held item's notification uses.
     /// </summary>
-    public static ConflictException ReviewLaunchesSpent(string campaignId, int limit, string midnight, string zone) =>
+    public static ConflictException ReviewLaunchesSpent(string campaignId, int limit, int started, string midnight, string zone) =>
         new(
             Execution.AttemptErrors.LaunchesSpent,
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"The manager of campaign '{campaignId}' has started {(limit == 1 ? "1 run" : $"{limit} runs")} since the installation's midnight ({midnight}, {zone}), the limit Launches:MaxPerDay:manager sets, so a review asked for now would wait until the next one. ")
+            $"The manager of campaign '{campaignId}' has started {Dispatch.Claimer.Runs(started)} since the installation's midnight ({midnight}, {zone}), "
+            + $"and the limit Launches:MaxPerDay:manager sets is {Dispatch.Claimer.Runs(limit)} a day, so a review asked for now would wait until the "
+            + "next one. jason launches list shows the limits as they stand. "
             + Notifications.NotificationComposer.LiftHold);
 
     /// <summary>

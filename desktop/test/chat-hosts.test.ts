@@ -113,7 +113,7 @@ test('in Plan only the host\'s argv carries every deny-list entry as a disallowe
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('in Plan only a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: the plan list\'s 47 verbs are allowed', () => {
+test('in Plan only a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: the plan list\'s 48 verbs are allowed', () => {
     const args = realTurn('plan_only');
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
@@ -123,12 +123,12 @@ test('in Plan only a Claude turn is denied adding a role and linking a project\'
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 47);
+    assert.equal(allowed.length, 48);
 });
 
 test('each noun with a verb on the allow list or the plan list has its help allowed, exactly and in every mode, and the deny rules are the same as before but where the hook rides', () => {
     const nouns = helpNouns(fence.allowed, fence.reads);
-    assert.deepEqual(nouns, ['approval', 'audience', 'block', 'campaign', 'contact', 'decision', 'events', 'journal', 'operation', 'plugin', 'preference', 'project', 'reply', 'report', 'role', 'rolenote', 'route', 'sender', 'subscription', 'suppression', 'workitem']);
+    assert.deepEqual(nouns, ['approval', 'audience', 'block', 'campaign', 'contact', 'decision', 'events', 'journal', 'launches', 'operation', 'plugin', 'preference', 'project', 'reply', 'report', 'role', 'rolenote', 'route', 'sender', 'subscription', 'suppression', 'workitem']);
     const rules = nouns.map((noun) => `Bash(jason ${noun} --help)`);
     const denied = valuesOf(claudeArguments({ ...turn, reads: fence.reads }), '--disallowedTools');
     for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {

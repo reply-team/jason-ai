@@ -1143,14 +1143,16 @@ function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
 }
 
 /**
- * What the empty chat says about approval, one short sentence true of its mode: in Plan only nothing written reaches a
- * person unapproved; in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves when the
- * person tells it to. Full access, where a program the AI writes can act as the person, and a mode word this desktop
- * does not know say nothing.
+ * What the empty chat says about approval, one short sentence true of its mode on its host: in Plan only nothing written
+ * reaches a person unapproved; in Ask first and Auto-edit on Claude Code a message follows its campaign's send mode, and
+ * the AI approves when the person tells it to; on Codex, whose Ask first, and the Auto-edit it runs as, only read and
+ * propose, a send the turn writes waits for the person, so Plan only's sentence. Full access, where a program the AI
+ * writes can act as the person, and a mode word this desktop does not know say nothing.
  */
-function approvalSentence(mode: Chat['mode']): string | null {
+function approvalSentence(mode: Chat['mode'], codex: boolean): string | null {
     if (mode === 'plan_only') return t('chat.empty.planOnly');
-    if (mode === 'ask_first' || mode === 'auto_edit') return t('chat.empty.onYourWord');
+    if (mode === 'ask_first' || mode === 'auto_edit')
+        return codex ? t('chat.empty.planOnly') : t('chat.empty.onYourWord');
     return null;
 }
 
@@ -1167,6 +1169,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         </div>`;
     // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
     const drawn = drawnMode(chat, host, 'window').mode;
+    const approval = approvalSentence(drawn, host !== null && codexHosts.has(host.id));
     // An agent made at the click asks Start's question above, in its panel, with its box: here are its chips alone.
     if (asksStart(chat)) return html`<div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     if (chat.entries.length === 0)
@@ -1175,7 +1178,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 <h2>
                     ${chat.campaignId ? `What should Jason do in ${agentNameOf(chat)}?` : 'What should Jason work on?'}
                 </h2>
-                ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
+                ${approval ? html`<p>${approval}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);

@@ -73,16 +73,13 @@ public sealed class LaunchesService(JasonDbContext db, JournalWriter journal, Ti
     }
 
     /// <summary>
-    /// Lets go every item held at a daily limit, in every campaign: a wait with no attempt and no block, on a waiting item
-    /// whose last error is the hold's, under either word. Each wait is released as a person's resume, through the one routine
-    /// that releases a wait, so each item goes back to <c>created</c> through the transition table and says who let it go.
-    /// The error is a converted column, so the word is read here rather than in the query.
+    /// Lets go every item held at a daily limit, in every campaign (<see cref="LaunchHolds"/>). Each wait is released as a
+    /// person's resume, through the one routine that releases a wait, so each item goes back to <c>created</c> through the
+    /// transition table and says who let it go.
     /// </summary>
     private async Task<int> ReleaseAsync(ActorRef actor, string? reason, DateTime now, CancellationToken cancellationToken)
     {
-        var waits = await db.WorkItemWaits
-            .Where(w => w.Status == WaitStatus.Open && w.AttemptId == null && w.ProviderBlockId == null
-                && w.WorkItem!.Status == WorkItemStatus.Waiting)
+        var waits = await LaunchHolds.Waits(db)
             .OrderBy(w => w.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

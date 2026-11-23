@@ -250,7 +250,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   person, `actor_required`, and an actor that is no person, `review_not_human`; then `campaign_not_found`; a campaign
   that is not active, a draft, a paused or an archived one, `409` `campaign_not_active`; a check-in open, one held at the
   manager's daily limit included, `409` `review_already_open`, which names it; and the manager's launches of the day
-  spent, as the claim counts them, `409` `launches_spent`, whose message names the way out: "To go on today, tell your
+  spent, as the claim counts them, `409` `launches_spent`, whose message says the runs that started beside the limit,
+  names `jason launches list`, and names the way out: "To go on today, tell your
   agent: ignore the limit, or run jason launches lift --actor human:<your name>." [The campaign manager](campaign-manager.md)
   §4 is the contract.
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
@@ -464,6 +465,17 @@ that is not that attempt does not call them.
 
 ### `launches`
 
+- `launches.list`: a read of the daily limits of launches as they stand now. The request is empty, or `campaign_id`.
+  The answer is `{"day", "lift", "roles", "held"}`: `day` is `{"start", "end", "time_zone"}`, the installation's day the
+  limits count in, from its midnight to the next as UTC moments, taken by the same function the claim and a lift take
+  it by; `lift` is null, or `{"until", "actor", "lifted_at"}` where a person lifted today; `roles` has one entry for
+  each role in the registry, in `role.list`'s order, `{"role", "max_per_day", "source"}`, the limit as the claim reads it
+  now, so a live edit of `settings.json` shows at the next read, null for a role the limits do not name, which has none,
+  and `source` `default` where the number is the one Jason ships (or none, for a role Jason does not ship) and `settings`
+  where the settings set another; `held` is how many work items wait on a daily limit now. With `campaign_id`, each role
+  also carries `started_today`, the runs of the role that started in that campaign since the installation's midnight,
+  counted as the claim counts them, and `held` is that campaign's; a campaign nobody holds is `campaign_not_found`.
+  Setting a limit is the settings file's (`Launches:MaxPerDay:<role>`); no operation writes one.
 - `launches.lift`: a person's word that today's daily limits of launches (`Launches:MaxPerDay`) do not hold, in every
   campaign and for every role, until the installation's next midnight in `Runtime:TimeZone`, or the system's own zone.
   The request is `actor` and an optional `reason`; nothing names a campaign or a role. In one transaction it lets go

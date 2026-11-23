@@ -122,6 +122,7 @@ public partial class RoleSkillTests
         Assert.Contains("A day's limit is lifted only on the person's word, by them or by their own session, never by you", head, StringComparison.Ordinal);
         Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names the way: they tell their agent to ignore the limit, or type the command the held item's notification prints, and it holds until the installation's next midnight", head, StringComparison.Ordinal);
         Assert.Contains("**end a person's line** in this campaign, with a reason", head, StringComparison.Ordinal);
+        Assert.Contains("Where you need the limits themselves, read them: `jason launches list --campaign <cmp>` says each role's limit a day as it stands", head, StringComparison.Ordinal);
     }
 
     /// <summary>A line is reopened only on the person's yes, by the question they answered, and never on a reading of the manager's.</summary>
@@ -150,6 +151,7 @@ public partial class RoleSkillTests
         var deep = FlattenedEntry("manager", "deep_review");
 
         Assert.Contains("**A campaign linked to a provider's sequence gets no letters of Jason's own.**", head, StringComparison.Ordinal);
+        Assert.Contains("where its `external_ids` holds an item whose `kind` is `campaign` (the provider's campaign, as the contract calls it), or where the campaign's context says it is linked to a sequence at the provider, the sequence sends", head, StringComparison.Ordinal);
         foreach (var text in new[] { head, deep })
         {
             Assert.Contains("check", text, StringComparison.Ordinal);
@@ -418,7 +420,7 @@ public partial class RoleSkillTests
     [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_start_and_the_resume_plan_no_batch_for_a_campaign_linked_to_a_provider_s_sequence()
     {
-        const string Fence = "Where the campaign's context says it is linked to a provider's sequence, plan no batch: hand nothing to the planner, say so in your line, and make the check your skill's review gives such a campaign.";
+        const string Fence = "Where `jason campaign get` lists a provider's campaign in `external_ids` (an item whose `kind` is `campaign`), or the campaign's context says it is linked to a provider's sequence, plan no batch: hand nothing to the planner, say so in your line, and make the check your skill's review gives such a campaign.";
         var start = FlattenedEntry("manager", "start");
         var fence = start.IndexOf(Fence, StringComparison.Ordinal);
         var hand = start.IndexOf("3. **Hand the first batch to the planner, by one item.**", StringComparison.Ordinal);

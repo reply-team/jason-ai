@@ -391,7 +391,9 @@ applies to the turns a person starts by sending, from the next one on. Every sta
 names the mode that start runs in and what the AI does in it, in the menu's words (`startSentences`,
 `src/chat-header.ts`; the words are `modeNames`, `modeSays` and `codexModeSays` in `src/chat-modes.ts`, held word for
 word to the page's by a test), and says that the mode may change between turns and that earlier turns' modes say
-nothing of this one. A start sealed from the person's own Claude Code configuration also says that it does not load it,
+nothing of this one. A Plan only start on Claude Code is also told, as every refusal of that mode tells it (`planReads`),
+that a shell command other than a jason read is refused, a plain listing of a folder included, and that it reads with
+Read, Glob and Grep; Codex's read-only sandbox runs a listing, and its start is told nothing of it. A start sealed from the person's own Claude Code configuration also says that it does not load it,
 and, where a Full access turn could follow in this run, that only a Full access turn on their own sign-in does.
 
 - **Ask first** is chosen from the menu, and a turn of a chat in Full access runs in it where Full access cannot apply

@@ -42,6 +42,7 @@ events sources
 journal append
 journal kinds
 journal list
+launches list
 logs
 operation describe
 plugin list

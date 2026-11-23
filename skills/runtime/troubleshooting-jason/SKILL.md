@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the twelve states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics. Also when the person says ignore the limit: read what Jason holds at a daily limit of launches, and lift it on their word.
 metadata:
   status: draft
 ---
@@ -338,7 +338,8 @@ again or resumed, parks on the same block.
 many runs of a role one campaign starts in the installation's day, from its midnight to the next in `Runtime:TimeZone`, or
 in the machine's own zone where that is not set, and the item that would start one more is held, not failed, before any
 attempt. It reads as this same `waiting` state: its wait is the installation's next midnight, its `last_error` is
-`launches_spent`, whose message names the setting and the midnight it counted from, with the zone, and its
+`launches_spent`, whose message names the setting and the midnight it counted from, with the zone, says how many runs
+started since then and the limit beside them — a limit lowered during the day can stand below that count — and its
 `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role. A notification counts it
 among the items that wait on a daily limit, and the campaign's other work goes on. There are four ways out: at the
 installation's next midnight the runtime releases the item by itself and counts the new day, so a day already spent by
@@ -348,12 +349,27 @@ applies from the next scan to work not yet held, while an item already held keep
 expires by it like any waiting item. Do not cancel or recreate it: it is not stuck, and the same work asked again counts
 against the same day.
 
+**The limits are read, never guessed: `jason launches list`.** It says the installation's day the limits count in, from
+its midnight to the next in its zone; a lift that stands today, with whose word it was; each role's limit a day as the
+runtime reads it now, `default` where it is the number Jason ships and `settings` where the settings set another, and
+`none` for a role with no limit, which is a role of the person's own the settings do not name; and `held`, how many work
+items wait on a daily limit now. With `--campaign`, each role also says the runs it started in that campaign today,
+counted as the claim counts them, and `held` is that campaign's. When the person asks what the limits are, or why work
+is held, read it and say the numbers it gives. Setting a limit is the person's, in the settings file under
+`Launches:MaxPerDay:<role>`; no command sets one.
+
+```
+jason launches list --human
+jason launches list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
 **"Ignore the limit" is the person's word, and the lift is its verb.** When the person tells you to ignore the limit, or
 names the lift, read first what is held, so that you can say what the lift let go: the waiting items whose `last_error`
-is `launches_spent`, each with its campaign and its role. Then run the lift as the person, under their own name, with a
-short reason of your own that says it is their word. It lets go every item held at a daily limit, in every campaign
-holding one and for every role, and holds nothing more until the installation's next midnight. Then say three things:
-which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's
+is `launches_spent`, each with its campaign and its role. Where something is held, that is what they mean; only where
+nothing is held, ask which limit they mean, and lift nothing. Then run the lift as the person, under their own name,
+with a short reason of your own that says it is their word. It lets go every item held at a daily limit, in every
+campaign holding one and for every role, and holds nothing more until the installation's next midnight. Then say three
+things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's
 `time_zone`, naming the zone, and in brackets how long from now, such as "until 00:00 Europe/Berlin (in five and a half
 hours)"; and that the items it released are counted again after that midnight, like any other of the new day. Where the
 answer says `already_lifted`, today was lifted already, and it still let go what was held since. Never lift on your own
