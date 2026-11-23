@@ -141,7 +141,10 @@ line in the chronicle. If you are not sure which two they meant, ask before you 
 What each verb does:
 
 - **`approve`** lets the item back into the queue for the next scan, with its due date, its priority
-  and its place untouched. It does not run the work; it stops the work being held.
+  and its place untouched. It does not run the work; it stops the work being held. It is refused with
+  `validation_failed` when the item's arguments no longer satisfy the operation's document, a reply drafted with a tag
+  in it before Jason began to refuse tags for one: tell the person the reason its detail gives, and do not send the
+  approval again as it stands; the way out is an edit of the item, after which Jason asks again, or a rejection.
 - **`reject`** ends the item as `failed`, carrying `approval_rejected` and the person's reason as its
   last error. That is an accountable ending rather than a breakage, and a finished item is not
   reopened — the work would have to be asked for again.

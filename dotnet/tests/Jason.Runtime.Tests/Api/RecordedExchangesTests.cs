@@ -1552,6 +1552,7 @@ public class RecordedExchangesTests
             var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
             item.PublicId = "wi_" + id[4..];
             item.Status = decided ? WorkItemStatus.Scheduled : WorkItemStatus.AwaitingApproval;
+            item.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
             item.Contact = new Contact { PublicId = "cnt_" + id[4..], FirstName = first, LastName = last, Company = "Kavali", Title = "CTO", CreatedAt = Noon, UpdatedAt = Noon };
             db.WorkItems.Add(item);
             db.Approvals.Add(new Approval
@@ -1676,6 +1677,8 @@ public class RecordedExchangesTests
             var ivyEnrol = Of("Ivy", "campaign.enroll");
             var cleoEnrol = Of("Cleo", "campaign.enroll");
             var adaEnrol = Of("Ada", "campaign.enroll");
+            // The enrolment a person approves from the campaign's row holds the arguments it was parked with, which a yes reads.
+            adaEnrol.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
             // The attempts the two endings were written by: a line of an ending names the attempt that ended the work.
             // Their ids stand apart from the counter, so every id after them stays the one the recording holds.
             Attempt Ran(WorkItem item, AttemptStatus status, int number)

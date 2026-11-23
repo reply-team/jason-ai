@@ -396,9 +396,15 @@ role that cannot decide *what to do next* raises a question instead — a decisi
 attempt that asked it and whose answer wakes the review that carries the work on.
 [docs/campaign-manager.md](campaign-manager.md) §6 is the contract for that.
 
-- **approve** releases the item to the next scan with its due date, priority and place untouched.
+- **approve** releases the item to the next scan with its due date, priority and place untouched. It is refused with
+  `validation_failed`, the document's reason in its `details`, while the item's `context.input` does not satisfy the
+  operation's document as this build publishes it (by the check `workitem.create` and `workitem.update` make: a document
+  can refuse what it once accepted), and nothing is written; it reads the arguments, not the composed input, and the
+  claim's own check is unchanged. An edit that commits between this read and the guarded write withdraws the question,
+  and the approval then writes nothing and answers `approval_not_pending`. A message's card offers an edit, after which
+  Jason asks again; other work has no Edit on its card, so there the way out is a rejection or `jason workitem update`.
 - **reject** ends the item as `failed`, with `approval_rejected` and the person's reason as its last
-  error, and no attempt invented to carry it.
+  error, and no attempt invented to carry it, whatever the item's input holds.
 - **cancelling the work, or its due date passing**, ends the decision with it: a live approval about
   work that can never run is the one row that would make `approval.list` untrue.
 - **a second decision on the same approval** writes nothing and answers `approval_not_pending`: both

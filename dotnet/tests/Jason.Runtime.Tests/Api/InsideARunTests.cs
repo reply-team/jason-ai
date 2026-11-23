@@ -379,6 +379,7 @@ public class InsideARunTests
         db.Campaigns.Add(campaign);
         var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", now);
         item.Status = WorkItemStatus.AwaitingApproval;
+        item.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
         item.Contact = new Contact { PublicId = "cnt_" + id[4..], FirstName = "Ada", LastName = "Lovelace", CreatedAt = now, UpdatedAt = now };
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);

@@ -169,6 +169,20 @@ public partial class InteractiveSkillTests
         Assert.DoesNotContain("their sentence carried across", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A yes the runtime refuses because the item's arguments no longer satisfy the operation's document is a refusal with a
+    /// reason, not a hiccup: the session says the reason, never sends the same yes again, and names the two ways out.
+    /// </summary>
+    [Fact]
+    public void A_yes_refused_for_the_items_arguments_is_said_and_never_sent_again_as_it_stands()
+    {
+        var skill = Flattened("approvals-and-questions");
+        Assert.Contains(
+            "It is refused with `validation_failed` when the item's arguments no longer satisfy the operation's document, a reply drafted with a tag in it before Jason began to refuse tags for one: tell the person the reason its detail gives, and do not send the approval again as it stands; the way out is an edit of the item, after which Jason asks again, or a rejection.",
+            skill,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.S2, "the approvals skill never decides")]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
