@@ -41,6 +41,12 @@ public partial class RoleSkillTests
         Assert.Contains("runs even while the campaign is paused", skill, StringComparison.Ordinal);
         Assert.Contains("waits for a person", skill, StringComparison.Ordinal);
 
+        // A stop takes a person out of a provider's campaign, and a campaign of Jason's own direct letters has none: there
+        // the proposal fails at its claim and costs a person a review at every opt-out, while `optout.record` already
+        // completed it.
+        Assert.Contains("Propose it only where the campaign is linked to a provider's campaign, as its context says.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the person had Jason's own direct letters alone, there is nothing to stop: `optout.record` completes the opt-out, and you propose no `enrollment.stop`.", skill, StringComparison.Ordinal);
+
         // A campaign that is archived takes no new work, and the provider's opt-out is account-wide.
         Assert.Contains("record the opt-out through any active or paused campaign they are a member of that is routed to the same provider account", skill, StringComparison.Ordinal);
         Assert.Contains("Do not remove them, or archive them or the campaign, until the opt-out has succeeded", skill, StringComparison.Ordinal);
