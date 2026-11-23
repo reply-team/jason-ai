@@ -255,6 +255,13 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("it tells them once, with a pointer: how many wait, and where to look.", skill, StringComparison.Ordinal);
+
+        // What a channel did last is when it last sent: a toast the switch kept off yesterday says nothing of a switch on
+        // today, and a session that read it as the present told the person nothing reaches them.
+        Assert.Contains(
+            "What a channel did last, which the `Notify:` line says, is history where it is older than the switches' present reading: a toast refused yesterday by a switch that is on now says nothing of today. Say what `jason status`'s `notifications` check says now, and the old outcome, if at all, as what happened then.",
+            skill,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

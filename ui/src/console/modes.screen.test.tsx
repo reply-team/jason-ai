@@ -991,8 +991,9 @@ describe('Plan only’s plan card', () => {
 });
 
 describe('the empty chat’s sentence about approval', () => {
-    // What is true of each mode: in Plan only nothing written reaches a person unapproved; in Ask first and Auto-edit a
-    // message follows its campaign's send mode, and the AI approves on the person's word, as theirs.
+    // What is true of each mode: in Plan only nothing written reaches a person unapproved; in Ask first and Auto-edit on
+    // Claude Code a message follows its campaign's send mode, and the AI approves on the person's word, as theirs; on
+    // Codex, whose Ask first only reads and proposes, nothing written reaches a person unapproved either.
     const planOnly = 'Nothing written here reaches a person without your approval.';
     const onYourWord = "A message written here follows its campaign's send mode; the AI approves when you tell it to.";
     // The sentence of the hero under the heading, or null when that hero draws none.
@@ -1037,10 +1038,31 @@ describe('the empty chat’s sentence about approval', () => {
         expect(said()).toBeNull();
         chooseHost('codex');
         await waitFor(() => expect(line()).toBeNull());
-        expect(said()).not.toBeNull();
+        // Codex's Ask first only reads and proposes: a send its turn writes waits for the person, whatever the send mode.
+        expect(said()).toBe(planOnly);
         chooseHost('claude');
         await waitFor(() => expect(line()).not.toBeNull());
         expect(said()).toBeNull();
+    });
+
+    it('says on Codex, in Ask first and in Auto-edit, that nothing reaches a person unapproved, and on Claude Code that a message follows its send mode', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        choose('ask_first');
+        await waitFor(() => expect(line()).toBeNull());
+        expect(said()).toBe(onYourWord);
+        chooseHost('codex');
+        await waitFor(() => expect(said()).toBe(planOnly));
+        chooseHost('claude');
+        await waitFor(() => expect(said()).toBe(onYourWord));
+        // A chat kept in Auto-edit runs its Codex turn in Ask first, and says what that Ask first holds.
+        choose('auto_edit');
+        await waitForMenus(() => expect(value()).toBe('auto_edit'));
+        expect(said()).toBe(onYourWord);
+        chooseHost('codex');
+        await waitFor(() => expect(said()).toBe(planOnly));
     });
 
     it('is not drawn in a new chat, which starts in Full access, from its first moment', async () => {

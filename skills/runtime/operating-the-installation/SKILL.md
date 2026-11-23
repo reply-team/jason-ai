@@ -235,7 +235,9 @@ asks, with the topic they choose. On the public ntfy server a topic is readable 
 them that before they pick one; the plugin's own README is the procedure.
 
 When someone says nothing ever tells them anything, read `jason status`'s `notifications` check and say what it found
-rather than guessing. Its states mean:
+rather than guessing. What a channel did last, which the `Notify:` line says, is history where it is older than the
+switches' present reading: a toast refused yesterday by a switch that is on now says nothing of today. Say what `jason
+status`'s `notifications` check says now, and the old outcome, if at all, as what happened then. Its states mean:
 
 - **`absent`, notifications off or no channel on** — say how to turn them on, and leave it to them.
 - **`absent`, a toast switched off** — Windows answered, when the toast was last sent, that Jason's notifications were
