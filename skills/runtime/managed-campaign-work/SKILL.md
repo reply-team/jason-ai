@@ -257,11 +257,14 @@ not answered yet and for people who have: tell me when you want it, or in Jason 
 messages go"." Where a kind goes automatically, say which kind, and that the critic reads each such message before it
 goes. Never ask the person to choose here, and never set a mode: `approvals-and-questions` asks it at an approval.
 
-The message ends with one question, whether to start it now, with nothing after it, said in the language the person writes in; in English: "Everything is ready. Start it?"
+End the message with one question and nothing after it, in the language the person writes in: whether to start it now.
+In English it is exactly "Everything is ready. Start it?"; in another language, say that one question in it, never the
+English beside it.
 
-- **Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then
-  read it back. Say, in the language the person writes in, that it started on their word and is recorded under their name, {name}; in English: "Started, as you said. It is recorded under your name, {name}." Say it only once `jason campaign get`
-  answers the status `active`.
+- **Yes**, in any words that answer that question: start it, with the person named as the one who starts it, then read
+  it back. Once `jason campaign get` answers the status `active`, and not before, say in the language the person writes
+  in that it started on their word and is recorded under their name, {name}; in English, exactly "Started, as you said.
+  It is recorded under your name, {name}."
 - **They will start it themselves**: leave it as it is. They start it when they choose, by telling this conversation or
   any session to start it, or by typing `jason campaign start` with the campaign's id in a terminal.
 - **Start it later**: leave it a draft, with everything recorded. When they tell you, or any session, to start it, read

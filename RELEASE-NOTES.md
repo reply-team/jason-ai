@@ -56,15 +56,16 @@ rule of the skills.
   message you approved on a Friday goes out whatever a file says about Fridays, and the chat says so.
 - **On Codex, Ask first and Auto-edit read and propose.** Codex never asks in these chats, so they only read and
   propose, and the chat now says so: nothing written there reaches a person without your approval.
-- **Plan only on Claude Code lists a folder.** Asked for a folder's listing in Plan only, the chat lists it with its
+- **Plan only on Claude Code reads a folder with its own tools.** Asked what is in a folder, the chat reads it with its
   reading tools instead of stopping at the refused shell line.
 
 **Setting a campaign up and starting it**
 
-- **The set-up, then the start on your yes.** The agent sets a campaign up with you. It asks for the sender's name
-  once, first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong now; says once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you
-  name. Then it asks whether to start, and starts on your yes, under your name. A missing tone of voice holds nothing
-  back: the work goes on in a plain, neutral voice, and you are told once that you may name one. The question and the
+- **The set-up, then the start on your yes.** The agent sets a campaign up with you. It asks for the sender's name once,
+  first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong now; says
+  once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you name.
+  Then it asks whether to start, and starts on your yes, under your name. A missing tone of voice holds nothing back:
+  the work goes on in a plain, neutral voice, and you are told once that you may name one. The question and the
   confirmation of the start are said in the language you write in.
 - **A draft that stands is named at once.** The set-up reads the campaign list before its first question and names a
   matching draft.
