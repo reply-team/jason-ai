@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.50.0-rc.1
+# Jason 0.50.0-rc.2
 
 Jason 0.50 tunes how the work is done. A campaign's manager keeps two clocks, a quick look every six hours and a deep
 review once a day, each starting from where the last one stopped, and you can ask it for a review at any moment. Each
@@ -28,7 +28,7 @@ ends, continues and reopens it. Every role has a daily limit of launches, counte
 one word lifts it for today. The agent sets a campaign up with you and starts it on your yes, and your word outranks a
 rule of the skills.
 
-## What is new since 0.49.2
+## What is new since 0.49.3
 
 **Your word, in the chat and in a terminal**
 
@@ -51,14 +51,23 @@ rule of the skills.
 - **Who decided, in the lists.** `jason approval list --human` has a DECIDED BY column, with the reason beside the actor
   where a send mode or a standing approval let an approval go, for example `system:dispatcher (automatic_mode)`.
   `jason decision list --human` has an ANSWERED BY column.
+- **What you read is in your language.** The chat's short lines between actions are in your language too.
+- **A memory file is what the agents plan by.** They read it and plan by it. It is never a rule Jason enforces: a
+  message you approved on a Friday goes out whatever a file says about Fridays, and the chat says so.
+- **On Codex, Ask first and Auto-edit read and propose.** Codex never asks in these chats, so they only read and
+  propose, and the chat now says so: nothing written there reaches a person without your approval.
+- **Plan only on Claude Code names the tools that run.** Where it refuses a shell listing, the refusal and the turn's
+  header name the reading tools to use instead: Read, Glob and Grep.
 
 **Setting a campaign up and starting it**
 
 - **The set-up, then the start on your yes.** The agent sets a campaign up with you. It asks for the sender's name
-  once, first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong;
-  says once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you
+  once, first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong now,
+  never saying "the roles launch" or "the notifications arrive" as a finding; says once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you
   name. Then it asks whether to start, and starts on your yes, under your name. A missing tone of voice holds nothing
   back: the work goes on in a plain, neutral voice, and you are told once that you may name one.
+- **A draft that stands is named at once.** The set-up reads the campaign list before its first question and names a
+  matching draft.
 - **The quick start takes up a draft that stands.** Where a draft campaign already stands for what you sell, the quick
   start fills it in and makes no second one.
 - **A plan card's steps say when and by which channel.** A subject and a body go on a step only where you asked to see
@@ -106,6 +115,11 @@ rule of the skills.
   that reopening alone sends nothing more.
   [A person's line in a campaign](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-persons-line-in-a-campaign)
   says what each state means.
+- **The people in a campaign, in a table.** `jason campaign list-contacts --human` shows each person's touches and the
+  last one.
+- **An opt-out with no provider sequence is completed.** Where the campaign holds no provider's campaign, as
+  with Jason's own direct letters, recording the opt-out completes it, and the summary says nothing was stopped at the
+  provider, with no stop that could only fail.
 
 **Daily limits of launches**
 
@@ -117,23 +131,50 @@ rule of the skills.
   `jason launches lift --actor human:<your name>`: what the limits hold is released at once, and nothing new is held
   until the installation's midnight. The agent says until when, in your own time and naming the zone, and how long from now. The notification
   of an item held at a daily limit says how to go on today.
+- **"Ignore the limit" lifts what is held.** Where something is held at a daily limit, that is what the word means and
+  it is lifted as you; the agent asks which limit only where nothing is held. Asked what the daily limits are, the chat
+  runs `jason launches list`.
+- **Read the limits.** `jason launches list` says the installation's day and when it ends, each role's limit and
+  whether it comes from the default or from your settings, a lift that stands and how many items are held. With
+  `--campaign`, it also says how many each role started there today. A limit is still set in the settings file.
+- **A line on Needs you while work is held.** It says how many items are held at a daily limit and until when, with a
+  button that lifts today's limits as you. It is not counted among what waits for you.
 
 **Notifications**
 
 - **A reply is notified, once.** When a role judges a reply to be the person's own, Jason tells you once, at the end of
   the run that judged it: "1 reply came in." Automatic replies, bounces and opt-outs are not counted, and under "every
   message" the reply and the approval its answer needs come as one notification. `Notifications:Replies` turns it off.
+- **An old outcome is said as history.** A channel's last notification outcome that is older than the switches' present
+  reading is told as what happened then; what `jason status` says now is the answer.
 
-## Fixed since 0.49.2
+**Jason Desktop**
 
+- **The plus buttons are smaller.** The plus beside Agents and the one beside Chats are drawn smaller and thinner, on
+  the centre of their square.
+- **The mark opens Start.** A click on Jason's mark at the top of the sidebar shows Start again, with the words you
+  typed there and did not send, and closes nothing.
+- **A chat you open has the caret in its box.** By any act of your own, from a row, Search, a plus, the Agents page, a
+  link or Back and Forward, you can type at once. Space on an agent's tab now opens it, as a click does, and a screen
+  reader hears which chat it enters.
+
+## Fixed since 0.49.3
+
+- **Words in another alphabet piped to `jason` on Windows are kept as written.** Standard input was read by the
+  console's code page, so Cyrillic, CJK and symbols were stored garbled. It is now read as UTF-8 on every system, a
+  file given by `--file`, `--value-file`, `--note-file` or `--result-file` is read the same way, and bytes that are not
+  UTF-8 are refused, never guessed. The skills' PowerShell examples set `$OutputEncoding` first, since Windows
+  PowerShell before 7 replaces such characters before Jason sees them.
+- **The refusal at a daily limit says the limit as a limit.** It names how many runs started, the limit beside it and
+  `jason launches list`, where it printed the limit as if it were the count.
 - **An act's reason is the agent's own short line**, never the text you pasted.
 - **The skills' examples pass long text on standard input.** A campaign's context, a role's brief or a note goes through
   a here-document, so an agent copying an example no longer breaks it on an apostrophe or shows the text in the list of
   running processes.
 
-## Upgrading from 0.49.2
+## Upgrading from 0.49.3
 
-- **Updating from 0.49.2.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
+- **Updating from 0.49.3.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
   `jason update apply` in a terminal, which hands the update to Jason Desktop. On Linux, a deb takes it with the
   system's own updates, Software Updater or `sudo apt update && sudo apt upgrade`, and an AppImage by its own update
   item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
@@ -169,3 +210,17 @@ rule of the skills.
   running, over its own environment.
 - On Windows, a dropped file's path whose name holds a single quote together with a `$` or a backtick, or a network
   path whose name holds a single quote, is quoted as PowerShell reads it, and Git Bash reads it back wrong.
+- On GNOME, a link without the click's token does not bring a running Jason Desktop to the front. `jason ui open`, and on
+  Ubuntu 24.04 a notification's click, change the running window's page where it is; GNOME says Jason Desktop "is
+  ready", and a click on that brings it forward. On Hyprland the window keeps its place unless `misc:focus_on_activate`
+  is set.
+- On macOS, a click on Jason's notification opens nothing of Jason's; `jason ui open` opens Jason Desktop at what waits.
+- On Windows, with no Jason Desktop registered or its program gone, a click on Jason's notification opens nothing, and
+  nothing that stays on screen says why. `jason ui open` in a terminal refuses with `desktop_not_installed`.
+- On Linux, a click reaches Jason only while its notification waits. At most ten wait at once, a newer one ending the
+  oldest one's wait; the runtime ends every wait when it stops; and notify-send before 0.7.10, or gdbus where there is
+  no notify-send, shows a notification no click reaches.
+- Outside GNOME and KDE, a `jason ui open` that starts Jason Desktop ends after ten seconds, saying on stderr that it
+  handed the address on (`opener_timed_out`), and exits 0. The desktop opens all the same.
+- An AppImage in a folder whose path holds a space or a quote takes no links: `jason ui open` and a click refuse with
+  `desktop_links_elsewhere`.
