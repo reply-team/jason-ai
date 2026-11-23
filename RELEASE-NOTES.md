@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.50.0-rc.2
+# Jason 0.50.0-rc.3
 
 Jason 0.50 tunes how the work is done. A campaign's manager keeps two clocks, a quick look every six hours and a deep
 review once a day, each starting from where the last one stopped, and you can ask it for a review at any moment. Each
