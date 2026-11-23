@@ -93,6 +93,9 @@ public sealed class PlannerChainTests
     {
         public Task<LaunchResult> LaunchAsync(ToastLaunch launch, TimeSpan bound, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("This runtime has no desktop, so nothing may be launched.");
+
+        public Task<WaitingLaunch> LaunchWaitingAsync(ToastLaunch launch, TimeSpan bound, Func<string, bool> shown, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("This runtime has no desktop, so nothing may be launched.");
     }
 
     [Fact]

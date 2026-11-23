@@ -433,16 +433,18 @@ a second source of business logic or a privileged database client.
 
 As built: the runtime serves the UI itself under `/ui/` from a module directory beside its data (`custom` when it
 holds a build, else `default`, the release's own build, which `jason ui install` places), as static files under a `default-src 'self'` policy, files under `sealed/` excepted ([ui.md](ui.md)). A
-browser pairs once: `ui.open` mints a single-use one-minute ticket, the page trades it at `POST /ui/session` for a UI
+page pairs once: `ui.open` mints a single-use one-minute ticket, the page trades it at `POST /ui/session` for a UI
 token the runtime keeps as a hash and accepts as a bearer until `ui.revoke`; a request carrying a foreign `Origin` is
-refused. The UI is one more consumer of the API and the runtime keeps nothing for it; see the `DEC-UI` decisions.
+refused. The release's build draws its console in Jason Desktop's window alone; a web interface of one's own is a build
+in `custom`, paired the same way ([ui.md](ui.md#a-web-interface-of-your-own)). The UI is one more consumer of the API
+and the runtime keeps nothing for it; see the `DEC-UI` decisions.
 
 **Jason Desktop** (`desktop/`, described in [desktop.md](desktop.md)) is the same kind of client in an application window
 for Windows, macOS and Linux. It carries the release's `jason` executable, works on the one installation the CLI uses
 (the same data directory, harness root and settings file; never a second one) and drives it only through the CLI's
-verbs and the settings file a person would edit. It loads the UI the runtime serves at its loopback address, in a second
-shell with the chat as its home, and reaches the page through one object, `window.jasonDesktop`. What it adds is what a
-browser tab cannot be trusted with: a chat that starts the person's own agent host (Claude Code, or Codex to read) as a
+verbs and the settings file a person would edit. It loads the UI the runtime serves at its loopback address, whose
+console has the chat as its home, and reaches the page through one object, `window.jasonDesktop`. What it adds is what
+no page the runtime serves can be trusted with: a chat that starts the person's own agent host (Claude Code, or Codex to read) as a
 child of the desktop and asks the person before the agent acts, a tray, and the setup of the connections that are a
 person's alone. The runtime starts no process for a screen and knows no desktop: nothing in it, no route, state or file,
 exists for the application, and a runtime with no desktop is unchanged.
@@ -1805,7 +1807,7 @@ original chat session.
 | DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `get.jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the page `docs/responsible-use.md` never names the address. |
 | DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |
 | DEC-UI-001 | The Jason UI is served by the runtime itself under `/ui/`, from `<data>/ui/custom/` when that holds a build and else `<data>/ui/default/`, as static files under `Content-Security-Policy: default-src 'self'`, files under `sealed/` excepted (docs/ui.md); it is a client of the Runtime API and nothing else. |
-| DEC-UI-002 | A browser is paired once: `ui.open` mints a single-use ticket good for one minute, the page trades it at `POST /ui/session` — the one door outside the operation catalog, and the only POST without a bearer — for a UI token the runtime stores as a hash and accepts as a bearer until `ui.revoke`; UI tokens never expire on their own. A request carrying an `Origin` that is not the runtime's own is refused. |
+| DEC-UI-002 | A page is paired once: `ui.open` mints a single-use ticket good for one minute, the page trades it at `POST /ui/session` — the one door outside the operation catalog, and the only POST without a bearer — for a UI token the runtime stores as a hash and accepts as a bearer until `ui.revoke`; UI tokens never expire on their own. A request carrying an `Origin` that is not the runtime's own is refused. |
 | DEC-UI-003 | The UI is an optional module, not a plugin: files the runtime serves, not code it invokes; installed by default and updated the way role skills are: a release publishes `jason-ui.zip` in `checksums.txt` (not in the manifest), and `jason ui install` places it as `ui/default/`, run by the install guide, at the end of `jason update apply` and as `jason status`'s repair; never fetched by the runtime; the runtime starts without it and makes no directory for it. The runtime's port defaults to 52766 so a bookmark is stable, moving to the next free port above it when that one is taken. |
 | DEC-UI-004 | The UI is one more consumer, and Jason stays command-line first and agent first: everything the UI needs from the runtime is a CLI verb that makes sense typed, returns facts and never views, and leaves the runtime unaware a screen exists — no route named after a page, no state, preference or cache for it. |
 | DEC-UI-005 | The UI's screen tests render exchanges the runtime's own tests recorded under `docs/api/fixtures/`, held to the code; its browser suite proves only what a browser alone can — pairing, the policy, the shape of every request; the runtime's logic is proven once, in the runtime's own tests. |

@@ -239,19 +239,20 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Twelve names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>install</c>, <c>logs</c>, <c>doctor</c>, <c>export</c> and <c>import</c>,
+    /// Thirteen names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>install</c>, <c>logs</c>, <c>doctor</c>, <c>export</c> and <c>import</c>,
     /// the <c>skills</c> and <c>update</c> nouns, <c>ui install</c> and <c>plugin install</c>, verbs of nouns whose
-    /// other verbs are operations, and <c>session open</c> — and no page says two, the four it said before the two verbs
+    /// other verbs are operations, <c>session open</c> and <c>ui open</c> — and no page says two, the four it said before the two verbs
     /// that read the installation's files arrived, the six it said before the UI was placed by a command, the seven it said
     /// before a plugin package was, the eight it said before a person's own agent host was started by one, the nine it
-    /// said before an installation was written into one archive, the ten it said before one was placed from it, or the
-    /// eleven it said before the machine was set up for the application by one.
+    /// said before an installation was written into one archive, the ten it said before one was placed from it, the
+    /// eleven it said before the machine was set up for the application by one, or the twelve it said before Jason Desktop
+    /// was opened by one.
     /// </summary>
     [Theory]
     [Critical(Family.D3, "a page says what the tree has outgrown")]
-    [InlineData("docs/handbook.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("docs/INSTALL.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**")]
+    [InlineData("docs/handbook.md", "It is one of thirteen names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, `session open`, which starts your own agent host, or a plain shell, in a terminal, and `ui open`, which opens Jason Desktop")]
+    [InlineData("docs/INSTALL.md", "It is one of thirteen names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, `session open`, which starts your own agent host, or a plain shell, in a terminal, and `ui open`, which opens Jason Desktop")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **thirteen declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -271,6 +272,8 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("nine declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("one of ten names", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ten declared exceptions", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of twelve names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("twelve declared exceptions", text, StringComparison.Ordinal);
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
@@ -794,7 +797,7 @@ public partial class PageClaimsTests
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-slack.zip` | the Slack plugin's package: the files of `plugins/slack` at `v{{version}}`, which `jason plugin install slack` places in `~/.jason/plugins/slack` |")]
     [InlineData(".github/release-notes-template.md", "| `jason-plugin-telegram.zip` | the Telegram plugin's package: the files of `plugins/telegram` at `v{{version}}`, which `jason plugin install telegram` places in `~/.jason/plugins/telegram` |")]
     [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of each package, in `sha256sum` format |")]
-    [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the browser UI's package: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
+    [InlineData(".github/release-notes-template.md", "| `jason-ui.zip` | the UI's package, the build Jason Desktop draws: `ui/` built at `v{{version}}`, which `jason ui install` places as the default UI |")]
     [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by `jason plugin install reply`, which places it in `~/.jason/plugins/reply` once it matches its line in `checksums.txt` and the manifest's content digest; step 3 of `docs/golden-path.md` runs it.")]
     [InlineData("docs/plugins.md", "`jason plugin install <id>` installs a package the release you run publishes: it downloads the file the manifest names, from that release's own directory, checks it against the release's `checksums.txt` and, unpacked, against that digest, and moves it in whole as `~/.jason/plugins/<id>`, or places nothing and exits 1 saying why.")]
     [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
@@ -835,7 +838,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Theory]
     [Critical(Family.D3, "a page says what the tree has outgrown")]
-    [InlineData("docs/handbook.md", "`jason ui install` places this release's browser UI, the page `jason ui open` opens; a runtime works without it.")]
+    [InlineData("docs/handbook.md", "`jason ui install` places this release's UI, the build Jason Desktop draws; a runtime works without it.")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it. After the skills it places the release's UI, and an update applied by a build older than that step places none, so `jason ui install` follows it; `jason status` names it until it has.")]
     public void The_walk_throughs_say_when_jason_ui_install_follows(string page, string said) =>
         Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
@@ -1350,7 +1353,7 @@ public partial class PageClaimsTests
     /// <summary>The two sentences of the README that may name TypeScript, as the README says them.</summary>
     private static readonly string[] TypeScriptSentences =
     [
-        "The browser UI is TypeScript.",
+        "Jason Desktop is TypeScript.",
         "TypeScript would need a build step on every machine that edits the plugin, and the runtime would still load only the JavaScript it produces, so we do not recommend it.",
     ];
 
@@ -1358,7 +1361,7 @@ public partial class PageClaimsTests
     /// The README says what a plugin author meets today: a plugin is plain JavaScript, run by the engine the runtime
     /// embeds, and a <c>.ts</c> entry is refused at load. It never says TypeScript comes first, nor that plugins or the
     /// changes a person or an agent makes are written in TypeScript, which would send an agent to write a package the
-    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says the browser UI is
+    /// runtime refuses. Two sentences may name TypeScript, each pinned by its text: the one that says Jason Desktop is
     /// TypeScript, and the one that says why it is not recommended for a plugin. Any other sentence that names it fails.
     /// </summary>
     [Fact]

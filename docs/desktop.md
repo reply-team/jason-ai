@@ -1,15 +1,15 @@
 # Jason Desktop
 
 Jason Desktop is a window onto the installation the `jason` command line uses. It is one more client of that
-installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
+installation: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
 and the settings file a person would edit. It runs on one installation, yours; in [the demo](#the-demo) it shows a page of sample data instead and runs
 no installation. Nothing in the runtime exists for the desktop.
 
-It adds three things the browser cannot do: a chat that is a session with your own agent, started for you on this
-computer (Claude Code or Codex, each starting a new chat in Full access, where it acts without asking), a tray that counts
-what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
-else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
+Its screens are a UI the runtime serves ([ui.md](ui.md)), and it adds three things of its own: a chat that is a session
+with your own agent, started for you on this computer (Claude Code or Codex, each starting a new chat in Full access,
+where it acts without asking), a tray that counts what waits for you, and the one-step setup of Reply, your notification
+channels and your AI provider's key. The terminal stays open to you at any time:
 on macOS, Windows and Linux the first start of each version puts `jason` where a new terminal finds it and gives your agents
 Jason's skills, by the `jason install` the application carries, and the Command Line item of its menu says what that
 placed and puts it back ([The command line, and the login items](#the-command-line-and-the-login-items)).
@@ -63,7 +63,8 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 `jason runtime start` only when none is; a runtime that is already up is used as it is, and `jason runtime run` is never
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
-package it carries, once for each desktop version, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
+package it carries, once for each desktop version, and the role skills again at a start where `jason status` finds no
+readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -174,18 +175,16 @@ agent's header instead, and the Feed by its own.
   follows to the end of what came while it was out of sight if you left it at the foot, and keeps your place if you
   left it scrolled up.
 - While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
-  **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
-  a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
+  **Stop** otherwise: with the box empty, while the model's name is still to be typed, and while a stop is under way. What you send with the arrow is
   queued. It shows in the conversation as your message, with "Queued · Jason takes it when this turn ends" under it,
   and goes as your next message once the turn ends well. A message you send while one is queued is added under it, a
   blank line between, and the two go together. **Take back** puts the whole queue into the box when the box is empty.
   Escape in the box stops the turn, with words typed or none, except while a menu, a list, the search box or a dialog is
   open on the screen: then the key is theirs, and the sidebar's menus and the search box close by it. A turn you stop,
-  and a turn that fails, gives the queued words back to the box, above what you typed there, and so does a turn that
-  ends while a tab may no longer send to its chat; nothing is sent by itself.
+  and a turn that fails, gives the queued words back to the box, above what you typed there; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
-- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials:
+- In the console's Live the sidebar draws the essentials:
   **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds every page, agent, chat and
   person; **Needs you**, with the number of approvals and questions waiting; the **Feed** under it; **Accounts**, where
   an account is connected; the two sections **Agents** and **Chats**, as the Demo draws them; and **Settings** alone at the foot. The pages it
@@ -196,7 +195,7 @@ agent's header instead, and the Feed by its own.
   say); this is kept by the page alone.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
+- The other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
   [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
@@ -226,9 +225,11 @@ reaches.
 The Jason menu carries Open Jason at Login, Command Line, the update item, and Uninstall Jason… on macOS and Linux. The
 tray's menu opens the window, a new chat and what needs you, and carries the same acts for the installation. The tray
 counts what waits for you, approvals and questions, read through `jason approval list` and `jason decision list` no more
-often than every 30 seconds while a runtime answers; a system notification carries the counts alone, never a name or the
-words of a question. Open Jason at Login is off until you turn it on; the runtime's start at logon is the machine
-set-up's, and no item of the menu's.
+often than every 30 seconds while a runtime answers. On macOS a system notification of the desktop's own says when the
+count rises, with the counts alone, never a name or the words of a question; on Windows and Linux the runtime's own
+notification of each waiting item is the one, its click opening the desktop on that item
+([notifications.md](notifications.md)), and the desktop adds none. Open Jason at Login is off until you turn it on; the
+runtime's start at logon is the machine set-up's, and no item of the menu's.
 
 ## Its own files
 
@@ -278,7 +279,7 @@ set-up's, and no item of the menu's.
   nothing of it lands outside `<data>`. The demo's page keeps nothing here: its session is in memory only. The window's page keeps its storage in memory only, so its pairing with the
   runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
   An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
-  window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
+  window loads, then removes what that page stored, so a browser you paired must be paired again
   once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
@@ -325,14 +326,12 @@ opens a folder in the place you used last, and its arrow lists every place avail
 - **The file manager**: File Explorer on Windows, Finder on macOS, and on Linux whatever `xdg-open` shows a folder with; the
   entry is absent where `xdg-open` is not found. And **Copy path**, which puts the folder's path on the
   clipboard.
-- **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
-  ([below](#the-chat-in-a-browser-tab)).
 
 On Windows and macOS, the row of an installed application shows that application's own icon, read at run time. On Linux,
 and for rows with no application of their own, the menu keeps its glyphs.
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. An agent's folder opened from
+otherwise the first place of the list. Copy path and Change Jason itself are never the default, and a terminal is always there. An agent's folder opened from
 its **…** menu or its row's menu leaves the default as it was. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
@@ -412,34 +411,6 @@ the entry is shown but cannot be chosen, and says to stop the turn or wait for i
 continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
 this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
 words.
-
-### The chat in a browser tab
-
-**Browser** opens the console in a tab of your system's browser, drawn as the window draws it, with the chats the window
-shows, for as long as the desktop runs. Everything that reads the runtime works there as it does in the window: the
-Dashboard, Needs you, People, Agents, Accounts as far as the runtime knows them, Performance, Activity, Work items,
-System, Settings and the search, and the chat's list of conversations, a conversation and the box. A tab sends only to a
-chat in Ask first, Plan only or Full access, and a turn it sends to a chat in Full access runs in Ask first, which the
-tab draws as the mode, with the reason under the box, and the chat says once; for a chat in any other mode its box is locked, with a sentence naming the mode. A tab never answers a
-permission card or a plan card, which say they are answered in Jason Desktop, and never changes a chat's mode; a chat
-started from a tab starts in Full access, as every new chat does. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
-with one sentence, "Done in Jason Desktop's own window.": the account acts of Connect and of the Accounts page, and the
-access modes other than the one a turn sent from the tab runs in. The tab's Demo | Live switch
-shows the demo page in that tab alone and leaves the desktop's mode as it is
-([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
-draws no Start fresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
-holds Rename conversation alone. The tab shows the
-Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
-
-The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
-on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
-a tab the desktop opened holds the chat; any other tab draws no console: it opens on the demo, or, while something waits, on one page that
-says Live Mode is only available in Jason Desktop ([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
-not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
-`127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
-which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
-still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
-`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation.
 
 ## The demo
 
@@ -553,14 +524,9 @@ navigation to the address as it refuses every other, then opens that one address
 of your own click or Enter in the page and at most once in two seconds, so the page cannot open it by itself. Said
 plainly: the link opens only right after a click or Enter of yours in the demo, so any real click or Enter in the page
 gives the page one second in which that one address may open, at most one tab per act. Any other
-address, the same one with a path, a query, a fragment or another scheme included, opens nothing. In a browser tab the
-address is text.
+address, the same one with a path, a query, a fragment or another scheme included, opens nothing.
 
-**In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
-with its own switch over the page's strip, while the desktop stays on your installation
-([ui.md](ui.md#the-demo-in-a-browser-tab)).
-
-**What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
+**What is not in the demo.** The demo has no chat, no Connect and no Open in, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH, no Uninstall Jason… and no Remove
 What Jason Placed:
 each belongs to your own installation, which **Live** opens. The page is drawn in the light theme it was built in,
@@ -599,7 +565,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   was and the refusal is said in the runtime's own words. Use changes only the default: a work item, a campaign or a role
   that names a profile keeps it, work already running finishes on the program it started on, the chat is not touched (each
   chat's program is chosen in its own model menu, and a new chat starts as before), and neither is the host Open in
-  starts a session of your own on (`agent.interactive_host`). In a browser tab it is drawn off with the other acts.
+  starts a session of your own on (`agent.interactive_host`).
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
@@ -653,9 +619,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
-  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts;
+  The Accounts screen shows the same card, drawn by the same code and acting through the same acts;
   the notification channels as the runtime reports them are in Settings, under Notifications; see
-  [the browser UI](ui.md#notifications-in-settings).
+  [ui.md](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -771,7 +737,7 @@ Claude Code.
   the key Jason's own commands use, its run token. Codex runs it read-only.** Neither says anything of the network or
   of acting for you, which nobody has seen. Keep a plugin's secret out of `settings.json`
   ([plugins.md](plugins.md#hostconfig)). A browser you paired keeps its token in its own profile, which a command of a
-  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-browsers)).
+  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-pages)).
 
 ### Conversations
 
@@ -790,7 +756,7 @@ becomes a campaign's. **…** holds the agent's folder in your file manager, nam
 Explorer** on Windows, **Open in Finder** on macOS, **Open in File manager** on Linux), and after it **Open Claude
 Code in terminal** or **Open Codex in terminal**: a new session of that host in a terminal at the agent's folder, by the
 same `jason session open` as Open in's own entry for it, the host the agent's chat runs on where it is found here, else
-Claude Code, else Codex; it is not there where neither is found, nor in the demo, nor in a tab, and opening it leaves
+Claude Code, else Codex; it is not there where neither is found, nor in the demo, and opening it leaves
 Open in's default as it was. The menu on the agent's row under **Agents** holds the two right after **Open**, then
 **Rename**, which renames the agent itself in its row (below), **Start conversation fresh**, which begins the agent's
 next turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the conversation's record from this
@@ -933,7 +899,7 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 
 Each chat has an access mode, chosen from a menu beside the composer. The line under the composer and the menu's check
 say the mode the chat's next turn runs in: the chat's own, unless that turn cannot run in it (a Full access chat on
-a Claude Code older than 2.1.322, in a browser tab, while Full access is not offered or where Claude Code's bypass mode
+a Claude Code older than 2.1.322, while Full access is not offered or where Claude Code's bypass mode
 is not available, an Auto-edit chat on Codex), when they say Ask first, with the reason under the composer, and the
 chat stays set to its own mode. Choosing Ask first
 there makes it the chat's mode, on every host. A mode applies to the turns you start by sending, from the next one on. **Full access** (below) is the mode
@@ -945,7 +911,7 @@ the turn just the same. The cards left in Plan only are a read outside the chat'
 page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
 access, where it runs with none.
 
-When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
+When a Plan only turn ends with an answer, the answer is shown as a plan card, as formatted text as any answer is, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
 your last answer." as your message; it never enters Auto-edit or Full access, and if the chat's mode changed in between,
 from the menu meanwhile, nothing is sent and the chat says so. The card is offered only
@@ -1029,7 +995,7 @@ Added campaign or project folders whose `.claude` holds skills, subagents or com
 Full access is the default: every new chat starts in it, the Feed too, and a chat stays in it, after a restart too,
 until you choose another mode. A turn that Full access cannot apply to runs in Ask first, and the chat says why once,
 that the menu shows the mode each next turn runs in, and that the chat stays set to Full access: a turn on a Claude
-Code older than 2.1.322, sent from a browser tab, or sent while Full access is not offered. A turn on Codex runs in
+Code older than 2.1.322, or one sent while Full access is not offered. A turn on Codex runs in
 Full access with no sandbox. Once you update Claude Code, the next turn runs in Full access, says so once and has the
 composer drawn again. Where Claude Code's bypass mode is not available, the turn runs in Ask first, the chat keeping
 Full access on its record, and each conversation is told why once while the cause holds, and again each time it comes
@@ -1244,11 +1210,18 @@ On Windows a click on one of Jason's notifications opens the desktop where it is
 command line handling the `jason://attention` link reads the desktop's registration under your account, never writes
 it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
 starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
-its program gone, or the hand-on failing, the browser UI opens as before, and the failure is said by its code
-([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing.
+its program gone, or the hand-on failing, nothing opens, and the failure is said by its code
+([notifications.md](notifications.md)). On Linux the runtime's notification hands its click to the same link handler,
+which opens the desktop the same way; on macOS a notification's click opens nothing. Where the desktop takes
+its links, `jason ui open` opens it at the same addresses from a terminal or an
+agent's session; on macOS that is built so and not yet seen on a Mac.
 
 On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
-deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a
+deb's menu entry declares it, and so does an AppImage's: the entry the install line writes in your account's
+applications folder, which `jason install` brings up to date at a new version's first start, with the folder's menu
+cache written again (`update-desktop-database`). On Linux the desktop takes a link only where xdg-open would start it
+for the scheme: where your account's own default for `jason-desktop:` links names another program, or a menu cache
+names an entry that is gone, `jason ui open` opens nothing and says so (`desktop_links_elsewhere`). Built so, and not yet seen on a real machine: a link from a
 browser on Linux. A start that carries anything beside the address opens nothing, and the Windows uninstall takes the
 registration off. [desktop/README.md](../desktop/README.md) has the table and the rules for the builder.
 
@@ -1429,7 +1402,8 @@ version's demo made (see [the demo](#the-demo)) are not your data: the removal t
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
   6. Remove the application: `sudo apt purge jason-desktop` for the deb, which takes `/usr/bin/jason` and Jason's apt
      source with it; for an AppImage delete the file, its menu entry `~/.local/share/applications/jason-desktop.desktop`
-     and its icons `~/.local/share/icons/hicolor/*/apps/jason-desktop-app.png` (under `$XDG_DATA_HOME` when that is set).
+     and its icons `~/.local/share/icons/hicolor/*/apps/jason-desktop-app.png` (under `$XDG_DATA_HOME` when that is set),
+     then run `update-desktop-database ~/.local/share/applications` so the menu cache no longer names the entry.
 
 ## What is not here
 

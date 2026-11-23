@@ -60,7 +60,8 @@ What it leaves you with:
   (each detected host's skills root), which an installed release shares.
 - **The UI served from `ui/dist`**, linked as the data directory's `ui/custom/`, which the runtime serves before
   anything else. `npm run build` writes the `manifest.json` the runtime asks for, so every later build is served by the
-  next request; while you work on the UI, `npm run dev` in `ui/` rebuilds on every change.
+  next request; while you work on the UI, `npm run dev` in `ui/` rebuilds on every change. Jason Desktop draws it, started
+  on the same data directory as [desktop/README.md](desktop/README.md) says; a browser tab draws one sentence of it.
 - **The runtime on port 52766**, or the next free one if an installed runtime already has it. `jason status` lists the
   rest; its `path` check fails, because this build is not on your PATH, on purpose.
 
@@ -84,7 +85,7 @@ To stop and remove it all: `jason runtime stop`, run as above, then delete the f
 - Run without publishing (with `JASON_DATA_DIR` set as above): `dotnet run --project dotnet/src/Jason.App -- --version`
   · `-- runtime run` · `-- runtime status` · `-- runtime start` (background; nothing is registered until you ask)
   · `-- runtime stop` · `-- runtime autostart enable | disable | status` · `-- campaign list` · `-- workitem list`
-  · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui open`
+  · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui pair`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project dotnet/src/Jason.Runtime --startup-project dotnet/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish dotnet/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`

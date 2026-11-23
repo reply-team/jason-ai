@@ -20,7 +20,7 @@ test('the chat follows an answer taller than the window from its foot, keeps the
 }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.addInitScript(talkingDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
 
     // The first message, from Start: the conversation is made at that send and shown, its composer at the foot.
@@ -121,7 +121,7 @@ test('the chat keeps the end of its conversation in view above the cards that wa
         if (reads > 1) await new Promise((done) => setTimeout(done, 1500));
         await route.continue();
     });
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     await expect(page.getByRole('form', { name: 'Start' })).toBeVisible();
     await page.evaluate((id) => (location.hash = `#/campaigns/${id}/chat`), campaign);

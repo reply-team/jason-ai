@@ -1,23 +1,13 @@
-import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import yauzl from 'yauzl';
 import { API_VERSION } from '../../src/api/version';
-import {
-    buildManifest,
-    buildNotices,
-    buildSealedPage,
-    packageUi,
-    sealedCarries,
-    sealedPage,
-} from '../../scripts/package-lib.mjs';
+import { buildManifest, buildNotices, packageUi } from '../../scripts/package-lib.mjs';
 import config from '../../vite.config';
 
 const ui = join(import.meta.dirname, '..', '..');
-const desktopDemo = join(ui, '..', 'desktop', 'demo');
-const sha256 = (bytes: Buffer | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 /** The packages the UI declares as its dependencies, which the notices of every build must name. */
 const dependencies = Object.keys(
@@ -59,29 +49,6 @@ function names(zip: string): Promise<string[]> {
             file.on('entry', (entry) => {
                 found.push(entry.fileName);
                 file.readEntry();
-            });
-            file.on('end', () => resolve(found));
-            file.readEntry();
-        });
-    });
-}
-
-function bytesOf(zip: string, wanted: string): Promise<Buffer | null> {
-    return new Promise((resolve, reject) => {
-        let found: Buffer | null = null;
-        yauzl.open(zip, { lazyEntries: true }, (error, file) => {
-            if (error || !file) return reject(error);
-            file.on('entry', (entry) => {
-                if (entry.fileName !== wanted) return file.readEntry();
-                file.openReadStream(entry, (streamError, stream) => {
-                    if (streamError || !stream) return reject(streamError);
-                    const chunks: Buffer[] = [];
-                    stream.on('data', (c: Buffer) => chunks.push(c));
-                    stream.on('end', () => {
-                        found = Buffer.concat(chunks);
-                        file.readEntry();
-                    });
-                });
             });
             file.on('end', () => resolve(found));
             file.readEntry();
@@ -160,29 +127,13 @@ describe('the asset', () => {
         );
     });
 
-    it('carries the pages under sealed/, byte for byte', async () => {
-        const page = readFileSync(join(desktopDemo, 'index.html'));
-        const { dir, dist } = aBuild({ 'sealed/demo.html': page });
-        const out = join(dir, 'jason-ui.zip');
-
-        await packageUi(dist, out, { version: '1', apiVersion: 'v1' });
-
-        expect(await names(out)).toContain('sealed/demo.html');
-        expect(sha256((await bytesOf(out, 'sealed/demo.html'))!)).toBe(sha256(page));
-    });
-
-    it('refuses under sealed/ anything but a page, and a directory below it', async () => {
-        for (const [name, refusal] of [
-            ['sealed/demo.js', /sealed\/demo\.js.*\.html/],
-            ['sealed/demo.css', /sealed\/demo\.css.*\.html/],
-            ['sealed/more/demo.html', /sealed\/more/],
-            ['Sealed/demo.html', /Sealed/],
-        ] as const) {
+    it('refuses a directory other than assets/, the sealed directory a build of its own may hold included', async () => {
+        for (const name of ['sealed/demo.html', 'Sealed/demo.html', 'more/x.js']) {
             const { dir, dist } = aBuild({ [name]: 'x' });
             await expect(
                 packageUi(dist, join(dir, 'out.zip'), { version: '1', apiVersion: 'v1' }),
                 name,
-            ).rejects.toThrow(refusal);
+            ).rejects.toThrow(new RegExp(`${name.split('/')[0]}/ is a directory other than assets/`));
         }
     });
 
@@ -307,67 +258,9 @@ describe('the build', () => {
         expect(generate).toThrow(pkg.replaceAll('\\', '/'));
     });
 
-    it('copies the demo page the desktop shows to sealed/demo.html, byte for byte', () => {
-        const emitted: { type: string; fileName: string; source: Uint8Array }[] = [];
-        const plugin = buildSealedPage();
-
-        (plugin.generateBundle as (this: { emitFile: (file: unknown) => void }) => void).call({
-            emitFile: (file) => emitted.push(file as { type: string; fileName: string; source: Uint8Array }),
-        });
-
-        expect(plugin.apply).toBe('build');
-        expect(sealedPage).toEqual({ from: join(desktopDemo, 'index.html'), to: 'sealed/demo.html' });
-        expect(emitted.map(({ type, fileName }) => ({ type, fileName }))).toEqual([
-            { type: 'asset', fileName: 'sealed/demo.html' },
-        ]);
-        expect(emitted[0]!.source).toBeInstanceOf(Uint8Array);
-        expect(sha256(emitted[0]!.source)).toBe(sha256(readFileSync(join(desktopDemo, 'index.html'))));
-    });
-
-    it('names in its notices what the sealed page carries, each with its licence text, when the build holds it', () => {
-        const generate = (bundle: Record<string, unknown>) => {
-            const emitted: { fileName: string; source: string }[] = [];
-            (
-                buildNotices().generateBundle as (
-                    this: { emitFile: (file: unknown) => void },
-                    o: unknown,
-                    b: unknown,
-                ) => void
-            ).call({ emitFile: (file) => emitted.push(file as { fileName: string; source: string }) }, {}, bundle);
-            return emitted.find((file) => file.fileName === 'THIRD-PARTY-NOTICES')!.source;
-        };
-
-        const withPage = generate({ 'sealed/demo.html': { type: 'asset', originalFileNames: [] } });
-        const without = generate({});
-
-        expect(sealedCarries.length).toBeGreaterThan(0);
-        for (const { name, version, licence, file } of sealedCarries) {
-            expect(withPage).toContain(`### ${name} ${version} — ${licence}`);
-            expect(withPage).toContain(readFileSync(join(desktopDemo, file), 'utf8').trim());
-            expect(without).not.toContain(`### ${name}`);
-        }
-        expect(withPage).toContain('sealed/demo.html');
-        // The part is its own: the headings the packager reads as the bundle's packages stay as they were.
-        expect(withPage.split('\n').filter((line) => line.startsWith('## '))).toEqual(
-            without.split('\n').filter((line) => line.startsWith('## ')),
-        );
-    });
-
-    it('names what the sealed page carries as the desktop names what its demo page carries', () => {
-        const script = readFileSync(join(ui, '..', 'desktop', 'scripts', 'notices.mjs'), 'utf8');
-        const list = /const demoCarries = \[(?<body>[^\]]*)\]/.exec(script)?.groups?.body ?? '';
-        const desktop = [...list.matchAll(/\{(?<entry>[^}]*)\}/g)].map(({ groups }) => {
-            const field = (key: string) => new RegExp(`${key}: '([^']*)'`).exec(groups!.entry!)?.[1];
-            return { name: field('name'), version: field('version'), licence: field('licence'), file: field('file') };
-        });
-        expect(desktop.length).toBeGreaterThan(0);
-        expect(sealedCarries).toEqual(desktop);
-    });
-
     it('is a step of the build the Vite configuration runs', () => {
         const plugins = (config.plugins ?? []).flat() as { name?: string }[];
         expect(plugins.map((plugin) => plugin?.name)).toContain('jason-ui-manifest');
         expect(plugins.map((plugin) => plugin?.name)).toContain('jason-ui-notices');
-        expect(plugins.map((plugin) => plugin?.name)).toContain('jason-ui-sealed-page');
     });
 });

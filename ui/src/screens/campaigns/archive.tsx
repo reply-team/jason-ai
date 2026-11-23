@@ -12,7 +12,6 @@ import type {
 } from '../../api/types';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
-import { can } from '../../platform/places';
 import { countCancels, jasonMayPauseFirst, many, nothingOpen, type Cancels } from './archive-model';
 import { unfinishedStatuses } from './kind';
 import { provider, type Movable } from './pause-dialog';
@@ -187,9 +186,6 @@ type DialogProps = { campaign: Movable; onDone: (archived: Campaign, open: WasOp
 /** The confirmation: the agent named, that it cannot be undone, and what it cancels, read as it opens. */
 export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const api = useApi();
-    // Whether this place has an agent's chat to ask in: a fact of the place, never of where the dialog is mounted, so the
-    // agent's Settings and the menu on its row under Agents offer the same way first.
-    const chat = can('chat.send');
     const [read, setRead] = useState<Read | null>(null);
     const [reading, setReading] = useState(0);
     const [reason, setReason] = useState('');
@@ -245,7 +241,7 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const pin = pinOf(agent);
     const name = provider(agent);
     const jasonFirst =
-        chat && read?.kind === 'open' && read.record !== null && jasonMayPauseFirst(read.record.status, read.usable);
+        read?.kind === 'open' && read.record !== null && jasonMayPauseFirst(read.record.status, read.usable);
     const open: WasOpen = read?.kind === 'open' && 'cancels' in read.counted ? read.counted.cancels : null;
     return (
         <Dialog

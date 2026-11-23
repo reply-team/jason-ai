@@ -60,4 +60,38 @@ public class PlatformUrlOpenerTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    /// <summary>
+    /// The opener is handed streams of the CLI's own, never its caller's: what it starts inherits them, and outside GNOME
+    /// and KDE xdg-open runs Jason Desktop to its end, so a caller that reads <c>jason ui open</c>'s output to its end, an
+    /// agent's tool call among them, would wait until the window closed. Seen on Ubuntu with no desktop session. Breaks if
+    /// the opener's start inherits its caller's streams again; that the start closes the input and drains the output is
+    /// the start's own code, which no test runs without starting a real opener.
+    /// </summary>
+    [Fact]
+    public void The_opener_gets_streams_of_its_own_and_none_of_its_callers()
+    {
+        var opener = Path.Combine(Path.GetTempPath(), "opener");
+
+        var start = PlatformUrlOpener.StartOf(opener, "jason-desktop://attention");
+
+        Assert.Equal(opener, start.FileName);
+        Assert.True(start.RedirectStandardInput);
+        Assert.True(start.RedirectStandardOutput);
+        Assert.True(start.RedirectStandardError);
+        Assert.Equal("jason-desktop://attention", start.ArgumentList[^1]);
+    }
+
+    /// <summary>
+    /// On Linux nothing is handed to xdg-open outside a graphical session: with neither <c>DISPLAY</c> nor
+    /// <c>WAYLAND_DISPLAY</c> it never asks which program takes the address and goes straight to a list of text browsers.
+    /// Breaks if the predicate the opener's start asks takes a session with no display for one.
+    /// </summary>
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("", "", false)]
+    [InlineData(":0", null, true)]
+    [InlineData(null, "wayland-0", true)]
+    public void On_linux_an_address_is_handed_on_only_in_a_graphical_session(string? display, string? wayland, bool handed) =>
+        Assert.Equal(handed, PlatformUrlOpener.InGraphicalSession(display, wayland));
 }

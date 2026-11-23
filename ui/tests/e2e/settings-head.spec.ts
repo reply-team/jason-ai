@@ -13,7 +13,7 @@ for (const width of [2000, 800]) {
     }) => {
         await page.setViewportSize({ width, height: 800 });
         await page.addInitScript(quietDesktop);
-        const { url } = await jason.uiOpen();
+        const { url } = await jason.uiPair();
         await page.goto(url);
         await expect(page.locator('.jc-console .area')).toBeVisible();
         await page.waitForFunction(

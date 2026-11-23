@@ -22,6 +22,11 @@ if (args[0] === 'status') {
             { name: 'runtime', required: true, state: up ? 'ok' : 'failed', fact: '', fix: '' },
             { name: 'runtime_version', required: false, state: up ? (process.env.STUB_SAME_VERSION === 'no' ? 'failed' : 'ok') : 'unknown', fact: '', fix: '' },
             { name: 'ui_module', required: false, state: up ? process.env.STUB_UI_MODULE || 'absent' : 'unknown', fact: '', fix: '' },
+            // As the real check reports its role root: the deployment its record names as details, and no details where
+            // there is no record, as after `jason uninstall` with the data kept (STUB_ROLE_SKILLS=unrecorded).
+            process.env.STUB_ROLE_SKILLS === 'unrecorded'
+                ? { name: 'role_skills', required: true, state: up ? 'failed' : 'unknown', fact: '', fix: 'jason skills install --roles-only' }
+                : { name: 'role_skills', required: true, state: up ? 'ok' : 'unknown', fact: '', fix: null, details: { ref: 'v0.34.0-rc.1', source: 'bundle', commit: '' } },
         ],
     });
     process.exit(1);
@@ -46,7 +51,7 @@ if (args[0] === 'status') {
     // The real verb registers with the machine; the stub only answers as if it had, and registers nothing.
     const registered = args[2] === 'enable' ? true : args[2] === 'disable' ? false : process.env.STUB_AUTOSTART === 'yes';
     print({ registered, platform: 'windows', data_directory: registered ? data : null, executable: null, executable_exists: null, artifact_path: null });
-} else if (verb === 'ui open') {
+} else if (verb === 'ui pair') {
     print({ url: process.env.STUB_LINK || `${origin}/ui/#pair=planted-pair-code` });
 } else if (verb === 'plugin list') {
     if (process.env.STUB_PLUGIN_LIST_FAILS === 'yes') {

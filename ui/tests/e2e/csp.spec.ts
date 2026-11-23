@@ -1,6 +1,6 @@
 import { expect, openSystem, quietDesktop, test } from './fixtures';
 
-const policy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
+const policy = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 test('the bundle runs under the policy the runtime sends: no refused resource, no page error', async ({
     page,
@@ -13,7 +13,7 @@ test('the bundle runs under the policy the runtime sends: no refused resource, n
     });
     page.on('pageerror', (error) => violations.push(`pageerror: ${error.message}`));
 
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     const first = await page.goto(url);
     expect(first?.headers()['content-security-policy']).toBe(policy);
     await expect(page.locator('.jc-console .side')).toBeVisible();

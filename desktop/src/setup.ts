@@ -127,9 +127,10 @@ export interface HostState {
     autoEdit: string | null;
     /**
      * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
-     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`). A mode not named runs as
-     * itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this listing, so the page
-     * draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that does not drive the chat.
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`, unreachable since 0.49.3).
+     * A mode not named runs as itself. Decided as the turn itself is (`turnMode`), with Claude Code's version read at this
+     * listing, so the page draws the mode the next turn runs in, and why, and works none of it out. Empty for a host that
+     * does not drive the chat.
      */
     runs: { window: TurnSteps; tab: TurnSteps };
     /**
@@ -519,8 +520,8 @@ export class Setup {
      * Claude Code's version as the last listing of the hosts read it, from which the page drew the mode a turn runs in
      * (`runs`): null when it could not be read, undefined before a listing read it or when Claude Code was not found. A turn
      * holds the version it reads itself to it (`Chat.send`), and asks the page to read the hosts again when the two differ
-     * across the floor of Full access. The window and a browser tab are handed the one version, so a listing whose version
-     * stands across that floor from the last listing's asks every page to read the hosts again itself.
+     * across the floor of Full access. Every page is handed the one version, so a listing whose version stands across that
+     * floor from the last listing's asks every page to read the hosts again itself.
      */
     handedClaudeVersion(): string | null | undefined {
         return this.#handedClaude;
@@ -555,7 +556,8 @@ export class Setup {
                             : claude.fullAccess
                         : null;
         const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
-        // What a turn on the host runs in, by the record's mode, from the window and from a tab: the turn's own rule.
+        // What a turn on the host runs in, by the record's mode, from the window and from a tab (unreachable since 0.49.3):
+        // the turn's own rule.
         const runsOn = (program: string, drives: boolean): HostState['runs'] => {
             const steps = (fromTab: boolean): TurnSteps => {
                 const out: TurnSteps = {};

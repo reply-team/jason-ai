@@ -1,15 +1,12 @@
-import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act as flush, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import { Bridge } from '../platform/bridge';
 import type { DesktopConversationRecord, DesktopKeptEntry, DesktopSetup } from '../platform/desktop';
-import { loadMode, mode } from '../platform/mode';
-import { setPlace, tabDesktop } from '../platform/places';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { callsBeyondStart, FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
@@ -27,8 +24,7 @@ import { forgetWaiting } from './waiting';
 // provider's part as the desktop reads Reply now (the sign-in, the accounts with Reply's own words for their state, the
 // channels Reply did not list and why) and, under "On record now", the plugin the runtime routes sends to and its state
 // as the runtime answers it. It reads once when drawn and again only on its Refresh, never on a journal line or a change
-// the desktop reports; it acts on nothing, and in a browser tab it draws the runtime's part and says where connecting is
-// done.
+// the desktop reports; it acts on nothing.
 
 const setupChat = 'conv_01JDACCOUNTS00000000000000S';
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -518,54 +514,5 @@ describe('the accounts card', () => {
         expect(words(fromReply(again))).toContain('Reply could not be read: The Reply CLI did not answer.');
         expect(within(again).queryByText('sales@example.test')).toBeNull();
         expect(words(onRecord(again))).toContain('Plugin that sends messages by default Reply (reply)');
-    });
-});
-
-describe('the accounts card in a browser tab', () => {
-    it('draws the runtime’s part and the Accounts page’s sentence that connecting is done in Jason Desktop', async () => {
-        const desktop = stubDesktop(everyState);
-        const stand = standInBridge(desktop);
-        const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
-        setPlace('tab', tab);
-        await loadMode(tab);
-        desktop.keep({ ...setUp(turn()), mode: 'ask_first' });
-        const fake = new FakeApi()
-            .answer('plugin.list', 'plugin.list/card-accounts-reply')
-            .answer('route.list', 'route.list/card-accounts-reply')
-            .answer('ui.tokens', 'ui.tokens/two');
-        nothingWaitsInChats(fake)
-            .answer('approval.list', 'approval.list/pending')
-            .answer('decision.list', 'decision.list/pending')
-            .answer('preference.list', 'preference.list/set')
-            .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all')
-            .answer('system.info', 'system.info/with-ui');
-        watch(agentHeads(fake));
-        activatePlugins(browserPlugins);
-        localStorage.clear();
-        location.hash = '';
-        route.value = { screen: 'attention' };
-        session.clear();
-        localStorage.setItem(
-            'jason.ui.session',
-            JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
-        );
-        await session.bootstrap();
-        try {
-            render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
-            const pane = await openChat('Sending');
-            const shown = await read(pane);
-            expect(
-                within(shown).getByText(
-                    'Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason Desktop; a browser cannot do them.',
-                ),
-            ).toBeTruthy();
-            expect(within(shown).queryByText('Read from Reply now')).toBeNull();
-            expect(within(shown).queryByText('sales@example.test')).toBeNull();
-            expect(words(onRecord(shown))).toContain('Plugin that sends messages by default Reply (reply)');
-        } finally {
-            cleanup();
-            setPlace('window');
-        }
     });
 });

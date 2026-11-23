@@ -2,13 +2,10 @@ import { act as flush, cleanup, fireEvent, render, waitFor, within } from '@test
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { loadMode, mode } from '../platform/mode';
-import { Bridge } from '../platform/bridge';
-import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
@@ -16,7 +13,6 @@ import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
-import { hostsOffered } from './open-folder';
 import { en } from '../locale/en';
 import { closeMenus } from './side';
 import { forgetWaiting } from './waiting';
@@ -72,7 +68,6 @@ const holdAgent = (fake: FakeApi, id: string) =>
 async function renderConsole(
     adjust: (fake: FakeApi) => void = () => undefined,
     seed: (desktop: StubDesktop) => void = () => undefined,
-    place: 'window' | 'tab' = 'window',
 ): Promise<StubDesktop> {
     const desktop = stubDesktop({ ...setupFound });
     seed(desktop);
@@ -80,14 +75,7 @@ async function renderConsole(
     desktop.keep({ id: autumn, campaignId: 'cmp_2', title: 'Autumn' });
     desktop.keep({ id: winter, campaignId: 'cmp_4', title: 'Winter' });
     desktop.keep({ id: setupChat, title: 'Set-up' });
-    let used: Parameters<typeof Console>[0]['desktop'] = desktop;
-    let held: Bridge | null = null;
-    if (place === 'tab') {
-        held = new Bridge({ port: 43210, secret: standInSecret }, standInBridge(desktop).fetch);
-        used = tabDesktop(held);
-        setPlace('tab', used);
-    } else setPlace('window');
-    await loadMode(used);
+    await loadMode(desktop);
     const fake = api();
     adjust(fake);
     watch(fake);
@@ -101,8 +89,7 @@ async function renderConsole(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     await session.bootstrap();
-    session.bridge.value = held;
-    render(<Console api={fake} desktop={used} stream={stubStream().stream} bootstrapped />);
+    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     await waitFor(() => expect(document.querySelector('[data-pane]')).not.toBeNull());
     // The agents are listed, so each row's state is known.
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
@@ -181,7 +168,6 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     closeMenus();
-    setPlace('window');
     mode.value = 'live';
 });
 
@@ -443,28 +429,6 @@ describe('The menu on a row of AGENTS or CHATS', () => {
             expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
         });
 
-        it('is not offered in a tab the desktop opened', async () => {
-            await renderConsole(undefined, undefined, 'tab');
-            fireEvent.contextMenu(await row('Spring'));
-            await waitFor(() => menu()!);
-            expect(words(menu()!)[0]).toBe('Open');
-            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
-            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
-        });
-
-        it('is not offered where there is no desktop', async () => {
-            await renderConsole();
-            expect(hostsOffered().map((each) => each.label)).toEqual(['Claude Code', 'Codex']);
-            // The same rows, drawn where the page has no desktop: the menu opens, with neither the folder nor the host.
-            setPlace('none');
-            fireEvent.contextMenu(await row('Spring'));
-            await waitFor(() => menu()!);
-            expect(words(menu()!)[0]).toBe('Open');
-            expect(within(menu()!).queryByRole('menuitem', { name: hostItem })).toBeNull();
-            expect(within(menu()!).queryByRole('menuitem', { name: folder })).toBeNull();
-            expect(hostsOffered()).toEqual([]);
-        });
-
         it('offers Codex for a chat that chose no host where Claude Code is below the chat’s floor, as the chat runs', async () => {
             const desktop = await renderConsole(undefined, (desktop) => {
                 desktop.status = {
@@ -595,15 +559,6 @@ describe('The menu on a row of AGENTS or CHATS', () => {
             expect(dialog.textContent).not.toContain(jasonFirst);
             expect(dialog.textContent).not.toContain('To stop it first');
             expect(fake.value!.calls.some((each) => each.operation === 'route.resolve')).toBe(false);
-        });
-
-        it('offers Jason’s pause first in a tab the desktop opened too, where its chat is', async () => {
-            await renderConsole(
-                (api) => api.answerAnyRequest('route.resolve', 'route.resolve/archive-pause'),
-                undefined,
-                'tab',
-            );
-            expect((await archiveSpring()).provider.textContent).toContain(jasonFirst);
         });
 
         it('says an archive the runtime refuses in the dialog, in the runtime’s words, and keeps the dialog open', async () => {

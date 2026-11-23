@@ -47,7 +47,7 @@ public static class UiSessionDoor
         var ticket = request.Ticket?.Trim();
         if (string.IsNullOrEmpty(ticket) || !tickets.TryRedeem(ticket))
         {
-            await ErrorResults.WriteAsync(context, StatusCodes.Status401Unauthorized, "ticket_invalid", "The link has been used or has expired. Run `jason ui open` for a new one.", retryable: false).ConfigureAwait(false);
+            await ErrorResults.WriteAsync(context, StatusCodes.Status401Unauthorized, "ticket_invalid", "The link has been used or has expired. Run `jason ui pair` for a new one.", retryable: false).ConfigureAwait(false);
             return;
         }
 

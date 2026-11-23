@@ -3,7 +3,6 @@ import type { Api } from '../api/client';
 import { ApiError } from '../api/client';
 import type { JournalEntry } from '../api/types';
 import type { DesktopConversation, DesktopSetup, JasonDesktop } from '../platform/desktop';
-import { currentDesktop, placeKind, setPlace } from '../platform/places';
 import type { StreamState } from '../platform/journal-stream';
 import type { Route } from '../router';
 import type { Chat } from './chat-model';
@@ -97,8 +96,6 @@ export interface Console {
     api: Api;
     desktop: JasonDesktop;
     dock: Dock;
-    /** Set when the console is bound in a browser tab over the desktop's bridge: what only the desktop's window may do is not offered. */
-    tab?: boolean;
 }
 
 let current: Console | null = null;
@@ -107,22 +104,12 @@ let current: Console | null = null;
 export function bind(console: Console): () => void {
     current = console;
     conversationsListed.value = false;
-    // A console bound as a tab's is a tab's whatever the page said before.
-    const before = console.tab === true ? placeKind() : null;
-    const heldBefore = currentDesktop();
-    if (before !== null) setPlace('tab', console.desktop);
     return () => {
         if (current === console) current = null;
-        if (before !== null) setPlace(before, heldBefore);
     };
 }
 
 export function here(): Console {
     if (!current) throw new Error('The console is not mounted.');
     return current;
-}
-
-/** Whether the console was bound in a browser tab. The one fact every control a tab may not use is hidden by. */
-export function inTab(): boolean {
-    return current?.tab === true || placeKind() === 'tab';
 }

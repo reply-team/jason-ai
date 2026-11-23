@@ -32,6 +32,11 @@
 # dry_run it does not make the draft either: every job runs, and the assembled release is handed back as an artifact of
 # the run.
 #
+# The cask's proof can be run alone: the button with cask_proof_alone naming a published release's tag, and the version
+# that tag names, runs the version job and the cask's proof and nothing else, on that release's macOS application held to
+# its checksums.txt, with the scripts of the ref the button ran on, so a change to the proof is proven in minutes on its
+# own branch. Every job that builds is skipped by its condition, and every job after them with it.
+#
 # A release's own notes are RELEASE-NOTES.md at the root, written for the release they name. The version job reads
 # the file before anything is built: a tag whose file is missing, untitled or names another version stops there, and
 # the button's run then carries the template alone.
@@ -51,6 +56,11 @@ on:
         required: false
         default: false
         type: boolean
+      cask_proof_alone:
+        description: 'A published release of this repository, by its tag (v0.49.3-rc.1), which must be v and the version above: the cask''s proof alone, from this ref''s scripts, on that release''s macOS application, and nothing else. Nothing is built, signed, assembled or published.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -148,6 +158,8 @@ jobs:
             rid: linux-x64
     # macOS and Windows are not legs here: their jobs, below, hold the Apple identity and the Azure sign-in, and a runner
     # is handed every secret its job names, so the job that runs the tests names none.
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       # The whole history and its tags, as the suite's checkout in ci.yml has them: the journal's kind documents are
       # compared with the last published release's, read from its tag, and at a release's tag that is the one before it.
@@ -258,6 +270,8 @@ jobs:
     # runs in the signing environment, which only release tags and release branches may run in, as every job that
     # holds a secret does.
     environment: signing
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       - uses: actions/checkout@v7
 
@@ -568,6 +582,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       - uses: actions/checkout@v7
 
@@ -688,6 +704,8 @@ jobs:
     # of the package at the tag; the release's pull request ran the test that holds the script to that digest for each
     # package the release publishes, on this tree, on every platform. A step per package, and an upload per package
     # under a name of its own.
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       - uses: actions/checkout@v7
 
@@ -755,6 +773,8 @@ jobs:
     defaults:
       run:
         working-directory: ui
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       - uses: actions/checkout@v7
 
@@ -800,6 +820,8 @@ jobs:
     # public repository, the tag and the commit, which is what `jason skills install` records for a deployment from it.
     # The repository is written as a constant, as the notes address is: a run elsewhere names the repository the
     # release is published from, not the one it ran in.
+    # Not in a run of the cask's proof alone (cask_proof_alone): nothing is built there, and nothing needs this job.
+    if: ${{ !inputs.cask_proof_alone }}
     steps:
       - uses: actions/checkout@v7
 
@@ -1576,6 +1598,8 @@ jobs:
   proof-macos-cask:
     name: The cask on osx-arm64
     needs: [version, macos]
+    # After the macOS job, on the application it uploaded; or, run alone, with that job skipped, on a published release's.
+    if: ${{ !cancelled() && needs.version.result == 'success' && (inputs.cask_proof_alone && needs.macos.result == 'skipped' || !inputs.cask_proof_alone && needs.macos.result == 'success') }}
     runs-on: macos-latest
     timeout-minutes: 150
     permissions:
@@ -1591,12 +1615,15 @@ jobs:
 
       - uses: actions/download-artifact@v7
         id: download
+        if: ${{ !inputs.cask_proof_alone }}
         with:
           name: jason-desktop-osx-x64
           path: feed
 
       # The previous release's application zip, for the upgrade, and the older formula's command line, for the leg beside
-      # it, each held to its own release's checksums.txt.
+      # it, each held to its own release's checksums.txt. Run alone (cask_proof_alone), the named release's application zip
+      # as well, held the same way and put where the macOS job's would be: the release of the version given, so that every
+      # step below reads one version.
       - name: Fetch the previous release and the older formula's command line
         id: previous
         if: ${{ !cancelled() }}
@@ -1605,10 +1632,16 @@ jobs:
         env:
           CASK_PREVIOUS_RELEASE: v0.49.1
           FORMULA_RELEASE: v0.48.7
+          ALONE: ${{ inputs.cask_proof_alone }}
         run: |
           release="v${VERSION%%-*}"
           [ "$CASK_PREVIOUS_RELEASE" != "$release" ] || { echo "::error::the previous release named, $CASK_PREVIOUS_RELEASE, is the one this tree builds"; exit 1; }
-          for pair in "$CASK_PREVIOUS_RELEASE jason-desktop-macos-arm64.zip" "$FORMULA_RELEASE jason-osx-arm64.tar.gz"; do
+          pairs=("$CASK_PREVIOUS_RELEASE jason-desktop-macos-arm64.zip" "$FORMULA_RELEASE jason-osx-arm64.tar.gz")
+          if [ -n "$ALONE" ]; then
+            [ "$ALONE" = "v$VERSION" ] || { echo "::error::the cask's proof run alone takes the release of the version given, v$VERSION, and was given $ALONE"; exit 1; }
+            pairs+=("$ALONE jason-desktop-macos-arm64.zip")
+          fi
+          for pair in "${pairs[@]}"; do
             set -- $pair
             tag="$1"; name="$2"; folder="$PREVIOUS/$tag"
             mkdir -p "$folder"
@@ -1620,6 +1653,11 @@ jobs:
             (cd "$folder" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
             echo "$tag's $name matches its checksums.txt"
           done
+          if [ -n "$ALONE" ]; then
+            mkdir -p "$FEED"
+            cp "$PREVIOUS/$ALONE/jason-desktop-macos-arm64.zip" "$FEED/jason-desktop-macos-arm64.zip"
+            echo "::notice title=Cask::the cask's proof runs alone, from this ref's scripts, on $ALONE's jason-desktop-macos-arm64.zip, which matches its checksums.txt"
+          fi
 
       # The id of the folder this build's jason extracts its native libraries to under ~/.net/jason, read with the host's
       # base pointed elsewhere, so that every compare tells it from the previous release's, as the macOS proof does.
@@ -1657,7 +1695,8 @@ jobs:
       # Every single wait inside a leg is bounded at 5 minutes or less: a hang fails with what was running, the desktop's
       # log, Gatekeeper's lines and the screen, long before a leg's limit of 30 minutes or the job's of 150.
       # L1, L3 and L4: installed, opened as a person opens it, said left to Homebrew by a dry run, uninstalled by
-      # Homebrew, then installed and opened again and zapped, and the machine compared with the machine before.
+      # Homebrew, then installed and opened again, the first open's set-up record still holding so that no set-up runs, and
+      # zapped, and the machine compared with the machine before.
       - name: Install with the cask, uninstall it, and zap it
         if: ${{ !cancelled() }}
         timeout-minutes: 30
@@ -1673,8 +1712,8 @@ jobs:
           bash .github/scripts/test-cask-macos.sh uninstall
           bash .github/scripts/test-installation-macos.sh listing after-cask-uninstall
           bash .github/scripts/test-cask-macos.sh uninstall-left
-          bash .github/scripts/test-cask-macos.sh install "$VERSION"
-          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh install "$VERSION" --after-plain-uninstall
+          bash .github/scripts/test-cask-macos.sh open "$VERSION" --set-up-recorded
           bash .github/scripts/test-cask-macos.sh zap
           bash .github/scripts/test-installation-macos.sh listing after-cask-zap
           bash .github/scripts/test-installation-macos.sh compare after-cask-zap before
@@ -1740,7 +1779,7 @@ jobs:
           [ ! -e "$OUT/skip" ] || exit 0
           bash .github/scripts/test-cask-macos.sh formula "$PREVIOUS/$FORMULA_RELEASE/jason-osx-arm64.tar.gz" "${FORMULA_RELEASE#v}"
           bash .github/scripts/test-cask-macos.sh beside-formula
-          bash .github/scripts/test-cask-macos.sh open "$VERSION"
+          bash .github/scripts/test-cask-macos.sh open "$VERSION" --beside-formula
           bash .github/scripts/test-cask-macos.sh formula-named
           bash .github/scripts/test-cask-macos.sh formula-off
           bash .github/scripts/test-cask-macos.sh zap

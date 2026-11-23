@@ -1880,9 +1880,10 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// install.sh's job is the apt route's leg, run against the deb and the index the desktop job built and uploaded: it
-    /// needs that job, runs under the same condition, and has no condition of its own on a step, so whenever the desktop
-    /// job runs this one runs too, and a change to the install line, the package or the leg is never passed by a skip.
+    /// install.sh's job is the apt route's leg, run against the deb and the index the desktop job built and uploaded, and
+    /// then the leg that opens that deb's Jason Desktop by <c>jason ui open</c>: it needs that job, runs under the same
+    /// condition, and has no condition of its own on a step, so whenever the desktop job runs this one runs too, and a
+    /// change to the install line, the package, a link or a leg is never passed by a skip.
     /// </summary>
     [Fact]
     public void The_install_line_s_job_runs_whenever_the_desktop_job_does_against_what_it_uploaded()
@@ -1901,7 +1902,8 @@ public class CiRunsTests
         Assert.Equal(
             ["ci-desktop-linux-x64-desktop"],
             steps.Where(step => Scalar(step, "uses") == "actions/download-artifact@v7").Select(step => Scalar(Mapping(step, "with"), "name")));
-        Assert.EndsWith("bash .github/scripts/test-apt-route.sh apt", (Scalar(steps[^1], "run") ?? "").Trim(), StringComparison.Ordinal);
+        Assert.EndsWith("bash .github/scripts/test-apt-route.sh apt", (Scalar(steps[^2], "run") ?? "").Trim(), StringComparison.Ordinal);
+        Assert.Equal("bash .github/scripts/test-desktop-link.sh apt", (Scalar(steps[^1], "run") ?? "").Trim());
     }
 
     /// <summary>

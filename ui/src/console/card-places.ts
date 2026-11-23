@@ -7,8 +7,7 @@ import { here } from './state';
 // the AI's, and it reads nothing, so it says no fact: its header, one sentence of the window's that is true wherever the
 // card stands, and one button that opens the place. The card that opens Connect says the AI hosts and the model keys
 // are there; the card that opens Accounts says Reply's sign-in and its accounts are on that page. What is done there is done
-// with that place's own controls, which say themselves what a browser tab cannot do; the card holds no key, no login, no
-// form and no link, and acts on nothing.
+// with that place's own controls; the card holds no key, no login, no form and no link, and acts on nothing.
 
 export type PlaceKind = 'ai_setup' | 'reply_setup';
 

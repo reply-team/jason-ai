@@ -1,11 +1,11 @@
 import { signal } from '@preact/signals-react';
 import type { DesktopUpdateItem, JasonDesktop } from '../../platform/desktop';
 import { mode } from '../../platform/mode';
-import { can, currentDesktop } from '../../platform/places';
+import { windowDesktop } from '../../platform/window-desktop';
 
 /**
  * The desktop's update item as the page last read it (`updates.item`), shared by Settings' Update section and the
- * sidebar's Settings row; null where the page has none to read: a tab, a plain browser, a desktop of an earlier version.
+ * sidebar's Settings row; null where the page has none to read: no desktop's window, or a desktop of an earlier version.
  */
 export const updateAnswer = signal<DesktopUpdateItem | null>(null);
 
@@ -16,7 +16,7 @@ let unfollow: (() => void) | null = null;
  * Reads the desktop's update item, and again whenever the desktop says it changed, while anything that draws it is on
  * the page; the function it returns stops that one follower, and the last one stops the reading.
  */
-export function followUpdates(desktop: JasonDesktop | undefined = currentDesktop()): () => void {
+export function followUpdates(desktop: JasonDesktop | undefined = windowDesktop()): () => void {
     followers += 1;
     if (followers === 1) unfollow = read(desktop);
     let done = false;
@@ -32,7 +32,7 @@ export function followUpdates(desktop: JasonDesktop | undefined = currentDesktop
 }
 
 function read(desktop: JasonDesktop | undefined): () => void {
-    if (desktop === undefined || !can('updates.item') || !can('updates.onChanged')) return () => undefined;
+    if (desktop === undefined) return () => undefined;
     if (typeof desktop.updates?.item !== 'function' || typeof desktop.updates.onChanged !== 'function')
         return () => undefined;
     let live = true;

@@ -30,8 +30,8 @@ export async function openSystem(page: Page): Promise<void> {
 }
 
 /**
- * The desktop's seam as far as the console needs it to mount and show a page: nothing answers, nothing is running. A tab
- * with no desktop draws one page and not the console, so a test of the console stands this in, as an init script, first.
+ * The desktop's seam as far as the console needs it to mount and show a page: nothing answers, nothing is running. A plain
+ * tab draws one message and not the console, so a test of the console stands this in, as an init script, first.
  */
 export function quietDesktop(): void {
     const quiet = () => () => undefined;

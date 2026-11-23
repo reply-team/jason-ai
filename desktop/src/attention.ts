@@ -81,6 +81,15 @@ export function trayView(attention: Attention): TrayView {
     return { title: String(total), tooltip: `${windowTitle}: ${said}`, status: said.charAt(0).toUpperCase() + said.slice(1) };
 }
 
+/**
+ * Whether the desktop says a rise in what waits with a system notification of its own: on macOS alone. On Windows and
+ * Linux the runtime's own notification of each waiting item opens the desktop on that item, so a second one for the same
+ * item would only repeat it; the tray's count and Needs you stay.
+ */
+export function notifiesItself(platform: NodeJS.Platform): boolean {
+    return platform === 'darwin';
+}
+
 /** A system notification's words: a pointer to what waits, by its counts. */
 export function notice(waiting: Waiting): { title: string; body: string } {
     const said = counted(waiting);
@@ -97,7 +106,8 @@ export interface AttentionDeps {
     log: Logger;
     timers?: Timers;
     show(attention: Attention): void;
-    notify(text: { title: string; body: string }): void;
+    /** Says a rise; null where the desktop does not notify of its own (`notifiesItself`). */
+    notify: ((text: { title: string; body: string }) => void) | null;
 }
 
 const same = (a: Attention, b: Attention) =>
@@ -105,8 +115,8 @@ const same = (a: Attention, b: Attention) =>
 
 /**
  * Reads the count on the cadence and tells the tray when it changed. A rise in either count, against the last count the
- * runtime gave, is notified; what already waits when the desktop starts is not news, and a spell without an answer
- * is not a reading.
+ * runtime gave, is notified where the desktop notifies of its own; what already waits when the desktop starts is not
+ * news, and a spell without an answer is not a reading.
  */
 export class AttentionWatcher {
     private readonly deps: AttentionDeps;
@@ -161,7 +171,7 @@ export class AttentionWatcher {
         if (read.state === 'up') {
             const before = this.last;
             this.last = { approvals: read.approvals, questions: read.questions };
-            if (before !== null && (read.approvals > before.approvals || read.questions > before.questions)) {
+            if (this.deps.notify !== null && before !== null && (read.approvals > before.approvals || read.questions > before.questions)) {
                 this.deps.notify(notice(this.last));
                 this.deps.log.info('attention_notified', { Approvals: read.approvals, Questions: read.questions });
             }

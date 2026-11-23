@@ -9,7 +9,7 @@
  * runtime's existing `ui.revoke` with `all`, before the window loads, then Electron's default session is cleared and its
  * page storage folders removed (`loadWindow`). Revoking every token is the only complete way: the ids an earlier page
  * stored are kept per origin, which Electron cannot list, and `ui.tokens` cannot tell a window's row from a browser's.
- * A browser paired with `jason ui open` pairs again once.
+ * A browser paired with `jason ui pair` pairs again once.
  *
  * The page reports the id of the token it holds, never the token (`WindowPairing`), so the token of the previous start
  * or of a pairing with a runtime on another port is revoked once the next pairing has succeeded, and the paired list

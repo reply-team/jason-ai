@@ -1,8 +1,8 @@
 /**
  * The seam between the page and Jason Desktop: what the desktop's preload puts on `window.jasonDesktop`, and all of
- * it. In a browser it is absent, and the page is the classic shell. The page is served from the runtime's loopback
- * origin in both; the desktop's main process checks every call's sender against that origin, so the page checks
- * nothing here. Every promise rejects with an Error whose message the page shows as text.
+ * it. In a browser it is absent, and the page draws one sentence (`src/own-place.ts`). The page is served from the
+ * runtime's loopback origin in both; the desktop's main process checks every call's sender against that origin, so the
+ * page checks nothing here. Every promise rejects with an Error whose message the page shows as text.
  */
 export {};
 
@@ -133,11 +133,10 @@ export interface DesktopChatOptions {
 /**
  * A chat's access mode, chosen per conversation from the menu beside the composer and kept on its record. `full_access`,
  * the mode of every new chat, the Feed's included, and of one whose record names none: it acts on this computer without
- * asking, with no confirmation; a turn on Codex, on a Claude Code below its floor or sent from a browser tab runs in Ask
- * first instead, said once, and the chat keeps the mode. `ask_first`: the agent asks on a card before anything the
- * desktop does not settle itself. `plan_only`: it reads and proposes, and changes nothing. `auto_edit`: Ask first, except
- * that the six file commands (mkdir, touch, mv, cp, rm, rmdir) run with no card on paths in the chat's own folder; no
- * confirmation, Claude Code only.
+ * asking, with no confirmation; a turn on Codex or on a Claude Code below its floor runs in Ask first instead, said once,
+ * and the chat keeps the mode. `ask_first`: the agent asks on a card before anything the desktop does not settle itself.
+ * `plan_only`: it reads and proposes, and changes nothing. `auto_edit`: Ask first, except that the six file commands
+ * (mkdir, touch, mv, cp, rm, rmdir) run with no card on paths in the chat's own folder; no confirmation, Claude Code only.
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
@@ -450,9 +449,10 @@ export interface DesktopHost {
     autoEdit: string | null;
     /**
      * What a turn on this host runs in, by the mode a chat's record keeps, where that is another mode, with the desktop's
-     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`); a mode not named runs as
-     * itself. The desktop decides it as it decides the turn, so the page draws the mode the next turn runs in, and why,
-     * and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is read as handing nothing.
+     * sentence why: sent from the desktop's own window (`window`) and from a browser tab (`tab`, unreachable since 0.49.3);
+     * a mode not named runs as itself. The desktop decides it as it decides the turn, so the page draws the mode the next
+     * turn runs in, and why, and works none of it out (`drawnMode`). A host an earlier desktop listed hands none, and is
+     * read as handing nothing.
      */
     runs: { window: DesktopTurnSteps; tab: DesktopTurnSteps };
     /**
@@ -638,21 +638,11 @@ export interface DesktopSetup {
 
 /**
  * A place "Open in" can open the folder in, by the name the desktop knows it by: Claude Code or Codex as a new session in a
- * terminal, a plain terminal, an editor, the file manager, or Copy path; or a browser, which opens the chat in a tab of the
- * system's browser rather than the folder. The page sends one of these names and never a path.
+ * terminal, a plain terminal, an editor, the file manager, or Copy path. The page sends one of these names and never a
+ * path.
  */
 export type DesktopOpenInPlace =
-    | 'claude'
-    | 'codex'
-    | 'terminal'
-    | 'vscode'
-    | 'cursor'
-    | 'antigravity'
-    | 'windsurf'
-    | 'zed'
-    | 'files'
-    | 'browser'
-    | 'copy';
+    'claude' | 'codex' | 'terminal' | 'vscode' | 'cursor' | 'antigravity' | 'windsurf' | 'zed' | 'files' | 'copy';
 
 /**
  * What the split button is drawn from: the places this computer has, in the order to show them, the one the button's main
@@ -909,15 +899,14 @@ export interface JasonDesktop {
         /**
          * A card the AI asked for in the chat did not draw: the desktop writes one line of its log, `chat_card_refused`,
          * with the card's kind (one of the six, or `unknown`) and why (`kind_unknown`, `too_long`, `malformed` or
-         * `schema`), and nothing of what the block held; a value outside those lists writes nothing. A place with no
-         * desktop's log, a tab or none, refuses it in its own words.
+         * `schema`), and nothing of what the block held; a value outside those lists writes nothing.
          */
         cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
         /**
          * Where a file dropped on the message box is on this computer, read by the desktop's preload from the file itself
          * (Electron's `webUtils.getPathForFile`), so the box can put the path in as a terminal does: answered at once,
-         * with no call to the desktop's main process. Empty for a file that is not on this computer, one a page made, and
-         * in a place with no desktop's window, a tab or none.
+         * with no call to the desktop's main process. Empty for a file that is not on this computer, and for one a page
+         * made.
          */
         pathOf(file: File): string;
     };

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
-import { currentDesktop, placeKind, setPlace } from '../platform/places';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -160,7 +159,7 @@ describe('the two sections', () => {
             desktop.keep({ id: 'conv_n', campaignId: null, title: 'Help me start', updatedAt: minutes(0) });
         });
         await waitFor(() => expect(titles()).toEqual(['Spring', 'Autumn', 'Summer referrals']));
-        expect(row('Autumn').querySelector('.t')?.textContent).toBe('');
+        expect(row('Autumn').querySelector('.t')?.textContent).toMatch(/^[0-9]+ (min|h|d)$/);
         fireEvent.click(row('Autumn'));
         await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_2', tab: 'chat' }));
         await waitFor(() => expect(row('Autumn').getAttribute('aria-current')).toBe('true'));
@@ -513,25 +512,6 @@ describe('the empty texts', () => {
         expect(within(agentsList()).getByText('No agents yet: the plus makes one.')).toBeTruthy();
         expect(within(chatsList()).getByText('No chats yet: the plus starts one.')).toBeTruthy();
         expect(side().queryByRole('button', { name: 'All agents' })).toBeNull();
-    });
-
-    it('names no plus that cannot be pressed', async () => {
-        await renderConsole(() => undefined, 'campaign.list/screen-empty');
-        await waitFor(() => expect(within(chatsList()).getByText('No chats yet: the plus starts one.')).toBeTruthy());
-        // The same sections, drawn where the page has no desktop: neither plus can be pressed.
-        const kind = placeKind();
-        const desktop = currentDesktop();
-        try {
-            setPlace('none');
-            flush(() => {
-                clock.value += 1;
-            });
-            await waitFor(() => expect(within(agentsList()).getByText('No agents yet.')).toBeTruthy());
-            await waitFor(() => expect(within(chatsList()).getByText('No chats yet.')).toBeTruthy());
-            expect(side().queryByText(/the plus/)).toBeNull();
-        } finally {
-            setPlace(kind, desktop);
-        }
     });
 
     it('says no chat is there only once the desktop has listed its conversations', async () => {

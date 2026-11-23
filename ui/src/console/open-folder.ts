@@ -1,9 +1,9 @@
 import { signal } from '@preact/signals-react';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
-import { can, earlier } from '../platform/places';
+import { earlier } from '../platform/window-desktop';
 import type { SessionHost } from './conversation-items';
-import { here, inTab } from './state';
+import { here } from './state';
 
 // An agent's folder in the system's file manager, from the agent's "…" and the menu on a row of the sidebar: through Open in's
 // own bridge (`openIn.open('files', …)`), which opens the folder the runtime recorded for the agent and never takes a path
@@ -30,13 +30,13 @@ export const sessionHosts = signal<readonly SessionHost[]>([]);
 
 /**
  * Reads the file manager's name once, as the console is drawn; the function it returns forgets the answer still to come.
- * In a tab, and where the desktop has no Open in, nothing is read.
+ * Where the desktop has no Open in, nothing is read.
  */
 export function readFileManager(): () => void {
     fileManager.value = undefined;
     sessionHosts.value = [];
     const openIn = earlier(here().desktop).openIn;
-    if (inTab() || !can('openIn.targets') || openIn === undefined) return () => undefined;
+    if (openIn === undefined) return () => undefined;
     let current = true;
     openIn.targets().then(
         (answer) => {
@@ -61,24 +61,23 @@ export const folderRefusal = signal<string | null>(null);
 
 /**
  * The act's word, by the desktop's name for the file manager, and the page's own word for it until the desktop has said
- * one, so the item is there from the first draw; null in a tab, and where this computer has no file manager.
+ * one, so the item is there from the first draw; null where this computer has no file manager.
  */
 export function folderWord(): string | null {
-    if (inTab() || !can('openIn.open')) return null;
     const name = fileManager.value;
     return name === null ? null : t('agent.menu.folder', { place: name ?? t('openIn.place.files') });
 }
 
-/** The agent hosts the place offers a session of: none in a tab, in the demo, or where the desktop has no Open in. */
+/** The agent hosts the place offers a session of: none in the demo, or where the desktop has no Open in. */
 export function hostsOffered(): readonly SessionHost[] {
-    if (inTab() || mode.value === 'demo' || !can('openIn.open')) return [];
+    if (mode.value === 'demo') return [];
     return sessionHosts.value;
 }
 
 /** Opens the agent's folder in the file manager; a refusal is said beside the sidebar until closed or the next opening. */
 export async function openFolder(campaignId: string): Promise<void> {
     const openIn = earlier(here().desktop).openIn;
-    if (!can('openIn.open') || openIn === undefined) return;
+    if (openIn === undefined) return;
     folderRefusal.value = null;
     folderRefusal.value = await openIn.open('files', campaignId, { keep: false }).then(
         (answer) => (answer === null ? null : answer.refused),
@@ -92,7 +91,7 @@ export async function openFolder(campaignId: string): Promise<void> {
  */
 export async function openSession(campaignId: string, host: SessionHost['id']): Promise<void> {
     const openIn = earlier(here().desktop).openIn;
-    if (!can('openIn.open') || openIn === undefined) return;
+    if (openIn === undefined) return;
     folderRefusal.value = null;
     folderRefusal.value = await openIn.open(host, campaignId, { keep: false }).then(
         (answer) => (answer === null ? null : answer.refused),

@@ -1,7 +1,7 @@
 /**
  * The restart re-pair. The window was paired with one runtime, the one the run file named when it loaded. When the run
  * file names another (the runtime restarted on another port, or as another process on the same one), the page's pairing
- * is the old runtime's, so the window asks `jason ui open --no-open` for a new link and loads it. While no run file
+ * is the old runtime's, so the window asks `jason ui pair` for a new link and loads it. While no run file
  * names a runtime the window waits; nothing here starts one. The IPC check needs nothing from here: it reads the run
  * file on every call, so a page at an origin the run file no longer names is refused at once.
  */
@@ -103,9 +103,9 @@ export class Repairer {
     private async pair(now: RunIdentity): Promise<Look> {
         this.busy = true;
         try {
-            const open = await this.deps.cli.run(['ui', 'open', '--no-open']);
-            const link = open.exit === 0 ? pairingLink(open.stdout, now.origin) : null;
-            if (link === null) return this.failed(now, open.exit);
+            const pair = await this.deps.cli.run(['ui', 'pair']);
+            const link = pair.exit === 0 ? pairingLink(pair.stdout, now.origin) : null;
+            if (link === null) return this.failed(now, pair.exit);
             try {
                 await this.deps.load(link);
             } catch {

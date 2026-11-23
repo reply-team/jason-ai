@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
-import { can } from '../platform/places';
 import { dropCaretAt, noPathDropped, somePathsDropped, withPaths, type DropCaret } from './chat-model';
 import { here } from './state';
 
@@ -11,9 +10,8 @@ import { here } from './state';
 const carriesFiles = (transfer: DataTransfer | null): transfer is DataTransfer =>
     transfer !== null && [...transfer.types].includes('Files');
 
-/** Where a dropped file is on this computer, as the desktop reads it; empty where this place, or the file, has none. */
+/** Where a dropped file is on this computer, as the desktop reads it; empty where the desktop, or the file, has none. */
 function pathOfDropped(file: File): string {
-    if (!can('chat.pathOf')) return '';
     // A desktop of an earlier version has no such member, and a file it cannot place throws: neither has a path here.
     try {
         return here().desktop.chat.pathOf(file);

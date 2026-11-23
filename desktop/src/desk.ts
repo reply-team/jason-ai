@@ -6,7 +6,7 @@
 
 import { app, clipboard, dialog, Menu, nativeImage, Notification, Tray, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
-import { AttentionWatcher, trayView, type Attention } from './attention.ts';
+import { AttentionWatcher, notifiesItself, trayView, type Attention } from './attention.ts';
 import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
 import { bindingsFor, itemKeys, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
@@ -124,7 +124,7 @@ export class Desk {
                 this.attention = attention;
                 this.renderTray();
             },
-            notify: (text) => this.notify(text, () => this.send('navigate.attention')),
+            notify: notifiesItself(process.platform) ? (text) => this.notify(text, () => this.send('navigate.attention')) : null,
         });
     }
 

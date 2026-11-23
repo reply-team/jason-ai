@@ -18,7 +18,7 @@ import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
 /** The verbs the desktop runs, by the words that name them; the log names a verb by these and nothing else. */
-const verbs = ['status', 'runtime start', 'runtime status', 'runtime stop', 'runtime autostart', 'ui install', 'ui open', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', 'campaign get', 'project get', 'session open', '--version'] as const;
+const verbs = ['status', 'runtime start', 'runtime status', 'runtime stop', 'runtime autostart', 'ui install', 'ui pair', 'skills install', 'plugin install', 'plugin reload', 'plugin list', 'route list', 'campaign get', 'project get', 'session open', '--version'] as const;
 
 export function verbOf(args: readonly string[]): string {
     const two = args.slice(0, 2).join(' ');
@@ -117,7 +117,7 @@ export function dataNewerRefusalIn(stdout: string): string | null {
 
 export interface Started {
     origin: string;
-    /** The pairing link `jason ui open --no-open` printed. */
+    /** The pairing link `jason ui pair` printed. */
     link: string;
     runtimeVersion: string | null;
     /** Whether the runtime is another version than the bundle's, in which case its own UI was loaded as it is. */
@@ -231,7 +231,11 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         if (removedRecorded) for (const host of skillsFolders) rmSync(join(paths.skillsRecords, host.record), { force: true });
         const unrecorded = skillsFolders.some((host) => !existsSync(join(paths.skillsRecords, host.record)));
         if (unrecorded && topRight) rmSync(join(paths.skillsRecords, replyRecord), { force: true });
-        if (deps.settings.skillsDeployedFor !== deps.bundleVersion || unrecorded) {
+        // The desktop's record says what it deployed for this version, not what is still there: `jason uninstall` with the
+        // data kept takes the role skills off and leaves the record, so a role root `jason status` finds with no deployment
+        // gets the role skills again, and the chat folder, whose records still stand, nothing.
+        const bundleDeployed = deps.settings.skillsDeployedFor === deps.bundleVersion && !unrecorded;
+        if (!bundleDeployed || facts.roleSkillsUnrecorded) {
             let deployed = true;
             if (facts.sameVersion) {
                 const roles = await cli.run(['skills', 'install', '--roles-only', '--source', deps.bundle], { timeoutMs: 300_000 });
@@ -245,7 +249,7 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
             // both folders.
             // The CLI's record of each deployment lives under <data>/desktop/skills-records, outside the chat folder: it is put
             // beside the skills for the CLI to read, and moved out again once the CLI has written it.
-            if (topRight) {
+            if (topRight && !bundleDeployed) {
                 const [claudeSkills, codexSkills] = skillsFolders;
                 if (claudeSkills === undefined || codexSkills === undefined) throw new Error('The chat has two skills folders.');
                 beforeSkillsDeploy(paths.chat, paths.skillsRecords, claudeSkills);
@@ -265,9 +269,9 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         release?.();
     }
 
-    const open = await cli.run(['ui', 'open', '--no-open']);
-    const link = open.exit === 0 ? pairingLink(open.stdout, origin) : null;
-    if (link === null) throw new StartFailed('ui open', open, said(open) || 'jason ui open printed no link to the runtime’s UI.');
+    const pair = await cli.run(['ui', 'pair']);
+    const link = pair.exit === 0 ? pairingLink(pair.stdout, origin) : null;
+    if (link === null) throw new StartFailed('ui pair', pair, said(pair) || 'jason ui pair printed no link to the runtime’s UI.');
 
     return { origin, link, runtimeVersion, versionsDiffer: !facts.sameVersion };
 }

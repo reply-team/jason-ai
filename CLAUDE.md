@@ -14,8 +14,8 @@ repository is for changing Jason.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
-- `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
-  `ui/README.md` says how it is built and tested.
+- `ui/` — the UI Jason Desktop draws: a React client of the Runtime API, which the runtime serves, built into the release
+  asset `jason-ui.zip`; `ui/README.md` says how it is built and tested.
 - `desktop/` — Jason Desktop, an Electron window onto the installation the CLI uses. A release publishes from it the
   Windows installer, a disk image and an update archive for each Mac architecture, a deb and an AppImage for Linux on x64,
   the update feeds and the block maps; `desktop/README.md` says how it is built and tested, and `docs/desktop.md` is its
@@ -67,10 +67,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   absent the runtime is unchanged (`UiGuardTests`). A UI token has the run token's rights: one level of trust, the
   machine's user. The UI is tested in three layers (`ui/README.md`, "Testing"): unit tests of dense logic in Node, screen tests against the exchanges the runtime's own tests recorded under
   `docs/api/fixtures/` (`ApiFixtures`, held one-to-one with the files and rewritten only under
-  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Nine guards hold the layers: the unit project
+  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Eight guards hold the layers: the unit project
   runs without a DOM and may not import React; no `.json` under `ui/` but the configuration; a dependency allowlist; the
   fixture catalog; the console's templates (markup only from its tag, into the page only through its painter, no
-  inline handler or style); the desktop seam, its members named once more; the classic shell's chunk, which reaches no console file but the few it shares; only the smoke's harness starts processes;
+  inline handler or style); the desktop seam, its members named once more; only the smoke's harness starts processes;
   one CI job runs all of it.
 
 ## Conventions
@@ -199,7 +199,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, a local act the CLI refused to perform, or a request the runtime took and did not answer within its
   operation's own `timeout_ms` and a margin, `request_timed_out`, which is not retryable), 2 usage error, 3 runtime
-  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**, verbs no operation stands behind:
+  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **thirteen declared exceptions**, verbs no operation stands behind:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
@@ -212,7 +212,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
   one such verb under a noun whose other verbs are operations, `plugin install` asks only the reload
   `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
-  operations and `install` and the `plugin` group to its four and `install`); `jason logs` reads the
+  operations, `install` and `open`, by what each verb sends, and the `plugin` group to its four and `install`);
+  `jason ui open` opens Jason Desktop at what waits or at one item by the desktop's own `jason-desktop:` link, a window
+  the runtime never knows exists, so it asks the runtime nothing, and only under `--web`, where a build of one's own is
+  installed, what `jason ui pair` asks; `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; `jason session open` starts the
   person's own agent host — the one the named preference `agent.interactive_host` names — in a new terminal window at
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
@@ -261,9 +264,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
   `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
   that is a release tag, `<skill-source>`.
-  `CliApp` states all twelve where the rule is written, each verb's `--help`
+  `CliApp` states all thirteen where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these twelve. `export` refuses while the runtime runs unless `--stop`
+  what a bundle never carries — and guards hold the list to these thirteen. `export` refuses while the runtime runs unless `--stop`
   is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
   link inside a carried place, following one at its top and judging it where it leads, or a name another system cannot
   hold before anything is written. `import` refuses, before anything is written, an
@@ -300,7 +303,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   guard over every message template the runtime writes and by a run of the real executable that reads
   its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
   reads them without the runtime; `jason doctor` carries a bounded slice of them.
-- Everything in the repository is written in English, with one exception: the translations of the browser UI's words
+- Everything in the repository is written in English, with one exception: the translations of the UI's words
   under `ui/src/locale/`, each language beside the English file it translates.
 
 ## Working style

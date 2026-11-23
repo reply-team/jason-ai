@@ -1,8 +1,10 @@
-# The browser UI
+# Jason Desktop's screens
 
-Jason serves a small web UI from the runtime itself: what needs you (approvals and questions), what work is running,
-planned and finished, the people it works with and what happened to each, and whether everything is running. It is one more client of the Runtime API, with the same rights as the command line, and nothing in the runtime
-exists for it alone: everything the page does is a verb you could type.
+[Jason Desktop](desktop.md)'s window draws a UI the runtime itself serves: what needs you (approvals and questions),
+what work is running, planned and finished, the people it works with and what happened to each, and whether everything
+is running. It is one more client of the Runtime API, with the same rights as the command line, and nothing in the
+runtime exists for it alone: everything the page does is a verb you could type. What the desktop does besides, its chat,
+its tray and its setup, is on [its own page](desktop.md).
 
 ## Opening it
 
@@ -10,21 +12,25 @@ exists for it alone: everything the page does is a verb you could type.
 jason ui open
 ```
 
-The runtime answers with a link into the page and the command opens it in your default browser (`--no-open` prints it
-instead, for an agent to hand to you). The link carries a ticket that pairs one browser, once, within 60 seconds;
-after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
-`jason ui open --approval <id>` and `--question <id>` open at the address of one item, `#/attention/approvals/<id>` or
-`#/attention/questions/<id>`. The build of this release draws its console in Jason Desktop and in a tab the desktop
-opens; the tab `jason ui open` opens is neither, so it opens on the demo, or, while something waits, on the one page
-that says Live Mode is only available in Jason Desktop, where to download it, what waits and where to decide it
-([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom` draws whatever it draws.
+opens Jason Desktop on what waits, by the desktop's own `jason-desktop:` link; `--approval <id>` and `--question <id>`
+open it at one item, and `--no-open` prints the address instead, for an agent to hand to you. It asks the runtime
+nothing and never opens a browser: where no Jason Desktop that takes its links is installed for your account (a
+command-line install still waiting to move into the desktop), it opens nothing and refuses with `desktop_not_installed`.
+On Linux it opens the desktop only where xdg-open would start it for the scheme: where your account's own default for
+`jason-desktop:` links names another program, a menu cache names an entry that is gone, or Jason Desktop's entry starts an
+AppImage by a quoted path (its folder's path holds a space or a quote), it opens nothing and refuses with
+`desktop_links_elsewhere`, saying which and what gives the links back. Outside GNOME
+and KDE, xdg-open runs the desktop it starts until that window closes, so a `jason ui open` that starts it says after ten
+seconds that it handed the address on (`opener_timed_out`) and ends 0: the desktop opens all the same.
 
-On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
-waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
-`jason ui open` does (with no desktop it lands on the demo or the one page described above, which ignore the address),
-and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
-Jason Desktop is installed for your account, the same click opens the desktop's Needs you instead
-([desktop.md](desktop.md), Links).
+Jason Desktop pairs its own window with the runtime at each start, by `jason ui pair`, which prints a link that pairs one
+page, once, within 60 seconds, and opens nothing ([Paired pages](#paired-pages)).
+
+On Windows and Linux a toast's click opens Jason Desktop through a `jason:` link: `jason://attention` for the list of what
+waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item, each on the desktop's
+Needs you ([desktop.md](desktop.md), Links), as `jason ui open` opens it. Where no Jason Desktop that takes its links is
+installed for your account the click opens nothing, and a link Jason does not know opens nothing either
+([notifications.md](notifications.md), §7).
 `jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
 put that item's prompt on the clipboard and open nothing: the text of [Copy prompt](#copy-prompt) below.
 `jason://attention/approvals/<id>/session` and `jason://attention/questions/<id>/session` start an agent session on
@@ -33,24 +39,25 @@ the first toast is shown; before that a browser has no program for them. The `ja
 command line's; Jason Desktop's own links use another, `jason-desktop:`, which opens a page of the desktop's window and
 never touches `jason:` ([`desktop/README.md`](../desktop/README.md), Links).
 
-If nothing is installed, `jason ui open` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
+If nothing is installed, `jason ui pair` says so with the code `ui_not_installed`, names `jason ui install` as the fix and the two directories below.
 
 ## Where the page comes from
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
-`Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+`Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to no other.
 Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
 name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
-release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
-its end, and `jason status` names it where the default build is missing or another release's. A build from source
-has no published UI to fetch.
+release's `checksums.txt`, and swaps it in as `ui/default/`. Jason Desktop runs it at a start where the runtime is its
+own version and `jason status` finds the UI the runtime serves missing or not in order, the install guide runs it, `jason update apply` runs it at its end,
+and `jason status` names it where the default build is missing or another release's. A build from source has no
+published UI to fetch.
 
-To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
-and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
-and digest. Delete `custom/` to go back to the default.
+To try a build that is not the installed one, a CI run's `jason-ui.zip` say, unzip it into `~/.jason/ui/custom/` and
+start Jason Desktop, whose window draws whatever the runtime serves; `jason status` and `jason runtime status --human`
+say which build is served, with its version and digest. Delete `custom/` to go back to the default.
 
 ### Files the UI does not trust
 
@@ -92,36 +99,13 @@ The build's own layout is trusted, and so is whoever can write under `<data>/ui/
 link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
 asks for it.
 
-### The demo in a browser tab
+The build of this release holds nothing under `sealed/`. What keeps a page there unable to act is tried in the browser:
+a hostile page put under `sealed/` of a build of one's own, opened by itself, aims every way out it can name (a fetch,
+an image, a WebSocket, a form, a pop-up, the tab's address, its own move) at a server on the loopback that answers
+anything, and at a file the UI serves, and the server must hear nothing and the file must not be reached (the sealed
+probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium, Firefox and WebKit, and nowhere else.
 
-The release's build carries one page there, `sealed/demo.html`: the demo page Jason Desktop shows in Demo, the same file
-byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
-it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
-switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
-other address brings back where the tab was before: the console in a tab the desktop opened, and in a tab with no
-desktop the page that tab opens on ([below](#settings-and-chat-in-the-browser)). Nothing is kept of this in your
-installation and nothing is asked: the runtime is not told, the desktop is not asked and its mode is not changed, and
-your installation is as it was. The tab alone remembers which of Demo and Live you pressed last, in its session storage,
-so a reload of that tab keeps it; another tab does not. A reload at `#/demo` shows the page
-again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
-the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
-
-The page is shown in a frame that keeps scripts alone, `sandbox="allow-scripts"`, with no feature delegated (`allow=""`)
-and no referrer: never the same origin, so it holds nothing of the runtime's address, the UI's token included; no form,
-pop-up, download, dialog or move of the tab. Its words in the strip are the page's own; its numbers and states are samples
-the page carries, never the runtime's. Narrower than the desktop's window ever shows the page, 900 pixels, the page keeps
-that width and scrolls sideways, and the switch stands in a strip of its own above it.
-
-The addresses the page holds are counted in [`desktop/demo/addresses.txt`](../desktop/demo/addresses.txt), each with why
-it is inert there; the UI's guards and the desktop's tests hold the page to that list exactly. What keeps them inert is
-the content policy the page is served under, which in a frame is the one thing between its script and the network: a
-hostile page put where the demo page stands aims every way out it can name (a fetch, an image, a WebSocket, a form, a
-pop-up, the tab's address, the frame's own move) at a server on the loopback that answers anything, and at a file the UI
-serves, and the server must hear nothing and the file must not be reached; it reads nothing of the console's storage or
-of the page above it either (the sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium,
-Firefox and WebKit, and nowhere else.
-
-## Paired browsers
+## Paired pages
 
 ```
 jason ui tokens
@@ -129,21 +113,25 @@ jason ui revoke <token-id>
 jason ui revoke --all
 ```
 
-Each pairing is a token the runtime keeps as a hash, with who paired and when, and when it was last used. A token never
-expires on its own; revoke it when a browser should no longer have it. A browser that `jason ui open` opens again ends
-the token it held, so the list stays one row per browser. The System screen shows the same list, the browsers used most
-recently first; one not used for a month is dimmed, since a private window that closed or a browser whose data was
-cleared never comes back for its token, and one button revokes every browser but the one you are using.
+Each pairing is a token the runtime keeps as a hash, with who paired and when, and when it was last used: Jason Desktop's
+window holds one, and so does each browser paired with [a web interface of your own](#a-web-interface-of-your-own). A
+token never expires on its own; revoke it when a page should no longer have it. A page that `jason ui pair`'s link pairs
+again ends the token it held, so the list stays one row per page. The System screen shows the same list, under "Paired
+browsers", the ones used most recently first and the window's own marked "this browser"; one not used for a month is
+dimmed, since a private window that closed or a browser whose data was cleared never comes back for its token, and
+**Revoke all other browsers** revokes every one but the window's own.
 
-A browser you paired keeps its token in its own profile, which a command of a Codex chat may read; revoke a browser you
-no longer use. The desktop's own window keeps its token in memory only and pairs afresh at each start. The first start of
-a desktop that kept it on disk before revokes every UI token once, so a browser you paired must be paired again once.
+The desktop's window keeps its token in memory only and pairs afresh at each start; `jason ui revoke --all` unpairs it
+too, and the window then says it is not paired until the desktop pairs it again: at its next start, once the runtime has
+restarted, or at **Reload** in its View menu. A browser you paired keeps its token in its own profile, which a command of a Codex chat may
+read; revoke a browser you no longer use. The first start of a desktop that kept its window's token on disk before
+revokes every UI token once, so a browser you paired must be paired again once.
 
 ## The port
 
-The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. When that port is taken it takes the
-next free one above it and `jason runtime status --human` says so; `Runtime:Port` in `settings.json` picks another, and
-`0` lets the OS choose, as before.
+The runtime listens on `127.0.0.1:52766` by default. When that port is taken it takes the next free one above it and
+`jason runtime status --human` says so; `Runtime:Port` in `settings.json` picks another, and `0` lets the OS choose, as
+before.
 
 ## Attention
 
@@ -169,8 +157,9 @@ open. When a pending approval of the same work item is listed, matched by the wo
 place, still chosen, and Approve belongs to that one; if its text is not the one saved, because something changed the
 work item after the save, its panel says so. If that approval was decided before the list held it, or the work ended
 another way, the row goes as a row decided elsewhere does. The list's counts do not fall because of the edit. The
-browser's page has no journal stream: it learns that the runtime asked again from its panel, which watches for the new
-approval for half a minute after the save, then from **Refresh**. The kept row is the page's own memory, the same in
+page learns that the runtime asked again from the journal: a line that names the work item has each list holding the row
+read where it stands at its next read, and an approval's open panel also watches for the new approval for half a minute
+after the save. The kept row is the page's own memory, the same in
 Attention, a campaign's Sequence, Needs you and an agent's chat: a reload of the page forgets it, and the row comes back
 when the runtime has asked again. If the
 text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
@@ -199,8 +188,9 @@ you.", with **Open Settings** beside it and nothing to answer. A send that was d
 why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
 automatically, the installation's own or that of the card's agent (`send_modes_in_force` of `campaign.get`), and the
 name or the tone is unset, a quiet line points to Settings, "Your name and tone"; while every mode waits for you it
-never shows, and it goes once both are set. **Hide for 7 days** keeps it away for a week in this browser's own storage,
-nothing sent to the runtime. **How messages go** in Settings sets the two for every agent, each kind on its own press as
+never shows, and it goes once both are set. **Hide for 7 days** keeps it away for a week in the page's own storage,
+nothing sent to the runtime; the desktop's window keeps that storage in memory only, so the line is back at the
+desktop's next start. **How messages go** in Settings sets the two for every agent, each kind on its own press as
 you (`jason preference set`), and **Forget my answer** gives one back (`jason preference unset`): a kind nobody has
 answered waits for you on every message, and the cards ask again. An agent's **Settings** tab says what each kind goes
 under for that agent and from where (`send_modes_in_force`), and sets the agent's own or gives it back to the choice for
@@ -219,7 +209,7 @@ harness's campaign and nothing else. Only the words on the screen change; the co
 and the ids keep `campaign`, and so does the rest of this page, which describes them.
 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
-**Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
+**Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this computer's time
 zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
 counts. A campaign's numbers, in the table and once it is open, its People tab and its Results leave archived people
 out (`--exclude-archived-contacts`), as People does while Archived is not ticked; its Inbox and What happened still
@@ -275,9 +265,8 @@ asking in the agent's chat, and always in the provider itself, the same from Set
 agent's row under **Agents**. One press sends one archive. The page then goes back to the list, read again without the
 agent, and says the agent is archived and what was cancelled, only what there was; an archived agent's Settings say it
 is archived and offer nothing, and a confirmation opened after another window archived
-the agent says so. The browser
-shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox, Results and Settings and no Sequence, its Chat, or its People where no chat can be made; an address that names Sequence still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
+the agent says so. An address naming a campaign's Details opens its Settings, and one naming
+any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox, Results and Settings and no Sequence, its Chat, or its People where no chat can be made; an address that names Sequence still opens it). In the console an agent is one place: its tabs
 and its Chat under one header ([below](#an-agent-in-the-console)). Its **Chat** opens the campaign's one conversation,
 kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents list's Chat opens the same one. An agent's
 conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
@@ -300,7 +289,7 @@ manager, named as Open in names that place, and after it **Open Claude Code in t
 terminal**), a new session of that host in a terminal at the agent's folder: the host the agent's chat runs on
 where Open in found it, else the first found, Claude Code before Codex, one item even where both are found, none where
 neither is, none in the demo, and it leaves the window's Open in where it was. The menu on the agent's row under
-**Agents** holds the two right after **Open**. Neither is there in a tab. Then its conversation's acts: **Rename
+**Agents** holds the two right after **Open**. Then its conversation's acts: **Rename
 conversation**, which the row's menu holds as **Rename** and which there renames the agent itself, through
 `campaign.update`, with the row's name made a field in place (a chat's row renames its conversation in place the same
 way: Enter keeps the name, Escape or leaving the field keeps nothing, and once Enter has sent a name both wait for the
@@ -313,7 +302,7 @@ A file dropped on a chat's message box, or on the box of **Start**, puts its pat
 file, as a terminal does. It goes in single quotes, which PowerShell, Git Bash and the macOS and Linux shells read as
 written, a UNC path among them. On Windows, a name with a quote (`'` or a typographic one: `‘ ’ ‚ ‛`) goes in double
 quotes instead. If that name also holds `$`, a backtick or a typographic double quote (`“ ” „`), or is a UNC path, its
-quotes are doubled for PowerShell, and Git Bash reads it wrong. Where a path cannot be read, in a tab or for a file dragged from a web page, the box says so.
+quotes are doubled for PowerShell, and Git Bash reads it wrong. Where a path cannot be read, as for a file dragged from a web page, the box says so.
 An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a reply in a conversation, from
@@ -324,9 +313,7 @@ and a box for your own answer. Under the mailbox an email goes
 from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
 not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
 wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
-anywhere else. In a browser the console is the same, and a campaign's Chat
-and the Start screen work only in the desktop's window and in a tab the desktop opened; any other tab draws no console
-([below](#settings-and-chat-in-the-browser)).
+anywhere else.
 
 ## Performance
 
@@ -334,7 +321,7 @@ The whole operation over time, from the same counts as the Agents page's Activit
 7, 30 or 90 days, across every campaign not archived or the ones chosen, each person counted once however many campaigns
 count them (`jason campaign activity` and its `total`), archived people left out of every number, chart and list
 (`--exclude-archived-contacts`). Two charts show contacted and replied people by the hour today,
-by the day over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`):
+by the day over 7 or 30 days and by the week over 90, in this computer's time zone (`jason campaign activity-by-period`):
 a person counted on two days stands in both bars and once in the number above them. A count's tile lists its people
 under the tiles, the latest to whom it happened first, grouped by that day, each with the campaigns that count them and
 what happened (`jason campaign list-contacts --activity` with the campaigns and the period); a bar lists that hour's,
@@ -349,7 +336,7 @@ failures. Each tab's number is `jason workitem count` for that tab's statuses an
 and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
 --query`, `jason contact list --query`: any part of a name, company, title, email, phone, profile link or custom
 field's value), a kind, a role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a
-day at a time. They are part of the page's address, so a bookmark or a link from another screen keeps them. Opening an
+day at a time. They are part of the page's address, so a reload or a link from another screen keeps them. Opening an
 item shows what the runtime recorded about it: its facts, its attempts, its input and its history; a failure is shown as
 the error the runtime recorded, with its class and the attempts it used. Open work can take a new priority, start and
 due time, or be cancelled with a reason, through `jason workitem update` and `jason workitem cancel`; work waiting for
@@ -456,7 +443,7 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   separates the entries of `PATH`, `;` on Windows and `:` elsewhere, starts nothing on any system, `--dry-run`
   included: no entry of the window's `PATH` can name that folder, and `jason status` says the installation is not ready.
 
-The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
+The page reads which system it runs on from the window itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables
 the console host would be started with. Each host's own form for a first message is in
 [execution-profiles.md](execution-profiles.md), §12.
@@ -565,43 +552,21 @@ jason session open --setup --host codex
   `--setup` with `--approval`, `--question`, `--campaign`, `--project`, `--here`, `--shell` or `--resume` is a usage
   error, exit 2.
 
-## Settings and Chat in the browser
+## Settings
 
-**Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
-system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
-never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
-follows it. Its **Notifications** section is [described below](#notifications-in-settings). In Jason Desktop's own window it
-also has an **Update** section, the last, which shows the desktop's version and its update item, and a quiet mark while
-the desktop knows of a version it has not installed ([desktop.md](desktop.md#updating)); a tab and the Demo draw none.
-
-**The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
-Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
-the desktop, while the desktop runs: it sends only to a chat in Ask first, Plan only or Full access, a turn it sends to a
-chat in Full access running in Ask first, says of a permission card or a plan card that it
-is answered in Jason Desktop, shows the mode it sends in as a label, and draws what only the desktop's window may do, such as the
-account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
-Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
-only place that approves
-([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, draws no console, whatever the installation holds and whatever the address
-names (the address is left as it is). It draws one page of text, centred, with the Demo | Live switch at the top right:
-"Live Mode is only available in Jason Desktop.", then "To access Live Mode, download Jason Desktop." with a link to the
-releases page and the sentence that the desktop app starts an AI session locally on your computer, and then that you can
-build your own web interface or work directly with Jason from a terminal session with your AI using the installed Jason
-skills. A tab opens on that page only while approvals or questions wait, or when the read of them fails; with nothing
-waiting it opens on the demo, as a press of Demo does (until the read answers, only the switch is drawn). A quiet line
-under the words counts what waits and says where to decide: in Jason Desktop, or ask your agent what Jason is waiting
-for, or run `jason approval list` and `jason decision list`, as the toast's pointer does; when the read fails there is no
-line. Once you press Live or Demo, that tab keeps your choice over a reload, and `#/demo` in the address still means the
-demo. The switch's Demo shows the demo in that tab alone, and its Live shows the page and stays. The default Demo takes the
-address's place, so the address a person came with is not kept once they press Live; the page ignores an address anyway. The runtime starts no AI and no process for a screen, in either case.
+**Settings** holds the theme, Light, Dark or the system's, in that order, which the runtime never hears of: Jason Desktop
+keeps the choice in its own settings, so its starting page follows it ([desktop.md](desktop.md) says what a new
+installation meets). Its **Notifications** section is [described below](#notifications-in-settings). It also has an
+**Update** section, the last, which shows the desktop's version and its update item, and a quiet mark while the desktop
+knows of a version it has not installed ([desktop.md](desktop.md#updating)); the Demo draws none.
 
 ## Accounts
 
 One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
 the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
 the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
-box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
-acts are the desktop's and offers none. The page writes no setting and adds no provider. The notification channels are not
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page.
+The page writes no setting and adds no provider. The notification channels are not
 here: they are the **Notifications** section of Settings.
 
 ## Notifications in Settings
@@ -624,17 +589,17 @@ operating system itself holds off stays words: a toast Windows did not show keep
 it, which say what Windows answered at that notification, never the switch as it is now, since the runtime asks Windows
 only when it sends a toast and asks again at the next one. In the Demo every switch is inert. The section says what the channels are for, that Jason tells the person this way
 when an approval or a question is waiting, and how one channel is switched, there or with the command, in the person's
-name; in Jason Desktop a provider's channel is connected or disconnected on the Connect panel, which never changes the
-desktop toast; a browser has no Connect panel.
+name; a provider's channel is connected or disconnected on the desktop's Connect panel, which never changes the desktop
+toast.
 
 ## Inside Jason Desktop
 
-[Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
-object the desktop puts on the page, `window.jasonDesktop`. In it a sidebar chooses what one area beside it shows: Start,
+[Jason Desktop](desktop.md) mounts the build as the console, which starts as the page loads over the object the desktop
+puts on the page, `window.jasonDesktop`. In it a sidebar chooses what one area beside it shows: Start,
 a chat, **Needs you** (this page's Attention), **Agents** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
-channels are set up. An empty Needs you card says you are caught up and offers **Open your agents**. The browser's
-other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area, and every
+channels are set up. An empty Needs you card says you are caught up and offers **Open your agents**. The other
+screens, People, Performance, Work items, System, Accounts and Settings, open in the same area, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on
@@ -655,7 +620,7 @@ tab makes nothing: the conversation is made at your first message or choice in i
 composer's menus, which show what the new conversation will take.
 
 What has no address of its own, Start, a set-up chat, the Feed and the sidebar's panels, stands at the chat's address,
-`#/chat`. Leaving an agent for one of them adds one entry to the browser's history, so Back comes back to the agent's
+`#/chat`. Leaving an agent for one of them adds one entry to the page's history, so Back comes back to the agent's
 tab, and Forward shows that place again. Its Chat comes back as you left it, the words typed and not sent included; a
 page tab is drawn again from its address, so what was typed there, a search say, is not kept. A second place without an
 address straight after the first adds no entry, so Back from it goes to the agent too.
@@ -667,8 +632,50 @@ conversation is opened, or made in another window or tab, that conversation take
 An archived agent with no conversation has none made for it: its Chat tab says that the agent is archived, and nothing
 more; one with a conversation shows it.
 
-## What the page may do
+## A web interface of your own
 
-The page holds its token in the browser's storage for the runtime's origin and sends it on every call, as the command
-line sends the run token. A request from any other origin is refused by the runtime, and the browser never sends the
-token to another site. The token has the same rights as the run token: there is one level of trust, the machine's user.
+Jason's own screens are drawn in Jason Desktop's window alone. A web interface of your own, in a browser, works through
+what stays open beside them: the runtime serves a build of yours, pairs it by the exchange that pairs the desktop's
+window, and answers it on the Runtime API the command line uses.
+
+**With none.** The runtime serves a build under `/ui/` at its address, `http://127.0.0.1:52766/ui/` by default
+([The port](#the-port)). Over the release's build, a browser tab there draws one sentence and nothing else, whatever the
+address names: "This is the place for a web interface of your own. To build one, ask your agent how." It has no link,
+no Demo and no console, reads no pairing and asks the runtime nothing.
+
+**The build.** A build is an `index.html` and, beside it, a `manifest.json` that holds exactly `version` and
+`api_version`, in `<data>/ui/custom/` (`~/.jason/ui/custom/` by default). The runtime serves it instead of the release's
+build, not beside it, under the rules of [Where the page comes from](#where-the-page-comes-from), and reads the directory
+at every request, so a build placed there is served at once and deleting `custom/` brings the release's back. Jason
+Desktop's window is served it too, and draws it in place of the console. `jason status` says which build is served, and
+that a build's `api_version` is not the runtime's; `jason ui install` and `jason update apply` never touch `custom/`. A
+build of `ui/` itself is made as [ui/README.md](../ui/README.md) says.
+
+**Pairing.** `jason ui pair` asks the runtime for a link (`ui.open`) and prints it, opening nothing:
+`http://127.0.0.1:<port>/ui/#/attention?t=<ticket>`, its ticket good for 60 seconds and for one use; with
+`--approval <id>` or `--question <id>` the link names `#/attention/approvals/<id>` or `#/attention/questions/<id>` in
+place of `#/attention`. The page trades the ticket at `POST /ui/session`, the one door outside the operation
+catalog and the only POST without a bearer, with the body `{"ticket":"…"}` and the runtime's own address as its
+`Origin`, and is answered `token`, `token_id`, `actor_id`, `api_version` and `instance_id`. The ticket is spent by that
+one trade whatever happens next; a spent or expired one is answered `401` with `ticket_invalid`.
+
+**Opening it.** `jason ui open --web` asks for such a link and hands it to your default browser, `--web --no-open`
+prints it instead, and `--approval` and `--question` go with either as with `jason ui pair`. Where `<data>/ui/custom/`
+holds no build the runtime would serve first, it asks the runtime nothing, opens nothing and refuses with
+`custom_ui_not_installed`, exit 1.
+
+**Talking to the runtime.** A page calls the [Runtime API](runtime-api.md) as any program does, `POST /v1/{noun}.{verb}`
+with its token as `Authorization: Bearer`, and follows the journal at `GET /v1/journal.stream`, where a browser's
+WebSocket, which cannot set that header, offers the token as the subprotocol `jason.bearer.<token>` beside
+`jason.journal.v1`. The page's policy lets it connect to its own origin and no other, and a request whose `Origin` names
+any address but the runtime's own, `http://127.0.0.1:<port>` or `http://localhost:<port>`, is refused with
+`origin_refused` before its token is read. Nothing in the runtime is made for a page: what a page shows comes from the
+operations the command line sends.
+
+**What a token can do.** Everything the run token can: every operation, reads and writes, deciding work that reaches
+real people included; there is one level of trust, the machine's user. A write names its actor as the caller claims it,
+and the release's build writes as `human:` and the `actor_id` the trade answered, this account's name. Unlike the run
+token, a UI token outlives a runtime's restart and never expires on its own: it lasts until `jason ui revoke`
+([Paired pages](#paired-pages)). Where a page keeps it is the page's own choice; one kept in a browser's storage for the
+runtime's origin is in that browser's profile, which a command of a Codex chat may read, and lets the page open again
+from a bookmark without a new pairing while the port stays the same.

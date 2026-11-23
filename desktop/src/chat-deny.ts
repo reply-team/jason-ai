@@ -242,7 +242,7 @@ export const cliCommandTree: readonly string[] = [
     'runtime autostart disable', 'runtime autostart enable', 'runtime autostart status', 'runtime drain', 'runtime restart', 'runtime resume',
     'runtime start', 'runtime status', 'runtime stop', 'sender list', 'session open', 'skills install', 'skills update', 'status',
     'subscription list', 'subscription rewind', 'subscription runs', 'suppression add', 'suppression list', 'suppression remove', 'ui install',
-    'ui open', 'ui revoke', 'ui tokens', 'uninstall', 'update apply', 'update check', 'update rollback', 'update status', 'workitem cancel',
+    'ui open', 'ui pair', 'ui revoke', 'ui tokens', 'uninstall', 'update apply', 'update check', 'update rollback', 'update status', 'workitem cancel',
     'workitem complete', 'workitem count', 'workitem create', 'workitem get', 'workitem heartbeat', 'workitem list', 'workitem resume',
     'workitem review', 'workitem set-result', 'workitem update', 'workitem wait',
 ];

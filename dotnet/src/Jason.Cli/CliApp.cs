@@ -16,7 +16,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Twelve names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Thirteen names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -53,7 +53,8 @@ namespace Jason.Cli;
 /// <para>
 /// <c>ui install</c> is the seventh, and the first verb of a noun whose other verbs are operations. It changes this
 /// installation as <c>skills</c> and <c>update</c> do: it places the release's UI as the default build on this
-/// machine, and asks the runtime nothing. <c>ui open</c>, <c>ui tokens</c> and <c>ui revoke</c> stay operations.
+/// machine, and asks the runtime nothing. <c>ui pair</c>, <c>ui tokens</c> and <c>ui revoke</c> stay operations:
+/// <c>ui.open</c>, <c>ui.tokens</c> and <c>ui.revoke</c>.
 /// </para>
 /// <para>
 /// <c>plugin install</c> is the eighth, made the same way. It places a plugin package the release publishes in the
@@ -103,10 +104,18 @@ namespace Jason.Cli;
 /// only one running from the executable it retires.
 /// </para>
 /// <para>
+/// <c>ui open</c> is the thirteenth, the second verb of the <c>ui</c> group that is no operation. It opens Jason Desktop
+/// at what waits, or at one approval or question, by the desktop's own <c>jason-desktop:</c> link, which the system hands
+/// to the application this account registered for it: a window on this machine, which the runtime never knows exists, so
+/// it asks the runtime nothing, and no operation can stand behind it. A link opens a page and decides nothing. Only
+/// <c>--web</c>, which opens a web UI of one's own where a build of it is installed, asks the runtime, and only what
+/// <c>ui pair</c> asks.
+/// </para>
+/// <para>
 /// Guards hold the list to these: the verb-map tests to the seven verbs, the three nouns, the <c>ui</c> group's three
-/// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
-/// noun's one verb, <c>open</c>. A thirteenth has to be added in the open rather than arriving as one more verb somebody
-/// thought was obviously fine.
+/// operations, <c>install</c> and <c>open</c>, held by what each verb sends, the <c>plugin</c> group's two operations and
+/// <c>install</c>, and the <c>session</c> noun's one verb, <c>open</c>. A fourteenth has to be added in the open rather
+/// than arriving as one more verb somebody thought was obviously fine.
 /// </para>
 /// </remarks>
 public static class CliApp

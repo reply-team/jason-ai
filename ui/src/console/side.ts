@@ -204,8 +204,8 @@ define('side.page', ([hash]) => {
 /** Where the build's own files are served from: the runtime serves the build under /ui/. */
 const assets = import.meta.env.BASE_URL;
 
-const entry = (title: string, hint: string, action: Html, icon: IconName, off: Html | null = null): Html =>
-    html`<button class="menuitem" type="button" role="menuitem" ${action} ${off}>
+const entry = (title: string, hint: string, action: Html, icon: IconName): Html =>
+    html`<button class="menuitem" type="button" role="menuitem" ${action}>
         ${svg(icon, 15)}<span class="mt">${title}</span><span class="ms">${hint}</span>
     </button>`;
 

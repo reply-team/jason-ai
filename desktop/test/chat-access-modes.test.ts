@@ -466,7 +466,7 @@ test('a tool the hook never saw, said while a Full access turn is stopped by Sto
     r.chat.stop(id);
     assert.deepEqual(await ended, { kind: 'done', error: null }, 'a turn the person stopped ends with no error');
     writeFileSync(go, '');
-    assert.equal(r.chat.modeNow(id), 'full_access');
+    assert.equal(r.chat.open(id).mode, 'full_access');
     assert.equal(r.again().open(id).mode, 'full_access', 'on the record too');
     assert.deepEqual(r.changes, []);
     assert.equal(r.unchecked, 1, 'a tool that ran unseen is said to the log, whatever stopped its turn');
@@ -487,7 +487,7 @@ test('a tool the hook never saw, said while a Full access turn is stopped for Pl
     await r.chat.setMode(id, 'plan_only');
     assert.deepEqual(await ended, { kind: 'done', error: null }, 'a turn the person\'s choice stopped ends with no sentence of another mode');
     writeFileSync(go, '');
-    assert.equal(r.chat.modeNow(id), 'plan_only');
+    assert.equal(r.chat.open(id).mode, 'plan_only');
     assert.equal(r.again().open(id).mode, 'plan_only', 'on the record too');
     assert.deepEqual(r.changes, [['full_access', 'plan_only']], 'no step to Ask first after the person\'s choice');
     assert.equal(r.unchecked, 1, 'a tool that ran unseen is said to the log, whatever stopped its turn');
@@ -520,7 +520,7 @@ test('Full access chosen while the host\'s version is read is not given once ano
         gate.held = null;
         open();
         assert.equal((await full).mode, 'ask_first', `after ${between.join(', then ')}: Full access answers the mode the chat is in`);
-        assert.equal(r.chat.modeNow(id), 'ask_first');
+        assert.equal(r.chat.open(id).mode, 'ask_first');
         assert.equal(r.again().open(id).mode, 'ask_first', 'on the record too');
     }
     assert.deepEqual(r.changes, [
@@ -790,7 +790,7 @@ test('the removed set is the start\'s own mode, never the conversation\'s: a Ful
     await r.chat.setMode(id, 'ask_first');
     await ended;
     writeFileSync(go, '');
-    assert.equal(r.chat.modeNow(id), 'ask_first');
+    assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal(r.unchecked, 1, 'the Full access start\'s tool ran unseen');
     assert.deepEqual(r.refused, []);
     assert.deepEqual(r.chat.bypassUnavailable(), { why: 'unguarded', named: null });
@@ -1906,7 +1906,7 @@ test('the desktop as shipped starts every new chat, a set-up chat or a campaign\
     const campaign = await r.chat.create('cmp_01ABC');
     assert.equal(campaign.mode, 'full_access', 'with no host named too');
     assert.equal(r.chat.open(campaign.id).mode, 'full_access');
-    assert.equal(r.chat.modeNow(setUp.id), 'full_access');
+    assert.equal(r.chat.open(setUp.id).mode, 'full_access');
     await r.turn(setUp.id, 'hello', claude);
     assert.deepEqual(r.started, ['full_access']);
     assert.equal(r.confirms, 0, 'no box');

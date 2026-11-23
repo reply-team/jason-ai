@@ -43,13 +43,16 @@ export interface SessionHost {
     label: string;
 }
 
-/** What the place lets the person do, as `can()` and `inTab()` say it there. */
+/** What the desktop's window lets the person do, as `placeGates` reads it. */
 export interface Gates {
     create: boolean;
     rename: boolean;
     restart: boolean;
     remove: boolean;
-    /** Whether the console is a tab the desktop opened, where a conversation is neither started fresh nor removed. */
+    /**
+     * Whether the console is a tab the desktop opened, where a conversation is neither started fresh nor removed; false
+     * since 0.49.3, which removed the tab.
+     */
     tab: boolean;
     /**
      * The word of the act that opens an agent's folder in the system's file manager, as Open in names that place; null
@@ -58,16 +61,16 @@ export interface Gates {
     folder: string | null;
     /**
      * The agent hosts a terminal can open a session of, in Open in's order (Claude Code before Codex), as Open in found
-     * them; empty where the place offers none: in a tab, in the demo, before Open in has answered, and where none is found.
+     * them; empty where the place offers none: in the demo, before Open in has answered, and where none is found.
      */
     hosts: readonly SessionHost[];
 }
 
 /**
  * The conversation's acts, as the agent's "…" holds them: for a conversation about an agent, first, the act that opens
- * the agent's folder in the file manager, where the place names one and is no tab, and the act that opens an agent host
- * in a terminal there, where Open in found one and the place is no tab; then Rename, Start fresh, Remove.
- * None where the place makes no chat; Start fresh and Remove are not in a tab; each is held while it cannot be taken:
+ * the agent's folder in the file manager, where the place names one, and the act that opens an agent host in a terminal
+ * there, where Open in found one; then Rename, Start fresh, Remove. None where the place makes no chat, and only Rename
+ * where `tab` is set, which no place sets since 0.49.3; each is held while it cannot be taken:
  * Rename until the conversation is kept or while its removal is asked, Start fresh and Remove while its turn runs or its
  * removal is asked.
  */

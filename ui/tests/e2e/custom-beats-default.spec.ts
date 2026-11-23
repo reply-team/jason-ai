@@ -6,7 +6,7 @@ test('a custom build is served over the default, and deleting it brings the defa
     await page.addInitScript(quietDesktop);
     const jason = await Jason.start({ build: 'both' });
     try {
-        const { url } = await jason.uiOpen();
+        const { url } = await jason.uiPair();
         await page.goto(url);
         await expect(page.locator('.jc-console .side')).toBeVisible();
         await openSystem(page);

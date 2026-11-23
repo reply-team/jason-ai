@@ -95,7 +95,7 @@ public sealed class StandardStreamsTests
         }
 
         var link = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.Cli", "Process", "IUrlOpener.cs"));
-        Assert.Contains("            StandardStreams.KeepOutOfChildren();\n            return ChildProcess.Start(start);", link, StringComparison.Ordinal);
+        Assert.Contains("            StandardStreams.KeepOutOfChildren();\n            if (ChildProcess.Start(start) is not { } process)", link, StringComparison.Ordinal);
         var terminal = File.ReadAllText(Path.Combine(Root, "dotnet", "src", "Jason.Cli", "Session", "ITerminalStarter.cs"));
         Assert.Contains("            StandardStreams.KeepOutOfChildren();\n            using var process = ChildProcess.Start(start);", terminal, StringComparison.Ordinal);
     }

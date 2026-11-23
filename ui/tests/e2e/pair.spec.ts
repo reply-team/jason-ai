@@ -1,11 +1,11 @@
 import { expect, quietDesktop, test } from './fixtures';
 
-test('jason ui open pairs a browser once; the ticket leaves the address bar; the used link is harmless; opening again keeps one token', async ({
+test('jason ui pair pairs a browser once; the ticket leaves the address bar; the used link is harmless; opening again keeps one token', async ({
     page,
     jason,
 }) => {
     await page.addInitScript(quietDesktop);
-    const { url } = await jason.uiOpen();
+    const { url } = await jason.uiPair();
     await page.goto(url);
     // Paired, the console is shown: the sidebar, and the area on Start, which every window opens on.
     await expect(page.locator('.jc-console .side')).toBeVisible();
@@ -25,7 +25,7 @@ test('jason ui open pairs a browser once; the ticket leaves the address bar; the
     await expect(page.locator('.jc-console .side')).toBeVisible();
     await expect(page.getByText(/isn't paired/)).toHaveCount(0);
 
-    const again = await jason.uiOpen();
+    const again = await jason.uiPair();
     await page.goto('about:blank');
     await page.goto(again.url);
     await expect(page.locator('.jc-console .side')).toBeVisible();
