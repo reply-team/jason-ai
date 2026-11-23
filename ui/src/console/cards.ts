@@ -717,7 +717,7 @@ export function openChoice(
     chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
 ): { index: number; card: Card } | null {
     let index = chat.entries.length - 1;
-    while (index >= 0 && !locksChoice(chat.entries[index]!.kind)) index--;
+    while (index >= 0 && !locksChoice(chat.entries[index]!)) index--;
     const entry = chat.entries[index];
     // One read from the desktop's record is drawn locked (`choiceState`), so it is never open.
     if (index < chat.reopened) return null;

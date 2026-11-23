@@ -306,7 +306,14 @@ describe('a chat as the page keeps it', () => {
         const chat = said(newChat('conv_1', 'claude'), 'Set up an autumn campaign');
         const attached = received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' });
         expect(attached).toMatchObject({ campaignId: 'cmp_1', title: 'Autumn outreach', running: true });
-        expect(attached.entries.at(-1)).toEqual({ kind: 'attached', title: 'Autumn outreach' });
+        expect(attached.entries.at(-1)).toEqual({ kind: 'attached', title: 'Autumn outreach', ofTurn: true });
+        // One the person picked after the turn ended is not the turn's.
+        const chosen = received(received(chat, { kind: 'done', error: null }), {
+            kind: 'attached',
+            campaignId: 'cmp_1',
+            title: 'Autumn outreach',
+        });
+        expect(chosen.entries.at(-1)).toEqual({ kind: 'attached', title: 'Autumn outreach' });
         expect(received(chat, { kind: 'fresh', reason: 'not_found' }).entries.at(-1)).toEqual({
             kind: 'fresh',
             reason: 'not_found',
@@ -1217,6 +1224,73 @@ describe('a choice the AI asked', () => {
     ])('is not locked by a later $kind', (entry) => {
         expect(state(after(asked(), entry))).toEqual({ state: 'live' });
         expect(state(said(after(asked(), entry), 'From me'))).toEqual({ state: 'chosen', label: 'From me' });
+    });
+
+    describe('when the turn that asked it made the chat a campaign’s conversation', () => {
+        const spring = { kind: 'attached', campaignId: 'cmp_1', title: 'Spring' } as const;
+        /** A set-up turn that asks, then hands the chat over to the campaign it made before its end. */
+        const handedOver = (): Chat => {
+            const asking = received(said(newChat('c1', 'claude'), 'Set it up'), {
+                kind: 'text',
+                text: 'Who should the emails come from?',
+                at,
+            });
+            return received(received(asking, spring), { kind: 'done', error: null });
+        };
+
+        it('is not locked by the hand-over: the agent’s rule decides, live once no act of the person’s was read', () => {
+            expect(handedOver().campaignId).toBe('cmp_1');
+            expect(state(handedOver(), clear)).toEqual({ state: 'live' });
+            expect(state(handedOver(), { at, read: 'reading' })).toEqual({ state: 'idle' });
+            expect(state(handedOver(), null)).toEqual({ state: 'idle' });
+            expect(state(handedOver(), { at, read: 'acted' })).toEqual({ state: 'acted' });
+            expect(state(handedOver(), { at, read: 'unread' })).toEqual({ state: 'unread' });
+            expect(state(said(handedOver(), ' From me'), { at, read: 'acted' })).toEqual({
+                state: 'chosen',
+                label: 'From me',
+            });
+        });
+
+        it('is still locked by any other entry after it', () => {
+            expect(state(after(handedOver(), { kind: 'error', text: 'It stopped.' }), clear)).toEqual({
+                state: 'locked',
+            });
+            expect(state(after(handedOver(), { kind: 'notice', text: 'Gone.', folder: null }), clear)).toEqual({
+                state: 'locked',
+            });
+        });
+
+        it('is locked by a campaign the person picked after the turn, which is no hand-over of the turn that asked', () => {
+            const picking = received(
+                received(said(newChat('c1', 'claude'), 'Set it up'), { kind: 'text', text: 'Who?', at }),
+                { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] },
+            );
+            const ended = received(picking, { kind: 'done', error: null });
+            expect(state(ended)).toEqual({ state: 'live' });
+            expect(state(received(ended, spring), clear)).toEqual({ state: 'locked' });
+        });
+
+        it('is locked by a picked campaign that arrives while an export runs, which is no turn', () => {
+            const picking = received(
+                received(said(newChat('c1', 'claude'), 'Set it up'), { kind: 'text', text: 'Who?', at }),
+                { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] },
+            );
+            const exporting = said(received(picking, { kind: 'done', error: null }), '/export x.md');
+            expect(exporting).toMatchObject({ running: true, exporting: '/export x.md' });
+            const attached = received(exporting, spring);
+            expect(attached.entries.at(-1)).toEqual({ kind: 'attached', title: 'Spring' });
+            expect(state(attached, clear)).toEqual({ state: 'locked' });
+        });
+
+        it('is answered by the message of a later turn, which a hand-over of that turn does not undo', () => {
+            const picking = received(
+                received(said(newChat('c1', 'claude'), 'Set it up'), { kind: 'text', text: 'Who?', at }),
+                { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] },
+            );
+            const later = received(said(received(picking, { kind: 'done', error: null }), 'Only one, please'), spring);
+            expect(later.entries.at(-1)).toEqual({ kind: 'attached', title: 'Spring', ofTurn: true });
+            expect(state(received(later, { kind: 'done', error: null }), clear)).toEqual({ state: 'own_words' });
+        });
     });
 
     it('is drawn locked once the chat is opened again, as the desktop keeps fewer entries than lock it, and answered as it was', () => {

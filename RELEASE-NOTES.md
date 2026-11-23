@@ -179,6 +179,8 @@ rule of the skills.
   email reply now goes out as HTML that shows exactly the text you approved, line breaks included.
 - **An approval's summary no longer says a send is "outside any campaign".** It names the person, the format, the
   account, the subject, the text and the send time.
+- **A "Jason asks" card's answers can be clicked when the same turn made the chat a campaign's conversation.** The line
+  that says so no longer locks the question above it, so a click sends that answer, as it does in any other chat.
 
 ## Upgrading from 0.49.3
 

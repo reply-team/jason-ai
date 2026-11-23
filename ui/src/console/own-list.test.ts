@@ -286,7 +286,7 @@ describe('the person’s own messages', () => {
                 if (reading.state !== 'card') continue;
                 const labels = optionsOf(reading.card).map((option) => option.label);
                 if (choiceState(opened, index, labels, null, false).state !== 'chosen') continue;
-                const next = opened.entries.find((entry, at) => at > index && locksChoice(entry.kind));
+                const next = opened.entries.find((entry, at) => at > index && locksChoice(entry));
                 if (next?.kind === 'user') chosen.push(next.text);
             }
             expect(left, JSON.stringify(each.entries)).toEqual(chosen);
