@@ -28,6 +28,7 @@ import { html, type Html } from './html';
 import { svg } from './icons';
 import { ageOf, searchLines, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { chatWaits } from './needs-chats';
+import { forgetHeld, heldLine, readHeld, sightHeld } from './needs-held';
 import {
     agentsOf,
     countWords,
@@ -317,7 +318,9 @@ async function acted(work: () => Promise<unknown>): Promise<void> {
  * journal's word asked for it, so a row edited here is read again only when a line named its work item.
  */
 export async function reload(followed = false): Promise<void> {
-    await attention.load(here().api, false, followed);
+    const api = here().api;
+    // The line for work held at a daily limit is read beside the lists, and enters none of their counts.
+    await Promise.all([attention.load(api, false, followed), readHeld(api)]);
     await fill();
 }
 
@@ -339,6 +342,7 @@ export function forgetNeeds(): void {
     acting.value = 0;
     senders.lookups.value = {};
     sending = null;
+    forgetHeld();
 }
 
 /**
@@ -351,6 +355,7 @@ export function sightNeeds(shown: boolean): void {
     batch(() => {
         keepPlace();
         left.value = false;
+        sightHeld();
     });
 }
 
@@ -1025,6 +1030,7 @@ export function needsView(): Html {
                   </div>`
                 : null
         }
+        ${heldLine()}
         ${
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`

@@ -548,6 +548,16 @@ export const en = {
     'approval.arg.find_phones.true': 'Phone numbers too, which may cost extra',
     'approval.arg.find_phones.false': 'No phone numbers',
     'approval.arg.audience': 'More people for audience {value}',
+    // Needs you's line for work held at a daily limit of launches (`console/needs-held.ts`). It is no item of the list
+    // and is never counted. {until} is the day's end on the person's clock, {zone} the zone that clock is in.
+    'needs.held.one': '1 work item waits on a daily limit of launches until {until} ({zone}).',
+    'needs.held.many': '{count} work items wait on a daily limit of launches until {until} ({zone}).',
+    'needs.held.says': "A lift lets every role in every agent run past today's limits until then.",
+    'needs.held.lift': "Lift today's limits",
+    'needs.held.lifted.none': 'Lifted until {until} ({zone}). Nothing was held any more.',
+    'needs.held.lifted.one': 'Lifted until {until} ({zone}). 1 work item was let go.',
+    'needs.held.lifted.many': 'Lifted until {until} ({zone}). {count} work items were let go.',
+    'needs.held.failed': 'The limits were not lifted.',
 } as const;
 
 export type MessageKey = keyof typeof en;
