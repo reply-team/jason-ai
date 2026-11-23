@@ -1341,15 +1341,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The desktop's page says that a chat the person opens has the caret in its box, so they can type at once, and that
-    /// nothing else moves it there; Start opened by Jason's mark too. The console notes the focus at each of those acts
-    /// and the dock gives the box of the pane it shows the focus, with the caret at the end; a move given no act moves none.
+    /// The desktop's page says that a chat the person opens, by any act of their own, has the caret in its box, so they
+    /// can type at once, and that nothing else moves it there; Start opened by Jason's mark too. The console notes the
+    /// focus at each of those acts and the dock gives the box of the pane it shows the focus, with the caret at the end; a
+    /// move given no act moves none. The page names no road, so a table in the UI's tests lists every one the source has.
     /// </summary>
     [Fact]
     public void The_desktop_page_says_a_chat_you_open_has_the_caret_in_its_box_and_the_console_puts_it_there()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
-        Assert.Contains("A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in **Agents** or **Chats** or on the Agents page, an agent's **Chat** tab, the Feed, a link to it you click in a notification or a card, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
+        Assert.Contains("A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at once. Nothing else moves it there: not moving along the rows or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
         Assert.Contains("A screen reader hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name of their row.", desktop, StringComparison.Ordinal);
         Assert.Contains("in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.", desktop, StringComparison.Ordinal);
 
@@ -1388,8 +1389,26 @@ public partial class PageClaimsTests
         Assert.Contains("dock.showChat(held, act);", shell, StringComparison.Ordinal);
         Assert.Contains("if ('route' in place) return dock.page(place.route, act);", shell, StringComparison.Ordinal);
 
-        // Every chat's pane is a region: an agent's named by its header's heading, any other by its row's name.
+        // So do the other acts that open a chat: a Feed line's agent and the Dashboard's, Needs you's Open the chat, a
+        // card's link (the dock gives the focus only where it is an agent's Chat), the classic pages' hand-off, the
+        // Dashboard's New GTM agent, a row menu's Start conversation fresh, Start's send and the way out of Settings.
         var chat = Flat(Page("ui", "src", "console", "chat.tsx"));
+        Assert.Contains("here().dock.chat({ id, name }, openedHere());", chat, StringComparison.Ordinal);
+        Assert.Contains("here().dock.chat({ id, name }, openedHere());", Flat(Page("ui", "src", "console", "needs.ts")), StringComparison.Ordinal);
+        Assert.Contains("here().dock.page(parseRoute(hash), openedHere());", Flat(Page("ui", "src", "console", "card-frame.ts")), StringComparison.Ordinal);
+        Assert.Contains("here().dock.chat(campaign, openedHere());", shell, StringComparison.Ordinal);
+        Assert.Contains("define('dash.new', () => void newAgent(undefined, openedHere()));", Flat(Page("ui", "src", "console", "dashboard.ts")), StringComparison.Ordinal);
+        Assert.Contains("void begin(row, 'fresh', (held) => here().dock.showChat(held, opened));", Flat(Page("ui", "src", "console", "row-menu.tsx")), StringComparison.Ordinal);
+        Assert.Contains("here().dock.showChat(id, opened);", Flat(Page("ui", "src", "console", "start.tsx")), StringComparison.Ordinal);
+        var wayOut = Flat(Page("ui", "src", "screens", "settings", "way-out.ts"));
+        Assert.Contains("return dock.show('start', opened);", wayOut, StringComparison.Ordinal);
+        Assert.Contains("return dock.showChat(place.pane.slice('chat:'.length), opened);", wayOut, StringComparison.Ordinal);
+
+        // The roads are listed in one table that the UI's tests hold to the source, so none is added without a row.
+        var roads = Flat(Page("ui", "src", "console", "chat-roads.test.ts"));
+        Assert.Contains("so a road added without a row here, or a row whose road went, is red.", roads, StringComparison.Ordinal);
+
+        // Every chat's pane is a region: an agent's named by its header's heading, any other by its row's name.
         Assert.Contains("? { 'aria-labelledby': agentNameId(chat.campaignId!) } : { 'aria-label': chat.main ? t('side.feed') : chat.title };", chat, StringComparison.Ordinal);
         Assert.Contains("role=\"region\" {...named}>", chat, StringComparison.Ordinal);
         Assert.Contains("<h2 id={agentNameId(id)}>{name}</h2>", head, StringComparison.Ordinal);
