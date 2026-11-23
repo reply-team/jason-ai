@@ -67,6 +67,11 @@ import type {
     WorkItemCreateRequest,
     WorkItemGetRequest,
     WorkItemWithResult,
+    ActorRef,
+    LaunchesLift,
+    LaunchesLiftRequest,
+    LaunchesList,
+    LaunchesListRequest,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
@@ -605,6 +610,10 @@ import workitemCountSearchNow from '../../../docs/api/fixtures/workitem.count/se
 import workitemCountSearchPlanned from '../../../docs/api/fixtures/workitem.count/search-planned.json';
 import workitemGetSearchFirst from '../../../docs/api/fixtures/workitem.get/search-first.json';
 import workitemListSearchNow from '../../../docs/api/fixtures/workitem.list/search-now.json';
+import launchesListLimits from '../../../docs/api/fixtures/launches.list/limits.json';
+import launchesListLifted from '../../../docs/api/fixtures/launches.list/lifted.json';
+import launchesLiftFromNeedsYou from '../../../docs/api/fixtures/launches.lift/from-needs-you.json';
+import launchesLiftNotHuman from '../../../docs/api/fixtures/launches.lift/not-human.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -2058,6 +2067,10 @@ export const fixtures = {
     >,
     'workitem.get/search-first': workitemGetSearchFirst satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.list/search-now': workitemListSearchNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
+    'launches.list/limits': launchesListLimits satisfies Exchange<LaunchesListRequest, LaunchesList>,
+    'launches.list/lifted': launchesListLifted satisfies Exchange<LaunchesListRequest, LaunchesList>,
+    'launches.lift/from-needs-you': launchesLiftFromNeedsYou satisfies Exchange<LaunchesLiftRequest, LaunchesLift>,
+    'launches.lift/not-human': launchesLiftNotHuman satisfies Exchange<{ actor: ActorRef }, ErrorEnvelope>,
 } as const;
 
 export type FixtureName = keyof typeof fixtures;
