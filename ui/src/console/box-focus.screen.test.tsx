@@ -4,9 +4,10 @@ import { session } from '../api/session';
 import { loadMode, mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
-import { route } from '../router';
+import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import type { DesktopLineEntry } from '../platform/desktop';
+import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
 import { agentFacts } from './agent-facts';
@@ -352,6 +353,206 @@ describe('the Feed opened by a link', () => {
         await leaveForNeeds();
         flush(() => desktop.link({ page: 'feed' }));
         await focusedBox(`chat:${feedId.value}`);
+    });
+});
+
+describe('a chat opened by any other act of the person’s', () => {
+    /** A line of the Feed about Spring, as the desktop keeps it. */
+    const springLine: DesktopLineEntry = {
+        kind: 'line',
+        journal_kind: 'inbound_reply_observed',
+        journal_id: 'jrn_01JD0000000000000000000001',
+        at: '2026-11-11T10:25:00.000Z',
+        campaign_id: 'cmp_1',
+        count: 1,
+    };
+    const feedConversation = 'conv_01JDFEED000000000000000000';
+    const shownBox = () =>
+        waitFor(() => {
+            const box = document.querySelector<HTMLTextAreaElement>(
+                '.area > .pane:not([hidden]) textarea[aria-label="Your message"]',
+            );
+            expect(box).not.toBeNull();
+            expect(document.activeElement).toBe(box);
+            return box!;
+        });
+
+    it('from a Feed line’s agent has the caret in the agent’s box', async () => {
+        const desktop = stubDesktop({ ...setupFound });
+        desktop.keep({ id: feedConversation, main: true, title: 'Feed', entries: [springLine] });
+        await renderConsoleOn(desktop);
+        await waitFor(() => expect(feedId.value).toBe(feedConversation));
+        press(await waitFor(() => menu().getByRole('button', { name: /^Feed/ })));
+        await focusedBox(`chat:${feedConversation}`);
+        const line = await waitFor(() => pane(`chat:${feedConversation}`)!.querySelector<HTMLElement>('.feed-line')!);
+        press(within(line).getByRole('button', { name: 'Spring' }));
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from the Dashboard’s line about an agent has the caret in the agent’s box', async () => {
+        await renderConsole(
+            screenApi()
+                .answerAnyRequest('campaign.activity', 'campaign.activity/all-30-days')
+                .answerAnyRequest('reply.count', 'reply.count/every-campaign'),
+        );
+        flush(() => {
+            lines.value = [
+                journalLine({
+                    id: 'jrn_01JD0000000000000000000001',
+                    kind: 'inbound_reply_observed',
+                    campaign_id: 'cmp_1',
+                    ts: new Date().toISOString(),
+                }),
+            ];
+        });
+        flush(() => here().dock.show('dashboard'));
+        await waitFor(() => expect(activePanel.value).toBe('dashboard'));
+        const link = await waitFor(() => pane('dashboard')!.querySelector<HTMLElement>('.dash-line .dash-link')!);
+        press(link);
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from the Dashboard’s New GTM agent has the caret in the box of the new agent’s opening', async () => {
+        await renderConsole(
+            newAgentApi()
+                .answerAnyRequest('campaign.activity', 'campaign.activity/all-30-days')
+                .answerAnyRequest('reply.count', 'reply.count/every-campaign'),
+        );
+        flush(() => here().dock.show('dashboard'));
+        await waitFor(() => expect(activePanel.value).toBe('dashboard'));
+        const button = await waitFor(() =>
+            within(pane('dashboard')!).getAllByRole('button', { name: 'New GTM agent' }).at(0)!,
+        );
+        press(button);
+        const box = await waitFor(() => {
+            const shown = document.querySelector<HTMLElement>('.area > .pane:not([hidden]) .agent-opening');
+            expect(shown).not.toBeNull();
+            const found = within(shown!).getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+            expect(document.activeElement).toBe(found);
+            return found;
+        });
+        caretAtEnd(box);
+    });
+
+    it('from Needs you’s Open the chat has the caret in the agent’s box', async () => {
+        const fake = screenApi()
+            .answerAnyRequest('approval.list', 'approval.list/pending')
+            .answerAnyRequest('approval.get', 'approval.get/pending-with-preview')
+            .answerAnyRequest('decision.get', 'decision.get/for-campaign-row');
+        await renderConsole(fake);
+        await leaveForNeeds();
+        const open = await waitFor(() =>
+            within(pane('needs')!.querySelector<HTMLElement>('.needs-pane')!).getByRole('button', {
+                name: 'Open the chat',
+            }),
+        );
+        press(open);
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from a data card’s link to an agent’s Chat has the caret in its box; a link to a page of no chat moves none', async () => {
+        await renderConsole();
+        // A card's control as the console's markup draws it: a click names the action and the address it opens.
+        const link = (hash: string) => {
+            const control = document.createElement('button');
+            control.type = 'button';
+            control.dataset['action'] = 'card.page';
+            control.dataset['args'] = JSON.stringify([hash]);
+            control.textContent = hash;
+            pane('start')!.append(control);
+            return control;
+        };
+        press(link('#/campaigns/cmp_1/people'));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_1/people'));
+        await settled();
+        expect(document.activeElement?.tagName).not.toBe('TEXTAREA');
+        flush(() => here().dock.show('start'));
+        await waitFor(() => expect(activePanel.value).toBe('start'));
+        press(link('#/campaigns/cmp_1/chat'));
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from a page’s New chat, handed over by the classic pages, has the caret in the new chat’s box', async () => {
+        await renderConsole(screenApi().answerAnyRequest('contact.list', 'contact.list/by-activity-empty'));
+        flush(() => here().dock.page(parseRoute('#/people')));
+        const button = await waitFor(() => within(pane('page')!).getByRole('button', { name: 'New chat' }));
+        press(button);
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+        await focusedBox(activePanel.value!);
+    });
+
+    it('from Search’s Feed and its New chat has the caret in the box', async () => {
+        await renderConsole();
+        await waitFor(() => expect(feedId.value).not.toBeNull());
+        const choose = async (words: string, label: string) => {
+            fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+            const input = await waitFor(() => within(document.body).getByRole('combobox'));
+            fireEvent.change(input, { target: { value: words } });
+            await waitFor(() => within(document.body).getByRole('option', { name: new RegExp(label) }));
+            fireEvent.keyDown(input, { key: 'Enter' });
+        };
+        await choose('feed', 'Feed');
+        await focusedBox(`chat:${feedId.value}`);
+        await leaveForNeeds();
+        await choose('new chat', 'New chat');
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+        await focusedBox(activePanel.value!);
+    });
+
+    it('from Search’s New GTM agent has the caret in the box of the new agent’s opening', async () => {
+        await renderConsole(newAgentApi());
+        fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+        const input = await waitFor(() => within(document.body).getByRole('combobox'));
+        fireEvent.change(input, { target: { value: 'new gtm agent' } });
+        await waitFor(() => within(document.body).getByRole('option', { name: /New GTM agent/ }));
+        fireEvent.keyDown(input, { key: 'Enter' });
+        await waitFor(() => {
+            const shown = document.querySelector<HTMLElement>('.area > .pane:not([hidden]) .agent-opening');
+            expect(shown).not.toBeNull();
+            expect(document.activeElement).toBe(
+                within(shown!).getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }),
+            );
+        });
+    });
+
+    it('from a row menu’s Start conversation fresh has the caret in its box', async () => {
+        await renderConsole();
+        const row = await chatsRow('Set-up');
+        row.focus();
+        fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+        const opened = await waitFor(() => within(document.body).getByRole('menu'));
+        fireEvent.click(within(opened).getByRole('menuitem', { name: 'Start conversation fresh' }));
+        await focusedBox(`chat:${setupChat}`);
+    });
+
+    it('from Start’s send has the caret in the box of the chat it made', async () => {
+        await renderConsole();
+        const box = startBox();
+        box.focus();
+        fireEvent.change(box, { target: { value: 'CFOs of logistics firms in Ohio' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+        await shownBox();
+    });
+
+    it('from Settings’ Back to the chat it was opened from has the caret in that chat’s box', async () => {
+        await renderConsole();
+        press(await chatsRow('Set-up'));
+        await focusedBox(`chat:${setupChat}`);
+        flush(() => here().dock.page({ screen: 'settings' }));
+        const back = await waitFor(() => within(pane('page')!).getByRole('button', { name: 'Back' }));
+        press(back);
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${setupChat}`));
+        await focusedBox(`chat:${setupChat}`);
+    });
+
+    it('from Settings’ Back to Start has the caret in Start’s box', async () => {
+        await renderConsole();
+        flush(() => here().dock.page({ screen: 'settings' }));
+        const back = await waitFor(() => within(pane('page')!).getByRole('button', { name: 'Back' }));
+        press(back);
+        await waitFor(() => expect(activePanel.value).toBe('start'));
+        await waitFor(() => expect(document.activeElement).toBe(startBox()));
     });
 });
 
