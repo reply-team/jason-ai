@@ -122,6 +122,7 @@ public partial class RoleSkillTests
         Assert.Contains("A day's limit is lifted only on the person's word, by them or by their own session, never by you", head, StringComparison.Ordinal);
         Assert.Contains("Where you meet a held check-in or a role's work held at a day's limit, the lift is the person's word, and a question you raise about it names the way: they tell their agent to ignore the limit, or type the command the held item's notification prints, and it holds until the installation's next midnight", head, StringComparison.Ordinal);
         Assert.Contains("**end a person's line** in this campaign, with a reason", head, StringComparison.Ordinal);
+        Assert.Contains("Where you need the limits themselves, read them: `jason launches list --campaign <cmp>` says each role's limit a day as it stands", head, StringComparison.Ordinal);
     }
 
     /// <summary>A line is reopened only on the person's yes, by the question they answered, and never on a reading of the manager's.</summary>
