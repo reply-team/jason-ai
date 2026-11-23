@@ -227,7 +227,7 @@ recorded, with `--nature opt_out` and the person's `--contact`. Recording it is 
 act the runtime puts every address and profile the contact holds on the do-not-contact register, and from then on the
 claim refuses, in every campaign, every provider operation about them that the register gates, on a value they gain
 later too: a send, a reply, an invitation, an enrolment. What is for exactly such a person still runs: the provider's
-`optout.record` and, where the campaign is linked to a provider's campaign, a proposed `enrollment.stop`, below. Do not
+`optout.record` and, where the campaign is linked to a provider's sequence, a proposed `enrollment.stop`, below. Do not
 run `jason suppression add` for them: the runtime has done it, and a second entry by hand only repeats it. Use that verb
 where there is no contact to record against, as below, where the person was not found and an address is all there is.
 
@@ -250,9 +250,12 @@ same opt-out twice: the same create answers with the item the first run made. Tw
 different keys, so name what makes each one different — the person, the act — or the second is refused with
 `idempotency_key_reused`.
 
-Taking them out of the provider's campaign as well is a person's decision. Propose it only where the campaign is linked
-to a provider's campaign, as its context says. Where the person had Jason's own direct letters alone, there is nothing
-to stop: `optout.record` completes the opt-out, and you propose no `enrollment.stop`. Where it is linked, propose it as
+Taking them out of the provider's sequence as well is a person's decision. Read `jason campaign get` first, and propose
+it only where its `external_ids` holds an item whose `kind` is `campaign`: that is the provider's campaign, which the
+contract calls `campaign.external_ids.campaign`, and the operation cannot run without it, whatever the context says.
+Where `external_ids` holds none, no sequence is linked, there is nothing at the provider to take the person out of:
+`optout.record` completes the opt-out, you propose no `enrollment.stop`, and your summary says in one clause that no
+sequence was linked, so nothing was stopped there. Where one is held, propose it as
 a `provider_op` item naming `enrollment.stop`, with the reason, and it waits for a person to approve it; the register
 holding them does not refuse it, because a stop is for exactly those people.
 
