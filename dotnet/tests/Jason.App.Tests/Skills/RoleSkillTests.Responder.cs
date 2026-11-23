@@ -76,7 +76,7 @@ public partial class RoleSkillTests
         // completed it.
         Assert.Contains("Read `jason campaign get` first, and propose it only where its `external_ids` holds an item whose `kind` is `campaign`", skill, StringComparison.Ordinal);
         Assert.Contains("which the contract calls `campaign.external_ids.campaign`, and the operation cannot run without it, whatever the context says.", skill, StringComparison.Ordinal);
-        Assert.Contains("your summary says in one clause that no sequence was linked, so nothing was stopped there.", skill, StringComparison.Ordinal);
+        Assert.Contains("your summary says in one clause that the campaign holds no provider's campaign, so nothing was stopped there.", skill, StringComparison.Ordinal);
         Assert.Contains("jason campaign get cmp_", skill, StringComparison.Ordinal);
         Assert.Contains("`optout.record` completes the opt-out, you propose no `enrollment.stop`", skill, StringComparison.Ordinal);
 
