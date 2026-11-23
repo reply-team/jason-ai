@@ -109,7 +109,9 @@ link is enough to start." where the AI host chosen for the chat can open a page;
 without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
-**Take back** returns the words. Start opens every time the window opens, also when campaigns exist.
+**Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and a click on
+Jason's mark at the top of the sidebar opens it again, with the words you typed there and did not send; it closes
+nothing, and in the Demo it opens the Demo's Start.
 
 Under Search, Needs you, the Feed and Accounts the sidebar holds two sections, **Agents** above **Chats**, each a
 header with a small plus at its right. **Agents** lists the agents that are not archived, each by the agent's name,

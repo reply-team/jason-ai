@@ -17,6 +17,7 @@ import { Console } from './console';
 import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
 import { chats, clock, conversations, feedId, feedUnseen, here } from './state';
+import { startDraft } from './start';
 
 // The sidebar: the rows in their order, the number on Needs you, More and what is under it, the two sections AGENTS
 // and CHATS with the plus over each, and Settings in the foot. Read against the recorded exchanges of the runtime's own
@@ -863,5 +864,97 @@ describe('the strip in the Windows and Linux desktop’s window, whose caption b
         renderConsole(Object.assign(stubDesktop(), { platform: 'darwin' as const }), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay')).toBe(false);
+    });
+});
+
+describe('Jason’s mark at the top of the sidebar', () => {
+    /** The mark and the wordmark: one button, named for the page it leads to. */
+    const brand = () => side().getByRole('button', { name: 'Start' });
+    const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Who do you want to reach?' });
+
+    beforeEach(() => {
+        startDraft.value = '';
+    });
+
+    it('shows Start again, with the words typed there and not sent, and leaves the Alpha badge out of the button', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.change(box(), { target: { value: 'CFOs of logistics firms in Ohio' } });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        expect(box().value).toBe('CFOs of logistics firms in Ohio');
+        // The button holds the mark and both wordmarks; the badge stands beside it, in the brand's strip.
+        const button = brand();
+        expect(button.getAttribute('type')).toBe('button');
+        expect(button.querySelector('.mark')).not.toBeNull();
+        expect(button.querySelector('.wordmark.light')).not.toBeNull();
+        expect(button.querySelector('.wordmark.dark')).not.toBeNull();
+        const alpha = document.querySelector<HTMLElement>('.jc-console .side .brand .alpha')!;
+        expect(alpha.textContent).toBe('Alpha');
+        expect(button.contains(alpha)).toBe(false);
+        expect(alpha.closest('button')).toBeNull();
+        expect(alpha.parentElement).toBe(button.parentElement);
+        // Start has no row: nothing marks the mark as where the area stands.
+        expect(button.hasAttribute('aria-current')).toBe(false);
+    });
+
+    it('closes nothing: a chat left is still drawn and in its row, and a page gives way to Start at the chat’s address', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000X2', title: 'Autumn' });
+        renderConsole(desktop);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const row = () => within(sections().chats).getByRole('button', { name: 'Autumn' });
+        fireEvent.click(await waitFor(row));
+        await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000X2'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        // The chat is only not chosen: its pane is held as it was left, and its row is in CHATS, where it opens again.
+        expect(
+            document.querySelector('.area > .pane[data-pane="chat:conv_01JDKEPT0000000000000000X2"]'),
+        ).not.toBeNull();
+        fireEvent.click(row());
+        await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000X2'));
+        expect(calls(desktop, 'chat.remove')).toEqual([]);
+        expect(calls(desktop, 'chat.stop')).toEqual([]);
+        fireEvent.click(side().getByRole('button', { name: 'Settings' }));
+        await waitFor(() => expect(inFront()).toBe('page:settings'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        expect(route.value.screen).toBe('chat');
+        // The Demo stays the Demo: the mark shows the Demo's own Start and asks the desktop for no other mode.
+        expect(mode.value).toBe('demo');
+        expect(calls(desktop, 'mode.set')).toEqual([]);
+    });
+
+    it('changes nothing at rest: no ground, border or padding of its own, the pointer and the focus ring the rows have, and no hover', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const button = brand();
+        expect(styleOf(button)).toMatchObject({
+            display: 'flex',
+            'align-items': 'center',
+            gap: '6px',
+            padding: '0',
+            border: '0',
+            background: 'none',
+            cursor: 'pointer',
+        });
+        // The ring is the console's one, for every control; nothing takes it off the mark.
+        expect(styleOf(button)['outline']).toBeUndefined();
+        const css = readFileSync('src/console/console.css', 'utf8');
+        expect(css).toContain(
+            '.jc-console :focus-visible {\n    box-shadow: none;\n    outline: 2px solid var(--teal);',
+        );
+        const hovers = css
+            .replace(/[/][*][^]*?[*][/]/g, '')
+            .split('}')
+            .map((rule) => rule.slice(0, rule.indexOf('{')))
+            .filter((head) => head.includes('.brand') && /:hover|:active|aria-current/.test(head));
+        expect(hovers).toEqual([]);
+        // Where the Mac's window has its buttons, the band is the sidebar's top 26 px; the brand starts below it, so the
+        // mark is in no drag region and needs no no-drag of its own.
+        expect(styleOf(button)['-webkit-app-region']).toBeUndefined();
     });
 });
