@@ -1349,7 +1349,8 @@ public partial class PageClaimsTests
     public void The_desktop_page_says_a_chat_you_open_has_the_caret_in_its_box_and_the_console_puts_it_there()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
-        Assert.Contains("A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in **Agents** or **Chats**, the Feed, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
+        Assert.Contains("A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in **Agents** or **Chats** or on the Agents page, an agent's **Chat** tab, the Feed, a link to it you click in a notification or a card, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there: not moving along the rows or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving.", desktop, StringComparison.Ordinal);
+        Assert.Contains("A screen reader hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name of their row.", desktop, StringComparison.Ordinal);
         Assert.Contains("in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.", desktop, StringComparison.Ordinal);
 
         // The box takes the focus once its pane is drawn, at the end of its words, and only for an act that opened it.
@@ -1374,6 +1375,24 @@ public partial class PageClaimsTests
         Assert.Contains("const opened = href(parseRoute(location.hash)) === address ? openedHere() : undefined;", shell, StringComparison.Ordinal);
         Assert.Contains("giveBox(chatPane(chatId), opened);", shell, StringComparison.Ordinal);
         Assert.Contains("giveBox(chatPane(id), opened);", shell, StringComparison.Ordinal);
+
+        // The Agents page's rows, an agent's Chat tab activated and a link the person clicked note the act too; the arrows
+        // along the tabs only move to a tab.
+        var agents = Flat(Page("ui", "src", "console", "campaigns.ts"));
+        Assert.Contains("here().dock.chat({ id: campaign.id, name: campaign.name }, openedHere());", agents, StringComparison.Ordinal);
+        Assert.Contains("here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(id)}`), openedHere());", agents, StringComparison.Ordinal);
+        var head = Flat(Page("ui", "src", "console", "agent-head.tsx"));
+        Assert.Contains("each === 'chat' ? here().dock.page(agentChatRoute(id), openedHere()) : navigate(to(each))", head, StringComparison.Ordinal);
+        var tabs = Flat(Page("ui", "src", "layout", "tabs.tsx"));
+        Assert.Contains("if (tab && tab.key !== active) navigate(to(tab.key));", tabs, StringComparison.Ordinal);
+        Assert.Contains("dock.showChat(held, act);", shell, StringComparison.Ordinal);
+        Assert.Contains("if ('route' in place) return dock.page(place.route, act);", shell, StringComparison.Ordinal);
+
+        // Every chat's pane is a region: an agent's named by its header's heading, any other by its row's name.
+        var chat = Flat(Page("ui", "src", "console", "chat.tsx"));
+        Assert.Contains("? { 'aria-labelledby': agentNameId(chat.campaignId!) } : { 'aria-label': chat.main ? t('side.feed') : chat.title };", chat, StringComparison.Ordinal);
+        Assert.Contains("role=\"region\" {...named}>", chat, StringComparison.Ordinal);
+        Assert.Contains("<h2 id={agentNameId(id)}>{name}</h2>", head, StringComparison.Ordinal);
     }
 
     /// <summary>

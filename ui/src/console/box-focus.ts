@@ -1,8 +1,9 @@
 import { sameControl } from './html';
 
 // A chat the person opens by their own act has the caret in its box, so they can type at once: a row of Chats or of
-// Agents, the Feed's row, each plus, a choice in Search, a row menu's Open, the window's New chat, Jason's mark for Start,
-// and Back or Forward to a chat or to Start. The act notes where the focus stood (`openedHere`), and the dock gives the
+// Agents, a row's Open or Chat on the Agents page and its New chat, an agent's Chat tab opened by a click, Enter or Space,
+// the Feed's row, a link the person clicked to the Feed or to an agent, each plus, a choice in Search, a row menu's Open,
+// the window's New chat, Jason's mark for Start, and Back or Forward to a chat or to Start. The act notes where the focus stood (`openedHere`), and the dock gives the
 // box of the pane it shows the focus once that pane is drawn (`giveBox`), with the caret at the end of the words there.
 // Where the pane shows an agent's opening, its box is the opening's. Nothing else moves the focus: arrowing along the
 // rows, a row's menu, a rename, a removal, an answer arriving or a card appearing call neither. Where the box is not

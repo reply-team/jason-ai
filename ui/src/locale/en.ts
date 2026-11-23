@@ -16,6 +16,7 @@ export const en = {
     'side.agents': 'Agents',
     'side.chats': 'Chats',
     'side.allAgents': 'All agents',
+    'side.feed': 'Feed',
     'side.none.agents': 'No agents yet: the plus makes one.',
     'side.none.chats': 'No chats yet: the plus starts one.',
     'side.sections': 'Conversations',

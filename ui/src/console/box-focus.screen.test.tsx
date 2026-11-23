@@ -67,8 +67,10 @@ function newAgentApi(): FakeApi {
         .answerAnyRequest('system.info', 'system.info/with-ui');
 }
 
-async function renderConsole(fake: FakeApi = screenApi()): Promise<StubDesktop> {
-    const desktop = stubDesktop({ ...setupFound });
+async function renderConsole(
+    fake: FakeApi = screenApi(),
+    desktop: StubDesktop = stubDesktop({ ...setupFound }),
+): Promise<StubDesktop> {
     desktop.keep({ id: spring, campaignId: 'cmp_1', title: 'Spring' });
     desktop.keep({ id: setupChat, title: 'Set-up' });
     desktop.agentCampaign = { id: 'cmp_1', name: 'New agent 1' };
@@ -89,6 +91,9 @@ async function renderConsole(fake: FakeApi = screenApi()): Promise<StubDesktop> 
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
     return desktop;
 }
+
+/** The console on a desktop the test set up, the Demo's say. */
+const renderConsoleOn = (desktop: StubDesktop) => renderConsole(screenApi(), desktop);
 
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const menu = () => within(side().getByRole('navigation', { name: 'Menu' }));
@@ -258,6 +263,143 @@ describe('a chat the person opens', () => {
         await waitFor(() => expect(activePanel.value).toBe(`chat:${spring}`));
         await focusedBox(`chat:${spring}`);
     });
+});
+
+describe('an agent’s chat the person opens', () => {
+    const agentsPage = () => pane('campaigns')!;
+    const agentRow = (name: string) =>
+        waitFor(() => within(within(agentsPage()).getByText(name).closest<HTMLElement>('tr')!));
+    const head = () => within(document.querySelector<HTMLElement>('.agent-head')!);
+    const tab = (name: string | RegExp) => head().getByRole('tab', { name });
+    async function openAgentsPage(): Promise<void> {
+        press(await waitFor(() => side().getByRole('button', { name: 'All agents' })));
+        await waitFor(() => expect(activePanel.value).toBe('campaigns'));
+    }
+    async function onPeopleTab(): Promise<void> {
+        press(await agentsRow('Spring'));
+        await focusedBox(`chat:${spring}`);
+        press(tab(/^People/));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_1/people'));
+        await waitFor(() => expect(activePanel.value).toBe('page'));
+    }
+
+    it('from a row’s Chat on the Agents page has the caret in the agent’s box', async () => {
+        await renderConsole();
+        await openAgentsPage();
+        press((await agentRow('Spring')).getByRole('button', { name: 'Chat' }));
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from a row’s Open on the Agents page, which opens the agent on its Chat, has the caret in its box', async () => {
+        await renderConsole();
+        await openAgentsPage();
+        press((await agentRow('Spring')).getByRole('button', { name: 'Open' }));
+        await focusedBox(`chat:${spring}`);
+    });
+
+    it('from the Agents page’s New chat, with no agent yet, has the caret in the new chat’s box', async () => {
+        const fake = screenApi().answerAnyRequest('campaign.list', 'campaign.list/screen-empty');
+        await renderConsole(fake);
+        flush(() => here().dock.show('campaigns'));
+        const button = await waitFor(() => within(agentsPage()).getByRole('button', { name: 'New chat' }));
+        press(button);
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+        await focusedBox(activePanel.value!);
+    });
+
+    it('from its header’s Chat tab, by a click or Enter, has the caret in its box', async () => {
+        await renderConsole();
+        await onPeopleTab();
+        // Enter on a tab, a link, is the link's own click.
+        press(tab('Chat'));
+        await focusedBox(`chat:${spring}`);
+        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+    });
+
+    it('from its header’s Chat tab, by Space, has the caret in its box', async () => {
+        await renderConsole();
+        await onPeopleTab();
+        const chat = tab('Chat');
+        chat.focus();
+        fireEvent.keyDown(chat, { key: ' ' });
+        await focusedBox(`chat:${spring}`);
+        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+    });
+
+    it('reached on its header’s tabs by the arrows leaves the focus on the Chat tab', async () => {
+        await renderConsole();
+        await onPeopleTab();
+        const people = tab(/^People/);
+        people.focus();
+        fireEvent.keyDown(people, { key: 'ArrowLeft' });
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${spring}`));
+        await settled();
+        expect(document.activeElement).toBe(tab('Chat'));
+    });
+
+    it('by a link to it the desktop hands the console has the caret in its box', async () => {
+        const desktop = await renderConsole();
+        await leaveForNeeds();
+        flush(() => desktop.link({ page: 'campaign', id: 'cmp_1' }));
+        await focusedBox(`chat:${spring}`);
+    });
+});
+
+describe('the Feed opened by a link', () => {
+    it('from a notification or a card has the caret in the Feed’s box', async () => {
+        const desktop = await renderConsole();
+        await waitFor(() => expect(feedId.value).not.toBeNull());
+        await leaveForNeeds();
+        flush(() => desktop.link({ page: 'feed' }));
+        await focusedBox(`chat:${feedId.value}`);
+    });
+});
+
+describe('every chat’s pane is a region named by the chat', () => {
+    const region = (name: string) => {
+        const shown = pane(name)!;
+        const found = within(shown).getByRole('region', { name: /.+/ });
+        expect(found.classList.contains('chat-panel')).toBe(true);
+        // The box keeps its own name inside it.
+        expect(within(found).getByRole('textbox', { name: 'Your message' })).toBeTruthy();
+        return found;
+    };
+
+    it.each(['live', 'demo'] as const)(
+        'in %s: an agent’s by its header’s heading, a set-up chat’s and the Feed’s by their rows’ names',
+        async (kept) => {
+            const desktop = stubDesktop({ ...setupFound });
+            desktop.modeKept = kept;
+            await renderConsoleOn(desktop);
+            press(await agentsRow('Spring'));
+            await focusedBox(`chat:${spring}`);
+            const agent = await waitFor(() => {
+                const found = region(`chat:${spring}`);
+                expect(found.getAttribute('aria-labelledby')).not.toBeNull();
+                return found;
+            });
+            const heading = document.getElementById(agent.getAttribute('aria-labelledby')!)!;
+            expect(heading.tagName).toBe('H2');
+            expect(document.querySelector('.agent-head')!.contains(heading)).toBe(true);
+            expect(within(document.body).getByRole('region', { name: 'Spring' })).toBe(agent);
+            // No name of its own besides the heading's, which is read once.
+            expect(agent.hasAttribute('aria-label')).toBe(false);
+
+            press(await chatsRow('Set-up'));
+            await focusedBox(`chat:${setupChat}`);
+            const setUp = region(`chat:${setupChat}`);
+            expect(within(document.body).getByRole('region', { name: 'Set-up' })).toBe(setUp);
+            expect(setUp.hasAttribute('aria-labelledby')).toBe(false);
+
+            await waitFor(() => expect(feedId.value).not.toBeNull());
+            const feedRow = await waitFor(() => menu().getByRole('button', { name: /^Feed/ }));
+            press(feedRow);
+            await focusedBox(`chat:${feedId.value}`);
+            const feed = region(`chat:${feedId.value}`);
+            expect(feed.getAttribute('aria-label')).toBe(feedRow.querySelector('span')!.textContent);
+            expect(within(document.body).getByRole('region', { name: 'Feed' })).toBe(feed);
+        },
+    );
 });
 
 describe('Start reached by Jason’s mark', () => {

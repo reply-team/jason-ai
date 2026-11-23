@@ -645,21 +645,23 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     }
                 },
             );
-        // A link opens the panel or the screen it names, and does nothing else (`links.ts`).
+        // A link opens the panel or the screen it names, and does nothing else (`links.ts`). It is the person's act, a
+        // notification's or a card's link they clicked: the Feed it opens, or an agent's Chat, takes the focus in its box.
         const opened = (link: DesktopLink) => {
             const place = linkPlace(link);
             if (place === null) return;
+            const act = openedHere();
             if ('feed' in place) {
                 void feedAsked
                     .then(() => (feedId.value === null ? null : openConversation(feedId.value)))
                     .then((held) => {
                         if (held === null) return;
                         feedUnseen.value = false;
-                        dock.showChat(held);
+                        dock.showChat(held, act);
                     });
                 return;
             }
-            if ('route' in place) return dock.page(place.route);
+            if ('route' in place) return dock.page(place.route, act);
             dock.show(place.panel);
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
         };

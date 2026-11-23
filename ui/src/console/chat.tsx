@@ -13,6 +13,7 @@ import { useApi } from '../api/context';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { t } from '../platform/i18n';
+import { agentNameId } from './agent-place';
 import { act, argsOf, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
@@ -1979,8 +1980,14 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             <ChatNotes chat={chat} />
         </form>
     );
+    // Every chat's pane is a region named by the chat, so a reader that lands in its box hears which chat it is in: an
+    // agent's by the heading of its header, which names the agent above the pane; a set-up chat's and the Feed's, which
+    // have no heading that names them, by the name their row in the sidebar shows. The box keeps its own name.
+    const named = underHead
+        ? { 'aria-labelledby': agentNameId(chat.campaignId!) }
+        : { 'aria-label': chat.main ? t('side.feed') : chat.title };
     return (
-        <div className="chat-panel" ref={panel} data-chat={chatId}>
+        <div className="chat-panel" ref={panel} data-chat={chatId} role="region" {...named}>
             <div className="chat-bar">
                 {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
                 {chat.main || chat.campaignId !== null ? null : (

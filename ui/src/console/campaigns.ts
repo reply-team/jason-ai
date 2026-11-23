@@ -3,6 +3,7 @@ import type { CampaignSummary, CampaignSummaryResponse, CampaignSummaryRow, Page
 import { parseRoute } from '../router';
 import * as store from '../screens/campaigns/store';
 import { act, define } from './actions';
+import { openedHere } from './box-focus';
 import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
 import { toCampaignRow } from './live';
@@ -45,15 +46,17 @@ export async function reload(): Promise<void> {
     }
 }
 
-define('campaigns.start', () => here().dock.chat());
+// Each of the page's acts that shows a chat is the person's: the chat's box takes the focus once it is shown
+// (`box-focus.ts`). Open shows the agent on its first tab, its Chat in Live, whose box takes it; a page tab takes nothing.
+define('campaigns.start', () => here().dock.chat(undefined, openedHere()));
 
 define('campaigns.open', ([id]) => {
-    if (typeof id === 'string') here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(id)}`));
+    if (typeof id === 'string') here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(id)}`), openedHere());
 });
 
 define('campaigns.chat', ([id]) => {
     const campaign = campaigns.value.find((each) => each.id === id);
-    if (campaign) here().dock.chat({ id: campaign.id, name: campaign.name });
+    if (campaign) here().dock.chat({ id: campaign.id, name: campaign.name }, openedHere());
 });
 
 export function campaignsView(): Html {
