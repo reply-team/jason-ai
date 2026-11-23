@@ -1,4 +1,5 @@
 import { computed, effect, signal } from '@preact/signals-react';
+import { openedHere } from './box-focus';
 import {
     useCallback,
     useEffect,
@@ -673,10 +674,11 @@ define('chat.answer', ([id, request, answer]) => {
         .catch(() => changeChat(id, (chat) => lost(chat, request)));
 });
 
+// A Feed line's agent, and the Dashboard's line about one: the person's act, so the agent's box takes the focus.
 define('feed.campaign', ([id]) => {
     if (typeof id !== 'string') return;
     const name = campaigns.value.find((each) => each.id === id)?.name ?? id;
-    here().dock.chat({ id, name });
+    here().dock.chat({ id, name }, openedHere());
 });
 
 define('feed.needs', () => {

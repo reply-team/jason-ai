@@ -1,3 +1,4 @@
+using System.Text;
 using System.CommandLine;
 using Jason.Contracts.Execution;
 
@@ -61,11 +62,41 @@ public static class RequestFile
         return (await ReadFileAsync(option, path, namesOption, cancellationToken).ConfigureAwait(false), $"'{path}'");
     }
 
+    /// <summary>What a refusal of a file says, as the usage error's message: the file named, the cure given.</summary>
+    public static string NotUtf8(string path) =>
+        $"The file {path} must be UTF-8, and it is not, so none of it was used. Save it as UTF-8.";
+
+    /// <summary>
+    /// The bytes as text: UTF-8, or the encoding a leading byte-order mark names (UTF-32 or UTF-16, either order), the
+    /// mark dropped. A byte that does not fit the encoding is refused, never stored as U+FFFD in a person's words.
+    /// </summary>
+    private static string Decode(string path, byte[] bytes)
+    {
+        var (encoding, mark) = bytes switch
+        {
+            [0xFF, 0xFE, 0x00, 0x00, ..] => ((Encoding)new UTF32Encoding(false, true, true), 4),
+            [0x00, 0x00, 0xFE, 0xFF, ..] => (new UTF32Encoding(true, true, true), 4),
+            [0xEF, 0xBB, 0xBF, ..] => (new UTF8Encoding(false, true), 3),
+            [0xFF, 0xFE, ..] => (new UnicodeEncoding(false, true, true), 2),
+            [0xFE, 0xFF, ..] => (new UnicodeEncoding(true, true, true), 2),
+            _ => (new UTF8Encoding(false, true), 0),
+        };
+
+        try
+        {
+            return encoding.GetString(bytes, mark, bytes.Length - mark);
+        }
+        catch (DecoderFallbackException cause)
+        {
+            throw new UsageException(NotUtf8(path), cause);
+        }
+    }
+
     private static async Task<string> ReadFileAsync(string option, string path, bool namesOption, CancellationToken cancellationToken)
     {
         try
         {
-            return await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            return Decode(path, await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
