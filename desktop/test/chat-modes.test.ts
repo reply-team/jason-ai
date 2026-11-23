@@ -815,7 +815,11 @@ test('Plan only says the AI how it is left, the plan card included, and a go app
     // tools that do run, and the AI reads with them rather than answering that it cannot see the folder.
     assert.equal(
         planReads,
-        'A shell command that is not a jason read is refused, a plain listing of a folder included: read a file with Read, and list or search a folder with Glob or Grep.',
+        'A shell command that is not a jason read is refused, a plain listing of a folder included: ' +
+            'read a file with Read, and list or search a folder with Glob or Grep. ' +
+            'A file or folder outside the chat\'s folders is not readable in Plan only: ' +
+            'tell the person so, in the person\'s language, ' +
+            'and that switching the access mode from the menu beside the message box may let you read it.',
     );
     assert.equal(planRefusal, `Plan only is on: nothing is changed. ${planReads} Say what you would do; the person switches the mode to act.`);
 });
