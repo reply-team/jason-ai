@@ -103,6 +103,9 @@ runs commands is called the AI.
 The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
 its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
+A chat you open has the caret in its box, after the words already there, so you can type at once: from its row in
+**Agents** or **Chats**, the Feed, either plus, **Search**, or **Back** and **Forward**. Nothing else moves it there:
+not moving along the rows, a row's menu or a rename, nor an answer or a card arriving.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
@@ -111,7 +114,7 @@ yet; no chat is made until you send. Enter sends and Shift+Enter makes a new lin
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and a click on
 Jason's mark at the top of the sidebar opens it again, with the words you typed there and did not send; it closes
-nothing, and in the Demo it opens the Demo's Start.
+nothing, and in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.
 
 Under Search, Needs you, the Feed and Accounts the sidebar holds two sections, **Agents** above **Chats**, each a
 header with a small plus at its right. **Agents** lists the agents that are not archived, each by the agent's name,

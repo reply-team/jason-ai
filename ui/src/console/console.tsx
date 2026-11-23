@@ -23,6 +23,7 @@ import { activityView } from './activity';
 import { agentFacts, goneAgents, readAgent } from './agent-facts';
 import { AgentHead } from './agent-head';
 import { agentChatOf, agentChatRoute, agentOfChat, namesPlace, shownAgent } from './agent-place';
+import { giveBox, openedHere, type Opened } from './box-focus';
 import { listen } from './actions';
 import {
     askFeed,
@@ -307,14 +308,18 @@ function showUnaddressed(pane: string): void {
     reveal(pane);
 }
 
-/** Shows again what the chat's address shows: the pane last shown that has no address, while it is still there. */
-function restore(): void {
+/**
+ * Shows again what the chat's address shows: the pane last shown that has no address, while it is still there. Back or
+ * Forward to it is the person's act: a chat or Start reached so takes the focus in its box (`opened`).
+ */
+function restore(opened?: Opened): void {
     if (unaddressed.startsWith('chat:')) {
         const chat = chats.value[unaddressed.slice('chat:'.length)];
         // A chat that went, or became an agent's and so has an address of its own, gives way to Start.
         if (chat === undefined || agentOfChat(chat) !== null) unaddressed = 'start';
     }
     reveal(unaddressed);
+    giveBox(unaddressed, opened);
 }
 
 /** What `chatOfAgent` answers for an agent the runtime does not know: it has no Chat to draw. */
@@ -370,8 +375,11 @@ function chatMade(from: string, to: string): void {
     if (shown) reveal(now);
 }
 
-/** Shows an agent's Chat tab, at its own address, once its conversation is open; a move made meanwhile wins. */
-function showAgentChat(id: string): void {
+/**
+ * Shows an agent's Chat tab, at its own address, once its conversation is open; a move made meanwhile wins. Shown for a
+ * person's act (`opened`), its box takes the focus.
+ */
+function showAgentChat(id: string, opened?: Opened): void {
     const mine = ++moves;
     void chatOfAgent(id).then((chatId) => {
         if (mine !== moves) return;
@@ -379,6 +387,7 @@ function showAgentChat(id: string): void {
             // The page's own way with an agent the runtime does not know: it says so, and the address leaves it.
             moveBar({ ...agentChatRoute(id), tab: 'people' }, true);
             reveal('page');
+            giveBox('page', opened);
             return;
         }
         moveBar(agentChatRoute(id));
@@ -390,17 +399,20 @@ function showAgentChat(id: string): void {
                     ? { agent: id, archived: true }
                     : { agent: id, why: conversationsFailure.value ?? 'The desktop did not say why.' };
             reveal('page');
+            giveBox('page', opened);
             return;
         }
         if (chatNote.value?.agent === id) chatNote.value = null;
         reveal(chatPane(chatId));
+        giveBox(chatPane(chatId), opened);
     });
 }
 
 /**
  * The address changed by the browser's own history (Back, Forward) or by a link: the area shows what it names. The
  * chat's address shows the pane last shown that has no address; an agent's Chat tab its conversation; an approval's or a
- * question's address Needs you at it; any other address the page. A move the dock made itself is skipped.
+ * question's address Needs you at it; any other address the page. A move the dock made itself is skipped. Back and
+ * Forward are the person's acts: a chat or Start they reach takes the focus in its box, as one opened from its row does.
  */
 function followHistory(to: Route): void {
     const address = href(to);
@@ -409,15 +421,20 @@ function followHistory(to: Route): void {
         return;
     }
     moves++;
-    if (!namesPlace(to)) return restore();
+    // Back, Forward and a link change the bar first and the route after it; a move of the page's own (an agent's tab,
+    // which keeps the focus on the tab) changes the route before the bar, so the bar does not say it yet.
+    const opened = href(parseRoute(location.hash)) === address ? openedHere() : undefined;
+    if (!namesPlace(to)) return restore(opened);
     const agent = agentChatOf(to);
-    if (agent !== null) return showAgentChat(agent);
+    if (agent !== null) return showAgentChat(agent, opened);
     if (to.screen === 'attention' && to.kind && to.id) {
         reveal('needs');
+        giveBox('needs', undefined);
         void needs.attention.open(here().api, to.kind, to.id);
         return;
     }
     if (activePanel.value !== 'page') reveal('page');
+    giveBox('page', undefined);
 }
 
 /** What an address names at the shell's start: a panel (with the item it opens), an agent's chat, a page, or nothing. */
@@ -437,27 +454,32 @@ function addressPlace(
 }
 
 function makeDock(): Dock {
-    const show = (panel: PanelName) => {
+    // What a person's act shows (`opened`) gives its box the focus once it is drawn: a chat's, or Start's (`box-focus.ts`).
+    const show = (panel: PanelName, opened?: Opened) => {
         moves++;
         showUnaddressed(panel);
+        giveBox(panel, opened);
     };
-    const showChat = (id: string) => {
+    const showChat = (id: string, opened?: Opened) => {
         const chat = chats.value[id];
         if (!chat) return;
         moves++;
         const agent = agentOfChat(chat);
-        if (agent === null) return showUnaddressed(chatPane(id));
-        moveBar(agentChatRoute(agent));
-        reveal(chatPane(id));
+        if (agent === null) showUnaddressed(chatPane(id));
+        else {
+            moveBar(agentChatRoute(agent));
+            reveal(chatPane(id));
+        }
+        giveBox(chatPane(id), opened);
     };
     return {
         show,
         showChat,
-        chat: (campaign) => {
-            if (campaign) return showAgentChat(campaign.id);
+        chat: (campaign, opened) => {
+            if (campaign) return showAgentChat(campaign.id, opened);
             const mine = ++moves;
             void startChat().then((id) => {
-                if (id !== null && mine === moves) showChat(id);
+                if (id !== null && mine === moves) showChat(id, opened);
             });
         },
         dropChat: (id) => {
@@ -470,11 +492,12 @@ function makeDock(): Dock {
                 unaddressed = 'start';
                 if (namesPlace(route.value)) moveBar({ screen: 'chat' }, true);
                 reveal('start');
+                giveBox('start', undefined);
             }
         },
-        page: (to) => {
+        page: (to, opened) => {
             const agent = agentChatOf(to);
-            if (agent !== null) return showAgentChat(agent);
+            if (agent !== null) return showAgentChat(agent, opened);
             moves++;
             if (to.screen === 'settings') rememberPlace();
             // The bar names what is shown: an agent's chat by its own address, anything else by the chat's. A panel a
@@ -483,6 +506,7 @@ function makeDock(): Dock {
                 moveBar({ screen: 'chat' }, true);
             moveBar(to);
             reveal('page');
+            giveBox('page', undefined);
         },
     };
 }
@@ -661,7 +685,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {
-                if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
+                // The window's New chat is the plus's act, by a menu or a key: the new chat's box takes the focus.
+                if (command === 'chat.new' || command === 'navigate.chat') return dock.chat(undefined, openedHere());
                 // The update notice's click: Settings, at its Update section.
                 if (command === 'navigate.update') chosenSection.value = 'update';
                 const to = commandTarget(command);

@@ -5,6 +5,7 @@ import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { act, define, menuPointer, systemMenuAfterKey } from './actions';
+import { openedHere, type Opened } from './box-focus';
 import { html, type Html } from './html';
 import { newAgent } from './new-agent';
 import { svg, type IconName } from './icons';
@@ -106,29 +107,33 @@ define('side.search', () => {
     openPalette();
 });
 // The plus over AGENTS makes the agent at the click, and its place opens on its Chat, which asks Start's question
-// (`new-agent.ts`); the plus over CHATS makes a chat about no agent.
+// (`new-agent.ts`); the plus over CHATS makes a chat about no agent. Each row, each plus and the Feed's row open a chat
+// by the person's act, so the chat's box takes the focus once it is shown (`box-focus.ts`).
 define('side.start', () => {
+    const opened = openedHere();
     closeMenus();
-    void newAgent();
+    void newAgent(undefined, opened);
 });
 define('side.new', () => {
+    const opened = openedHere();
     closeMenus();
-    here().dock.chat();
+    here().dock.chat(undefined, opened);
 });
 define('side.feed', () => {
     const id = feedId.value;
     if (id === null) return;
+    const opened = openedHere();
     void openConversation(id).then((held) => {
         if (held === null) return;
         feedUnseen.value = false;
-        here().dock.showChat(held);
+        here().dock.showChat(held, opened);
     });
 });
-/** Shows a conversation of either section, as a click on its row does. */
-export function openRow(id: string): void {
+/** Shows a conversation of either section, as a click on its row does: its box takes the focus. */
+export function openRow(id: string, opened: Opened = openedHere()): void {
     supersede();
     void openConversation(id).then((held) => {
-        if (held !== null) here().dock.showChat(held);
+        if (held !== null) here().dock.showChat(held, opened);
     });
 }
 
@@ -136,11 +141,14 @@ define('side.chat', ([id]) => {
     if (typeof id === 'string') openRow(id);
 });
 
-/** Opens an agent with no conversation yet, as the Agents page does: its Chat makes the conversation at the first act. */
-export function openAgentRow(id: string): void {
+/**
+ * Opens an agent with no conversation yet, as the Agents page does: its Chat makes the conversation at the first act, and
+ * its box takes the focus.
+ */
+export function openAgentRow(id: string, opened: Opened = openedHere()): void {
     const row = drawnRow(id);
     supersede();
-    here().dock.chat({ id, name: row?.title ?? id });
+    here().dock.chat({ id, name: row?.title ?? id }, opened);
 }
 
 define('side.agent', ([id]) => {
@@ -187,8 +195,9 @@ define('side.allAgents', () => {
     here().dock.show('campaigns');
 });
 // Start too, from Jason's mark: by the dock's own road, as closing the chat shown leads there, so nothing is closed,
-// only chosen, and Back comes back to a page it left.
+// only chosen, and Back comes back to a page it left. Start's box takes the focus, as a chat's does when it is opened.
 define('side.show', ([panel]) => {
+    const opened = panel === 'start' ? openedHere() : undefined;
     closeMenus();
     if (
         panel === 'start' ||
@@ -198,7 +207,7 @@ define('side.show', ([panel]) => {
         panel === 'activity' ||
         panel === 'connect'
     )
-        here().dock.show(panel);
+        here().dock.show(panel, opened);
 });
 define('side.page', ([hash]) => {
     closeMenus();

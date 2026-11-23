@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals-react';
 import { earlier } from '../platform/window-desktop';
+import type { Opened } from './box-focus';
 import { reload as reloadCampaigns } from './campaigns';
 import { holdOpening, isRefusal } from './chat';
 import { startWaiting } from './start';
@@ -29,12 +30,13 @@ let unsettled: string | null = null;
 
 /**
  * Makes the agent of a click and opens its place; a click made while one is being made is not taken. `again` is a
- * failed click's id, sent once more by Try again; a new click sends it too, whether or not its line was closed.
+ * failed click's id, sent once more by Try again; a new click sends it too, whether or not its line was closed. The
+ * click's own focus (`opened`) gives the opening's box the focus once it is shown.
  */
-export async function newAgent(again?: string): Promise<void> {
+export async function newAgent(again?: string, opened?: Opened): Promise<void> {
     if (agentMaking.value) return;
     const { desktop, dock } = here();
-    if (earlier(desktop).chat?.createAgent === undefined) return dock.show('start');
+    if (earlier(desktop).chat?.createAgent === undefined) return dock.show('start', opened);
     // Until a click made its agent, a new click is that click once more: if its create went through after all, the same
     // agent comes back, never a second.
     const id = again ?? unsettled ?? clickId();
@@ -63,7 +65,7 @@ export async function newAgent(again?: string): Promise<void> {
         if (waiting !== null) holdOpening(conversation.id, waiting);
         conversations.value = [conversation, ...conversations.value.filter((each) => each.id !== conversation.id)];
         void reloadCampaigns();
-        dock.chat({ id: campaign.id, name: campaign.name });
+        dock.chat({ id: campaign.id, name: campaign.name }, opened);
     } catch (error) {
         putBack();
         agentFailure.value = { clickId: id, said: messageOf(error) };
