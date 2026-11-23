@@ -443,11 +443,12 @@ that is not that attempt does not call them.
   [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
-  approving a search under another audience than the allowance names takes the allowance back in the same act. A yes
-  on work whose `context.input` no longer satisfies its operation's document, for example a reply drafted with a tag in
-  its text, before the document began to refuse tags, is refused with `validation_failed` and the document's reason in
-  `details`, by the check `workitem.create` and `workitem.update` make, or with `validation_timed_out` (retryable) where
-  a pattern of it did not finish matching; nothing changes, and once the input is edited the runtime asks again. [`docs/work-execution.md`](work-execution.md), "Approvals".
+  approving a search under another audience than the allowance names takes the allowance back in the same act. A yes on
+  work whose input, the arguments the item holds, no longer satisfies its operation's document, for example a reply
+  drafted with a tag in its text, before the document began to refuse tags, is refused with `validation_failed` and the
+  document's reason in `details`, by the check `workitem.create` and `workitem.update` make, or with
+  `validation_timed_out` (retryable) where a pattern of it did not finish matching; nothing changes, and once the input
+  is edited the runtime asks again. [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.reject`: the work ends, carrying the decision and the person who made it, whatever its input holds.
 - An approval whose work had its input edited while it was pending is `superseded`, by whoever edited it, and
   either verb naming it answers `approval_not_pending`. [`docs/work-execution.md`](work-execution.md), "Approvals".
