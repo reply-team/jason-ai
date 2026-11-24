@@ -34,6 +34,17 @@ internal static class LineTouches
     private static readonly string TouchesSql =
         string.Join(", ", OperationCatalog.Touches.Order(StringComparer.Ordinal).Select(operation => $"'{operation}'"));
 
+    /// <summary>
+    /// Whether a succeeded <c>message.cancel</c> of the campaign names the work item aliased <c>w</c>: the provider held the
+    /// send and said it took it back, so it never went. The one definition, which a touch that counts and a letter a message
+    /// is named to follow (<see cref="LineRoots"/>) both read.
+    /// </summary>
+    internal static readonly string TakenBackSql = $$"""
+        EXISTS (SELECT 1 FROM work_items AS k
+                WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
+                  AND json_extract(k.context_json, '$.input.send') = w.public_id)
+        """;
+
     /// <summary>Whether the work item aliased <c>w</c> is a touch that counts: the one definition.</summary>
     internal static readonly string CountedSql = $$"""
         (w.kind = 'provider_op'
@@ -41,9 +52,7 @@ internal static class LineTouches
          AND (w.status = 'succeeded'
               OR EXISTS (SELECT 1 FROM attempts AS a
                          WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous'))
-         AND NOT EXISTS (SELECT 1 FROM work_items AS k
-                         WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
-                           AND json_extract(k.context_json, '$.input.send') = w.public_id))
+         AND NOT {{TakenBackSql}})
         """;
 
     /// <summary>

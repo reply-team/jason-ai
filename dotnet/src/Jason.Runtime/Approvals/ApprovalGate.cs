@@ -47,8 +47,9 @@ public static class ApprovalGate
 
     /// <summary>
     /// Whether <paramref name="live"/> lets the work run as it now stands without asking anybody: approved, and about
-    /// exactly <paramref name="subject"/>, or about it less the pins learned where the approved subject held none
-    /// (<see cref="ApprovalSubject.Less"/>). The claim runs work under such a row and reads nothing else about it, its
+    /// exactly <paramref name="subject"/>, or about it less the pins learned where the approved subject held none, and less a
+    /// message's decision to go as a letter of its own where the approved subject held no decision about the letter it
+    /// follows (<see cref="ApprovalSubject.Less"/>). The claim runs work under such a row and reads nothing else about it, its
     /// reviews included, so a review asks this same question of the same row to know whether the claim would hear it, and
     /// the automatic mode's retry goes under it too.
     /// </summary>

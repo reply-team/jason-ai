@@ -56,12 +56,13 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Thirty checks in one
+/// Everything that can stop a provider work item, decided before a child process exists. Thirty-five checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
 /// another plugin, numbered after the rest and asked after the twenty-third, before the twenty-fourth, the
-/// twenty-eighth, a contact who opted out, numbered after it and asked right after the tenth, and the twenty-ninth and
+/// twenty-eighth, a contact who opted out, numbered after it and asked right after the tenth, the twenty-ninth and
 /// thirtieth, a touch on a line that was ended and a touch past the ceiling, numbered after that and asked right after
-/// the twenty-eighth — then whether another search of the campaign
+/// the twenty-eighth, and the thirty-first to thirty-fifth, an earlier letter named for a message to follow that it
+/// cannot, numbered after those and asked right after the fourteenth — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -89,7 +90,7 @@ public static class ProviderOpPreflight
     private const string ContactPin = "contact";
 
     /// <summary>
-    /// The thirty, in the order they are checked: the published order. The first that fails is the one the attempt
+    /// The thirty-five, in the order they are checked: the published order. The first that fails is the one the attempt
     /// records. A check's number is its name, <see cref="Numbers"/>, and is not its place here.
     /// </summary>
     /// <remarks>
@@ -116,6 +117,11 @@ public static class ProviderOpPreflight
         AttemptErrors.SendUnknown,
         AttemptErrors.SendReferenceAbsent,
         AttemptErrors.SendRouteMismatch,
+        AttemptErrors.FollowsUnknown,
+        AttemptErrors.FollowsReferenceAbsent,
+        AttemptErrors.FollowsTakenBack,
+        AttemptErrors.FollowsRouteMismatch,
+        AttemptErrors.FollowsSenderMismatch,
         AttemptErrors.SearchUnknown,
         AttemptErrors.SearchReferenceAbsent,
         AttemptErrors.SearchRouteMismatch,
@@ -141,6 +147,11 @@ public static class ProviderOpPreflight
         AttemptErrors.OptedOut,
         AttemptErrors.LineFinished,
         AttemptErrors.TouchCeilingReached,
+        AttemptErrors.FollowsUnknown,
+        AttemptErrors.FollowsReferenceAbsent,
+        AttemptErrors.FollowsTakenBack,
+        AttemptErrors.FollowsRouteMismatch,
+        AttemptErrors.FollowsSenderMismatch,
     ];
 
     /// <summary>
@@ -178,7 +189,8 @@ public static class ProviderOpPreflight
     /// <summary>
     /// The refusals from <c>no_route</c> through <c>template_not_offered</c>, named by the last of them and counted by
     /// its place, so a check added among them is among them — <c>opted_out</c>, <c>line_finished</c> and
-    /// <c>touch_ceiling_reached</c> are, by their place — and <c>thread_route_mismatch</c>, named: they say nothing of
+    /// <c>touch_ceiling_reached</c> are, by their place, and so are the five of an earlier letter followed, which a repeat
+    /// never asks — and <c>thread_route_mismatch</c>, named: they say nothing of
     /// whether an earlier attempt acted. While the work item carries one that may have reached the person, each keeps its
     /// code and is recorded ambiguous, with <see cref="MayHaveActed"/>.
     /// </summary>
@@ -216,7 +228,7 @@ public static class ProviderOpPreflight
             : verdict;
     }
 
-    /// <summary>The thirty checks, in the published order: the first that fails is the verdict.</summary>
+    /// <summary>The thirty-five checks, in the published order: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
@@ -326,6 +338,19 @@ public static class ProviderOpPreflight
             return Refused(resolution, unnamed.Code, unnamed.Message);
         }
 
+        // Thirty-first to thirty-fifth, asked right after the twelfth to fourteenth: which earlier letter a message follows
+        // is decided here, after every check of the person — someone who must not be written to is refused as that, never
+        // as a wrong letter named — and before the input is composed, because the input carries the letter's reference. The
+        // runtime's default never refuses; a letter the caller named is refused when the campaign holds no such letter to
+        // this person on this channel, when it has not gone with the provider's reference, when it was taken back, when it
+        // went through another plugin or account, or from another mailbox. A repeat keeps the decision its first claim
+        // recorded and asks none of them (FollowsDecision).
+        var follows = FollowsDecision.Decide(contract, facts, route, plugin);
+        if (follows is FollowsDecision.Refused letter)
+        {
+            return Refused(resolution, letter.Code, letter.Message);
+        }
+
         // Fifteenth to seventeenth: a status read or a stop of a search, the same three questions of the search it names,
         // by the reference the search's own attempt returned. A search that answered `finished` inside its call kept no
         // reference, so there is nothing to read or to stop.
@@ -347,7 +372,7 @@ public static class ProviderOpPreflight
                 string.Create(CultureInfo.InvariantCulture, $"This campaign holds no audience under {number} for '{operation}': a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds, or the audience by its definition."));
         }
 
-        var input = CanonicalInput.Compose(contract, facts);
+        var input = CanonicalInput.Compose(contract, facts, follows);
         if (Contradictions(contract, facts, input) is { Count: > 0 } contradicted)
         {
             return Refused(
@@ -391,13 +416,14 @@ public static class ProviderOpPreflight
         // Twenty-first: an argument the document names per channel goes only where the routed plugin's manifest lists it
         // for the channel the arguments name. It is asked once the input satisfies its schema, so a moment that is no
         // moment is the planner's to fix first, and before a person is asked to approve work that could not go out as
-        // written. An argument the work does not carry asks nothing of the manifest.
-        if (UntakenArgument(contract, plugin, input, CanonicalInput.ConsumedChannel(contract, facts.Item)) is { } untaken)
+        // written. An argument the work does not carry asks nothing of the manifest, and neither does one whose value, as
+        // the decision about it reads it, asks nothing of the plugin: a letter of its own, which every plugin sends.
+        if (UntakenArgument(contract, plugin, input, CanonicalInput.ConsumedChannel(contract, facts.Item), follows?.AsksNothing ?? NoArgument) is { } untaken)
         {
             return Refused(
                 resolution,
                 AttemptErrors.ArgumentUnsupported,
-                $"'{route.PluginId}' takes no '{untaken.Argument}' for '{operation}' on the '{untaken.Channel}' channel: its manifest does not list it there. Leave the argument out and set not_before to the moment, or route the operation to a plugin that takes it.");
+                $"'{route.PluginId}' takes no '{untaken.Argument}' for '{operation}' on the '{untaken.Channel}' channel: its manifest does not list it there. Leave the argument out{Instead(untaken.Argument)}, or route the operation to a plugin that takes it.");
         }
 
         // Twenty-second: a message written as a template goes only to a plugin whose manifest lists the operation's channel
@@ -727,14 +753,17 @@ public static class ProviderOpPreflight
             : null;
 
     /// <summary>
-    /// The first argument the document names per channel that the input carries and the plugin does not take on the
-    /// channel the arguments name, in the document's order; null when there is none.
+    /// The first argument the document names per channel that the input carries, asking something of the plugin, and the
+    /// plugin does not take on the channel the arguments name, in the document's order; null when there is none. An argument
+    /// in <paramref name="asksNothing"/> is carried with a value that asks nothing of the plugin, as the decision about it
+    /// says, so the manifest is not asked about it.
     /// </summary>
     private static (string Argument, string Channel)? UntakenArgument(
         OperationContract contract,
         LoadedPlugin plugin,
         JsonObject input,
-        string? channel)
+        string? channel,
+        IReadOnlySet<string> asksNothing)
     {
         if (contract.ChannelArguments is not { } names || channel is null || input["args"] is not JsonObject args)
         {
@@ -743,7 +772,7 @@ public static class ProviderOpPreflight
 
         foreach (var name in names)
         {
-            if (args.ContainsKey(name) && !plugin.Manifest.Arguments.Takes(contract.Id, name, channel))
+            if (args.ContainsKey(name) && !asksNothing.Contains(name) && !plugin.Manifest.Arguments.Takes(contract.Id, name, channel))
             {
                 return (name, channel);
             }
@@ -751,6 +780,20 @@ public static class ProviderOpPreflight
 
         return null;
     }
+
+    /// <summary>No argument the work carries asks nothing of the plugin.</summary>
+    private static readonly IReadOnlySet<string> NoArgument = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// What an argument the twenty-first check refuses can be replaced with, where something can: a moment the provider does
+    /// not keep is kept by the item's own <c>not_before</c>. Every other argument is left out, or routed elsewhere.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> InsteadOfTheArgument = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["send_after"] = " and set not_before to the moment",
+    };
+
+    private static string Instead(string argument) => InsteadOfTheArgument.TryGetValue(argument, out var instead) ? instead : string.Empty;
 
     /// <summary>
     /// One refusal, carrying the resolution the decision had reached when it refused: the attempt records what

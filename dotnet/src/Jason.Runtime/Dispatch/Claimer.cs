@@ -160,6 +160,13 @@ public sealed class Claimer(
                 await AudienceAsync(db, item, searching, now, ct).ConfigureAwait(false);
             }
 
+            // A message the claim lets through, to run now or to wait for a person, records which earlier letter it follows,
+            // and why: the decision a repeat of it keeps. One the claim refuses records nothing.
+            if (verdict is { Refused: false, Plan: { } sending } && sending.Input[FollowsDecision.Key] is JsonObject decided)
+            {
+                Follows(db, item, decided);
+            }
+
             // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
             // responder's reply would reach it by a second path. It waits, with no attempt, for the installation's next midnight.
             // A day a person lifted holds nothing.
@@ -902,6 +909,35 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// The message's record of which earlier letter it follows, and why, under its context's reserved key: the decision the
+    /// claim composed, less the provider's reference, which is the letter's own provenance and is read again from it. Written
+    /// and said in the chronicle only where it changes, as the dispatcher, and saved with the claim, so a claim that loses its
+    /// save to another writer records nothing.
+    /// </summary>
+    private void Follows(JasonDbContext db, WorkItem item, JsonObject composed)
+    {
+        var decided = FollowsDecision.Recorded(composed);
+        var recorded = item.Context[FollowsDecision.Key];
+        if (JsonNode.DeepEquals(recorded, decided))
+        {
+            return;
+        }
+
+        var context = item.Context.DeepClone().AsObject();
+        context[FollowsDecision.Key] = decided;
+        item.Context = context;
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.WorkItemContextUpdated,
+            campaign: null,
+            key: FollowsDecision.Key,
+            old: recorded?.DeepClone(),
+            updated: decided.DeepClone(),
+            workItem: item);
+    }
+
+    /// <summary>
     /// What the pre-flight decides on, read inside the claim transaction and nowhere else. The route is resolved
     /// first — a pure lookup over the snapshot the decision itself will use again — because whose identifiers to
     /// read is the routed plugin's question, and an item nothing routes needs no reads at all. An audience the work names
@@ -1007,6 +1043,7 @@ public sealed class Claimer(
         var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
         var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
         var line = OperationCatalog.Touches.Contains(contract.Id) ? await LineAsync(db, item, contact, maxTouches, ct).ConfigureAwait(false) : null;
+        var followed = CanonicalInput.Follows(contract) ? await FollowedAsync(db, contract, item, contact, unsettled, ct).ConfigureAwait(false) : null;
         return new PreflightFacts(
             item,
             campaign,
@@ -1023,7 +1060,52 @@ public sealed class Claimer(
             inTheWay,
             thread,
             suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false),
-            line);
+            line,
+            followed);
+    }
+
+    /// <summary>
+    /// The earlier letter a message would follow (<see cref="FollowsDecision"/>): on a repeat, the one its first claim
+    /// recorded, as it stands now, since nothing is decided again; otherwise the one the arguments name under
+    /// <c>args.follows</c>, or the line's root where they leave it to the runtime (<see cref="LineRoots"/>), and none where
+    /// they ask for a letter of its own. A letter is read only in the work's own campaign, the way a send the work names
+    /// is, by its latest succeeded attempt.
+    /// </summary>
+    private static async Task<EarlierLetter?> FollowedAsync(
+        JasonDbContext db,
+        OperationContract contract,
+        WorkItem item,
+        Contact contact,
+        Attempt? unsettled,
+        CancellationToken ct)
+    {
+        var named = unsettled is not null
+            ? FollowsDecision.RecordedLetter(item)
+            : !FollowsDecision.LeftToTheRuntime(item)
+                ? FollowsDecision.NamedLetter(item)
+                : CanonicalInput.ConsumedChannel(contract, item) is { } channel
+                    ? await LineRoots.RootAsync(db, item.CampaignId, contact.Id, item.Id, contract.Id, channel, ct).ConfigureAwait(false)
+                    : null;
+        var letter = await ReferenceAsync(
+            db,
+            item,
+            named,
+            SendKind,
+            (made, reference, ran) => new EarlierLetter(
+                made.PublicId,
+                made.Operation,
+                made.Status,
+                reference,
+                ran?.PluginId,
+                ran?.BindingIdentity,
+                made.ContactId,
+                LineRoots.Channel(made),
+                LineRoots.Sender(made),
+                TakenBack: false),
+            ct).ConfigureAwait(false);
+        return letter is null
+            ? null
+            : letter with { TakenBack = await LineRoots.TakenBackAsync(db, item.CampaignId, letter.WorkItem, ct).ConfigureAwait(false) };
     }
 
     /// <summary>

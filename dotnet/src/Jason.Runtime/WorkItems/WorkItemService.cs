@@ -18,6 +18,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Reports;
+using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -594,6 +595,10 @@ public sealed class WorkItemService(
         CampaignAudiences.RefuseWritten(
             item.Operation,
             request.Set?.ContainsKey(CampaignAudiences.ContextKey) == true || request.Unset?.Contains(CampaignAudiences.ContextKey, StringComparer.Ordinal) == true,
+            errors);
+        FollowsDecision.RefuseWritten(
+            item.Operation,
+            request.Set?.ContainsKey(FollowsDecision.Key) == true || request.Unset?.Contains(FollowsDecision.Key, StringComparer.Ordinal) == true,
             errors);
         await ValidateVerdictReferenceAsync(item, request.Set, request.Unset, errors, cancellationToken).ConfigureAwait(false);
         errors.ThrowIfAny();
