@@ -41,6 +41,12 @@ internal static class LineTouches
     private static readonly string TouchesSql =
         string.Join(", ", OperationCatalog.Touches.Order(StringComparer.Ordinal).Select(operation => $"'{operation}'"));
 
+    /// <summary>
+    /// Whether the work item aliased <paramref name="item"/> names the send aliased <paramref name="send"/> under
+    /// <c>args.send</c>: one text for every probe here, so an index on what an item names is taken by each of them.
+    /// </summary>
+    private static string NamesSql(string item, string send) => $"json_extract({item}.context_json, '$.input.send') = {send}.public_id";
+
     /// <summary>The states in <paramref name="states"/> as a SQL list of literals.</summary>
     private static string ListSql(IEnumerable<string> states) => string.Join(", ", states.Select(state => $"'{state}'"));
 
@@ -57,13 +63,13 @@ internal static class LineTouches
         EXISTS (SELECT 1 FROM work_items AS k
                 WHERE k.campaign_id = {{send}}.campaign_id AND k.status = 'succeeded'
                   AND k.operation IN ('{{HeldSends.Cancel}}', '{{HeldSends.Status}}')
-                  AND json_extract(k.context_json, '$.input.send') = {{send}}.public_id
+                  AND {{NamesSql("k", send)}}
                   AND (k.operation = '{{HeldSends.Cancel}}'
                        OR ({{HeldSends.ReadSaidSql("k", ListSql(HeldSends.UnsentStates))}}
                            AND NOT EXISTS (SELECT 1 FROM work_items AS g
                                            WHERE g.campaign_id = {{send}}.campaign_id AND g.status = 'succeeded'
                                              AND g.operation = '{{HeldSends.Status}}'
-                                             AND json_extract(g.context_json, '$.input.send') = {{send}}.public_id
+                                             AND {{NamesSql("g", send)}}
                                              AND {{HeldSends.ReadSaidSql("g", ListSql(HeldSends.MayHaveGoneStates))}}))))
         """;
 
@@ -75,7 +81,7 @@ internal static class LineTouches
     internal static readonly string TakenBackSql = $$"""
         EXISTS (SELECT 1 FROM work_items AS k
                 WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
-                  AND json_extract(k.context_json, '$.input.send') = w.public_id)
+                  AND {{NamesSql("k", "w")}})
         """;
 
     /// <summary>Whether the work item aliased <c>w</c> is a touch that counts: the one definition.</summary>
