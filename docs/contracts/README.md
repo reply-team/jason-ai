@@ -585,6 +585,11 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   provider's own shape, composed from `args.definition`, or, for an audience named by its number, from the audience the
   campaign holds. `args` is the caller's as written and the runtime never rewrites it, so the definition is placed at
   the root, as `send` is, and the plugin reads it there and nowhere else.
+- `follows` appears where the operation's input schema declares it — today `message.send` — and says which earlier
+  letter of the campaign the message follows, as a reply in its thread: that send's work item, its operation and the
+  provider's reference for it, or, with all three null, a new letter, and in `because` why either way. The runtime
+  composes it at the claim from `args.follows` and the campaign's own earlier sends; a caller never writes it, and the
+  plugin reads it there, never `args.follows`.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
   visible.
 
