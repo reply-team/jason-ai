@@ -198,7 +198,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['theme.set', ['dark']],
         ['updates.key', []],
         ['updates.item', []],
-        ['updates.press', ['Check for Updates…']],
+        ['updates.press', ['Restart Jason and Its Runtime to Install 0.48.6', { ask: true }]],
         ['dailyTrends.get', []],
         ['dailyTrends.set', [false]],
         ['mode.get', []],

@@ -4,7 +4,7 @@
  * (`Desk.pressUpdate`).
  */
 
-import type { MenuItem } from './updates.ts';
+import type { MenuItem, UpdateState } from './updates.ts';
 
 /**
  * What the seam's `updates.item` answers: the desktop's version, the update item as the menu shows it, or none, what
@@ -17,14 +17,42 @@ export interface UpdateItemAnswer {
     item: { label: string; enabled: boolean } | null;
     said?: string | null;
     newer?: string | null;
+    step?: UpdateStep | null;
 }
+
+/**
+ * The three steps of an update the page's card has words for; every other step of the updater is sent as null. A step may come
+ * with `newer` null (a terminal's request for an older version moves the updater without a newer version known), and the
+ * page then shows no card.
+ */
+export type UpdateStep = 'offered' | 'downloading' | 'downloaded';
 
 /**
  * The answer of `updates.item`: the item's label and whether it is enabled, never its act, which the press reads again,
  * the sentence of the person's last check, wherever it was asked from, and the version known and not installed.
  */
-export function updateAnswerOf(version: string, item: MenuItem | null, said: string | null, newer: string | null): UpdateItemAnswer {
-    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled }, said, newer };
+export function updateAnswerOf(version: string, item: MenuItem | null, said: string | null, newer: string | null, step: UpdateStep | null = null): UpdateItemAnswer {
+    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled }, said, newer, step };
+}
+
+/**
+ * The step the page's card shows: the updater's own step when the item is the updater's and the step is one of the three
+ * the card has words for, else null (idle, checking, installing, the deb's restart, a build that is not installed, a demo
+ * run). `item` is the item the menu shows now: where it has no act of the updater's, there is no step.
+ */
+export function updateStepOf(state: UpdateState, item: MenuItem | null): UpdateStep | null {
+    if (item === null || item.act === 'restart') return null;
+    return state.step === 'offered' || state.step === 'downloading' || state.step === 'downloaded' ? state.step : null;
+}
+
+/**
+ * Whether a press from the page asks first: only a press that names `ask` and whose act is the install, which stops the
+ * runtime and restarts the desktop. The question is the desktop's own (`installQuestion`), the one the key gets; any
+ * other act asks nothing here.
+ */
+export function pressAsks(act: MenuItem['act'], options: unknown): boolean {
+    if (act !== 'install' || typeof options !== 'object' || options === null) return false;
+    return (options as { ask?: unknown }).ask === true;
 }
 
 /**

@@ -17,6 +17,7 @@ import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } 
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
+import { updateStepOf, type UpdateStep } from './update-item.ts';
 import { menuItemOf, pressItem, restartQuestion, updateNotice, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
@@ -230,6 +231,16 @@ export class Desk {
     updateNewer(): string | null {
         if (this.demo !== null) return null;
         return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;
+    }
+
+    /**
+     * The step the page's card shows: the updater's own, offered, downloading or downloaded, and null at every other
+     * step, in a demo run and for the deb's restart (`updateStepOf`).
+     */
+    updateStep(): UpdateStep | null {
+        const { updates } = this.deps;
+        if (updates === null || !updates.active) return null;
+        return updateStepOf(updates.current, this.updateItem());
     }
 
     /**

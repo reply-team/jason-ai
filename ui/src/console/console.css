@@ -626,6 +626,110 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.jc-console .ucard {
+    box-sizing: border-box;
+    margin-bottom: 8px;
+    padding: 11px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border: 1px solid var(--accent-line);
+    border-radius: 10px;
+    background: var(--teal-2);
+    color: var(--accent-text);
+    font-size: 13px;
+    font-weight: 400;
+    white-space: normal;
+}
+.jc-console .ucard .ut {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.35;
+}
+.jc-console .ucard .ut svg {
+    flex: none;
+    margin-top: 2px;
+}
+.jc-console .ucard .ut span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.jc-console .ucard .uact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.jc-console .ucard button {
+    height: 28px;
+    font: inherit;
+    font-weight: 400;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.jc-console .ucard .ub {
+    padding: 0 14px;
+    border: 1px solid var(--accent-line);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--accent-text);
+}
+.jc-console .ucard .ub:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.jc-console .ucard .uq {
+    padding: 0 2px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: color-mix(in srgb, var(--accent-text) 80%, transparent);
+}
+.jc-console .ucard .ub:focus-visible,
+.jc-console .ucard .uq:focus-visible {
+    outline: 2px solid var(--accent, var(--ink));
+}
+.jc-console .ucard .ubar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent-line);
+    overflow: hidden;
+}
+.jc-console .ucard .ubar span {
+    display: block;
+    width: 40%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--teal);
+    animation: ucard-slide 1.6s ease-in-out infinite;
+}
+.jc-console .ucard .uhint {
+    font-size: 12px;
+    color: color-mix(in srgb, var(--accent-text) 80%, transparent);
+}
+.jc-console .ucard .spin {
+    animation: ucard-turn 1.2s linear infinite;
+}
+@keyframes ucard-slide {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(250%);
+    }
+}
+@keyframes ucard-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .jc-console .ucard .ubar span,
+    .jc-console .ucard .spin {
+        animation: none;
+    }
+}
 .jc-console .pillc {
     display: inline-flex;
     align-items: center;
