@@ -226,16 +226,16 @@ public class UnsentFactsTests
     /// Only a read with nothing after it is the last: while a read the runtime made of the send is open, or the reads it
     /// made since the moment have not reached the span or the nine, a read that still finds the send waiting says nothing;
     /// a read of anybody's that comes after the runtime's last read ended past the span, which failed and said nothing,
-    /// says it. Nine reads of the runtime's are the most where nine succeeded or nine failed: one that failed among nine
-    /// leaves a read still to come, and a person's read after nine that failed is the last. A send a read already found
-    /// final, by anybody, is never overdue.
+    /// says it. Nine reads of the runtime's are the most where nine failed, or nine succeeded with one of them past the span:
+    /// nine that succeeded before the span, and one that failed among nine, leave a read still to come, and a person's read
+    /// after nine that failed is the last. A send a read already found final, by anybody, is never overdue.
     /// </summary>
     [Theory]
     [InlineData("another read open", false)]
     [InlineData("reads still to come", false)]
     [InlineData("a person's read after the last", true)]
     [InlineData("a person's read after nine, one failed", false)]
-    [InlineData("a person's read after nine", true)]
+    [InlineData("a person's read after nine", false)]
     [InlineData("a person's read after nine that failed", true)]
     [InlineData("found sent before", false)]
     public async Task A_send_is_overdue_only_where_no_read_of_it_is_still_to_come(string scene, bool said)

@@ -25,12 +25,15 @@ namespace Jason.Runtime.Dispatch;
 /// read (<c>message.status</c>) where the send ran, as the dispatcher, unless one the runtime made is open already; the
 /// first once the grace has passed, the second <c>Dispatcher:DeferredReadFirstWaitSeconds</c> after the first ended, and
 /// each later one <c>Dispatcher:DeferredReadWaitSeconds</c> after the one before it ended, whatever it answered, until the
-/// send is said not to have gone (<see cref="JournalKinds.MessageUnsentObserved"/>), or <see cref="MostReads"/> of the
-/// reads the runtime made of the send that ended at or after its moment have succeeded, or as many have failed
-/// (<see cref="MadeReads"/>): <see cref="MostInAll"/> at the most, whatever the settings. A read that ends
-/// <c>Dispatcher:DeferredReadOverdueSeconds</c> or more after the moment and still finds the send waiting says it is
-/// overdue, so a read judged under a span since changed is followed by one more. A send whose failed reads are spent is
-/// read no more and may never be said: each of those failures woke the manager, as a failed item does.
+/// send is said not to have gone (<see cref="JournalKinds.MessageUnsentObserved"/>). Of the reads the runtime made of the
+/// send that ended at or after its moment, whichever step made them: until
+/// <c>Dispatcher:DeferredReadOverdueSeconds</c> after the moment have passed, none is made once <see cref="MostReads"/> less one have
+/// succeeded, so the last read waits for the span; after it, none once <see cref="MostReads"/> have succeeded and one of
+/// them ended past the span; and none once <see cref="MostReads"/> have failed (<see cref="MadeReads"/>):
+/// <see cref="MostInAll"/> at the most, whatever the settings. A read that ends that span or more after the moment and
+/// still finds the send waiting says it is overdue, so a read judged under a span since changed is followed by one more.
+/// A send whose failed reads are spent is read no more and may never be said: each of those failures woke the manager, as
+/// a failed item does.
 /// <para>
 /// It writes no line: each read decides alone, at its own end (<see cref="Execution.SentFacts"/>), whoever made it. A
 /// read that finds the send went says so as it always has; one that finds it failed or was cancelled, and the last read
@@ -55,8 +58,8 @@ public sealed class DeferredReads(
     ILogger<DeferredReads> logger)
 {
     /// <summary>
-    /// The most reads of each kind the step makes of one send after its moment: nine that succeeded, and nine that
-    /// failed (<see cref="MadeReads.Most"/>).
+    /// The most reads of each kind the step makes of one send after its moment: nine that succeeded, eight before the
+    /// overdue span and one after it, and nine that failed (<see cref="MadeReads.Most"/>).
     /// </summary>
     public const int MostReads = MadeReads.Most;
 
@@ -197,8 +200,10 @@ public sealed class DeferredReads(
     /// since its moment (<paramref name="made"/>, null where none has ended) and whether it was said not to have gone
     /// (<paramref name="said"/>): the first once the grace has passed, then a wait after the last one ended, whatever it
     /// answered, the first wait after the first read and the later wait after each other; never once the send was said not
-    /// to have gone, which a read past the overdue span that still finds it waiting says, or once its reads are spent,
-    /// <see cref="MostReads"/> succeeded or as many failed (<see cref="MadeReads.Spent"/>).
+    /// to have gone, which a read past the overdue span that still finds it waiting says. Until the span after the moment,
+    /// none once <see cref="MostReads"/> less one have succeeded, whichever step made them, so the last waits for the span;
+    /// after it, none once <see cref="MostReads"/> have succeeded and one of them ended past the span; and at any moment
+    /// none once as many have failed (<see cref="MadeReads.Spent"/>).
     /// </summary>
     internal static bool Due(HeldSend send, MadeReads? made, bool said, DispatcherOptions options, DateTimeOffset now)
     {
@@ -214,7 +219,8 @@ public sealed class DeferredReads(
             return now >= send.Moment.AddSeconds(options.DeferredReadGraceSeconds);
         }
 
-        if (made.Spent)
+        var span = send.Moment.AddSeconds(options.DeferredReadOverdueSeconds);
+        if (made.Spent(span) || (now < span && made.Succeeded >= MostReads - 1))
         {
             return false;
         }
