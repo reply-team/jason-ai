@@ -35,7 +35,7 @@
         },
         "message": {
           "format": "email",
-          "subject": "Notes from the meetup",
+          "subject": "One question about the meetup",
           "body": "Hi Ines, did you get a chance to look at my note?"
         }
       },

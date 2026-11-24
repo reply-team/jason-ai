@@ -25,7 +25,7 @@
           },
           "message": {
             "format": "email",
-            "subject": "Notes from the meetup",
+            "subject": "One question about the meetup",
             "body": "Hi Ines, did you get a chance to look at my note?"
           }
         },
@@ -71,7 +71,7 @@
       "work_item": "wi_2"
     },
     "preview": {
-      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, did you get a chance to look at my note?; send after: —; follows: wi_1 (line_root); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: One question about the meetup; text: Hi Ines, did you get a chance to look at my note?; send after: —; follows: wi_1 (line_root); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
       "highlights": {
         "/contacts/0/channels/0/value": "ines@example.test",
         "/args/channel": "email",
@@ -81,7 +81,7 @@
         },
         "/args/message": {
           "format": "email",
-          "subject": "Notes from the meetup",
+          "subject": "One question about the meetup",
           "body": "Hi Ines, did you get a chance to look at my note?"
         },
         "/args/message/compose": null,
@@ -132,7 +132,7 @@
             },
             "message": {
               "format": "email",
-              "subject": "Notes from the meetup",
+              "subject": "One question about the meetup",
               "body": "Hi Ines, did you get a chance to look at my note?"
             }
           },

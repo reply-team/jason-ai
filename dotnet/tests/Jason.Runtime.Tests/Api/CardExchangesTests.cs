@@ -161,7 +161,9 @@ public partial class CardExchangesTests
         var letter = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-follow-letter", new { work_item_id = first }, Ct);
         Assert.Equal((WorkItemStatus.Succeeded, "Notes from the meetup"), (letter.Status, (string?)letter.Context["input"]!["message"]!["subject"]));
 
-        var second = await scene.SendAsync(ines, "message.send", EmailArgs("Hi Ines, did you get a chance to look at my note?"));
+        var followUp = EmailArgs("Hi Ines, did you get a chance to look at my note?");
+        followUp["message"]!["subject"] = "One question about the meetup";
+        var second = await scene.SendAsync(ines, "message.send", followUp);
         await scene.ClaimAsync();
         var row = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
         Assert.Equal(second, row.WorkItemId);
