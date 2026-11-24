@@ -1704,7 +1704,7 @@ export const ROWS = {
         "when": "The message follows an earlier email, and the send answered `follows.never_sent`, Reply's code `contact.followedSendNeverSent` at 409: that email was cancelled or failed for good and will never go. Nothing is sent, and the message does not go as a letter of its own instead.",
         "code": "follows_never_sent",
         "class": "permanent",
-        "note": "The email this message follows was cancelled or failed at Reply and will never go, so there is no thread to place this one in, and nothing was sent. To reach the person, propose the message again as a letter of its own, with `follows` written `new_thread`."
+        "note": "The email this message follows was cancelled or failed at Reply and will never go, so there is no thread to place this one in, and nothing was sent. A read of that email by `message.status` that says it failed or was cancelled takes it off the line, and the message can then be proposed again: it follows the line as it then stands, or goes as a letter of its own with `follows` written `new_thread`."
       },
       "followed_email_not_gone_yet": {
         "when": "The message follows an earlier email, and the send answered `follows.not_sent`, Reply's code `contact.followedSendNotSent` at 409: that email has not gone yet, and this message would go at once. Reply's guard released the key with nothing taken, so a repeat under it is the send itself. Nothing is sent.",

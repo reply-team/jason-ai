@@ -36,7 +36,7 @@
   },
   "precondition": "The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent.",
   "preview": {
-    "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}; follows: {/follows/work_item} ({/follows/because})",
+    "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}; follows: {/follows/work_item} ({/follows/because}); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
     "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message", "/args/message/compose", "/args/send_after", "/follows"]
   },
 
