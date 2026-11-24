@@ -171,8 +171,9 @@ was handed over may not be read: the contract names no latest `send_after`, and 
 the sends handed over more than 395 days ago, a year before the 30 days it looks back. The reads of a send are counted
 whichever step of the runtime made them, since only a read's context tells one step's reads from another's: a read the
 bounce step made of a deferred send after its moment is one of its 9 that succeeded or its 9 that failed, as it ended,
-and any of its reads spaces the next. An overdue span raised after a send's ninth read succeeded is never met, so that
-send is not said `overdue`. And a send whose 9 failed reads are spent is read no more by the step and may end never said
+and any of its reads spaces the next. The bounce step's reads keep none of the step's waits, so even with the shipped
+settings they can spend the 9 that succeeded before the overdue span, and that send is then never said `overdue`. An
+overdue span raised after a send's ninth read succeeded is never met, so that send is not said `overdue`. And a send whose 9 failed reads are spent is read no more by the step and may end never said
 by a line: each of those failures was a `workitem_failed` the manager was woken by, and a read a person or a role makes
 of the send still answers, as every read does, and spends nothing.
 

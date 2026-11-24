@@ -392,6 +392,8 @@ public partial class RoleSkillTests
         Assert.Contains("An `overdue` send is still held by the provider and may still go", skill, StringComparison.Ordinal);
         Assert.Contains("write to the person again only once a `message.cancel` of it has succeeded", skill, StringComparison.Ordinal);
         Assert.Contains("A `cancelled` send may be the provider's own stop on a reply, or a person's act there", skill, StringComparison.Ordinal);
+        Assert.Contains("never of a send a succeeded `message.cancel` of this campaign took back", skill, StringComparison.Ordinal);
+        Assert.Contains("it was cancelled at the provider, not by a succeeded `message.cancel` of this campaign", skill, StringComparison.Ordinal);
         Assert.Contains("A `failed` send is final: the letter did not go", skill, StringComparison.Ordinal);
         Assert.Contains("read the person's thread and where they stand in the campaign first", skill, StringComparison.Ordinal);
         Assert.Contains(

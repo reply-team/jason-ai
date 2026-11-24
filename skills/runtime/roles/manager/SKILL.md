@@ -425,7 +425,7 @@ next step is due, where the campaign's plan waits on that message having gone. S
 The line names the work item that made the send, with the `plugin`, the provider's `reference`, the `channel`, the
 `state`, the provider's `failure_code` where it is one word, the `moment` it was due, `cancelled_at` and the read that
 found it under `read_work_item`, never the provider's sentence or the text. It is said once per send, and never of a
-send a `message.cancel` of this campaign took back. Read every line of the kind since your last review:
+send a succeeded `message.cancel` of this campaign took back. Read every line of the kind since your last review:
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unsent_observed --since 2026-09-18T09:00:00Z
@@ -441,9 +441,9 @@ What it calls for depends on its `state`:
   a second letter now could reach the person twice. Take it back first with a `message.cancel` item naming it, and
   write to the person again only once a `message.cancel` of it has succeeded; one that ends `send_not_pending` says
   the letter went or failed after all, so read it again before anything else.
-- `cancelled`: it was cancelled at the provider, not by this campaign. A `cancelled` send may be the provider's own stop
-  on a reply, or a person's act there, so read the person's thread and where they stand in the campaign first: a person
-  who replied is answered, never sent the letter that was stopped.
+- `cancelled`: it was cancelled at the provider, not by a succeeded `message.cancel` of this campaign. A `cancelled`
+  send may be the provider's own stop on a reply, or a person's act there, so read the person's thread and where they
+  stand in the campaign first: a person who replied is answered, never sent the letter that was stopped.
 
 Say in your note what you did with each.
 
