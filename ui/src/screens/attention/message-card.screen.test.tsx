@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
@@ -141,8 +141,13 @@ describe('the message card, where the letter follows one', () => {
 
     it('says the reply as first written where the followed letter cannot be read', async () => {
         const fake = new FakeApi();
-        fake.call = async () => {
-            throw new Error('unreachable');
+        const calls: { operation: string; body: unknown }[] = [];
+        const refusals: Promise<void>[] = [];
+        fake.call = (operation, body) => {
+            calls.push({ operation, body });
+            const refused = Promise.reject(new Error('unreachable'));
+            refusals.push(refused.then(undefined, () => undefined));
+            return refused;
         };
         const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
         render(
@@ -150,9 +155,11 @@ describe('the message card, where the letter follows one', () => {
                 <MessageCard detail={toApprovalDetail(preview)} />
             </ApiProvider>,
         );
-        // The words are the same before the read ends, so the read is let end (it is refused) before they are held to.
-        await waitFor(() => expect(fake.call).toBeDefined());
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // The words are the same before the read ends: hold them only once the followed item's read was made and refused.
+        await waitFor(() => expect(calls).toEqual([{ operation: 'workitem.get', body: { work_item_id: 'wi_1' } }]));
+        await act(async () => {
+            await refusals[0];
+        });
         expect(document.body.textContent).toContain(t('follows.reply.unread'));
         expect(document.body.textContent).not.toContain('Notes from the meetup" of');
     });
