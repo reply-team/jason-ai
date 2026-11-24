@@ -336,7 +336,7 @@ public partial class RoleSkillTests
         Assert.Contains("**A review has fifteen minutes and one attempt, so it works in an order and to a ceiling.**", deep, StringComparison.Ordinal);
         Assert.Contains("Handle at most twenty people at one review across steps 2 to 4.", deep, StringComparison.Ordinal);
         Assert.Contains("**The next touch is yours, one at a time, at a review.**", deep, StringComparison.Ordinal);
-        Assert.Contains("**A follow-up goes under the first letter, as a reply.**", deep, StringComparison.Ordinal);
+        Assert.Contains("**A follow-up goes under the line's root, as a reply.**", deep, StringComparison.Ordinal);
         Assert.Contains("No line goes past `Lines:MaxTouches`, the ceiling the settings hold, and you never plan past it", deep, StringComparison.Ordinal);
         Assert.Contains("the roles may plan it: a fourth touch after something made the person newly relevant, or two where two are enough", deep, StringComparison.Ordinal);
 
@@ -567,8 +567,10 @@ public partial class RoleSkillTests
     public void The_roles_say_that_a_follow_up_goes_under_the_first_letter_as_a_reply()
     {
         var deep = FlattenedEntry("manager", "deep_review");
-        Assert.Contains("**A follow-up goes under the first letter, as a reply.**", deep, StringComparison.Ordinal);
-        Assert.Contains("the subject is `Re: ` and the subject of the letter it follows", deep, StringComparison.Ordinal);
+        Assert.Contains("**A follow-up goes under the line's root, as a reply.**", deep, StringComparison.Ordinal);
+        Assert.Contains("the subject is the title it would carry as a letter of its own, with no `Re:` and no copy of the followed letter's subject", deep, StringComparison.Ordinal);
+        Assert.Contains("Where the first letter never went, the message is rewritten as a first letter", deep, StringComparison.Ordinal);
+        Assert.DoesNotContain("the subject is `Re: `", deep, StringComparison.Ordinal);
         Assert.Contains("`\"follows\": \"new_thread\"` only where the plan says this touch opens a thread of its own", deep, StringComparison.Ordinal);
         Assert.Contains("LinkedIn messages follow nothing", deep, StringComparison.Ordinal);
         Assert.Contains("Never send a follow-up as a `conversation.reply`", deep, StringComparison.Ordinal);
@@ -577,34 +579,45 @@ public partial class RoleSkillTests
 
         var printed = SkillPack.PrintedCommands(EntryFile("manager", "deep_review"));
         var touch = Assert.Single(printed, line => line.Contains("--operation message.send", StringComparison.Ordinal));
-        Assert.Contains("\"subject\":\"Re: ", touch, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"subject\":\"Re: ", touch, StringComparison.Ordinal);
         Assert.DoesNotContain("follows", touch, StringComparison.Ordinal);
 
         var copywriter = Flattened("copywriter");
-        Assert.Contains("A follow-up's subject is `Re: ` and the subject of the letter it follows", copywriter, StringComparison.Ordinal);
+        Assert.Contains("A follow-up's subject is the title it would carry as a letter of its own, with no `Re:` and no copy of the followed letter's subject", copywriter, StringComparison.Ordinal);
+        Assert.DoesNotContain("A follow-up's subject is `Re: `", copywriter, StringComparison.Ordinal);
 
         var critic = Flattened("critic");
         Assert.Contains("An email `message.send` that does not say `\"follows\": \"new_thread\"` goes as a reply under the line's root", critic, StringComparison.Ordinal);
-        Assert.Contains("Judge the text as a reply to it", critic, StringComparison.Ordinal);
+        Assert.Contains("judge the text as a reply to it", critic, StringComparison.Ordinal);
         Assert.Contains("it must also read whole", critic, StringComparison.Ordinal);
 
         Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back", critic, StringComparison.Ordinal);
         Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back", deep, StringComparison.Ordinal);
-        Assert.Contains("read the `follows` the runtime composed, on the `Follows:` line of `jason workitem get <the send's wi_…> --human` or of the approval's preview: under which letter it lands, or why it goes as a new letter", critic, StringComparison.Ordinal);
+        Assert.Contains("Before the send is claimed nothing is decided yet", critic, StringComparison.Ordinal);
+        Assert.Contains("Derive the probable root yourself by that rule", critic, StringComparison.Ordinal);
+        Assert.DoesNotContain("read the `follows` the runtime composed", critic, StringComparison.Ordinal);
         Assert.Contains("a letter that a succeeded `message.cancel` took back, and a letter that a succeeded read (`message.status`) says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`)", critic, StringComparison.Ordinal);
-        Assert.Contains("A follow-up that ended `follows_not_sent_yet` is proposed again with a `send_after` later than the followed letter's moment", deep, StringComparison.Ordinal);
-        Assert.Contains("A follow-up that ended `follows_never_sent`: read the followed letter's status, with a `message.status` item that names that send under `args.send`", deep, StringComparison.Ordinal);
+        Assert.Contains("is mended by the one rule \"A follow-up that could not go\" in the manager's head file", deep, StringComparison.Ordinal);
+        var manager = Flattened("manager");
+        Assert.Contains("**A follow-up that could not go.**", manager, StringComparison.Ordinal);
+        Assert.Contains("`follows_not_placed` (`contact.followUpNotPlaced`) and `follows_not_found`: it is never proposed again with `follows` absent", manager, StringComparison.Ordinal);
+        Assert.Contains("THE PERSON is asked, as \"How to ask\" says, whether it goes as a letter of its own (`\"follows\": \"new_thread\"`)", manager, StringComparison.Ordinal);
+        Assert.Contains("`follows_never_sent` (`contact.followedSendNeverSent`): the letter it followed never went. Read that letter's status", manager, StringComparison.Ordinal);
+        Assert.Contains("`follows_not_sent_yet` (`contact.followedSendNotSent`): the letter has not gone yet. Propose it again later, with a `send_after` later than that letter's moment", manager, StringComparison.Ordinal);
+        Assert.Contains("A deferred follow-up that failed with no code, or with the provider's daily-limit code of a direct send", manager, StringComparison.Ordinal);
+        Assert.Contains("For a send that followed a letter, its `failure_code` and the rule \"A follow-up that could not go\" decide the way forward", manager, StringComparison.Ordinal);
         Assert.Contains("a letter that a succeeded read says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`)", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("under which letter the email lands and that letter's subject, read from the item with `jason workitem get", Flattened("approvals-and-questions"), StringComparison.Ordinal);
         var read = Assert.Single(SkillPack.PrintedCommands(SkillPack.Find("critic").File), line => line.StartsWith("jason workitem list ", StringComparison.Ordinal));
         Assert.Contains("--contact cnt_", read, StringComparison.Ordinal);
         Assert.DoesNotContain("--operation", read, StringComparison.Ordinal);
 
-        Assert.Contains("The approval card names the letter it chose, which is the one to read", critic, StringComparison.Ordinal);
+        Assert.DoesNotContain("The approval card names the letter it chose", critic, StringComparison.Ordinal);
         Assert.Contains("so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed; where it has not, the follow-up goes as a letter of its own", Flattened("planner"), StringComparison.Ordinal);
 
         var planner = Flattened("planner");
-        Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
-        Assert.Contains("`wait_on` naming the first letter's work item", planner, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups go under the line's root, as replies, where the provider can: the latest letter that went as one of its own", planner, StringComparison.Ordinal);
+        Assert.Contains("`wait_on` naming the work item of the letter it follows", planner, StringComparison.Ordinal);
+        Assert.DoesNotContain("never planned ahead", planner, StringComparison.Ordinal);
     }
 }

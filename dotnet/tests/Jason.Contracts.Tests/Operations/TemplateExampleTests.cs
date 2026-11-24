@@ -114,9 +114,9 @@ public class TemplateExampleTests
     }
 
     /// <summary>
-    /// A template that follows a letter goes under that letter's subject, so its example renders no subject of its own: in
-    /// its place it says, in the summary's own words, that the message goes as a reply under that letter's subject and its
-    /// own subject is not sent. A name only that subject reads is not listed, and a subject the standard would refuse no
+    /// A template that follows a letter goes under that letter's subject, so its example renders no subject of its own and
+    /// holds none, never a sentence in its place: the summary says that the message goes as a reply under that letter's
+    /// subject and its own subject is not sent. A name only that subject reads is not listed, and a subject the standard would refuse no
     /// longer leaves the person without an example.
     /// </summary>
     [Theory]
@@ -133,9 +133,11 @@ public class TemplateExampleTests
 
         var example = Preview.Example(input)!;
 
-        var line = (string?)example["subject"];
-        Assert.Equal("a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent", line);
-        Assert.EndsWith("; " + line, Preview.Summary.Render(input), StringComparison.Ordinal);
+        Assert.Null(example["subject"]);
+        Assert.EndsWith(
+            "; a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+            Preview.Summary.Render(input),
+            StringComparison.Ordinal);
         Assert.Equal("Any news, Marta?", (string?)example["body"]);
         Assert.Empty(example["unfilled"]!.AsArray());
     }

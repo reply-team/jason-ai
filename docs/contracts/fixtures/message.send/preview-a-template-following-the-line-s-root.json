@@ -41,7 +41,7 @@
       "/follows": { "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA", "operation": "message.send", "reference": "email-1001", "because": "line_root" }
     },
     "example": {
-      "subject": "a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+      "subject": null,
       "body": "Hi Marta, one more thought after the meetup.",
       "unfilled": []
     }

@@ -144,6 +144,13 @@ failures. `touch_ceiling_reached` and `line_finished` are a line's end, not a fa
 every touch the settings allow, so you end their line, and the second that it was ended already, so nothing is owed.
 A failed item is finished and is not reopened — if the work is still wanted, it is new work.
 
+**A follow-up that could not go.** A follow-up is an email `message.send` that follows a letter. It ends without going either inline, as a failed item with an error code, or later, as a `message_unsent_observed` line in the state `failed` with the provider's `failure_code`. The way forward is one rule, by the code, whichever road it came by:
+
+- `follows_not_placed` (`contact.followUpNotPlaced`) and `follows_not_found`: it is never proposed again with `follows` absent, since the same letter is picked again and it fails the same way for ever. THE PERSON is asked, as "How to ask" says, whether it goes as a letter of its own (`"follows": "new_thread"`). That is a person's decision, never yours.
+- `follows_never_sent` (`contact.followedSendNeverSent`): the letter it followed never went. Read that letter's status (`message.status`, as "Asking after one send" says), then propose the follow-up again: the root is decided anew.
+- `follows_not_sent_yet` (`contact.followedSendNotSent`): the letter has not gone yet. Propose it again later, with a `send_after` later than that letter's moment.
+- A deferred follow-up that failed with no code, or with the provider's daily-limit code of a direct send, which its letter meets when it was carried over at the mailbox's daily limit and the carry-over ran out: nothing went. Propose it again as it was.
+
 **What the provider does not offer yet.** `capability_not_offered` says the provider does not offer an operation, or
 one argument of it, yet; its message names which. The code is final: it is nobody's configuration and no argument a
 corrected item could fix, and no repeat of the same item gets past it. Choose another way to do the work, or tell the
@@ -434,8 +441,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unse
 What it calls for depends on its `state`:
 
 - `failed`: the provider took the send and could not make it. A `failed` send is final: the letter did not go, and it
-  will not. Whether to send it again, reach the person another way or tell somebody is yours to decide, after reading
-  the person's thread.
+  will not. For a send that followed a letter, its `failure_code` and the rule "A follow-up that could not go" decide the
+  way forward. For any other, whether to send it again, reach the person another way or tell somebody is yours to
+  decide, after reading the person's thread.
 - `overdue`: its moment passed a week ago, or as long as this installation set, and every read still found it waiting.
   An `overdue` send is still held by the provider and may still go, at a limit or a schedule of the provider's own, so
   a second letter now could reach the person twice. Take it back first with a `message.cancel` item naming it, and
