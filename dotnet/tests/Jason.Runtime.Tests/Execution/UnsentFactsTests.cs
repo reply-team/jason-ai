@@ -224,18 +224,21 @@ public class UnsentFactsTests
     /// Only a read with nothing after it is the last: while a read the runtime made of the send is open, or the reads it
     /// made since the moment have not reached the span or the nine, a read that still finds the send waiting says nothing;
     /// a read of anybody's that comes after the runtime's last read ended past the span, which failed and said nothing,
-    /// says it. A send a read already found final, by anybody, is never overdue.
+    /// says it. Nine reads of the runtime's are the most only where nine succeeded: one that failed among them leaves a read
+    /// still to come. A send a read already found final, by anybody, is never overdue.
     /// </summary>
     [Theory]
     [InlineData("another read open", false)]
     [InlineData("reads still to come", false)]
     [InlineData("a person's read after the last", true)]
+    [InlineData("a person's read after nine, one failed", false)]
+    [InlineData("a person's read after nine", true)]
     [InlineData("found sent before", false)]
     public async Task A_send_is_overdue_only_where_no_read_of_it_is_still_to_come(string scene, bool said)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
-        var by = scene == "a person's read after the last" || scene == "reads still to come" ? ActorType.Human : ActorType.System;
+        var by = scene.StartsWith("a person's read", StringComparison.Ordinal) || scene == "reads still to come" ? ActorType.Human : ActorType.System;
         var (send, read) = await SeedAsync(db, WeekAgo, by: by);
         switch (scene)
         {
@@ -250,13 +253,22 @@ public class UnsentFactsTests
                 await EarlierAsync(db, send, Noon.AddDays(-1), ActorType.System);
                 await EarlierAsync(db, send, Noon, ActorType.System, code: "provider_unavailable");
                 break;
+            case "a person's read after nine, one failed":
+            case "a person's read after nine":
+                for (var earlier = 0; earlier < DeferredReads.MostReads; earlier++)
+                {
+                    var failed = earlier == 0 && scene.EndsWith("one failed", StringComparison.Ordinal);
+                    await EarlierAsync(db, send, Noon.AddDays(-1).AddMinutes(earlier), ActorType.System, code: failed ? "provider_unavailable" : null);
+                }
+
+                break;
             case "found sent before":
                 await EarlierAsync(db, send, Noon.AddDays(-2), ActorType.Role, state: "sent");
                 await EarlierAsync(db, send, Noon.AddDays(-1), ActorType.System);
                 break;
         }
 
-        var ended = scene == "a person's read after the last" ? Noon.AddHours(1) : Noon;
+        var ended = by == ActorType.Human && scene != "reads still to come" ? Noon.AddHours(1) : Noon;
         Assert.Equal(said, await EndAsync(db, read, send, Answer("queued", null, null), ended));
         Assert.Equal(said ? 1 : 0, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.MessageUnsentObserved, Ct));
     }

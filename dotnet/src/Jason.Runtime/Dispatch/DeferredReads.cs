@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
@@ -18,23 +19,27 @@ namespace Jason.Runtime.Dispatch;
 /// The step of a scan right after the bounce step: a deferred send whose moment has passed is read, to learn what became
 /// of it. Its candidates are the one definition of a send the provider holds (<see cref="HeldSends"/>) with the moment
 /// test turned round: a send the definition covers whose moment passed at least <c>Dispatcher:DeferredReadGraceSeconds</c>
-/// ago and no more than <see cref="LookBack"/> ago, of which nothing yet says what became of it — no succeeded cancel, no
-/// answer that the provider holds no such send, no final read, whoever made it. For each it queues a read
-/// (<c>message.status</c>) where the send ran, as the dispatcher, unless one the runtime made is open already; the first
-/// once the grace has passed, the second <c>Dispatcher:DeferredReadFirstWaitSeconds</c> after the first ended, and each
-/// later one <c>Dispatcher:DeferredReadWaitSeconds</c> after the one before it ended, until a read ends at least
-/// <c>Dispatcher:DeferredReadOverdueSeconds</c> after the moment, or <see cref="MostReads"/> have ended: the reads it
-/// counts are the reads the runtime made of the send that ended at or after its moment.
+/// ago, handed over and due no more than <see cref="LookBack"/> ago, of which nothing yet says what became of it — no
+/// succeeded cancel, no answer that the provider holds no such send, no final read, whoever made it. For each it queues a
+/// read (<c>message.status</c>) where the send ran, as the dispatcher, unless one the runtime made is open already; the
+/// first once the grace has passed, the second <c>Dispatcher:DeferredReadFirstWaitSeconds</c> after the first ended, and
+/// each later one <c>Dispatcher:DeferredReadWaitSeconds</c> after the one before it ended, whatever it answered, until the
+/// send is said not to have gone (<see cref="JournalKinds.MessageUnsentObserved"/>) or <see cref="MostReads"/> have
+/// succeeded: the reads it counts are the reads the runtime made of the send that succeeded and ended at or after its
+/// moment. A read that ends <c>Dispatcher:DeferredReadOverdueSeconds</c> or more after the moment and still finds the
+/// send waiting says it is overdue, so a read judged under a span since changed is followed by one more; a read that
+/// failed counts for none of the nine.
 /// <para>
 /// It writes no line: each read decides alone, at its own end (<see cref="Execution.SentFacts"/>), whoever made it. A
 /// read that finds the send went says so as it always has; one that finds it failed or was cancelled, and the last read
 /// where none found what became of it, say the send did not go.
 /// </para>
 /// <para>
-/// An active campaign's sends only: a paused campaign's reads wait, so none is made there. At most
-/// <see cref="OpenPerCampaign"/> reads the runtime made are open in a campaign at once, whichever step made them, the
+/// An active campaign's sends only: a paused campaign's reads wait, so none is made there. The step makes no read in a
+/// campaign while <see cref="OpenPerCampaign"/> reads the runtime made are open there, whichever step made them, the
 /// oldest sends first. A read no route takes where the send ran is not made, said once per campaign, and asked again at
-/// the next scan. The candidates are read at most once every <see cref="Cadence"/>: no wait of the reads is shorter.
+/// the next scan. The candidates are read at most once every <see cref="Cadence"/>: no wait of the reads is shorter. A
+/// read of them that fails, a stored value it cannot parse among them, skips the step's run and never the scan.
 /// </para>
 /// </summary>
 public sealed class DeferredReads(
@@ -83,6 +88,16 @@ public sealed class DeferredReads(
         new EventId(3, nameof(Failed)),
         "The deferred read step for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
 
+    private static readonly Action<ILogger, Exception?> Unread = LoggerMessage.Define(
+        LogLevel.Warning,
+        new EventId(4, nameof(Unread)),
+        "The deferred read step could not read the deferred sends; it reads them again at its next run, and the rest of the scan continues without it");
+
+    private static readonly Action<ILogger, string, Exception?> UnreadToParse = LoggerMessage.Define<string>(
+        LogLevel.Warning,
+        new EventId(4, nameof(Unread)),
+        "The deferred read step could not read the deferred sends; it reads them again at its next run, and the rest of the scan continues without it: {Failure}");
+
     /// <summary>
     /// How long after its moment the last of <see cref="MostReads"/> reads of a send ends at the soonest: the grace, the
     /// first wait, and a wait after each read after the second. A send may be said overdue no later than this, or its
@@ -105,18 +120,39 @@ public sealed class DeferredReads(
         }
 
         var options = settings.Current;
-        var passed = await HeldSends.ReadPassedAsync(db, now.AddSeconds(-options.DeferredReadGraceSeconds), now - LookBack, ct).ConfigureAwait(false);
-        if (passed.Count == 0)
+        IReadOnlyList<HeldSend> passed;
+        Dictionary<string, int> active;
+        try
         {
+            passed = await HeldSends.ReadPassedAsync(db, now.AddSeconds(-options.DeferredReadGraceSeconds), now - LookBack, ct).ConfigureAwait(false);
+            if (passed.Count == 0)
+            {
+                return 0;
+            }
+
+            active = await db.Campaigns
+                .AsNoTracking()
+                .Where(campaign => campaign.Status == CampaignStatus.Active)
+                .Select(campaign => new { campaign.Id, campaign.PublicId })
+                .ToDictionaryAsync(campaign => campaign.PublicId, campaign => campaign.Id, StringComparer.Ordinal, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The candidates are every campaign's, read in one query: a value it cannot parse in any of them, or a failure of
+            // the database, would otherwise end the scan. The run is skipped, said by what failed and never by what was read.
+            if (ParseFailure.Is(ex))
+            {
+                UnreadToParse(logger, ParseFailure.Describe(ex), null);
+            }
+            else
+            {
+                Unread(logger, ex);
+            }
+
+            db.ChangeTracker.Clear();
             return 0;
         }
-
-        var active = await db.Campaigns
-            .AsNoTracking()
-            .Where(campaign => campaign.Status == CampaignStatus.Active)
-            .Select(campaign => new { campaign.Id, campaign.PublicId })
-            .ToDictionaryAsync(campaign => campaign.PublicId, campaign => campaign.Id, StringComparer.Ordinal, ct)
-            .ConfigureAwait(false);
 
         var queued = 0;
         foreach (var sends in passed.Where(send => active.ContainsKey(send.Campaign)).GroupBy(send => send.Campaign, StringComparer.Ordinal))
@@ -145,25 +181,32 @@ public sealed class DeferredReads(
 
     /// <summary>
     /// Whether a read of <paramref name="send"/> is due at <paramref name="now"/>, by the reads the runtime made of it
-    /// since its moment (<paramref name="made"/>, null where none has ended): the first once the grace has passed, then a
-    /// wait after the last one ended, the first wait after the first read and the later wait after each other; never
-    /// once <see cref="MostReads"/> have ended or one ended at least the overdue span after the moment.
+    /// since its moment (<paramref name="made"/>, null where none has ended) and whether it was said not to have gone
+    /// (<paramref name="said"/>): the first once the grace has passed, then a wait after the last one ended, whatever it
+    /// answered, the first wait after the first read and the later wait after each other; never once the send was said not
+    /// to have gone, which a read past the overdue span that still finds it waiting says, or once
+    /// <see cref="MostReads"/> have succeeded. A read that failed spaces the next and counts for none of the nine.
     /// </summary>
-    internal static bool Due(HeldSend send, MadeReads? made, DispatcherOptions options, DateTimeOffset now)
+    internal static bool Due(HeldSend send, MadeReads? made, bool said, DispatcherOptions options, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(send);
         ArgumentNullException.ThrowIfNull(options);
+        if (said)
+        {
+            return false;
+        }
+
         if (made is null)
         {
             return now >= send.Moment.AddSeconds(options.DeferredReadGraceSeconds);
         }
 
-        if (made.Count >= MostReads || made.LastEnded >= send.Moment.AddSeconds(options.DeferredReadOverdueSeconds))
+        if (made.Succeeded >= MostReads)
         {
             return false;
         }
 
-        var wait = made.Count == 1 ? options.DeferredReadFirstWaitSeconds : options.DeferredReadWaitSeconds;
+        var wait = made.Ended == 1 ? options.DeferredReadFirstWaitSeconds : options.DeferredReadWaitSeconds;
         return now >= made.LastEnded.AddSeconds(wait);
     }
 
@@ -180,6 +223,7 @@ public sealed class DeferredReads(
         var open = await SendReads.OpenAsync(db, campaignRow, ids, ct).ConfigureAwait(false);
         var made = await SendReads.MadeAsync(db, campaignRow, sends.ToDictionary(send => send.WorkItem, send => send.Moment, StringComparer.Ordinal), ct)
             .ConfigureAwait(false);
+        var said = await SaidAsync(db, campaignRow, ids, ct).ConfigureAwait(false);
 
         var queued = 0;
         var skipped = false;
@@ -190,7 +234,7 @@ public sealed class DeferredReads(
                 break;
             }
 
-            if (open.Contains(send.WorkItem) || !Due(send, made.GetValueOrDefault(send.WorkItem), options, now))
+            if (open.Contains(send.WorkItem) || !Due(send, made.GetValueOrDefault(send.WorkItem), said.Contains(send.WorkItem), options, now))
             {
                 continue;
             }
@@ -236,6 +280,21 @@ public sealed class DeferredReads(
         }
 
         return queued;
+    }
+
+    /// <summary>
+    /// Which of the sends named a line already says did not go: its key is the send's work item, one line per send, read by
+    /// the campaign, the kind and the key the line's own index holds.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> SaidAsync(JasonDbContext db, int campaignRow, IReadOnlyCollection<string> sends, CancellationToken ct)
+    {
+        var said = await db.Journal
+            .AsNoTracking()
+            .Where(entry => entry.CampaignId == campaignRow && entry.Kind == JournalKinds.MessageUnsentObserved && sends.Contains(entry.Key!))
+            .Select(entry => entry.Key!)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return said.ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

@@ -183,7 +183,7 @@ public partial class InboundSyncDocTests
         Assert.Contains($"`Dispatcher:DeferredReadGraceSeconds` ago ({defaults.DeferredReadGraceSeconds}, a quarter of an hour, by default)", section, StringComparison.Ordinal);
         Assert.Contains($"no more than {DeferredReads.LookBack.TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
         Assert.Contains($"and at {DeferredReads.MostReads} at most", section, StringComparison.Ordinal);
-        Assert.Contains($"At most {DeferredReads.OpenPerCampaign} reads the runtime made are open in a campaign at once", section, StringComparison.Ordinal);
+        Assert.Contains($"The step makes no read in a campaign while {DeferredReads.OpenPerCampaign} reads the runtime made are open there, whichever step made them: the cap is the step's own", section, StringComparison.Ordinal);
         Assert.Contains($"its reason \"{DeferredReads.Reason}\"", section, StringComparison.Ordinal);
         Assert.Equal(TimeSpan.FromMinutes(1), DeferredReads.Cadence);
         Assert.Contains("at most once a minute", section, StringComparison.Ordinal);

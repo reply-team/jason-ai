@@ -5,6 +5,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
@@ -66,9 +67,9 @@ public class DeferredReadsTests
     }
 
     /// <summary>
-    /// A send whose moment is inside the grace waits for it; one whose moment passed more than thirty days ago, one whose
-    /// moment is still to come, one with no moment known and one the provider cannot cancel are not read at all. Once the
-    /// grace has passed, the first is read.
+    /// A send whose moment is inside the grace waits for it; one whose moment passed more than thirty days ago, one handed
+    /// to the provider more than thirty days ago whatever its moment, one whose moment is still to come, one with no moment
+    /// known and one the provider cannot cancel are not read at all. Once the grace has passed, the first is read.
     /// </summary>
     [Fact]
     public async Task A_send_inside_its_grace_waits_and_one_beyond_thirty_days_or_not_held_is_never_read()
@@ -77,6 +78,7 @@ public class DeferredReadsTests
         var (campaign, ines) = await SceneAsync(harness);
         var inside = await SendAsync(harness, campaign, ines, Noon.AddMinutes(-10));
         await SendAsync(harness, campaign, ines, Noon.AddDays(-30).AddMinutes(-1));
+        await SendAsync(harness, campaign, ines, Noon.AddDays(-29));
         await SendAsync(harness, campaign, ines, Noon.AddHours(1));
         await SendAsync(harness, campaign, ines, moment: null);
         await SendAsync(harness, campaign, ines, Noon.AddHours(-2), cancelable: false);
@@ -253,8 +255,9 @@ public class DeferredReadsTests
     }
 
     /// <summary>
-    /// The reads stop at the read that ends the overdue span after the moment, whatever is left of the nine: with three days,
-    /// the fifth read is the last, and none is made after it however long the clock runs.
+    /// The reads stop at the read that ends the overdue span after the moment, whatever is left of the nine, since it says
+    /// the send is overdue: with three days, the fifth read is the last, and none is made after it however long the clock
+    /// runs.
     /// </summary>
     [Fact]
     public async Task The_reads_stop_at_the_read_that_ends_the_overdue_span_after_the_moment()
@@ -268,29 +271,133 @@ public class DeferredReadsTests
 
         Assert.Equal(5, made.Count);
         Assert.True(made[^1].AddMinutes(1) >= moment.AddDays(3));
+        Assert.Equal(SentFacts.Overdue, (string?)(await UnsentAsync(harness, send))?["state"]);
     }
 
     /// <summary>
-    /// Nine reads ended since the moment are the most, whatever the waits; a read that ended the overdue span or more after
-    /// the moment is the last; before either, the next is due a wait after the last ended, the first wait after the first.
+    /// A span lowered while a send's reads are under way is met by its next read: the reads made under a week all ended
+    /// before the line could be said, and said nothing then; the next, a day after the last, ends past the new two days
+    /// and says the send is overdue, and it is the last.
     /// </summary>
     [Fact]
-    public void Nine_reads_are_the_most_and_one_ended_after_the_overdue_span_is_the_last()
+    public async Task A_span_lowered_while_a_send_is_read_is_met_by_its_next_read_which_says_it_is_overdue()
+    {
+        using var harness = Routed();
+        var (campaign, ines) = await SceneAsync(harness);
+        var moment = Noon.AddMinutes(-15);
+        var send = await SendAsync(harness, campaign, ines, moment);
+        var silent = true;
+
+        var made = await DriveAsync(harness, campaign, send, ended: count =>
+        {
+            if (count == 5)
+            {
+                silent = UnsentAsync(harness, send).GetAwaiter().GetResult() is null;
+                harness.Options.CurrentValue.DeferredReadOverdueSeconds = 2 * 86_400;
+            }
+        });
+
+        Assert.True(silent);
+        Assert.Equal(6, made.Count);
+        Assert.True(made[4].AddMinutes(1) >= moment.AddDays(2));
+        Assert.Equal(SentFacts.Overdue, (string?)(await UnsentAsync(harness, send))?["state"]);
+    }
+
+    /// <summary>
+    /// A read that failed spaces the next as any read does, a day after it ended, but counts for none of the nine: nine
+    /// that failed leave the send read again, and where the last of them failed after the overdue span, the read that
+    /// follows says the send is overdue.
+    /// </summary>
+    [Fact]
+    public async Task Reads_that_failed_count_for_none_of_the_nine_and_a_last_one_that_failed_is_followed_by_another()
+    {
+        using var harness = Routed();
+        var (campaign, ines) = await SceneAsync(harness);
+        var moment = Noon.AddDays(-10);
+        var send = await SendAsync(harness, campaign, ines, moment);
+        for (var read = 0; read < DeferredReads.MostReads; read++)
+        {
+            await ReadAsync(harness, campaign, send, Noon.AddDays(read - DeferredReads.MostReads).AddMinutes(1), code: "provider_unavailable");
+        }
+
+        Assert.Equal(0, await harness.DeferredReadAsync(Ct));
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(1, await harness.DeferredReadAsync(Ct));
+        Assert.Null(await UnsentAsync(harness, send));
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await EndOpenReadsAsync(harness, campaign, "queued", send);
+        Assert.Equal(SentFacts.Overdue, (string?)(await UnsentAsync(harness, send))?["state"]);
+        harness.Clock.Advance(TimeSpan.FromDays(2));
+        Assert.Equal(0, await harness.DeferredReadAsync(Ct));
+        Assert.Equal(DeferredReads.MostReads + 1, (await ReadSendsAsync(harness)).Count);
+    }
+
+    /// <summary>
+    /// A value the candidates' read cannot parse, in any send, stored the way an edit made with the column's own check
+    /// turned off would store it, skips the step's run, said by a template that carries none of the stored text, and never
+    /// reaches the scan; once the row reads again, the run a minute later reads the send due.
+    /// </summary>
+    [Fact]
+    public async Task A_row_the_candidates_read_cannot_parse_skips_the_run_and_never_the_scan()
+    {
+        using var harness = Routed();
+        var (campaign, ines) = await SceneAsync(harness);
+        var due = await SendAsync(harness, campaign, ines, Noon.AddMinutes(-20));
+        var broken = await SendAsync(harness, campaign, ines, Noon.AddMinutes(-30), named: true);
+        const string Stored = "{\"input\":{\"send_after\":\"a stored text of hers";
+        await using (var db = harness.Open())
+        {
+            await db.Database.OpenConnectionAsync(Ct);
+            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = ON;", Ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET context_json = {Stored} WHERE public_id = {broken}", Ct);
+            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = OFF;", Ct);
+        }
+
+        Assert.Equal(0, await harness.DeferredReadAsync(Ct));
+        Assert.Empty(await ReadSendsAsync(harness));
+        Assert.Contains(harness.Logs.Warnings, line => line.StartsWith("The deferred read step could not read the deferred sends", StringComparison.Ordinal));
+        Assert.False(harness.Logs.Mentions("stored text"));
+
+        await using (var db = harness.Open())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET context_json = {"{}"} WHERE public_id = {broken}", Ct);
+        }
+
+        Assert.Equal(0, await harness.DeferredReadAsync(Ct));
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(1, await harness.DeferredReadAsync(Ct));
+        Assert.Equal([due], await ReadSendsAsync(harness));
+    }
+
+    /// <summary>
+    /// Nine reads that succeeded since the moment are the most, whatever the waits, and a read that failed counts for none
+    /// of them; a send said not to have gone is read no more, and a read that ended past the overdue span stops nothing by
+    /// itself; before either, the next is due a wait after the last ended, whatever it answered, the first wait after the
+    /// first.
+    /// </summary>
+    [Fact]
+    public void Nine_reads_that_succeeded_are_the_most_and_a_send_said_not_to_have_gone_is_read_no_more()
     {
         var options = new DispatcherOptions();
         var moment = new DateTimeOffset(Noon);
         var send = new HeldSend("cmp_x", "wi_x", "message.send", moment, Mailer, null);
         var far = moment.AddDays(29);
+        var span = moment.AddSeconds(options.DeferredReadOverdueSeconds);
 
-        Assert.False(DeferredReads.Due(send, null, options, moment.AddSeconds(options.DeferredReadGraceSeconds - 1)));
-        Assert.True(DeferredReads.Due(send, null, options, moment.AddSeconds(options.DeferredReadGraceSeconds)));
-        Assert.False(DeferredReads.Due(send, new MadeReads(1, moment.AddHours(1)), options, moment.AddHours(2).AddSeconds(-1)));
-        Assert.True(DeferredReads.Due(send, new MadeReads(1, moment.AddHours(1)), options, moment.AddHours(2)));
-        Assert.False(DeferredReads.Due(send, new MadeReads(2, moment.AddHours(2)), options, moment.AddHours(26).AddSeconds(-1)));
-        Assert.True(DeferredReads.Due(send, new MadeReads(2, moment.AddHours(2)), options, moment.AddHours(26)));
-        Assert.True(DeferredReads.Due(send, new MadeReads(DeferredReads.MostReads - 1, moment.AddDays(1)), options, far));
-        Assert.False(DeferredReads.Due(send, new MadeReads(DeferredReads.MostReads, moment.AddDays(1)), options, far));
-        Assert.False(DeferredReads.Due(send, new MadeReads(3, moment.AddSeconds(options.DeferredReadOverdueSeconds)), options, far));
+        Assert.False(DeferredReads.Due(send, null, said: false, options, moment.AddSeconds(options.DeferredReadGraceSeconds - 1)));
+        Assert.True(DeferredReads.Due(send, null, said: false, options, moment.AddSeconds(options.DeferredReadGraceSeconds)));
+        Assert.False(DeferredReads.Due(send, null, said: true, options, far));
+        Assert.False(DeferredReads.Due(send, new MadeReads(1, 1, moment.AddHours(1)), said: false, options, moment.AddHours(2).AddSeconds(-1)));
+        Assert.True(DeferredReads.Due(send, new MadeReads(1, 1, moment.AddHours(1)), said: false, options, moment.AddHours(2)));
+        Assert.False(DeferredReads.Due(send, new MadeReads(0, 1, moment.AddHours(1)), said: false, options, moment.AddHours(2).AddSeconds(-1)));
+        Assert.True(DeferredReads.Due(send, new MadeReads(0, 1, moment.AddHours(1)), said: false, options, moment.AddHours(2)));
+        Assert.False(DeferredReads.Due(send, new MadeReads(2, 2, moment.AddHours(2)), said: false, options, moment.AddHours(26).AddSeconds(-1)));
+        Assert.True(DeferredReads.Due(send, new MadeReads(2, 2, moment.AddHours(2)), said: false, options, moment.AddHours(26)));
+        Assert.True(DeferredReads.Due(send, new MadeReads(DeferredReads.MostReads - 1, DeferredReads.MostReads + 3, moment.AddDays(1)), said: false, options, far));
+        Assert.False(DeferredReads.Due(send, new MadeReads(DeferredReads.MostReads, DeferredReads.MostReads, moment.AddDays(1)), said: false, options, far));
+        Assert.True(DeferredReads.Due(send, new MadeReads(3, 3, span), said: false, options, far));
+        Assert.False(DeferredReads.Due(send, new MadeReads(3, 3, span), said: true, options, far));
     }
 
     /// <summary>A whole dispatcher's composition with a plugin that sends, cancels and reads sends, routed by default under one account.</summary>
@@ -419,10 +526,14 @@ public class DeferredReadsTests
         await db.SaveChangesAsync(Ct);
     }
 
-    /// <summary>Ends the campaign's open reads the runtime made, of the sends named or of all, now, with <paramref name="state"/>.</summary>
+    /// <summary>
+    /// Ends the campaign's open reads the runtime made, of the sends named or of all, now, with <paramref name="state"/>,
+    /// the way the recorder ends a read: what the read says of its send is decided in the change set that ends it.
+    /// </summary>
     private static async Task EndOpenReadsAsync(DispatchHarness harness, Campaign campaign, string state, params string[] sends)
     {
         await using var db = harness.Open();
+        var facts = new SentFacts(new JournalWriter(harness.Clock), TestOptions.Settings(harness.Options));
         var open = await db.WorkItems
             .Where(item => item.CampaignId == campaign.Id && item.Operation == SendReads.Operation && item.CreatedByType == ActorType.System && item.Status == WorkItemStatus.Created)
             .ToListAsync(Ct);
@@ -431,16 +542,29 @@ public class DeferredReadsTests
             read.Status = WorkItemStatus.Succeeded;
             read.FinishedAt = harness.Clock.GetUtcNow().UtcDateTime;
             read.Result = Answer(state, cancelable: true);
+            var named = (string)read.Context["input"]!["send"]!;
+            var made = await db.WorkItems.AsNoTracking().SingleAsync(item => item.PublicId == named, Ct);
+            var input = new JsonObject { ["send"] = new JsonObject { ["work_item"] = named, ["reference"] = made.Result!["items"]![0]!["reference"]!.DeepClone() } };
+            await facts.SayUnsentAsync(db, read, Mailer, input, read.Result, Ct);
         }
 
         await db.SaveChangesAsync(Ct);
     }
 
+    /// <summary>The body of the line that says <paramref name="send"/> did not go, or null where none says it.</summary>
+    private static async Task<JsonNode?> UnsentAsync(DispatchHarness harness, string send)
+    {
+        await using var db = harness.Open();
+        var lines = await db.Journal.AsNoTracking().Where(entry => entry.Kind == JournalKinds.MessageUnsentObserved && entry.Key == send).ToListAsync(Ct);
+        return lines.Count == 0 ? null : Assert.Single(lines).New;
+    }
+
     /// <summary>
     /// Runs the step a minute before each read is due and at the moment it is, ending each read a minute after it was made,
-    /// still queued, until two days pass with no read: answers when each read was made.
+    /// still queued, and telling <paramref name="ended"/> how many have ended, until two days pass with no read: answers
+    /// when each read was made.
     /// </summary>
-    private static async Task<List<DateTime>> DriveAsync(DispatchHarness harness, Campaign campaign, string send)
+    private static async Task<List<DateTime>> DriveAsync(DispatchHarness harness, Campaign campaign, string send, Action<int>? ended = null)
     {
         var made = new List<DateTime>();
         Assert.Equal(1, await harness.DeferredReadAsync(Ct));
@@ -449,6 +573,7 @@ public class DeferredReadsTests
         {
             harness.Clock.Advance(TimeSpan.FromMinutes(1));
             await EndOpenReadsAsync(harness, campaign, "queued", send);
+            ended?.Invoke(made.Count);
             var wait = made.Count == 1 ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
             harness.Clock.Advance(wait - TimeSpan.FromMinutes(1));
             Assert.Equal(0, await harness.DeferredReadAsync(Ct));

@@ -134,10 +134,10 @@ public sealed class DispatcherOptions
     public const int MinimumDeferredReadOverdueSeconds = 3_600;
 
     /// <summary>
-    /// The latest a deferred send may be said overdue after its moment: two weeks, so its last read, a wait after the read
-    /// before it, comes well inside the thirty days a moment is read back to.
+    /// The latest a deferred send may be said overdue after its moment: nine days, as far as the nine reads of a send reach
+    /// with the grace and every wait at their longest, a day each, and well inside the thirty days a send is read back to.
     /// </summary>
-    public const int MaximumDeferredReadOverdueSeconds = 1_209_600;
+    public const int MaximumDeferredReadOverdueSeconds = Dispatch.DeferredReads.MostReads * MaximumDeferredReadSeconds;
 
     /// <summary>
     /// 60..86400; how long after a deferred send's moment its first read is due: a provider sends at the moment and needs a
@@ -158,9 +158,10 @@ public sealed class DispatcherOptions
     public int DeferredReadWaitSeconds { get; set; } = 86_400;
 
     /// <summary>
-    /// 3600..1209600; how long after its moment a deferred send is read: the first read that ends after it is the last, and
-    /// where no read has said the send went, failed or was cancelled, the send is said overdue. A week unless set: a letter
-    /// waiting at a provider's limit for days is not yet lost. Refused beyond what the nine reads of a send reach.
+    /// 3600..777600; how long after its moment a deferred send no read has found went, failed or was cancelled is said
+    /// overdue: the first read that ends this long after it and still finds the send waiting says so, and is its last. A
+    /// week unless set: a letter waiting at a provider's limit for days is not yet lost. Refused beyond what the nine reads
+    /// of a send reach.
     /// </summary>
     public int DeferredReadOverdueSeconds { get; set; } = 604_800;
 

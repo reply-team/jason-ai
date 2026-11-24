@@ -19,8 +19,8 @@ namespace Jason.Runtime.Execution;
 /// finds it still <c>queued</c> says it is <c>overdue</c> only where it is the last read the runtime makes of a deferred send
 /// whose moment has passed (<see cref="DeferredReads"/>): it ends <c>Dispatcher:DeferredReadOverdueSeconds</c> or more
 /// after the moment, no read the runtime made of the send is open, the reads it made since the moment have ended — the
-/// most it makes, or one at least that span after the moment — and nothing yet says what became of the send. Never
-/// earlier.
+/// most it makes that succeed, or one at least that span after the moment — and nothing yet says what became of the
+/// send. Never earlier.
 /// </summary>
 /// <remarks>
 /// Nothing is said of a send the campaign's own cancel took back: a succeeded <c>message.cancel</c> of the campaign naming
@@ -144,7 +144,7 @@ public sealed partial class SentFacts
 
         var made = (await SendReads.MadeAsync(db, read.CampaignId, new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal) { [sendId] = send.Moment }, ct, except: read.PublicId)
             .ConfigureAwait(false)).GetValueOrDefault(sendId);
-        var count = made?.Count ?? 0;
+        var count = made?.Succeeded ?? 0;
         var last = made?.LastEnded;
         if (read.CreatedByType == ActorType.System)
         {

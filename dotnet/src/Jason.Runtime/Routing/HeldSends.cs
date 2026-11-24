@@ -67,7 +67,8 @@ internal static class HeldSends
     /// it can no longer be cancelled is read from the latest read alone, since a provider may hold a send it was about to
     /// send again, and only while its moment is still to come. The latest is the one that finished last. The moment comes
     /// back in UTC to the millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends
-    /// keep nothing.
+    /// keep nothing. Where a bound of the past is given, a send handed over before it is left out by its own column, before
+    /// any of its JSON is read.
     /// </summary>
     private const string Sql = """
         SELECT Campaign, WorkItem, Operation, strftime('%Y-%m-%dT%H:%M:%fZ', Moment) AS Moment, PluginId, BindingIdentity
@@ -81,6 +82,7 @@ internal static class HeldSends
             JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
                  AND a.number = (SELECT max(b.number) FROM attempts AS b WHERE b.work_item_id = s.id AND b.status = 'succeeded')
             WHERE s.status = 'succeeded'
+              AND ({12} IS NULL OR s.finished_at >= {12})
               AND ({7} IS NULL OR s.campaign_id = {7})
               AND ({8} IS NULL OR s.contact_id IN (SELECT value FROM json_each({8})))
               AND ({11} IS NULL OR s.public_id = {11})
@@ -143,10 +145,10 @@ internal static class HeldSends
     }
 
     /// <summary>
-    /// Every send the definition holds whose moment is no later than <paramref name="passedBy"/> and, where given, no
-    /// earlier than <paramref name="since"/>, and of which nothing yet says what became of it, in campaign order: the
-    /// deferred sends whose moment has passed. <paramref name="campaignId"/> and <paramref name="send"/>, where given,
-    /// narrow it to one campaign's row and one send.
+    /// Every send the definition holds whose moment is no later than <paramref name="passedBy"/> and, where given, which
+    /// was handed over, and whose moment is, no earlier than <paramref name="since"/>, and of which nothing yet says what
+    /// became of it, in campaign order: the deferred sends whose moment has passed. <paramref name="campaignId"/> and
+    /// <paramref name="send"/>, where given, narrow it to one campaign's row and one send.
     /// </summary>
     public static Task<IReadOnlyList<HeldSend>> ReadPassedAsync(
         JasonDbContext db, DateTimeOffset passedBy, DateTimeOffset? since, CancellationToken ct, int? campaignId = null, string? send = null) =>
@@ -178,6 +180,7 @@ internal static class HeldSends
         object campaign = campaignId is { } row ? row : DBNull.Value;
         object people = contactIds is null ? DBNull.Value : JsonSerializer.Serialize(contactIds);
         object from = since is { } earliest ? Moment(earliest) : DBNull.Value;
+        object handed = since is { } handedSince ? handedSince.UtcDateTime : DBNull.Value;
         object one = send is null ? DBNull.Value : send;
         var rows = await db.Database
             .SqlQueryRaw<HeldSendRow>(
@@ -193,7 +196,8 @@ internal static class HeldSends
                 people,
                 Word(mode),
                 from,
-                one)
+                one,
+                handed)
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows

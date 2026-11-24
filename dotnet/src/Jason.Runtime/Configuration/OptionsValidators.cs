@@ -164,7 +164,7 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 
     /// <summary>
     /// The reads of a deferred send: a grace and two waits of a minute to a day, and the moment it is said overdue an hour
-    /// to two weeks after its own. A send is read at most <see cref="Dispatch.DeferredReads.MostReads"/> times, each due a
+    /// to nine days after its own, the furthest the nine reads reach with the grace and every wait at a day. A send is read at most <see cref="Dispatch.DeferredReads.MostReads"/> times, each due a
     /// wait after the one before it ends, so the last of them ends no sooner than the grace, the first wait and the rest of
     /// the waits after the send's moment; an overdue moment beyond that is refused, since the send's last read would end
     /// before it could be said overdue, and nothing would say it.

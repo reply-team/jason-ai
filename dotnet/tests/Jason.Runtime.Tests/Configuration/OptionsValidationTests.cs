@@ -290,8 +290,9 @@ public class OptionsValidationTests
     /// <summary>
     /// A deferred send is first read fifteen minutes after its moment, again an hour after that read ends where it did not
     /// say what became of the send, then a day after each later one, and said overdue a week after its moment, unless set:
-    /// the grace and each wait are a minute to a day, the week an hour to two weeks. A week the nine reads of a send would
-    /// not reach is refused, since its last read would end before the send could be said overdue. Nothing is clamped.
+    /// the grace and each wait are a minute to a day, the week an hour to nine days, the most nine reads reach with the grace
+    /// and every wait at a day. A week the nine reads of a send would not reach is refused, since its last read would end
+    /// before the send could be said overdue. Nothing is clamped.
     /// </summary>
     [Theory]
     [InlineData(59, 3_600, 86_400, 604_800, "Dispatcher:DeferredReadGraceSeconds must be between 60 and 86400; got 59.")]
@@ -300,8 +301,8 @@ public class OptionsValidationTests
     [InlineData(900, 86_401, 86_400, 604_800, "Dispatcher:DeferredReadFirstWaitSeconds must be between 60 and 86400; got 86401.")]
     [InlineData(900, 3_600, 59, 604_800, "Dispatcher:DeferredReadWaitSeconds must be between 60 and 86400; got 59.")]
     [InlineData(900, 3_600, 86_401, 604_800, "Dispatcher:DeferredReadWaitSeconds must be between 60 and 86400; got 86401.")]
-    [InlineData(900, 3_600, 86_400, 3_599, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 1209600; got 3599.")]
-    [InlineData(900, 3_600, 86_400, 1_209_601, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 1209600; got 1209601.")]
+    [InlineData(900, 3_600, 86_400, 3_599, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 777600; got 3599.")]
+    [InlineData(86_400, 86_400, 86_400, 777_601, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 777600; got 777601.")]
     [InlineData(900, 3_600, 43_200, 604_800, "Dispatcher:DeferredReadOverdueSeconds (604800) is beyond what the 9 reads of a send reach, 306900 seconds after its moment at the soonest: its last read would end before it could be said overdue.")]
     public void A_deferred_send_is_read_after_a_grace_then_after_waits_until_it_is_overdue(int grace, int firstWait, int wait, int overdue, string refusal)
     {

@@ -239,14 +239,14 @@ was told of and, for a bounce of one of its people, queues a `message.status` re
 to that person the bounce could be of, at most three; the read that finds the send bounced is what records it and, for
 a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
 `system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Deferred reads, at most once a minute, the sends a
-provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, no more than 30 days ago, and of which
-nothing yet says what became of them, and queues a `message.status` read of each where it ran: the first once that grace
-has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each later one
-`Dispatcher:DeferredReadWaitSeconds` after the one before it ended, until a read ends
-`Dispatcher:DeferredReadOverdueSeconds` or more after the moment or nine have ended, with at most five open in a
-campaign. The read that finds a send `failed` or `cancelled`, or the last that still finds it `queued`, says once that
-it did not go: `message_unsent_observed`, its state `failed`, `cancelled` or `overdue`
-([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, handed over and due no more than 30
+days ago, and of which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
+the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each
+later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
+became of the send or nine have succeeded, making none in a campaign while five it made are open there. The read that
+finds a send `failed` or `cancelled`, or the first that ends `Dispatcher:DeferredReadOverdueSeconds` or more after the
+moment and still finds it `queued`, says once that it did not go: `message_unsent_observed`, its state `failed`,
+`cancelled` or `overdue` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -1824,7 +1824,7 @@ mistyped one.
 | `Dispatcher:DeferredReadGraceSeconds` | `900` | 60..86400 | how long after a deferred send's moment its first read is due ([docs/inbound-sync.md](inbound-sync.md) §1) |
 | `Dispatcher:DeferredReadFirstWaitSeconds` | `3600` | 60..86400 | how long after the first read of a deferred send ended, where it did not find what became of the send, the second is due |
 | `Dispatcher:DeferredReadWaitSeconds` | `86400` | 60..86400 | how long after each later read of a deferred send ended the next is due |
-| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..1209600 | how long after its moment a deferred send is read: the first read that ends this long after it is the last, and where none found what became of the send, it is said `overdue`; refused beyond what nine reads reach, the grace, the first wait and seven waits |
+| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..777600 | how long after its moment a deferred send no read found went, failed or was cancelled is said `overdue`: the first read that ends this long after it and still finds the send waiting says so, and is its last; refused beyond what nine reads reach, the grace, the first wait and seven waits |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

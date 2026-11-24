@@ -26,13 +26,14 @@ internal static class SendReads
     public const string Operation = "message.status";
 
     /// <summary>
-    /// The finished reads of the sends named, one row a read: the send it names and when it ended, in UTC to the
-    /// millisecond. A read is matched to its send by the identifier its input names; nothing else of its context is read.
-    /// One read may be left out by its id, the read whose own end is being decided.
+    /// The finished reads of the sends named, one row a read: the send it names, when it ended, in UTC to the millisecond,
+    /// and whether it succeeded. A read is matched to its send by the identifier its input names; nothing else of its
+    /// context is read. One read may be left out by its id, the read whose own end is being decided.
     /// </summary>
     private const string MadeSql = """
         SELECT json_extract(w.context_json, '$.input.send') AS Send,
-               strftime('%Y-%m-%dT%H:%M:%fZ', w.finished_at) AS Ended
+               strftime('%Y-%m-%dT%H:%M:%fZ', w.finished_at) AS Ended,
+               CASE WHEN w.status = 'succeeded' THEN 1 ELSE 0 END AS Succeeded
         FROM work_items AS w
         WHERE w.campaign_id = {0}
           AND w.operation = {1}
@@ -91,10 +92,11 @@ internal static class SendReads
     }
 
     /// <summary>
-    /// The finished reads the runtime made of each send named that ended at or after the moment given for it: how many,
-    /// and when the latest ended. A read that ended before the send's moment could only find it held, so it is not one of
-    /// the reads of a send whose moment has passed. A send no such read has finished for is absent.
-    /// <paramref name="except"/>, where given, is a read left out, the one whose own end is being decided.
+    /// The finished reads the runtime made of each send named that ended at or after the moment given for it: how many of
+    /// them succeeded, how many ended, whatever they answered, and when the latest ended. A read that ended before the
+    /// send's moment could only find it held, so it is not one of the reads of a send whose moment has passed. A send no
+    /// such read has finished for is absent. <paramref name="except"/>, where given, is a read left out, the one whose own
+    /// end is being decided.
     /// </summary>
     public static async Task<IReadOnlyDictionary<string, MadeReads>> MadeAsync(
         JasonDbContext db, int campaignId, IReadOnlyDictionary<string, DateTimeOffset> from, CancellationToken ct, string? except = null)
@@ -112,18 +114,21 @@ internal static class SendReads
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows
-            .Select(row => (row.Send, Ended: DateTimeOffset.ParseExact(row.Ended, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)))
+            .Select(row => (row.Send, Succeeded: row.Succeeded != 0, Ended: DateTimeOffset.ParseExact(row.Ended, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)))
             .Where(row => row.Ended >= from[row.Send])
             .GroupBy(row => row.Send, StringComparer.Ordinal)
             .ToDictionary(
                 reads => reads.Key,
-                reads => new MadeReads(reads.Count(), reads.Max(read => read.Ended)),
+                reads => new MadeReads(reads.Count(read => read.Succeeded), reads.Count(), reads.Max(read => read.Ended)),
                 StringComparer.Ordinal);
     }
 }
 
-/// <summary>The finished reads the runtime made of one send: how many, and when the latest of them ended.</summary>
-internal sealed record MadeReads(int Count, DateTimeOffset LastEnded);
+/// <summary>
+/// The finished reads the runtime made of one send: how many succeeded, how many ended whatever they answered, and when
+/// the latest of them ended.
+/// </summary>
+internal sealed record MadeReads(int Succeeded, int Ended, DateTimeOffset LastEnded);
 
-/// <summary>One finished read: the send it names, and its end as the database wrote it.</summary>
-internal sealed record MadeReadRow(string Send, string Ended);
+/// <summary>One finished read: the send it names, its end as the database wrote it, and 1 where it succeeded.</summary>
+internal sealed record MadeReadRow(string Send, string Ended, int Succeeded);
