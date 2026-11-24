@@ -588,12 +588,12 @@ public partial class RoleSkillTests
         Assert.Contains("Judge the text as a reply to it", critic, StringComparison.Ordinal);
         Assert.Contains("it must also read whole", critic, StringComparison.Ordinal);
 
-        Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, those sent before this release included", critic, StringComparison.Ordinal);
-        Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, those sent before this release included", deep, StringComparison.Ordinal);
-        Assert.Contains("read the `follows` the runtime composed on the approval: under which letter it lands, or why it goes as a new letter", critic, StringComparison.Ordinal);
+        Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back", critic, StringComparison.Ordinal);
+        Assert.Contains("the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back", deep, StringComparison.Ordinal);
+        Assert.Contains("read the `follows` the runtime composed, on the `Follows:` line of `jason workitem get <the send's wi_…> --human` or of the approval's preview: under which letter it lands, or why it goes as a new letter", critic, StringComparison.Ordinal);
         Assert.Contains("a letter that a succeeded `message.cancel` took back, and a letter that a succeeded read (`message.status`) says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`)", critic, StringComparison.Ordinal);
         Assert.Contains("A follow-up that ended `follows_not_sent_yet` is proposed again with a `send_after` later than the followed letter's moment", deep, StringComparison.Ordinal);
-        Assert.Contains("read its status (`message.status` of it): a read that says it failed or was cancelled takes it off the line", deep, StringComparison.Ordinal);
+        Assert.Contains("A follow-up that ended `follows_never_sent`: read the followed letter's status, with a `message.status` item that names that send under `args.send`", deep, StringComparison.Ordinal);
         Assert.Contains("a letter that a succeeded read says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`)", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("under which letter the email lands and that letter's subject, read from the item with `jason workitem get", Flattened("approvals-and-questions"), StringComparison.Ordinal);
         var read = Assert.Single(SkillPack.PrintedCommands(SkillPack.Find("critic").File), line => line.StartsWith("jason workitem list ", StringComparison.Ordinal));

@@ -1577,7 +1577,7 @@ public partial class InteractiveSkillTests
     public void The_session_skills_say_that_a_letter_to_a_person_who_has_one_goes_into_its_thread()
     {
         var session = Flattened("managed-campaign-work");
-        Assert.Contains("an email to a person who already has one in the campaign goes under the line's root, the latest letter to them on the channel that went as a letter of its own, for whatever reason, those sent before this release included, where the provider can place it there, unless it says `\"follows\": \"new_thread\"`; otherwise it goes as a letter of its own", session, StringComparison.Ordinal);
+        Assert.Contains("an email to a person who already has one in the campaign goes under the line's root, the latest letter to them on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back, where the provider can place it there, unless it says `\"follows\": \"new_thread\"`; otherwise it goes as a letter of its own", session, StringComparison.Ordinal);
 
         var approvals = Flattened("approvals-and-questions");
         Assert.Contains("a message to the same person that is no answer in the thread they wrote in, a follow-up or a letter of its own, is covered too", approvals, StringComparison.Ordinal);
