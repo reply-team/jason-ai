@@ -95,13 +95,13 @@ public class ReplyStubFollowUpTests
     }
 
     [Theory]
-    [InlineData("not_found", "contact.followed_send_not_found", 404, "contact.followedSendNotFound")]
-    [InlineData("other_contact", "contact.followed_send_other_contact", 400, "contact.followedSendOtherContact")]
-    [InlineData("other_mailbox", "contact.followed_send_other_mailbox", 400, "contact.followedSendOtherMailbox")]
-    [InlineData("cancelled", "contact.followed_send_never_sent", 409, "contact.followedSendNeverSent")]
-    [InlineData("failed", "contact.followed_send_never_sent", 409, "contact.followedSendNeverSent")]
-    [InlineData("not_gone", "contact.followed_send_not_sent", 409, "contact.followedSendNotSent")]
-    [InlineData("not_later", "contact.follow_up_before_followed_send", 409, "contact.followUpBeforeFollowedSend")]
+    [InlineData("not_found", "follows.not_found", 404, "contact.followedSendNotFound")]
+    [InlineData("other_contact", "follows.other_contact", 400, "contact.followedSendOtherContact")]
+    [InlineData("other_mailbox", "follows.other_mailbox", 400, "contact.followedSendOtherMailbox")]
+    [InlineData("cancelled", "follows.never_sent", 409, "contact.followedSendNeverSent")]
+    [InlineData("failed", "follows.never_sent", 409, "contact.followedSendNeverSent")]
+    [InlineData("not_gone", "follows.not_sent", 409, "contact.followedSendNotSent")]
+    [InlineData("not_later", "follows.too_early", 409, "contact.followUpBeforeFollowedSend")]
     public async Task A_follow_up_refused_at_the_request_sends_nothing_and_takes_nothing(string what, string code, int status, string replyCode)
     {
         using var account = Planted();
@@ -168,9 +168,9 @@ public class ReplyStubFollowUpTests
     }
 
     [Theory]
-    [InlineData("cancelled", "contact.followed_send_never_sent")]
-    [InlineData("failed", "contact.followed_send_never_sent")]
-    [InlineData("waiting", "contact.followed_send_not_sent")]
+    [InlineData("cancelled", "contact.followedSendNeverSent")]
+    [InlineData("failed", "contact.followedSendNeverSent")]
+    [InlineData("waiting", "contact.followedSendNotSent")]
     public async Task A_follow_up_that_comes_due_reads_the_send_it_names_and_fails_final_where_that_will_not_have_gone(string then, string code)
     {
         using var account = Planted();
@@ -212,6 +212,25 @@ public class ReplyStubFollowUpTests
     }
 
     [Fact]
+    public async Task A_mailbox_that_cannot_place_a_follow_up_fails_it_under_its_own_code_and_the_read_says_so()
+    {
+        using var account = Planted();
+        var first = await FirstAsync(account, "Tuesday");
+        account.CannotPlaceTheNextFollowUp();
+
+        var (exit, _, said) = await account.RunAsync(Follow(first), """{"body":"Hi"}""", Ct);
+
+        Assert.Equal(1, exit);
+        var error = Error(said);
+        Assert.Equal(("follows.not_placed", "contact.followUpNotPlaced", "email-1002"), ((string?)error["code"], (string?)error["reply_code"], (string?)error["details"]!["reference"]));
+        var (got, gotOut, _) = await account.RunAsync(["--json", "-q", "direct-send", "get", "email-1002"], Ct);
+        Assert.Equal(0, got);
+        Assert.Equal(("failed", "contact.followUpNotPlaced"), ((string?)JsonNode.Parse(gotOut)!["state"], (string?)JsonNode.Parse(gotOut)!["failure_code"]));
+        Assert.Single(account.Threads);
+        Assert.Single(account.Threads[0]!["messages"]!.AsArray());
+    }
+
+    [Fact]
     public async Task A_reply_that_does_not_offer_follow_ups_answers_the_route_as_one_it_does_not_have()
     {
         using var account = Planted().NotOffering("direct_send_follow_up");
@@ -222,9 +241,8 @@ public class ReplyStubFollowUpTests
 
         Assert.Equal(1, exit);
         var error = Error(said);
-        Assert.Equal(("reply.refused", 404), ((string?)error["code"], (int)error["status"]!));
+        Assert.Equal(("follows.not_available", 404), ((string?)error["code"], (int)error["status"]!));
         Assert.Null(error["reply_code"]);
-        Assert.Contains("follow-up", (string?)error["detail"], StringComparison.Ordinal);
         Assert.Equal((sent, direct), (account.Sent.Count, account.DirectSends.Count));
 
         // The first letter's own route is untouched.

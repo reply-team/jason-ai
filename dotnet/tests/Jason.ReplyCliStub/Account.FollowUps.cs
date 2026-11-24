@@ -19,31 +19,35 @@ internal sealed record FollowUpCode(string Code, string ReplyCode, int Status, s
 internal static class FollowUpCodes
 {
     public static readonly FollowUpCode NotFound = new(
-        "contact.followed_send_not_found", "contact.followedSendNotFound", 404,
+        "follows.not_found", "contact.followedSendNotFound", 404,
         "Reply holds no direct email of this account by that reference to follow, so nothing was sent.");
 
     public static readonly FollowUpCode NotOwned = new(
-        "contact.followed_send_not_owned", "contact.followedSendNotOwned", 403,
+        "follows.not_owned", "contact.followedSendNotOwned", 403,
         "The direct email belongs to a teammate this caller cannot act for, so nothing was sent.");
 
     public static readonly FollowUpCode OtherContact = new(
-        "contact.followed_send_other_contact", "contact.followedSendOtherContact", 400,
+        "follows.other_contact", "contact.followedSendOtherContact", 400,
         "The direct email went to another contact, so nothing was sent.");
 
     public static readonly FollowUpCode OtherMailbox = new(
-        "contact.followed_send_other_mailbox", "contact.followedSendOtherMailbox", 400,
+        "follows.other_mailbox", "contact.followedSendOtherMailbox", 400,
         "The direct email went from another mailbox, so nothing was sent.");
 
     public static readonly FollowUpCode NeverSent = new(
-        "contact.followed_send_never_sent", "contact.followedSendNeverSent", 409,
+        "follows.never_sent", "contact.followedSendNeverSent", 409,
         "The direct email was cancelled or failed for good and will never go, so the follow-up was not sent.");
 
     public static readonly FollowUpCode NotSent = new(
-        "contact.followed_send_not_sent", "contact.followedSendNotSent", 409,
+        "follows.not_sent", "contact.followedSendNotSent", 409,
         "The direct email has not gone and is held for a later moment, so the follow-up was not sent.");
 
+    public static readonly FollowUpCode NotPlaced = new(
+        "follows.not_placed", "contact.followUpNotPlaced", 409,
+        "The mailbox could not place the follow-up in the thread of the email it follows, so it was not sent.");
+
     public static readonly FollowUpCode BeforeFollowedSend = new(
-        "contact.follow_up_before_followed_send", "contact.followUpBeforeFollowedSend", 409,
+        "follows.too_early", "contact.followUpBeforeFollowedSend", 409,
         "The follow-up is held for a moment that is not later than the direct email's, so nothing was sent.");
 }
 
@@ -128,6 +132,36 @@ internal static partial class Account
             && later <= earlier
             ? Refusal(FollowUpCodes.BeforeFollowedSend, ids)
             : null;
+    }
+
+    private const string PlaceFailsFile = "place-fails.json";
+
+    /// <summary>
+    /// A mailbox a test made unable to place the next follow-up in its thread (the road that fails inside a send that goes at
+    /// once): the follow-up is recorded failed under Reply's code and refused as <see cref="FollowUpCodes.NotPlaced"/>, once.
+    /// </summary>
+    private static Ending? CannotPlace(string root, string follows, int contactId, long accountId, JsonObject ids)
+    {
+        var path = Path.Combine(root, PlaceFailsFile);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        File.Delete(path);
+        var sends = Read(root, DirectSendsFile);
+        var reference = "email-" + (1001 + sends.Count).ToString(CultureInfo.InvariantCulture);
+        var record = new JsonObject
+        {
+            ["reference"] = reference, ["channel"] = WireChannel("email"), ["contactId"] = contactId, ["accountId"] = accountId,
+            ["sendAfter"] = null, ["sentAt"] = null, ["messageId"] = null, ["follows"] = follows,
+        };
+        Failed(record, FollowUpCodes.NotPlaced);
+        sends.Add(record);
+        Write(root, DirectSendsFile, sends);
+        return Refused(
+            FollowUpCodes.NotPlaced.Code, FollowUpCodes.NotPlaced.Title, status: FollowUpCodes.NotPlaced.Status,
+            replyCode: FollowUpCodes.NotPlaced.ReplyCode, ids: ids, details: new JsonObject { ["reference"] = reference, ["state"] = "failed" });
     }
 
     /// <summary>The subject a follow-up goes under: <c>Re: </c> and the subject of the email it follows, never doubled.</summary>
@@ -303,6 +337,6 @@ internal static partial class Account
     {
         held["state"] = "failed";
         held["failureReason"] = code.Title;
-        held["failureCode"] = code.Code;
+        held["failureCode"] = code.ReplyCode;
     }
 }

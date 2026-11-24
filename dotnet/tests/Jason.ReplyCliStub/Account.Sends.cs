@@ -251,7 +251,9 @@ internal static partial class Account
         // does not offer follow-ups.
         if (follows is not null && !(Offered(root, "direct_send_follow_up") && Offered(root, "direct_send")))
         {
-            return NotOffered("direct_send_follow_up", contactId, ids);
+            // reply-cli names a follow-up route Reply does not have by a code of its own, not by the generic refusal.
+            return Refused(
+                "follows.not_available", "This Reply does not know follow-ups, so nothing was sent.", status: 404, ids: ids);
         }
 
         // A Reply that keeps direct sends reads the moment, the schedule and the key; one that does not reads none, and sends now.
@@ -301,6 +303,11 @@ internal static partial class Account
         if (refused is not null)
         {
             return refused;
+        }
+
+        if (follows is not null && moment is null && timedBy is null && CannotPlace(root, follows, contactId, accountId, ids) is { } unplaced)
+        {
+            return unplaced;
         }
 
         if (send.Channel == "email" && MailboxAtLimit(root, accountId, contactId, keeps && key is not null && moment is null && timedBy is null, ids) is { } limited)

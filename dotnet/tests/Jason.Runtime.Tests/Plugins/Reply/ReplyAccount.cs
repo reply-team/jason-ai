@@ -959,6 +959,13 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>The next follow-up that goes at once fails in the mailbox, which cannot place it in its thread (once).</summary>
+    public ReplyAccount CannotPlaceTheNextFollowUp()
+    {
+        Write("place-fails.json", new JsonObject());
+        return this;
+    }
+
     /// <summary>
     /// A key Reply is still finishing the first request made under: a direct send made under it is refused
     /// <c>idempotency_key.in_use</c>, and nothing is sent.
