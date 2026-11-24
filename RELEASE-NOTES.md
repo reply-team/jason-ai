@@ -21,10 +21,10 @@ replaces the title and the body together.
 
 # Jason 0.51.0-rc.1
 
-Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the first letter, under the first
-letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
+Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
+that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
 under which letter and subject it will land before you approve it. A letter a provider held for later and then failed or
-cancelled no longer counts as a touch, and Jason now reads every letter held for later until it is known whether it went,
+cancelled no longer counts as a touch, and Jason now keeps reading a letter held for later until it is known whether it went,
 and tells the campaign's manager about one that did not.
 
 **Read this first.** Against a Reply that does not yet offer follow-ups, a follow-up is refused and nothing is sent: it
@@ -33,10 +33,10 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 
 ## What is new since 0.50.0
 
-**Follow-ups in the first letter's thread**
+**Follow-ups in the thread of the letter that opened it**
 
-- **A follow-up goes as a reply under the first letter's subject.** Where you do not say otherwise, an email follow-up
-  follows the line's first letter: the latest earlier email to that person in the campaign that went as a letter of its
+- **A follow-up goes as a reply under the subject of the letter that opened the thread.** Where you do not say otherwise,
+  an email follow-up follows the earlier letter that opened the thread: the latest earlier email to that person in the campaign that went as a letter of its
   own, held the provider's reference, counted as a touch and was not taken back. Its own subject is not sent; the
   provider may add a quotation of the earlier letter beneath your approved text.
 - **Say otherwise when you want to.** `"follows": "new_thread"` sends a letter of its own, and a work item's id follows
@@ -58,13 +58,14 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 
 **Letters held for later**
 
-- **A letter that did not go is told.** After a letter's moment, Jason reads it 15 minutes later, then after an hour,
-  then daily, until it is known whether it went. A letter the provider failed or cancelled, or still holds seven days
+- **A letter that did not go is told.** After a letter's moment, Jason reads it again and again, a limited number of
+  times, until it is known whether it went. It looks back thirty days from a letter's moment and reads only a few at a
+  time in each campaign. A letter the provider failed or cancelled, or still holds seven days
   past its moment, is said once in the journal as `message_unsent_observed`, and the manager is woken. The manager is
   told what each state means: a failed letter did not go; an overdue one may still go, so a second letter comes only
   after cancelling it succeeds; a cancelled one is read against the thread and the person's state first.
 - **A failed or cancelled letter is no touch.** A letter the provider's own read says failed or was cancelled stops
-  counting toward the ceiling of touches, the people list and the line's first letter, unless another read says it went.
+  counting toward the ceiling of touches, the people list and the choice of the letter a follow-up lands under, unless another read says it went.
 
 **Speed**
 
@@ -82,6 +83,9 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 - **Updating from 0.50.0.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
   `jason update apply` in a terminal. On Linux, a deb takes it with the system's own updates, and an AppImage by its own
   update item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
+- **Update Jason itself, not the package alone.** A runtime older than 0.51.0 refuses the Reply plugin 0.20.0
+  (`argument_invalid`, among the arguments of `message.send`); `jason plugin install reply --replace` puts a matching
+  package back.
 - **The Reply plugin needs reply-cli 0.23.0 or later.** Update reply-cli with npm before the first follow-up. Against a
   Reply that does not offer follow-ups yet, a follow-up is refused with `capability_not_offered` and nothing is sent;
   propose it again with `"follows": "new_thread"` to reach the person now.
@@ -103,3 +107,31 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   data that 0.51 has opened.
   [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says when
   `jason update rollback` restores the backup the migration took.
+
+## Known issues
+
+- The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches count your
+  installation's own day.
+- Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
+  turn that runs in Ask first, Auto-edit or Plan only.
+- No screen lists the archived agents yet.
+- In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
+- An agent has one conversation: there is no second chat for the same agent yet.
+- On Windows, a `%NAME%` in the agent host's words may still be expanded by a Windows Terminal that is already
+  running, over its own environment.
+- On Windows, a dropped file's path whose name holds a single quote together with a `$` or a backtick, or a network
+  path whose name holds a single quote, is quoted as PowerShell reads it, and Git Bash reads it back wrong.
+- On GNOME, a link without the click's token does not bring a running Jason Desktop to the front. `jason ui open`, and on
+  Ubuntu 24.04 a notification's click, change the running window's page where it is; GNOME says Jason Desktop "is
+  ready", and a click on that brings it forward. On Hyprland the window keeps its place unless `misc:focus_on_activate`
+  is set.
+- On macOS, a click on Jason's notification opens nothing of Jason's; `jason ui open` opens Jason Desktop at what waits.
+- On Windows, with no Jason Desktop registered or its program gone, a click on Jason's notification opens nothing, and
+  nothing that stays on screen says why. `jason ui open` in a terminal refuses with `desktop_not_installed`.
+- On Linux, a click reaches Jason only while its notification waits. At most ten wait at once, a newer one ending the
+  oldest one's wait; the runtime ends every wait when it stops; and notify-send before 0.7.10, or gdbus where there is
+  no notify-send, shows a notification no click reaches.
+- Outside GNOME and KDE, a `jason ui open` that starts Jason Desktop ends after ten seconds, saying on stderr that it
+  handed the address on (`opener_timed_out`), and exits 0. The desktop opens all the same.
+- An AppImage in a folder whose path holds a space or a quote takes no links: `jason ui open` and a click refuse with
+  `desktop_links_elsewhere`.
