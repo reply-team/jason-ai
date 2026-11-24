@@ -588,6 +588,12 @@ public partial class RoleSkillTests
         Assert.Contains("judge the text as a reply to it", critic, StringComparison.Ordinal);
         Assert.Contains("it must also read whole", critic, StringComparison.Ordinal);
 
+        Assert.Contains("the thread of the line's first letter (or of a later one that opened a thread of its own with `new_thread`)", critic, StringComparison.Ordinal);
+        Assert.Contains("the thread of the line's first letter (or of a later one that opened a thread of its own with `new_thread`)", deep, StringComparison.Ordinal);
+        var read = Assert.Single(SkillPack.PrintedCommands(SkillPack.Find("critic").File), line => line.StartsWith("jason workitem list ", StringComparison.Ordinal));
+        Assert.Contains("--contact cnt_", read, StringComparison.Ordinal);
+        Assert.DoesNotContain("--operation", read, StringComparison.Ordinal);
+
         var planner = Flattened("planner");
         Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
         Assert.Contains("`wait_on` naming the first letter's work item", planner, StringComparison.Ordinal);

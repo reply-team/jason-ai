@@ -135,7 +135,7 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 ```
 
 **A follow-up goes under the first letter, as a reply.** Created with no `follows`, an email `message.send` lands in the
-thread of the line's first letter, as a reply, where the provider can place a letter in a thread and the mailbox and
+thread of the line's first letter (or of a later one that opened a thread of its own with `new_thread`), as a reply, where the provider can place a letter in a thread and the mailbox and
 account are the same; the approval card says which, and why, and otherwise it goes as a letter of its own. Write it as a
 reply: the subject is `Re: ` and the first letter's subject, so a first letter with the subject "Price list for your
 team" is followed by "Re: Price list for your team"; the body is short and stands on what the person already has.
