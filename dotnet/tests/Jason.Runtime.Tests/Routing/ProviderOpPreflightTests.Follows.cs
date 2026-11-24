@@ -77,6 +77,48 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
+    /// A person who must not be written to is refused as that, never as a letter named wrongly: the register's entry, a
+    /// standing opt-out, a line that was ended and a line at the ceiling of touches each answer before the letter a message
+    /// names is asked about, even where that letter is one the campaign does not hold. What the refusal tells the manager is
+    /// what the person asked, or what was decided about the line.
+    /// </summary>
+    [Theory]
+    [InlineData(AttemptErrors.Suppressed)]
+    [InlineData(AttemptErrors.OptedOut)]
+    [InlineData(AttemptErrors.LineFinished)]
+    [InlineData(AttemptErrors.TouchCeilingReached)]
+    [Critical(Family.W3, "a person who must not be written to is refused as that, never as a letter named wrongly")]
+    public void A_person_who_must_not_be_written_to_is_refused_as_that_before_the_letter_named_is_asked_about(string code)
+    {
+        var scenario = Scenario.Sending("snd-1");
+        scenario.Plugin = Offering();
+        scenario.Arguments![FollowsDecision.Key] = "wi_01K9R000000000000000000009";
+        Assert.Equal(AttemptErrors.FollowsUnknown, scenario.Check().Code);
+
+        switch (code)
+        {
+            case AttemptErrors.Suppressed:
+                scenario.Suppressed = true;
+                break;
+            case AttemptErrors.OptedOut:
+                scenario.OptedOut = OptOutVerdict;
+                break;
+            case AttemptErrors.LineFinished:
+                scenario.Line = new LineFacts(MembershipState.Finished, Touches: 0, Ceiling: 5);
+                break;
+            default:
+                scenario.Line = new LineFacts(MembershipState.Enrolled, Touches: 5, Ceiling: 5);
+                break;
+        }
+
+        var verdict = scenario.Check();
+
+        Assert.Equal((code, FailureClass.Permanent), (verdict.Code, verdict.Class));
+        Assert.True(verdict.Refused);
+        Assert.Null(verdict.Plan);
+    }
+
+    /// <summary>
     /// What reaches the plugin carries the provider's reference of an earlier letter only where the routed plugin's manifest
     /// lists follows for the channel the message goes on. Every way the argument is written, every letter the claim can find,
     /// on a plugin that lists follows there, one that lists it on another channel only and one that lists nothing; at a first

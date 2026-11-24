@@ -178,6 +178,34 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A letter named that itself followed another — a reply in an earlier letter's thread — is followed all the same. The
+    /// line's root is the runtime's own choice and skips such a letter; a letter the caller names is held only to the five
+    /// checks, and none of them asks what that letter followed. The message follows it by its own reference, as named.
+    /// </summary>
+    [Fact]
+    public async Task A_letter_named_that_followed_another_is_followed_as_named()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LetterHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        var first = Wrote(db, campaign, contact, hoursAgo: 9);
+        var reply = Wrote(db, campaign, contact, hoursAgo: 5);
+        reply.Context = Recording(reply.Context, first.PublicId);
+        var send = Sending(db, campaign, contact);
+        send.Context[WorkItemService.InputKey]![FollowsDecision.Key] = reply.PublicId;
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var composed = (await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItemId == send.Id, Ct)).Subject["input"]![FollowsDecision.Key]!;
+        Assert.Equal(
+            (reply.PublicId, "email-5", FollowsDecision.Named),
+            ((string?)composed["work_item"], (string?)composed["reference"], (string?)composed["because"]));
+    }
+
+    /// <summary>
     /// The line's root is the latest letter to the person on the channel that opened a thread of its own: a letter claimed
     /// before the runtime decided this, or one recorded as a letter of its own. A reply that followed a letter is never a
     /// root however late it went, and neither is a letter to another person or on another channel, so the root moves past
