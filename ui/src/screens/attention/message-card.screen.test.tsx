@@ -4,6 +4,7 @@ import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
 import { ApiProvider } from '../../api/context';
 import { FakeApi } from '../../test/fake-api';
+import { t } from '../../platform/i18n';
 import { MessageCard } from './message-card';
 
 const card = (preview: Record<string, unknown>, reply = false) =>
@@ -117,6 +118,43 @@ describe('the message card, where the letter follows one', () => {
         );
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
         expect(fake.sent('workitem.get')).toEqual({ work_item_id: 'wi_1' });
+    });
+
+    it('dates the followed letter by its send_after where it has one', async () => {
+        const letter = fixtures['workitem.get/card-follow-letter'].response;
+        const fake = new FakeApi();
+        fake.call = async () =>
+            ({
+                ...letter,
+                context: { ...letter.context, input: { ...letter.context.input, send_after: '2020-03-04T09:30:00Z' } },
+            }) as never;
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        await waitFor(() =>
+            screen.getByText(/A reply to "Notes from the meetup" of 4 Mar 2020, \d\d:\d\d, the letter/),
+        );
+    });
+
+    it('says the reply as first written where the followed letter cannot be read', async () => {
+        const fake = new FakeApi();
+        fake.call = async () => {
+            throw new Error('unreachable');
+        };
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        // The words are the same before the read ends, so the read is let end (it is refused) before they are held to.
+        await waitFor(() => expect(fake.call).toBeDefined());
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(document.body.textContent).toContain(t('follows.reply.unread'));
+        expect(document.body.textContent).not.toContain('Notes from the meetup" of');
     });
 
     it('shows nothing for a send that is not an email', () => {
