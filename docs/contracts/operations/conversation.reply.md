@@ -13,7 +13,8 @@ explains it. Where the two seem to differ, the document is right and this page i
 "Answer the person who wrote, in the thread they wrote in." It is the level-one catalogue's one send verb, `message.send`, restricted
 to a send bound to a thread that already exists: the thread fixes who is reached and the identity that answers, so
 the call names neither a recipient nor a sender, and nobody else can be put on it — no copy, no blind copy. A message
-to somebody outside a thread is a different operation.
+outside a thread the person opened is a different operation, `message.send`, and so is a follow-up into the thread of
+Jason's own earlier letter: that one names its recipient and its sender itself, and the letter it follows.
 
 **A reply is never repeated after a lost answer.** `repeat_after_ambiguous` is `never`: an attempt that may have sent
 and heard nothing back ends for a person, because no read tells this work item's reply from another one sent to the

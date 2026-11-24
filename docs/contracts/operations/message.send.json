@@ -25,7 +25,7 @@
   "invariants": ["A5", "A7", "A14", "A21", "A22", "H4", "H5"],
 
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" },
-  "channel_arguments": ["send_after"],
+  "channel_arguments": ["send_after", "follows"],
   "channel_templates": ["email", "linkedin"],
   "route_channel_argument": "channel",
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
@@ -36,15 +36,15 @@
   },
   "precondition": "The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent.",
   "preview": {
-    "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}",
-    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message", "/args/message/compose", "/args/send_after"]
+    "summary": "Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}; follows: {/follows/work_item} ({/follows/because})",
+    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/sender", "/args/message", "/args/message/compose", "/args/send_after", "/follows"]
   },
 
   "input_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:jason:operation:message.send:1:input",
     "title": "message.send input",
-    "description": "One message to one person, outside any of the provider's campaigns and threads, on one channel, from one of the provider's accounts.",
+    "description": "One message to one person, outside any of the provider's campaigns, on one channel, from one of the provider's accounts; into the thread of an earlier send of the campaign only where the root `follows` names one.",
     "type": "object",
     "additionalProperties": false,
     "required": ["args", "contacts", "campaign", "idempotency_key"],
@@ -115,6 +115,13 @@
             "maxLength": 64,
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-][0-9]{2}:[0-9]{2})$",
             "description": "The moment the provider sends it at, with its offset, written as `YYYY-MM-DDTHH:mm:ss` with a fraction of one to three digits where it names one and `Z` or `+hh:mm` or `-hh:mm`, `T` and `Z` in capitals. Absent, or a moment already past, means as soon as the provider can. Only a plugin whose manifest lists it for the channel takes it, and the claim refuses it on any other (`argument_unsupported`)."
+          },
+          "follows": {
+            "anyOf": [
+              { "type": "string", "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$" },
+              { "const": "new_thread" }
+            ],
+            "description": "The earlier letter of this campaign the message follows, as a reply in that letter's thread. Absent: the runtime decides at the claim, and follows the line's root, the latest earlier email of this person in this campaign that itself follows nothing, counted as a touch, holding the provider's reference and not taken back. A work item's identifier: that letter, named explicitly. `new_thread`: a letter of its own. Never null. A letter the routed plugin cannot place in a thread goes as a new letter, and the preview a person reads says so; only a letter named explicitly that cannot be followed is refused, at the claim. Written, it is taken only by a plugin whose manifest lists it for the channel, and the claim refuses it on any other (`argument_unsupported`). The runtime's decision is the root `follows`; the arguments stay as the caller wrote them."
           }
         },
         "anyOf": [
@@ -174,6 +181,7 @@
         "items": { "$ref": "#/$defs/contact" }
       },
       "campaign": { "$ref": "#/$defs/campaign" },
+      "follows": { "$ref": "#/$defs/follows" },
       "idempotency_key": {
         "type": "string",
         "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
@@ -240,6 +248,42 @@
             "description": "Only this plugin's own pins reach it. The message names no campaign: it goes outside any of the provider's."
           }
         }
+      },
+      "follows": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item", "operation", "reference", "because"],
+        "description": "Which earlier letter the message follows, composed by the runtime at the claim from `args.follows` and the campaign's own earlier sends: never written by a caller. It says the whole decision: a letter followed, by its work item, its operation and the provider's reference for that send, or, with all three null, a new letter; `because` says why either way. A plugin places the message by this member and by nothing in `args`.",
+        "properties": {
+          "work_item": { "type": ["string", "null"], "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$", "description": "The work item that sent the letter followed, or null for a new letter." },
+          "operation": { "type": ["string", "null"], "description": "The operation that sent it, `message.send`, or null for a new letter." },
+          "reference": { "type": ["string", "null"], "minLength": 1, "maxLength": 256, "description": "The provider's reference for the send followed, as that work item's succeeded attempt returned it under `external_ids.send`, or null for a new letter." },
+          "because": {
+            "type": "string",
+            "enum": ["named", "line_root", "asked_new_thread", "no_earlier_letter", "not_offered", "other_account", "other_mailbox"],
+            "description": "Why: `named`, the caller named the letter followed in `args.follows`; `line_root`, the runtime followed the line's root; `asked_new_thread`, the caller asked for a letter of its own; `no_earlier_letter`, the line holds no earlier letter that can be followed; `not_offered`, the routed plugin does not take `follows` on this channel; `other_account`, the line's root went through another plugin or binding than this message is routed to; `other_mailbox`, the line's root went from another of the provider's accounts than `args.sender`."
+          }
+        },
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "work_item": { "type": "string" },
+              "operation": { "const": "message.send" },
+              "reference": { "type": "string" },
+              "because": { "enum": ["named", "line_root"] }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "work_item": { "const": null },
+              "operation": { "const": null },
+              "reference": { "const": null },
+              "because": { "enum": ["asked_new_thread", "no_earlier_letter", "not_offered", "other_account", "other_mailbox"] }
+            }
+          }
+        ]
       }
     }
   },
@@ -381,6 +425,8 @@
     "An email's text reaches the provider written as markup that shows exactly that text, its line breaks included; nothing in it but a template's tags is read as markup of the provider's.",
     "A work item sends at most once. Every attempt makes its send under the work item's idempotency key, and no other call of it carries one, so a repeat after `provider_answer_lost` is answered with the first send's own answer — the same reference — where the provider took it. A repeat the plugin cannot settle that way fails `send_not_settled`, and nothing is sent.",
     "A message that names `send_after` goes at that moment or not at all: a plugin whose provider does not offer it fails `capability_not_offered` before anything is sent, and never sends it now instead. A moment already past is no moment, and goes as one that names none.",
+    "A message handed a root `follows` with a reference goes into the thread of the send it names, as a reply to it, or not at all: a plugin whose provider cannot place it there fails before anything is sent, and never sends it as a new letter. A `follows` with no reference, or none, is a new letter, as before.",
+    "The plugin reads the root `follows`, never `args.follows`, which is the caller's wish the runtime has already decided on.",
     "The result says `sent` where the provider sent the message inside the call, and `accepted` where it took it to send later, never that it went. Its `reference` is the one under `external_ids.send`: both, or neither and a null or absent reference.",
     "The person's identifier comes back under `external_ids.contact`, on a failure too once the person was found or created.",
     "The result carries exactly one item, its channel and format the ones the call named, and its `contact_id` is the identifier the call was given."
