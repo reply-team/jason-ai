@@ -11,10 +11,9 @@ internal sealed record FollowUpCode(string Code, string ReplyCode, int Status, s
 
 /// <summary>
 /// Every code a follow-up of a direct email can end in, in one table: the CLI's spelling of each, Reply's own beside it, the
-/// status Reply answers a refusal at the request with, and the CLI's sentence. The spellings are the ones the rule the rest
-/// of this program follows gives Reply's codes (<c>contact.notFound</c> is <c>contact.not_found</c>), until the reply-cli
-/// release that takes <c>--follows</c> names them; the names are then one edit here. A code a follow-up that fails after it
-/// was taken is left under is read by <c>direct-send get</c>, and is the same one.
+/// status Reply answers a refusal at the request with, and the CLI's sentence. reply-cli names each by its meaning, in the
+/// family of the flag (<c>follows.</c>), with Reply's own code beside it in <c>reply_code</c>; <c>not_placed</c>'s status, 409,
+/// is this stand-in's choice, unconfirmed. <c>direct-send get</c> reads a failed follow-up's code in Reply's spelling.
 /// </summary>
 internal static class FollowUpCodes
 {
