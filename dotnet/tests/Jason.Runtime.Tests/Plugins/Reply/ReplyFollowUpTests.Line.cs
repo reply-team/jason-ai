@@ -92,13 +92,20 @@ public partial class ReplyFollowUpTests
         for (var scan = 0; scan < 3; scan++)
         {
             Assert.Equal(0, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
+            await IdleAsync(api);
         }
 
+        // Claimed == 0 alone proves nothing: an eligible send is parked for a person's approval with none claimed too. The
+        // proof is the four together: still created, not eligible, no attempt, and no approval parked for anybody.
         var held = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = third, include_snapshots = true }, Ct);
         Assert.Equal((WorkItemStatus.Created, false), (held.Status, held.Eligible));
         Assert.Empty(held.Attempts ?? []);
         Assert.Empty((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
         Assert.Equal(2, account.Calls.Count(call => call.Command == "contact send-email"));
+
+        // The scans since said the answer and the hold no second time.
+        Assert.Single(await LinesAsync(api, campaign, JournalKinds.InboundReplyObserved));
+        Assert.Single(await LinesAsync(api, campaign, JournalKinds.ContactsPaused));
     }
 
     /// <summary>
