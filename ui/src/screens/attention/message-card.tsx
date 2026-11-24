@@ -29,9 +29,8 @@ function Following({ follows }: { follows: FollowsWords }) {
             (item) => {
                 if (!live) return;
                 // A work item's context.input is the operation's arguments themselves.
-                const input = (
-                    item.context as { input?: { message?: { subject?: unknown }; send_after?: unknown } }
-                ).input;
+                const input = (item.context as { input?: { message?: { subject?: unknown }; send_after?: unknown } })
+                    .input;
                 const subject = input?.message?.subject;
                 const sendAfter = input?.send_after;
                 // The letter's own moment: its send_after where it has one, else when the provider accepted it.
