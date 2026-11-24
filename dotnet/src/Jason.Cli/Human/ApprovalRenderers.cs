@@ -127,8 +127,7 @@ public static class ApprovalRenderers
     /// <summary>
     /// Where an email send goes, from the preview's `/follows` highlight: under an earlier letter of the campaign, whose
     /// subject it takes and whose own is therefore not sent, or as a letter of its own and why. Null for any send that
-    /// is not an email, and where the preview carries none. The earlier letter is named by its work item, which is all
-    /// this verb's one answer says of it.
+    /// is not an email, and where the preview carries none. The earlier letter is named by its work item and read from nothing else: one verb, one operation.
     /// </summary>
     private static string? Follows(JsonNode? highlights)
     {
@@ -140,17 +139,17 @@ public static class ApprovalRenderers
 
         if ((string?)follows["work_item"] is { Length: > 0 } workItem)
         {
-            return $"a reply under the subject of the letter of work item {workItem}; this letter's own subject is not sent";
+            return $"{workItem}: a reply; it goes under that letter's subject, its own subject is not sent";
         }
 
         return (string?)follows["because"] switch
         {
-            "asked_new_thread" => "a new letter: it was asked to go as one of its own",
-            "not_offered" => "a new letter: this provider cannot place a reply in a thread on this channel",
-            "no_earlier_letter" => "a new letter: no earlier letter of this campaign to this person can be followed",
-            "other_account" => "a new letter: the earlier letter went through another account of the provider",
-            "other_mailbox" => "a new letter: the earlier letter went from another of the provider's mailboxes",
-            _ => "a new letter",
+            "asked_new_thread" => "A new letter, as asked.",
+            "not_offered" => "A new letter: this provider's plugin does not offer a reply in a thread on this channel.",
+            "no_earlier_letter" => "A new letter: no earlier letter of this campaign to this person can be followed.",
+            "other_account" => "A new letter: the earlier letter went through another account.",
+            "other_mailbox" => "A new letter: the earlier letter went from another of the provider's mailboxes.",
+            _ => "A new letter.",
         };
     }
 

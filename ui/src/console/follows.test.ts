@@ -14,9 +14,22 @@ describe('what an email send follows, in words', () => {
     });
 
     it('says a reply goes under the followed letter and its own subject is not sent', () => {
-        const words = followsSentence({ workItem: 'wi_1', because: 'named' }, { subject: 'Hello', sent: '2 d ago' });
+        const words = followsSentence(
+            { workItem: 'wi_1', because: 'named' },
+            { subject: 'Hello', moment: '3 Oct, 18:02' },
+        );
         expect(words).toBe(
-            'A reply to "Hello", sent 2 d ago. It goes under that subject; its own subject below is not sent.',
+            'A reply to "Hello" of 3 Oct, 18:02, as asked. It goes under that subject; its own subject below is not sent.',
+        );
+    });
+
+    it('names the letter the thread began with for the line root', () => {
+        const words = followsSentence(
+            { workItem: 'wi_1', because: 'line_root' },
+            { subject: 'Hello', moment: '3 Oct, 18:02' },
+        );
+        expect(words).toMatch(
+            /^A reply to "Hello" of 3 Oct, 18:02, the letter this campaign's thread with this person began with\./,
         );
     });
 
@@ -27,7 +40,7 @@ describe('what an email send follows, in words', () => {
     it.each(['asked_new_thread', 'not_offered', 'no_earlier_letter', 'other_account', 'other_mailbox'])(
         'says why %s is a new letter',
         (because) => {
-            expect(followsSentence({ workItem: null, because }, null)).toMatch(/^A new letter: /);
+            expect(followsSentence({ workItem: null, because }, null)).toMatch(/^A new letter/);
         },
     );
 });

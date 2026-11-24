@@ -1,3 +1,6 @@
+import { en, type MessageKey } from '../locale/en';
+import { t } from '../platform/i18n';
+
 /** What an email send's root `follows` says: the letter it goes under, or why it is a letter of its own. */
 export interface FollowsWords {
     /** The earlier letter's work item; null for a letter of its own. */
@@ -16,29 +19,21 @@ export function followsOf(value: unknown): FollowsWords | null {
     return { workItem: text(follows['work_item']), because: text(follows['because']) };
 }
 
-const NEW_LETTER: Readonly<Record<string, string>> = {
-    asked_new_thread: 'A new letter: it was asked to go as one of its own.',
-    not_offered: 'A new letter: this provider cannot place a reply in a thread on this channel.',
-    no_earlier_letter: 'A new letter: no earlier letter of this campaign to this person can be followed.',
-    other_account: 'A new letter: the earlier letter went through another account of the provider.',
-    other_mailbox: "A new letter: the earlier letter went from another of the provider's mailboxes.",
-};
-
-/** What the letter followed was, as a read of its work item says: its subject and the moment it went. */
+/** What the letter followed was, as a read of its work item says: its subject and its own moment, already in words. */
 export interface Followed {
     subject: string | null;
-    sent: string | null;
+    moment: string | null;
 }
-
-const FOLLOWING_TAIL = 'It goes under that subject; its own subject below is not sent.';
 
 /** The Follows row's words. `followed` is null while the letter is unread or could not be read. */
 export function followsSentence(follows: FollowsWords, followed: Followed | null): string {
     if (follows.workItem === null) {
-        return NEW_LETTER[follows.because ?? ''] ?? 'A new letter.';
+        const key = `follows.new.${follows.because ?? ''}`;
+        return t((Object.hasOwn(en, key) ? key : 'follows.new.other') as MessageKey);
     }
-    if (followed?.subject) {
-        return `A reply to "${followed.subject}"${followed.sent ? `, sent ${followed.sent}` : ''}. ${FOLLOWING_TAIL}`;
+    if (followed?.subject && followed.moment) {
+        const key = follows.because === 'named' ? 'follows.reply.named' : 'follows.reply.line_root';
+        return t(key, { subject: followed.subject, moment: followed.moment });
     }
-    return `A reply to an earlier letter of this campaign. It goes under that letter's subject; its own subject below is not sent.`;
+    return t('follows.reply.unread');
 }

@@ -3,7 +3,7 @@ import { useApi } from '../../api/context';
 import type { WorkItem } from '../../api/types';
 import { channelWords, type ApprovalDetail } from '../../console/live';
 import { followsSentence, type Followed, type FollowsWords } from '../../console/follows';
-import { relative } from '../../time/format';
+import { when } from '../../time/format';
 
 /** A person's text as a text node: the framework escapes it, and the line breaks it carries are drawn by the style. */
 function Text({ value }: { value: string }) {
@@ -30,10 +30,14 @@ function Following({ follows }: { follows: FollowsWords }) {
                 if (!live) return;
                 const input = (item.context as { input?: { args?: { message?: { subject?: unknown } } } }).input;
                 const subject = input?.args?.message?.subject;
-                const at = item.finished_at ?? item.updated_at;
+                const sendAfter = (item.context as { input?: { args?: { send_after?: unknown } } }).input?.args
+                    ?.send_after;
+                const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.created_at;
                 setFollowed({
                     subject: typeof subject === 'string' && subject ? subject : null,
-                    sent: at ? relative(new Date(at), new Date()) : null,
+                    moment: at
+                        ? when(new Date(at), new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)
+                        : null,
                 });
             },
             () => undefined,

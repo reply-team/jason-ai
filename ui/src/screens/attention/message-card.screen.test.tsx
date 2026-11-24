@@ -97,7 +97,9 @@ describe('the message card, where the letter follows one', () => {
     it('says a new letter and why, and marks no subject', () => {
         card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }));
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject', 'Body']);
-        expect(document.body.textContent).toMatch(/A new letter: this provider cannot place a reply/);
+        expect(document.body.textContent).toMatch(
+            /A new letter: this provider's plugin does not offer a reply in a thread/,
+        );
     });
 
     it('says a reply goes under the followed letter, read from its work item, and marks the subject as not sent', async () => {
@@ -108,8 +110,10 @@ describe('the message card, where the letter follows one', () => {
             operation === 'workitem.get'
                 ? ((reads += 1),
                   {
-                      context: { input: { args: { message: { subject: 'First note' } } } },
-                      finished_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+                      context: {
+                          input: { args: { message: { subject: 'First note' }, send_after: '2020-03-04T09:30:00Z' } },
+                      },
+                      created_at: '2020-03-03T18:02:00Z',
                       updated_at: new Date().toISOString(),
                   } as never)
                 : call(operation, body, kind);
@@ -127,7 +131,9 @@ describe('the message card, where the letter follows one', () => {
                 />
             </ApiProvider>,
         );
-        await waitFor(() => screen.getByText(/A reply to "First note", sent 2 d ago\./));
+        await waitFor(() =>
+            screen.getByText(/A reply to "First note" of 4 Mar 2020, \d\d:\d\d, the letter this campaign's thread/),
+        );
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
         expect(reads).toBe(1);
     });
