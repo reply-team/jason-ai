@@ -14,6 +14,7 @@ internal sealed record FollowUpCode(string Code, string ReplyCode, int Status, s
 /// status Reply answers a refusal at the request with, and the CLI's sentence. reply-cli names each by its meaning, in the
 /// family of the flag (<c>follows.</c>), with Reply's own code beside it in <c>reply_code</c>; <c>not_placed</c>'s status, 409,
 /// is this stand-in's choice, unconfirmed. <c>direct-send get</c> reads a failed follow-up's code in Reply's spelling.
+/// <c>follows.not_owned</c> is here for the package's error mapping only: this stand-in has no teammates, so it cannot produce it.
 /// </summary>
 internal static class FollowUpCodes
 {
@@ -142,7 +143,8 @@ internal static partial class Account
     /// A mailbox a test made unable to place the next follow-up in its thread (the road that fails inside a send that goes at
     /// once): the follow-up is recorded failed under Reply's code and refused as <see cref="FollowUpCodes.NotPlaced"/>, once.
     /// </summary>
-    private static Ending? CannotPlace(string root, string follows, int contactId, long accountId, JsonObject ids)
+    private static Ending? CannotPlace(
+        string root, string follows, int contactId, long accountId, string? key, string request, JsonObject ids)
     {
         var path = Path.Combine(root, PlaceFailsFile);
         if (!File.Exists(path))
@@ -161,10 +163,22 @@ internal static partial class Account
         Failed(record, FollowUpCodes.NotPlaced);
         sends.Add(record);
         Write(root, DirectSendsFile, sends);
-        return Refused(
+        if (key is not null)
+        {
+            // Kept under its key like any answer: a repeat is answered the same and goes through nothing again.
+            var keys = Read(root, KeysFile);
+            keys.Add(new JsonObject { ["key"] = key, ["request"] = request, ["reference"] = reference, ["notPlaced"] = reference });
+            Write(root, KeysFile, keys);
+        }
+
+        return NotPlacedRefusal(reference, ids);
+    }
+
+    /// <summary>The refusal of a follow-up the mailbox could not place, naming the record Reply made of it.</summary>
+    private static Ending NotPlacedRefusal(string reference, JsonObject ids) =>
+        Refused(
             FollowUpCodes.NotPlaced.Code, FollowUpCodes.NotPlaced.Title, status: FollowUpCodes.NotPlaced.Status,
             replyCode: FollowUpCodes.NotPlaced.ReplyCode, ids: ids, details: new JsonObject { ["reference"] = reference, ["state"] = "failed" });
-    }
 
     /// <summary>The subject a follow-up goes under: <c>Re: </c> and the subject of the email it follows, never doubled.</summary>
     private static string ReplySubject(string subject) =>
@@ -189,7 +203,8 @@ internal static partial class Account
         }
 
         if (Text(record, "follows") is { Length: > 0 } follows
-            && sends.OfType<JsonObject>().FirstOrDefault(entry => Text(entry, "reference") == follows) is { } named)
+            && sends.OfType<JsonObject>().FirstOrDefault(entry => Text(entry, "reference") == follows) is { } named
+            && Text(named, "state") == "sent")
         {
             var thread = ThreadOfSend(threads, sends, named);
             var subject = ReplySubject(Text(named, "subject"));
@@ -283,6 +298,10 @@ internal static partial class Account
             var waiting = Text(held, "state") is "queued" or "waitingForSchedule";
             switch (Text(move, "to"))
             {
+                case "sent" when waiting && Text(held, "follows").Length > 0:
+                    // A follow-up goes only through the check in fact, whatever order a test moved the sends in.
+                    FollowUpDue(root, sends, held);
+                    break;
                 case "sent" when waiting:
                     Went(root, sends, held);
                     break;

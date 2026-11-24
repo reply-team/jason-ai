@@ -876,7 +876,7 @@ public sealed class ReplyAccount : IDisposable
         string? failureCode = null,
         string? estimatedSendAt = null,
         JsonNode? bounced = null, string? bounceType = null, string? bouncedAt = null,
-        JsonObject? reply = null)
+        JsonObject? reply = null, string? subject = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         var sends = ReadArray(DirectSendsFile);
@@ -891,6 +891,8 @@ public sealed class ReplyAccount : IDisposable
             ["messageId"] = messageId,
             ["failureReason"] = failureReason,
             ["cancelledAt"] = cancelledAt,
+            // An email Reply kept has a subject, which a follow-up goes under; a planted one is given one unless a test says.
+            ["subject"] = subject ?? (reference.StartsWith("email-", StringComparison.Ordinal) ? "A planted email" : null),
         };
         if (renderedSubject is not null)
         {

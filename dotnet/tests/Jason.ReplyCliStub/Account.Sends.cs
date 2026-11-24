@@ -305,7 +305,7 @@ internal static partial class Account
             return refused;
         }
 
-        if (follows is not null && moment is null && timedBy is null && CannotPlace(root, follows, contactId, accountId, ids) is { } unplaced)
+        if (follows is not null && moment is null && timedBy is null && CannotPlace(root, follows, contactId, accountId, key, fingerprint, ids) is { } unplaced)
         {
             return unplaced;
         }

@@ -230,6 +230,73 @@ public class ReplyStubFollowUpTests
         Assert.Single(account.Threads[0]!["messages"]!.AsArray());
     }
 
+    [Theory]
+    [InlineData(false, "contact.followedSendNotSent")]
+    [InlineData(true, "contact.followedSendNeverSent")]
+    public async Task A_follow_up_moved_to_sent_before_the_send_it_follows_has_gone_goes_through_the_check_in_fact(bool cancelled, string code)
+    {
+        using var account = Planted();
+        var first = await FirstAsync(account, "Tuesday", "--send-after", Moment(3));
+        var (_, stdout, _) = await account.RunAsync([.. Follow(first), "--send-after", Moment(4)], """{"body":"Hi"}""", Ct);
+        var reference = (string)JsonNode.Parse(stdout)!["reference"]!;
+        if (cancelled)
+        {
+            account.SendBecomes(first, "cancelled");
+        }
+
+        account.SendBecomes(reference, "sent");
+        var (got, gotOut, _) = await account.RunAsync(["--json", "-q", "direct-send", "get", reference], Ct);
+
+        Assert.Equal(0, got);
+        Assert.Equal(("failed", code), ((string?)JsonNode.Parse(gotOut)!["state"], (string?)JsonNode.Parse(gotOut)!["failure_code"]));
+        Assert.Empty(account.Threads);
+        Assert.Null(account.DirectSends[0]!["messageId"]);
+    }
+
+    [Fact]
+    public async Task A_planted_email_send_has_a_subject_so_a_follow_up_after_it_goes_under_a_whole_Re_subject()
+    {
+        using var account = Planted().WithDirectSend("email-2001", "sent", sentAt: "2026-11-01T10:00:00Z", messageId: "<planted.com>");
+
+        var (exit, _, said) = await account.RunAsync(Follow("email-2001"), """{"body":"Hi"}""", Ct);
+
+        Assert.True(exit == 0, said);
+        var subject = ThreadSubject(account);
+        Assert.StartsWith("Re: ", subject, StringComparison.Ordinal);
+        Assert.True(subject!.Length > 4, subject);
+    }
+
+    [Fact]
+    public async Task A_keyed_repeat_of_a_follow_up_the_mailbox_could_not_place_answers_the_same_and_goes_through_nothing_again()
+    {
+        using var account = Planted();
+        var first = await FirstAsync(account, "Tuesday");
+        account.CannotPlaceTheNextFollowUp();
+        var (one, _, oneSaid) = await account.RunAsync([.. Follow(first), "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
+        var direct = account.DirectSends.Count;
+
+        var (two, _, twoSaid) = await account.RunAsync([.. Follow(first), "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
+
+        Assert.Equal((1, 1), (one, two));
+        Assert.Equal(Error(oneSaid).ToJsonString(), Error(twoSaid).ToJsonString());
+        Assert.Equal(direct, account.DirectSends.Count);
+    }
+
+    [Fact]
+    public async Task A_keyed_repeat_with_the_mailbox_left_out_is_the_same_request_as_with_it_given()
+    {
+        using var account = Planted();
+        var first = await FirstAsync(account, "Tuesday");
+
+        var (one, oneOut, _) = await account.RunAsync([.. Follow(first), "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
+        var (two, twoOut, _) = await account.RunAsync(
+            ["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--follows", first, "--message", "-", "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
+
+        Assert.Equal((0, 0), (one, two));
+        Assert.Equal(JsonNode.Parse(oneOut)!.ToJsonString(), JsonNode.Parse(twoOut)!.ToJsonString());
+        Assert.Equal(2, account.DirectSends.Count);
+    }
+
     [Fact]
     public async Task A_reply_that_does_not_offer_follow_ups_answers_the_route_as_one_it_does_not_have()
     {

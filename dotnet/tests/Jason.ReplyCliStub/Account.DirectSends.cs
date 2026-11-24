@@ -134,6 +134,11 @@ internal static partial class Account
                 status: 409, replyCode: prefix + "idempotencyKeyInUse", ids: ids);
         }
 
+        if (Text(kept, "request") == request && Text(kept, "notPlaced") is { Length: > 0 } unplaced)
+        {
+            return NotPlacedRefusal(unplaced, ids);
+        }
+
         if (Text(kept, "request") == request)
         {
             return Done((JsonObject)kept["answer"]!.DeepClone());
