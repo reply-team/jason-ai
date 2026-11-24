@@ -197,6 +197,64 @@ public class CampaignCommandsTests
         Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A review asked of a campaign's manager: the campaign, the depth when one is named and the reason, under the actor the
+    /// command names; with no depth named nothing is sent for it, and the runtime takes it for a quick look.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "--depth", "deep", "--reason", "before the board meeting" }, "{\"campaign_id\":\"cmp_A\",\"depth\":\"deep\",\"reason\":\"before the board meeting\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    [InlineData(new[] { "--depth", "quick" }, "{\"campaign_id\":\"cmp_A\",\"depth\":\"quick\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    [InlineData(new string[0], "{\"campaign_id\":\"cmp_A\",\"actor\":{\"type\":\"human\",\"id\":\"Marta\"}}")]
+    public async Task Review_sends_the_campaign_the_depth_named_and_the_reason(string[] options, string posted)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "review", "cmp_A", .. options]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignReview, posted);
+    }
+
+    /// <summary>A depth that is neither of the two is a usage error, said before anything is sent.</summary>
+    [Fact]
+    public async Task Review_refuses_a_depth_it_does_not_know()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("--actor", "human:Marta", "campaign", "review", "cmp_A", "--depth", "thorough");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--depth takes quick or deep; 'thorough' is not one of them.", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, cli.Requests);
+    }
+
+    /// <summary>
+    /// The help says what a review asked for is: the two depths and the default, that the daily deep review keeps its moment,
+    /// the refusals a person can meet, that it is a person's word refused inside a run, and that Jason Desktop's chat
+    /// refuses it under confinement.
+    /// </summary>
+    [Fact]
+    public async Task Review_help_says_the_depths_the_clocks_and_where_it_is_refused()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "review", "--help");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var help = Flat(cli.Text);
+        foreach (var said in new[]
+        {
+            "--depth", "quick_look", "deep_review", "the daily deep review still comes at its moment",
+            "campaign_not_active", "review_already_open", "launches_spent", "jason launches lift",
+            Flat(ActorOption.RefusedInsideARun), Flat(ConfinedVerbs.Help),
+        })
+        {
+            Assert.Contains(said, help, StringComparison.Ordinal);
+        }
+
+        static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+    }
+
     [Theory]
     [InlineData("start", Operations.CampaignStart)]
     [InlineData("pause", Operations.CampaignPause)]
@@ -467,10 +525,10 @@ public class CampaignCommandsTests
         var summary = JsonSerializer.Serialize(
             new CampaignSummaryResponse(
             [
-                new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow("cmp_A", 22, 3, 3, 2, 2, 6, 2, 6, Paused: 1, Finished: 2, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
-            new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Removed: 1)),
+            new CampaignSummaryTotal(22, 3, 3, 2, 3, 7, 2, 6, Paused: 1, Finished: 2, Removed: 1)),
             JasonJson.Options);
         using var cli = new FolderRun(null, Answer(summary, Campaigns(("cmp_A", "Spring outreach"), ("cmp_B", "Partners"))));
 
@@ -478,21 +536,21 @@ public class CampaignCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED"], Cells(lines[0]));
-        Assert.Equal(["Spring outreach", "cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1"], Cells(lines[2]));
-        Assert.Equal(["Partners", "cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(lines[3]));
-        Assert.Equal(["TOTAL", "-", "22", "3", "3", "2", "3", "7", "2", "6", "1"], Cells(lines[^1]));
+        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "PAUSED", "FINISHED", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["Spring outreach", "cmp_A", "22", "3", "3", "2", "2", "6", "2", "6", "1", "2", "1"], Cells(lines[2]));
+        Assert.Equal(["Partners", "cmp_B", "2", "0", "0", "0", "1", "1", "-", "-", "0", "0", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "-", "22", "3", "3", "2", "3", "7", "2", "6", "1", "2", "1"], Cells(lines[^1]));
 
         // With no campaign linked to a sequence, the total has none to count either.
         var unlinked = JsonSerializer.Serialize(
             new CampaignSummaryResponse(
-                [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Removed: 0, SequenceLinked: false)],
-                new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Removed: 0)),
+                [new CampaignSummaryRow("cmp_B", 2, 0, 0, 0, 1, 1, 0, 1, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false)],
+                new CampaignSummaryTotal(2, 0, 0, 0, 1, 1, 0, 1, Paused: 0, Finished: 0, Removed: 0)),
             JasonJson.Options);
         using var alone = new FolderRun(null, Answer(unlinked, Campaigns(("cmp_B", "Partners"))));
         Assert.Equal(ExitCodes.Success, await alone.RunAsync("campaign", "summary", "cmp_B", "--human"));
         var only = alone.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["TOTAL", "-", "2", "0", "0", "0", "1", "1", "-", "-", "0"], Cells(only[^1]));
+        Assert.Equal(["TOTAL", "-", "2", "0", "0", "0", "1", "1", "-", "-", "0", "0", "0"], Cells(only[^1]));
     }
 
     [Fact]
@@ -752,8 +810,8 @@ public class CampaignCommandsTests
     private static string Counts(string verb, params string[] ids) => verb == "summary"
         ? JsonSerializer.Serialize(
             new CampaignSummaryResponse(
-                [.. ids.Select(id => new CampaignSummaryRow(id, 1, 0, 0, 0, 1, 0, 0, 0, Removed: 0, SequenceLinked: false))],
-                new CampaignSummaryTotal(ids.Length, 0, 0, 0, ids.Length, 0, 0, 0, Removed: 0)),
+                [.. ids.Select(id => new CampaignSummaryRow(id, 1, 0, 0, 0, 1, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false))],
+                new CampaignSummaryTotal(ids.Length, 0, 0, 0, ids.Length, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0)),
             JasonJson.Options)
         : JsonSerializer.Serialize(
             new CampaignActivityResponse(
@@ -837,7 +895,8 @@ public class CampaignCommandsTests
         var campaign = JsonSerializer.Serialize(
             new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50,
                 SendModes: new SendModesDto(SendMode.Automatic, null),
-                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default))),
+                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default)),
+                DeepReviewDueAt: Moment.AddDays(1)),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -854,13 +913,31 @@ public class CampaignCommandsTests
         Assert.Contains("Profile:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
 
-        // So is the reserve it keeps, since the dispatcher counts against it.
+        // So is the reserve it keeps, since the dispatcher counts against it, and when its next deep review comes.
         Assert.Matches("(?m)^Reserve: +threshold 50 untouched\\r?$", cli.Text);
+        Assert.Matches("(?m)^Deep review: +2026-09-15 10:00:00 UTC\\r?$", cli.Text);
 
         // And how a send to each kind of contact goes now, with where that comes from.
         Assert.Matches("(?m)^Cold sends: +automatic, this campaign's own\\r?$", cli.Text);
         Assert.Matches("(?m)^Warm sends: +every_message, as nobody has chosen one\\r?$", cli.Text);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A paused or archived campaign keeps the grid moment it had, and nothing runs at it, so its view names no deep review.
+    /// </summary>
+    [Theory]
+    [InlineData(CampaignStatus.Paused)]
+    [InlineData(CampaignStatus.Archived)]
+    public async Task Human_mode_names_no_deep_review_for_a_campaign_that_is_not_active(CampaignStatus status)
+    {
+        var campaign = JsonSerializer.Serialize(
+            new CampaignDto("cmp_A", "LatAm", status, "prj_A", "default", new JsonObject(), [], null, null, Moment, Moment, null, DeepReviewDueAt: Moment.AddDays(1)),
+            JasonJson.Options);
+        using var cli = new CliRun(campaign);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", "get", "cmp_A", "--human"));
+        Assert.DoesNotContain("Deep review:", cli.Text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1005,6 +1082,39 @@ public class CampaignCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The people's table says how many touches each has had in the campaign and when the latest was, as the JSON carries
+    /// them: a count and a UTC moment, and a person nobody touched yet shows 0 and a dash.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_lists_the_touches_and_the_last_touch_of_each_person()
+    {
+        static ContactDto Person(string id, string first) =>
+            new(id, first, "Lovelace", null, null, null, [], [], [], Moment, Moment, null);
+        var page = JsonSerializer.Serialize(
+            new Page<MembershipItemDto>(
+                [
+                    new MembershipItemDto(Person("cnt_A", "Ada"), MembershipState.Enrolled, Moment, Moment, Touches: 3, LastTouchAt: new DateTimeOffset(2026, 10, 16, 9, 30, 0, TimeSpan.Zero)),
+                    new MembershipItemDto(Person("cnt_B", "Byron"), MembershipState.Enrolled, Moment, Moment),
+                ],
+                null),
+            JasonJson.Options);
+        using var cli = new CliRun(page);
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", "list-contacts", "cmp_A", "--human"));
+
+        var lines = cli.Text.Split(Environment.NewLine);
+        var header = lines[0];
+        Assert.Contains("TOUCHES", header, StringComparison.Ordinal);
+        Assert.Contains("LAST TOUCH", header, StringComparison.Ordinal);
+        var ada = lines.Single(line => line.StartsWith("cnt_A ", StringComparison.Ordinal));
+        Assert.Equal("3", ada[header.IndexOf("TOUCHES", StringComparison.Ordinal)..].Split("  ", StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+        Assert.StartsWith("2026-10-16 09:30:00 UTC", ada[header.IndexOf("LAST TOUCH", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        var byron = lines.Single(line => line.StartsWith("cnt_B ", StringComparison.Ordinal));
+        Assert.Equal("0", byron[header.IndexOf("TOUCHES", StringComparison.Ordinal)..].Split("  ", StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+        Assert.StartsWith("-", byron[header.IndexOf("LAST TOUCH", StringComparison.Ordinal)..], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_summarizes_an_import_and_names_every_rejected_item()
     {
@@ -1078,7 +1188,7 @@ internal sealed class CliRun : IDisposable
     private readonly TempPaths _paths = new();
     private readonly CliEnvironment _environment;
 
-    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true, Jason.Cli.Process.IUrlOpener? opener = null, string? accountName = null)
+    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true, Jason.Cli.Process.IUrlOpener? opener = null, string? accountName = null, TextReader? input = null)
     {
         if (descriptor)
         {
@@ -1096,7 +1206,7 @@ internal sealed class CliRun : IDisposable
                 Requests++;
                 return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
             }),
-            standardInput is null ? null : new StringReader(standardInput),
+            input ?? (standardInput is null ? null : new StringReader(standardInput)),
             Opener: opener,
             AccountName: accountName);
     }

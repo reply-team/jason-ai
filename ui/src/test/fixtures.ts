@@ -67,6 +67,11 @@ import type {
     WorkItemCreateRequest,
     WorkItemGetRequest,
     WorkItemWithResult,
+    ActorRef,
+    LaunchesLift,
+    LaunchesLiftRequest,
+    LaunchesList,
+    LaunchesListRequest,
 } from '../api/types';
 
 import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.approve/already-decided.json';
@@ -122,9 +127,28 @@ import workitemGetNeedsMessageCancelled from '../../../docs/api/fixtures/workite
 import approvalListCardMessageAllApproved from '../../../docs/api/fixtures/approval.list/card-message-all-approved.json';
 import approvalListCardMessageItemApproved from '../../../docs/api/fixtures/approval.list/card-message-item-approved.json';
 import workitemGetCardMessageRequeued from '../../../docs/api/fixtures/workitem.get/card-message-requeued.json';
+import workitemGetCardReplyParked from '../../../docs/api/fixtures/workitem.get/card-reply-parked.json';
 import workitemGetNeedsMessageRequeued from '../../../docs/api/fixtures/workitem.get/needs-message-requeued.json';
 import workitemGetCardMessageReparked from '../../../docs/api/fixtures/workitem.get/card-message-reparked.json';
 import approvalListCardMessagePending from '../../../docs/api/fixtures/approval.list/card-message-pending.json';
+import approvalApproveCardReplyMarkedRefused from '../../../docs/api/fixtures/approval.approve/card-reply-marked-refused.json';
+import approvalApproveCardReplyMarkedReasked from '../../../docs/api/fixtures/approval.approve/card-reply-marked-reasked.json';
+import approvalGetCardReplyMarked from '../../../docs/api/fixtures/approval.get/card-reply-marked.json';
+import approvalGetCardReplyMarkedReasked from '../../../docs/api/fixtures/approval.get/card-reply-marked-reasked.json';
+import approvalListCardReplyMarkedAfterEdit from '../../../docs/api/fixtures/approval.list/card-reply-marked-after-edit.json';
+import approvalListCardReplyMarkedAllAfterEdit from '../../../docs/api/fixtures/approval.list/card-reply-marked-all-after-edit.json';
+import approvalListCardReplyMarkedAllPending from '../../../docs/api/fixtures/approval.list/card-reply-marked-all-pending.json';
+import approvalListCardReplyMarkedAllReasked from '../../../docs/api/fixtures/approval.list/card-reply-marked-all-reasked.json';
+import approvalListCardReplyMarkedItemAfterEdit from '../../../docs/api/fixtures/approval.list/card-reply-marked-item-after-edit.json';
+import approvalListCardReplyMarkedItemAllAfterEdit from '../../../docs/api/fixtures/approval.list/card-reply-marked-item-all-after-edit.json';
+import approvalListCardReplyMarkedItemAllReasked from '../../../docs/api/fixtures/approval.list/card-reply-marked-item-all-reasked.json';
+import approvalListCardReplyMarkedItemReasked from '../../../docs/api/fixtures/approval.list/card-reply-marked-item-reasked.json';
+import approvalListCardReplyMarkedPending from '../../../docs/api/fixtures/approval.list/card-reply-marked-pending.json';
+import approvalListCardReplyMarkedReasked from '../../../docs/api/fixtures/approval.list/card-reply-marked-reasked.json';
+import workitemGetCardReplyMarkedParked from '../../../docs/api/fixtures/workitem.get/card-reply-marked-parked.json';
+import workitemGetCardReplyMarkedReparked from '../../../docs/api/fixtures/workitem.get/card-reply-marked-reparked.json';
+import workitemGetCardReplyMarkedRequeued from '../../../docs/api/fixtures/workitem.get/card-reply-marked-requeued.json';
+import workitemUpdateCardReplyMarkedEdited from '../../../docs/api/fixtures/workitem.update/card-reply-marked-edited.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
 import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-work-item.json';
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
@@ -501,6 +525,7 @@ import workitemListUnknownCampaign from '../../../docs/api/fixtures/workitem.lis
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
 import workitemUpdateCardMessageEdited from '../../../docs/api/fixtures/workitem.update/card-message-edited.json';
+import workitemUpdateCardReplyMarkupRefused from '../../../docs/api/fixtures/workitem.update/card-reply-markup-refused.json';
 import workitemUpdateNeedsMessageEdited from '../../../docs/api/fixtures/workitem.update/needs-message-edited.json';
 // The person panel's recordings.
 import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
@@ -605,6 +630,10 @@ import workitemCountSearchNow from '../../../docs/api/fixtures/workitem.count/se
 import workitemCountSearchPlanned from '../../../docs/api/fixtures/workitem.count/search-planned.json';
 import workitemGetSearchFirst from '../../../docs/api/fixtures/workitem.get/search-first.json';
 import workitemListSearchNow from '../../../docs/api/fixtures/workitem.list/search-now.json';
+import launchesListLimits from '../../../docs/api/fixtures/launches.list/limits.json';
+import launchesListLifted from '../../../docs/api/fixtures/launches.list/lifted.json';
+import launchesLiftFromNeedsYou from '../../../docs/api/fixtures/launches.lift/from-needs-you.json';
+import launchesLiftNotHuman from '../../../docs/api/fixtures/launches.lift/not-human.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -769,6 +798,7 @@ export const fixtures = {
         { work_item_id: string },
         WorkItem
     >,
+    'workitem.get/card-reply-parked': workitemGetCardReplyParked satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/card-message-reparked': workitemGetCardMessageReparked satisfies Exchange<
         { work_item_id: string },
         WorkItem
@@ -780,6 +810,74 @@ export const fixtures = {
     'approval.list/card-message-pending': approvalListCardMessagePending satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
+    >,
+    // A reply drafted with markup before the update: its yes refused, its text edited, the yes asked again approved.
+    'approval.approve/card-reply-marked-refused': approvalApproveCardReplyMarkedRefused satisfies Exchange<
+        ApprovalDecisionRequest,
+        ErrorEnvelope
+    >,
+    'approval.approve/card-reply-marked-reasked': approvalApproveCardReplyMarkedReasked satisfies Exchange<
+        ApprovalDecisionRequest,
+        Approval
+    >,
+    'approval.get/card-reply-marked': approvalGetCardReplyMarked satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/card-reply-marked-reasked': approvalGetCardReplyMarkedReasked satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.list/card-reply-marked-after-edit': approvalListCardReplyMarkedAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-all-after-edit': approvalListCardReplyMarkedAllAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-all-pending': approvalListCardReplyMarkedAllPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-all-reasked': approvalListCardReplyMarkedAllReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-item-after-edit': approvalListCardReplyMarkedItemAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-item-all-after-edit':
+        approvalListCardReplyMarkedItemAllAfterEdit satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'approval.list/card-reply-marked-item-all-reasked': approvalListCardReplyMarkedItemAllReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-item-reasked': approvalListCardReplyMarkedItemReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-pending': approvalListCardReplyMarkedPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-reply-marked-reasked': approvalListCardReplyMarkedReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'workitem.get/card-reply-marked-parked': workitemGetCardReplyMarkedParked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/card-reply-marked-reparked': workitemGetCardReplyMarkedReparked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/card-reply-marked-requeued': workitemGetCardReplyMarkedRequeued satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.update/card-reply-marked-edited': workitemUpdateCardReplyMarkedEdited satisfies Exchange<
+        WorkItemUpdateRequest,
+        WorkItem
     >,
     'approval.list/by-campaign-pending': approvalListByCampaignPending satisfies Exchange<
         ApprovalListRequest,
@@ -1770,6 +1868,10 @@ export const fixtures = {
         WorkItemUpdateRequest,
         WorkItem
     >,
+    'workitem.update/card-reply-markup-refused': workitemUpdateCardReplyMarkupRefused satisfies Exchange<
+        WorkItemUpdateRequest,
+        ErrorEnvelope
+    >,
     'workitem.update/needs-message-edited': workitemUpdateNeedsMessageEdited satisfies Exchange<
         WorkItemUpdateRequest,
         WorkItem
@@ -2058,6 +2160,10 @@ export const fixtures = {
     >,
     'workitem.get/search-first': workitemGetSearchFirst satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.list/search-now': workitemListSearchNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
+    'launches.list/limits': launchesListLimits satisfies Exchange<LaunchesListRequest, LaunchesList>,
+    'launches.list/lifted': launchesListLifted satisfies Exchange<LaunchesListRequest, LaunchesList>,
+    'launches.lift/from-needs-you': launchesLiftFromNeedsYou satisfies Exchange<LaunchesLiftRequest, LaunchesLift>,
+    'launches.lift/not-human': launchesLiftNotHuman satisfies Exchange<{ actor: ActorRef }, ErrorEnvelope>,
 } as const;
 
 export type FixtureName = keyof typeof fixtures;

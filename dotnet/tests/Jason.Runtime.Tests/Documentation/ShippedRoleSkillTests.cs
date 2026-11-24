@@ -14,6 +14,7 @@ public partial class ShippedRoleSkillTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public void The_shipped_role_skill_is_named_after_its_directory()
     {
         var packs = Directory.GetDirectories(RoleSkillsPack());
@@ -55,6 +56,36 @@ public partial class ShippedRoleSkillTests
         }
     }
 
+    /// <summary>
+    /// The manager's whole folder — the head and its entries — composed as an operator composes it, reaches a work
+    /// directory under the cap that refuses a role's folder past it: the entries are copied beside the head, every one the
+    /// runtime may name, and the folder's bytes are counted against <c>Roles:MaxSkillBytes</c> with room to spare.
+    /// </summary>
+    [Fact]
+    public void The_managers_folder_with_its_entries_reaches_a_work_directory_under_the_cap()
+    {
+        var pack = Path.Combine(RoleSkillsPack(), "manager");
+        var bytes = Directory.EnumerateFiles(pack, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+        var cap = new RolesOptions().MaxSkillBytes;
+        Assert.True(bytes < cap / 4, $"The manager's folder is {bytes} bytes, too near the cap of {cap}.");
+
+        using var data = new TempDataDir();
+        Compose(pack, Path.Combine(data.Paths.RoleSkillsDirectory, "manager"));
+        var workDir = data.Paths.AttemptWorkDirectory("wi_A", "att_A");
+        var report = WorkDirectory.Prepare(workDir, ["Write"], "manager", data.Paths.RoleSkillsDirectory, cap);
+
+        Assert.Null(report.RefusalCode);
+        Assert.NotNull(report.Skill);
+        Assert.True(report.Skill.Copied);
+        var copied = Path.Combine(workDir, ".claude", "skills", "manager");
+        foreach (var entry in Jason.Contracts.Execution.RoleEntries.Of("manager"))
+        {
+            var file = Path.Combine(copied, Jason.Contracts.Execution.RoleEntries.RelativePath(entry));
+            Assert.True(File.Exists(file), $"The entry '{entry}' did not reach the work directory.");
+            Assert.Equal(File.ReadAllText(Path.Combine(pack, Jason.Contracts.Execution.RoleEntries.RelativePath(entry))), File.ReadAllText(file));
+        }
+    }
+
     /// <summary>The pack, files and directories alike, as an operator would have composed it.</summary>
     private static void Compose(string source, string target)
     {
@@ -75,6 +106,7 @@ public partial class ShippedRoleSkillTests
     /// plain command word the envelope names, and a note is the role's own memory rather than what is true.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task The_researchers_skill_teaches_the_plain_callback_and_what_a_note_is_worth()
     {
         // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
@@ -134,6 +166,7 @@ public partial class ShippedRoleSkillTests
     /// without.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task The_managers_skill_teaches_the_review_the_boundary_and_the_line_it_always_leaves()
     {
         // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
@@ -147,9 +180,11 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("`review_intent`", skill, StringComparison.Ordinal);
         Assert.Contains("`cause`", skill, StringComparison.Ordinal);
 
-        // 2. INV-MEM-001, in the order that makes it bite: the runtime first, the note afterwards, and the
-        // runtime wins where they disagree. A manager is the role most tempted to believe its own last note.
-        Assert.Contains("Read runtime state before memory", skill, StringComparison.Ordinal);
+        // 2. INV-MEM-001, where it bites: the note is where a review starts, because one manager goes from one review
+        // to the next, and the runtime wins wherever the two disagree. A manager is the role most tempted to believe its
+        // own last note, so the head says both in its heading.
+        Assert.Contains("## Start from your note, and believe the runtime over it", skill, StringComparison.Ordinal);
+        Assert.Contains("**The note is never the truth over the campaign's state:**", skill, StringComparison.Ordinal);
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("runtime state wins", skill, StringComparison.OrdinalIgnoreCase);
 
@@ -247,6 +282,7 @@ public partial class ShippedRoleSkillTests
     /// the JSON on a command line has it written.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task Every_role_skill_carries_the_one_result_file_sentence_and_the_qualified_no_file_sentence()
     {
         var roles = Directory.GetDirectories(RoleSkillsPack());
@@ -269,6 +305,7 @@ public partial class ShippedRoleSkillTests
     /// teaches a second meaning to the one reader who has no way to ask which was meant.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a shipped role skill breaks a rule the launcher holds it to")]
     public async Task Only_the_manager_is_taught_the_word_check_in()
     {
         foreach (var pack in Directory.GetDirectories(RoleSkillsPack()))

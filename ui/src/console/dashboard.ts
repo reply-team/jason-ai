@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { openedHere } from './box-focus';
 import type { CampaignActivityResponse } from '../api/types';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
@@ -239,8 +240,8 @@ define('dash.trends', (_args, element) => {
     }
     void reloadTrends();
 });
-// The agent is made at the click, and its place opens on its Chat (`new-agent.ts`).
-define('dash.new', () => void newAgent());
+// The agent is made at the click, and its place opens on its Chat (`new-agent.ts`), the opening's box taking the focus.
+define('dash.new', () => void newAgent(undefined, openedHere()));
 define('dash.needs', () => here().dock.show('needs'));
 define('dash.agents', () => here().dock.show('campaigns'));
 define('dash.item', ([kind, id]) => {

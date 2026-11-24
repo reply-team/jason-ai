@@ -61,7 +61,8 @@ public static class WorkItemMapper
             item.IdempotencyKey,
             item.Campaign.Name,
             ContactNames.Display(item.Contact),
-            ReviewHash: ReviewSubject.IsReviewable(item) ? ReviewSubject.Hash(item) : null);
+            ReviewHash: ReviewSubject.IsReviewable(item) ? ReviewSubject.Hash(item) : null,
+            Entry: item.Entry);
     }
 
     public static WorkItemSummaryDto ToSummary(WorkItem item, DateTime now)
@@ -90,7 +91,8 @@ public static class WorkItemMapper
             Utc(item.FinishedAt),
             item.Campaign.Name,
             ContactNames.Display(item.Contact),
-            item.Status == WorkItemStatus.Processing ? Utc(WorkItemQueries.LiveAttempt(item)?.StartedAt) : null);
+            item.Status == WorkItemStatus.Processing ? Utc(WorkItemQueries.LiveAttempt(item)?.StartedAt) : null,
+            Entry: item.Entry);
     }
 
     public static AttemptDto ToDto(Attempt attempt, bool includeSnapshot)

@@ -367,6 +367,10 @@ export type CampaignSummaryRow = {
     idle: number;
     sequence: number;
     out: number;
+    /** The members whose line is paused. Absent from a runtime that does not count it. */
+    paused?: number;
+    /** The members whose line is ended; new and idle leave them out. Absent from a runtime that does not count it. */
+    finished?: number;
     removed: number;
     sequence_linked: boolean;
 };
@@ -436,6 +440,10 @@ export type MembershipItem = {
     updated_at: string;
     why?: MembershipWhy;
     counted: CountedIn[];
+    /** The touches the person has had in the first campaign, as the ceiling of touches counts them. */
+    touches?: number;
+    /** When the last of them was; null with none. Both absent from a runtime that does not count touches. */
+    last_touch_at?: string | null;
 };
 export type ListContactsRequest = {
     campaign_id?: string;
@@ -608,3 +616,9 @@ export type WorkItemCreateRequest = {
 export type WorkItemGetRequest = { work_item_id: string };
 /** A work item as workitem.get answers it, with what it produced once it finished. */
 export type WorkItemWithResult = WorkItem & { result: unknown };
+/** The installation's daily limits of launches, as Needs you reads them: the day's end and how many items are held. */
+export type LaunchesListRequest = Record<string, never>;
+export type LaunchesList = { day: { end: string }; held: number };
+export type LaunchesLiftRequest = { reason?: string; actor: ActorRef };
+/** A lift as it stands: when the limits hold again, in which zone, and how many held items it let go. */
+export type LaunchesLift = { until: string; time_zone: string; released: number; already_lifted: boolean };

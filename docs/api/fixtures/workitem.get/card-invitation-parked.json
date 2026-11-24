@@ -51,6 +51,7 @@
     },
     "campaign_name": "Spring launch",
     "contact_name": "Noor Haddad",
-    "review_hash": "sha256:recorded-3"
+    "review_hash": "sha256:recorded-3",
+    "entry": null
   }
 }

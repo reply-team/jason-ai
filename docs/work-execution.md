@@ -167,7 +167,7 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
-  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule). An item created with
+  held at the claim with no attempt of its own, until the installation's next midnight (§The claim rule). An item created with
   `wait_on` is written waiting from its first moment, on the items of its campaign the create names (at most 100, each
   once; another campaign's item or one that does not exist is refused at `wait_on[i]`; under an automatic send mode the
   critic the runtime creates for a send follows them, and may be the hundred and first): it is never claimed before
@@ -189,7 +189,7 @@ state change writes one journal entry.
 
 ## Eligibility
 
-An item is **eligible** — the dispatcher would claim it right now — when all five of these hold:
+An item is **eligible** — the dispatcher would claim it right now — when all six of these hold:
 
 1. its status is `created` — work `awaiting_approval` is not eligible, and no number of scans makes
    it so;
@@ -201,14 +201,23 @@ An item is **eligible** — the dispatcher would claim it right now — when all
    `dispatch.in_archived_campaign: runs`, today `audience.search_cancel` alone: archiving is how a person stops a
    campaign, so the archive cancels the campaign's open work but such a stop, and the next scan makes one stop for each
    search of the campaign still in flight, which ends it `cancelled`;
-3. `not_before` is unset or already past;
-4. `due_at` is unset or still ahead;
-5. `retry_after` is unset or already past.
+3. it is not a touch of a person paused in its campaign: an item whose operation's document says `touch: true` —
+   `message.send`, `social_invitation.send` and `campaign.enroll` — about a person whose membership in the item's
+   campaign is `paused` waits, as a paused campaign's work does: it stays `created`, and no status, wait or attempt is
+   written, until the line is continued or ended ([A person's line in a campaign](#a-persons-line-in-a-campaign)). A
+   reply to the person, a take-back of a send and every other item of theirs are not held;
+4. `not_before` is unset or already past;
+5. `due_at` is unset or still ahead;
+6. `retry_after` is unset or already past.
 
 `eligible` is never stored. It is computed from one shared expression that the item list and the DTO
 use, and that the claim query states again in SQL — a window function the expression cannot carry — held to
-it by a test across every campaign state, so `workitem.list --eligible` tells you exactly what the next
-scan would consider.
+it by a test across every campaign state and every state of a person's membership, so `workitem.list --eligible`
+tells you exactly what the next scan would consider. Every way a letter comes to be sent passes the claim, so a paused
+person's letter waits whether it was waiting for its `not_before`, parked for an approval the person then gave, or
+released from a wait. A letter already `scheduled` or `processing` is on its way and is not held; one the provider
+already took for a later moment cannot be held, only taken back (below), and so is one on its way at the hold that the
+provider then takes for a later moment.
 
 ## The claim rule
 
@@ -261,28 +270,57 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-eight pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the thirty pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
 Work of a role is held, not failed, when `Launches:MaxPerDay:<role>` names the role and the item's campaign has already
-started that many runs of it since 00:00Z: a failure would wake the manager, and a responder's reply would reach it by a
-second path. The day is UTC, since a campaign has no time zone. The claim counts the attempts of the campaign's `ai_role`
-items of the item's role that started since 00:00Z — an attempt the claim refused never started and spends nothing, and
-an item queued by hand counts like one the runtime made — and holds the item in the same transaction: it moves to
-`waiting` with no attempt, its wait is the next 00:00Z, its `last_error` is `launches_spent`, and one
-`workitem_waiting` line says `held_by` with the code, the limit and the role. A held item does not make its campaign busy, so the
-campaign's other work is claimed at the next scan. There are three ways out. At 00:00Z the resume step releases it and
-the claim counts the new day as usual, so a day already spent by then holds it again. `workitem.resume` lets that one
-item go past the limit under the person's name: the claim takes it at its next turn and its run counts like any other.
+started that many runs of it since the installation's midnight (every role Jason ships is named by default, with the numbers
+the settings table gives, and a role of a person's own is named only where the person names it): a failure would wake the manager, and a responder's reply
+would reach it by a second path. The day is the installation's, from one midnight to the next in its time zone —
+`Runtime:TimeZone` where the settings name one, the system's zone as the runtime read it when it started where they do
+not — since a campaign has no time
+zone of its own and a UTC midnight can fall in the middle of the person's afternoon; a day daylight saving shortens to 23
+hours or lengthens to 25 is counted from midnight to midnight as it is. The claim reads the zone and the limits once a
+scan. It counts the attempts of the campaign's `ai_role` items of the item's role that started since the local midnight,
+as a UTC instant — an attempt the claim refused never started and spends nothing, and an item queued by hand counts like
+one the runtime made — and holds the item in the same transaction: it moves to `waiting` with no attempt, its wait is
+the next local midnight, as a UTC instant, its `last_error` is `launches_spent`, whose message says how many runs
+started since the midnight it counted from, with the zone, and the limit as a limit beside them — a limit lowered during
+the day can stand below the count — and names `jason launches list`, and one `workitem_waiting` line says `held_by` with
+the code, the limit and the role. A held
+item does not make its campaign busy, so the campaign's other work is claimed at the next scan. There are four ways out.
+At the next local midnight the resume step releases it and the claim counts the new day as usual, so a day already spent
+by then holds it again. `workitem.resume` lets that one item go past the limit under the person's name: the claim takes
+it at its next turn and its run counts like any other. `launches.lift` (`jason launches lift`) is a person's word that
+the limits do not hold for the rest of the day, in every campaign and for every role: in one transaction it writes a row
+of `launch_limit_lifts` for the local date in its zone, releases every open hold at a daily limit as a person's resume,
+each item back to `created` through the transition table with a `workitem_resumed` line under the person's name and
+reason, and writes one `launch_limit_lifted` line. The claim reads that row once a scan, beside the limits, and while it
+covers the day it holds nothing; at the next local midnight it no longer covers the day the claim counts, nothing is
+deleted, and the limits hold again, so a lift made at 23:50 lasts ten minutes. What the lift let go is bounded by the
+same midnight: an item it released that is claimed only after it is counted like any other item of the new day, and a
+new day already spent holds it again, where a person's own `workitem.resume` of one item keeps its run past the limit
+on any later day. The claim tells the two apart by the release's moment: a person's release made after a lift was taken
+and within the day it covers is the lift's. A second lift the same day writes no row
+and no line, answers `already_lifted`, and still lets go a hold that appeared since; a lift covers its date in the zone
+it was taken in, so moving `Runtime:TimeZone` moves the day out from under it. Only a person under their own name may
+lift: a role or an attempt is refused with `lift_not_human`, no named person with `actor_required`, and a request from
+inside a run with `decided_inside_a_run` whatever actor it names.
 Every run counts, a resumption included, so a role whose run yielded can be held too; let go, its next run is told about
 the wait its own run ended in, since the hold's wait has no attempt (§The launch envelope). Raising the setting
 applies at the next scan to work not yet held, while an item already held keeps its moment. A held item keeps its due
 date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
 ([docs/campaign-manager.md](campaign-manager.md) §1).
 
+The limits are read where they stand with `launches.list` (`jason launches list`): the installation's day, the lift that
+stands today, each role's limit as the claim reads it now, from the default or the settings, and how many items are held
+at a limit; with a campaign, each role's runs that started there today, counted as the claim counts them. It is a read,
+open inside a run as outside one. Setting a limit is the settings file's: no operation writes one.
+
 **The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
-a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
+a campaign releases in a UTC day without asking a person. The ceiling keeps the UTC day, 00:00Z to 00:00Z, whatever the
+installation's zone, which only the daily limits of launches count in. Where the automatic mode would release a send, the claim first
 counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
 approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
 was released under and is not counted again, and a send a person approves runs under a row of another reason and counts for nothing. At
@@ -350,7 +388,7 @@ with a name; a role or an attempt is refused with `approval_not_human`, and an a
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
 approve anything, and that every decision names who made it. An approval, an answer, a preference, a campaign's send
-mode or its start sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names
+mode or its start, a lift of the daily limits, or a review asked of a campaign's manager, sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names
 its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
@@ -358,9 +396,15 @@ role that cannot decide *what to do next* raises a question instead — a decisi
 attempt that asked it and whose answer wakes the review that carries the work on.
 [docs/campaign-manager.md](campaign-manager.md) §6 is the contract for that.
 
-- **approve** releases the item to the next scan with its due date, priority and place untouched.
+- **approve** releases the item to the next scan with its due date, priority and place untouched. It is refused with
+  `validation_failed`, the document's reason in its `details`, while the item's `context.input` does not satisfy the
+  operation's document as this build publishes it (by the check `workitem.create` and `workitem.update` make: a document
+  can refuse what it once accepted), and nothing is written; it reads the arguments, not the composed input, and the
+  claim's own check is unchanged. An edit that commits between this read and the guarded write withdraws the question,
+  and the approval then writes nothing and answers `approval_not_pending`. A message's card offers an edit, after which
+  Jason asks again; other work has no Edit on its card, so there the way out is a rejection or `jason workitem update`.
 - **reject** ends the item as `failed`, with `approval_rejected` and the person's reason as its last
-  error, and no attempt invented to carry it.
+  error, and no attempt invented to carry it, whatever the item's input holds.
 - **cancelling the work, or its due date passing**, ends the decision with it: a live approval about
   work that can never run is the one row that would make `approval.list` untrue.
 - **a second decision on the same approval** writes nothing and answers `approval_not_pending`: both
@@ -795,6 +839,78 @@ without that time left out. `jason workitem count` takes the same filters and an
 return, without paging through them. `--block blk_…` (`provider_block_id`) keeps the items a provider block holds: those
 whose open wait names it (§Provider blocks).
 
+## A person's line in a campaign
+
+A membership's `state` is where the line with that person in that campaign stands. `enrolled` is a line that goes on.
+`excluded` is a person removed (`campaign.remove_contacts`), with every piece of their open work there cancelled and
+what the provider holds for them there taken back (below).
+`finished` is a line that was ended: the claim refuses every touch to the person in that campaign, `line_finished`
+(below), while a reply in a thread the person opened, a take-back of a send and every read go on, and the line stays
+ended until it is reopened. `paused` is a line a reply paused, and while it is paused the claim takes none of
+the person's touches in that campaign ([Eligibility](#eligibility), rule 3) — a touch waits, `created`, with nothing
+written — while a reply to the person, a take-back of a send and every read go on. The pause never stops the campaign,
+and it lasts until the line is continued or ended; the manager settles it, since the reply that paused it wakes the
+manager, and the deep review accounts for every person paused.
+
+**The hold.** The respond step ([docs/inbound-sync.md](inbound-sync.md) §1) holds the line of the person an
+`inbound_reply_observed` line names, by the line's contact column, inside the transaction that reads the line and before
+anything else it does with it: whether or not `Responder:OnReply` is on, and whatever skip passes the line over. An
+`enrolled` member of the campaign becomes `paused`, and one reserved line says it, `contacts_paused`, as
+`system:dispatcher`, naming the person and the reply line by their ids. A member whose line is already paused, ended or
+removed is left as they are, and a line that names no contact — the thread's person is pinned to none, or to more than
+one — holds nobody. A thread moves when Jason writes into it too, so a line that does not know who moved the thread —
+one the inbound read wrote, or one the events store wrote from a `thread_moved` event that names no side — and may be
+Jason's own move holds nobody either: one whose `last_activity_at` is not later than the latest moment any succeeded
+letter of Jason's own went into the thread — a touch of the person in the campaign, at its `accepted_for` where its
+result names one, otherwise the end of its succeeded attempt, across the campaign since a touch records no thread, or an
+answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
+succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
+went. A line whose event names the other side always holds, whatever the moments. Moments of the runtime's own record
+are compared, and nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line
+does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
+step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
+
+**Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`
+or `social_invitation.send` that succeeded with the provider's reference, whose result says `cancelable: true`, for a
+moment still to come — cannot be held at the claim, only cancelled. Three acts stop a line, and each, in its own save,
+queues one `message.cancel` for each such letter of the people it stopped in that campaign, by the runtime's one
+definition of a send the provider holds (the one a route change is held to, [routing](routing.md)), as
+`system:dispatcher`, root work about no person, one above `Responder:Priority`, unless a cancel still open or one that
+succeeded already names the letter: the hold, `campaign.finish_contacts` and `campaign.remove_contacts`. A touch that
+was on its way at the hold, `scheduled` or `processing`, is taken back where it ends: when its attempt succeeds and the
+person is `paused` in that campaign by then, the routine that ends attempts asks for the same take-back for them once the
+success is saved, so a letter the provider took for a later moment after the hold is cancelled as one it took before.
+This applies only to a letter the provider holds for a moment still ahead; one that already went when its attempt
+ended is a race nobody can win, and nothing more is promised for it. A take-back the runtime refuses there is logged by
+the code and costs the success nothing. A letter whose
+cancel no route active now takes where it ran, at its plugin and its account, is not taken back, since the claim would
+refuse the cancel; the act goes on, and the runtime's log says so once per campaign, by the campaign's id and the code
+`held_send_cancel_not_routed`. A letter already on its way at the provider answers the cancel `send_not_pending`, and
+nothing more can be done for it.
+
+Three acts move a line, one operation each, and each takes `campaign_id` and `contact_ids` (at most 1000), answers one
+result per item in the order asked, as `campaign.remove_contacts` does, and writes one reserved line for the request:
+
+- **`campaign.finish_contacts`** (`jason campaign finish-contacts`) ends the line with an `enrolled` or `paused` member:
+  the membership becomes `finished`, and in the same save the person's open touches in that campaign — the operations
+  whose document says `touch: true` — are cancelled, while their responder, its `conversation.get`, a
+  `conversation.reply`, a `message.cancel` and every other item are left to run, and what the provider holds for them
+  there is taken back (above). Any named actor may end a line, a role from its run among them, and the `reason` is
+  required (`validation_failed`, `required` on `reason`). The line is `contacts_finished`, with the people whose line it
+  ended and the reason.
+- **`campaign.continue_contacts`** (`jason campaign continue-contacts`) enrols a `paused` member again, whose waiting
+  touches are candidates again by that alone; any named actor may. The line is `contacts_continued`.
+- **`campaign.reopen_contacts`** (`jason campaign reopen-contacts`) enrols a `finished` member again. It is the person's
+  decision, carried one of two ways: their own word, from a named `human` outside any run, or a run that names, in
+  `decision_id`, the campaign's question a named person answered about the `contacts_finished` line that ended those
+  lines. A person counts only where that line is the latest `contacts_finished` of the campaign naming them, so one
+  answer reopens the end it was asked about and never a later one; a person that line does not name, or whose line a
+  later `contacts_finished` ended again, is answered `not_in_decision`. No later reopen is looked for: a person the
+  question reopened and nobody ended since is `enrolled`, and a second reopen answers `not_finished`, as it does for
+  any line that is not ended. The runtime never reads the answer's words, so
+  the manager reopens only on an answer that says yes. The line is `contacts_reopened`, with the question where a run
+  carried it. Touches counted before the line ended stay counted: the ceiling counts work items, never a state.
+
 ## A campaign's people, counted
 
 `jason campaign summary` (`campaign.summary`) answers, for each campaign named or every campaign not archived, in every
@@ -811,7 +927,15 @@ not archived, each person once with the campaigns that list them under `counted`
 `--activity <count>` and the same period, it lists exactly
 the people one count counts, each with why it counts them in each of those campaigns: the approval or question waiting,
 how their latest work ended, or when in the period it happened, the latest first. Under `--activity people` the why is
-the latest of what happened to them, its `text` naming the count it was. Work about a person is work in that campaign
+the latest of what happened to them, its `text` naming the count it was. Each row also says how many touches the
+person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
+exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
+shows is the number the ceiling stops at. A send that a succeeded `message.cancel` of the campaign took back never
+went: it is no touch, and no row's last touch either. A touch's moment, where it succeeded, is the one the provider took
+it for, its result's `accepted_for`, read in UTC as the hold reads it, else the item's finish; where it did not, the end
+of the latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
+(`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
 line of each campaign it reaches ([docs/events.md](events.md) §3): one that no campaign's provider campaign places, such
 as the reply to a direct email or a message outside a sequence, reaches every campaign not archived that the person is a
@@ -837,12 +961,19 @@ Now:
   finish, so the person is no longer `failed`.
 - `working` — Work about them is planned or running. Work waiting for an approval is `waiting`'s.
 - `new` — Nothing has been done or planned for them yet: no work about them was created by a person, a role, an
-  attempt or a plugin. Work the runtime made about them by itself, the read of their thread and the responder a reply
-  woke, does not count. A campaign's reserve is this count ([docs/campaign-manager.md](campaign-manager.md) §9).
-- `idle` — Their work finished without failing, nothing is planned, and they were never put into the sequence.
+  attempt or a plugin, and their line is not finished. Work the runtime made about them by itself, the read of their
+  thread and the responder a reply woke, does not count. A campaign's reserve is this count
+  ([docs/campaign-manager.md](campaign-manager.md) §9), so a person whose line is ended is no longer someone still to
+  start on; a paused person still is.
+- `idle` — Their work finished without failing, nothing is planned, they were never put into the sequence, and their
+  line is not finished; a paused person can be idle.
 - `sequence` — They were put into the provider's sequence and are not out of it.
 - `out` — They replied, opted out, were stopped in the sequence, or hard-bounced. A reply is one the inbound read or
   the provider's events observed; opted out means on the do-not-contact register now; a soft bounce takes nobody out.
+- `paused` — Their line in the campaign is paused (membership state `paused`). A paused line is not ended, so they stay
+  in every other count they stand in, `new` and `idle` included.
+- `finished` — Their line in the campaign is ended (membership state `finished`). They are still members, so `people`
+  and `out` count them as before, but `new` and `idle` leave them out.
 - `removed` — They were taken out of the campaign. They count in nothing else now, and stay listed, so a re-import
   never adds them back.
 
@@ -927,7 +1058,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-eight provider checks follow.
+existed. It is the same rule the thirty provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -1019,7 +1150,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 5,
+  "envelope_version": 6,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -1059,7 +1190,8 @@ One JSON object is written to the child's standard input, which is then closed:
         "result_omitted": false
       }
     ]
-  }
+  },
+  "entry": { "name": "start", "text": "the role's entries/start.md, whole" }
 }
 ```
 
@@ -1122,6 +1254,23 @@ and the status are always there, and `workitem.get` reads a result left out. The
 hands out after a release is recorded on the wait as the one it resumed; an attempt that retries after
 it is told the same, because the wait it follows is still the last one.
 
+`entry` is the named way into its role's job the work item was created with, and null for every item that has none.
+Only the runtime writes one, from a fixed vocabulary per role in which only the manager has names today — `start`,
+`resume`, `quick_look`, `deep_review` and `inbound_reply` — and no request to `workitem.create` or `workitem.update` carries it.
+`name` is the item's entry; `text` is the file `entries/<name>.md` of the role's folder, whole, as UTF-8, read from the
+copy the launch made in the work directory inside the same read that copies the role's tree, so the text the envelope
+carries and the folder the host finds are the same bytes. Nothing in it is stripped or parsed, and the runtime composes
+no prompt of it. The file is a file of the role's tree, bounded with the rest of it by `Roles:MaxSkillBytes`, and it has
+no bound of its own. Where the folder has no such file, `text` is null and the attempt runs all the same: there is no
+fallback to some other text. The attempt's launch record names the entry beside `role_skill`, as `{name, bytes}`,
+`bytes` being the size of the file, and 0 where the file was not there.
+
+A manager's check-in carries its brief in `context`, and the brief's `review_intent` says why the check-in exists, in
+one of three values: `scheduled` when a clock came round, the quick look's or the deep review's; `triggered` when a line
+of the chronicle asked for a review, and then `trigger` and `cause` name it; and `requested` when a person asked for one
+with `campaign.review`, which names no trigger and no cause. The value and the entry are both the runtime's, and they
+are written together when the check-in is created ([docs/campaign-manager.md](campaign-manager.md) §5).
+
 A role reads `resumption` the way it reads the rest of the envelope, because it is part of it: no new
 channel, no second message. The command that runs `ai_role` work writes the whole envelope to the
 child's standard input and composes no prompt from its parts, on every host. On a host that reads its
@@ -1133,9 +1282,9 @@ that stream, by its own framing, and nothing else is written: the host's section
 [execution-profiles.md](execution-profiles.md) §12 says which.
 
 Every change to this envelope is additive — `cli_command` took it to version 2, `role_memory` to
-version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, and `resumption` to
-version 5 — so a host written against an earlier version keeps working: it reads the fields it knows
-and ignores the rest.
+version 3, `memory_files`, with `role_memory`'s `project_id`, to version 4, `resumption` to
+version 5, and `entry` to version 6 — so a host written against an earlier version keeps working: it reads the fields
+it knows and ignores the rest.
 
 ### Finding the API
 
@@ -1253,10 +1402,10 @@ settings at all and are never refused for this reason.
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
+| `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since the installation's midnight; the claim holds it, with no attempt, until the installation's next midnight, and a person's `workitem.resume` or `launches.lift` lets it go sooner (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-eight pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the thirty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -1279,18 +1428,18 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-eight checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, and the twenty-eighth, added after it, right after the tenth:
+**Everything that can stop it is decided at the claim, before a child process exists.** Thirty checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, the twenty-eighth, added after it, right after the tenth, and the twenty-ninth and the thirtieth, added after that, right after the twenty-eighth:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed → opted_out →
-contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
+line_finished → touch_ceiling_reached → contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
 search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-five are refusals and all of them are final: twenty-two are `permanent`, `input_invalid` and
+The first twenty-seven are refusals and all of them are final: twenty-four are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -1310,6 +1459,25 @@ verdict itself registers every value the contact had, in the same save, by the r
 reply in that verdict's campaign, under their name, outside any run, stating a nature other than `opt_out` — never by a
 role's or a run's, never by a person named from inside a run, never by a carried answer alone, and never by
 `suppression.remove` ([runtime API](runtime-api.md), `reply.record`).
+The twenty-ninth and the thirtieth, added after it, are asked right after `opted_out`, and only of a touch — an operation
+whose document says `touch: true`, today `message.send`, `social_invitation.send` and `campaign.enroll` — that names a
+contact: they ask by the person and the operation, never by a channel, so a reply in a thread the person opened
+(`conversation.reply`), a take-back (`message.cancel`) and every read pass whatever the line's state. `line_finished`
+refuses a touch to a person whose membership of the campaign is `finished`: the line with them was ended, and only the
+person reopens it; a `paused` membership is not refused here, since a paused person's touch is no candidate at all
+([Eligibility](#eligibility), rule 3). `touch_ceiling_reached` refuses a touch to a person who has
+already had `Lines:MaxTouches` touches in this campaign (§Settings): a touch counts when it is one of those operations
+about the person in this campaign, other than the item being claimed, and it succeeded, or any attempt of it ended classed
+`ambiguous`, since that attempt may have reached the person, whatever came after it and whatever became of the item —
+put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most, and a send that a
+succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended
+`ambiguous` leaves it counted, since the letter may still go — one definition, which the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
+cannot both pass the count: the claim takes one item of a campaign at a time and none while another of its items is
+`scheduled` or `processing`, so every touch claimed before is counted by its attempts once it has left
+`processing`, and one that has not run yet is counted at its own claim. Where a later attempt of a touch found that
+nothing had been sent, the count holds it one too many: the safe side of a ceiling, since nothing the store keeps proves
+the earlier attempt did not act.
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
@@ -1349,7 +1517,7 @@ the earlier act at the account whichever version of the package made it, so an u
 the repeat through.
 While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code, and so does check 27, and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
-(`docs/routing.md`). An answer that arrived and does not satisfy the
+(`docs/routing.md`). Checks 28, 29 and 30 are asked among the first of those, by their place, and are among them too. An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
 the operation does not declare, or declares under another class. An answer a pattern of
 that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
@@ -1579,14 +1747,19 @@ mistyped one.
 | `Dispatcher:ProviderOp:TimeoutSeconds` | `600` | 30..86400 | the budget of one `provider_op` attempt; never below the slowest published operation's `timeout_ms` plus `Plugins:Invoker:KillGraceMs` |
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
+| `Manager:ReviewSeconds` | `21600` | 300..604800 | how long after a campaign's last review of any kind, with nothing happened, its manager is given a quick look, unless the campaign names its own pace ([docs/campaign-manager.md](campaign-manager.md) §4) |
+| `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the interval of a campaign's deep review grid, started at every going live and moved only by a deep review the summon makes; the installation's only, no campaign carries its own ([docs/campaign-manager.md](campaign-manager.md) §4) |
+| `Manager:AudienceThreshold` | `20` | 1..100000 | the `audience_threshold` the runtime gives a campaign at its first start, from `draft`, where it holds none and its people come from a search: one `campaign_updated` line by `system:runtime`; never at a resume ([docs/campaign-manager.md](campaign-manager.md) §9) |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 | `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
 | `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the reads of sends a bounce asks for sit one below it, and the inbound read's `conversation.list` items ten above it |
 | `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
-| `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
+| `Launches:MaxPerDay:<role>` | `critic: 240, personalizer: 120, researcher: 40, manager: 25, responder: 25, planner: 10, copywriter: 10, analyst: 10, deliverability-specialist: 10` | 1..1000 | how many runs of a role one campaign may start in the installation's day, counted from its midnight in `Runtime:TimeZone`; each of the nine roles Jason ships has a limit by default, a net against a runaway role to be corrected after the first live campaigns, and a person's own entry changes that role's number and keeps every other default, a thousand being as high as it goes; a role the map does not name, a custom role of the person's own, has no limit; the claim holds a role at its limit until the installation's next midnight, and `launches.lift` lifts every role's for the rest of the day (§The claim rule) |
+| `Runtime:TimeZone` | absent | an IANA id | the installation's time zone, whose day `Launches:MaxPerDay` counts and a lift covers, the day named by the zone's own id and both spellings of UTC as `UTC`; absent, the system's zone as the runtime read it when it started; an id the system does not know, a Windows id among them, or one spelled otherwise than the zone spells it, as `asia/tokyo` is, is refused at start and keeps the last good settings on a live edit (§The claim rule) |
 | `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
+| `Lines:MaxTouches` | `5` | 1..20 | the most touches — operations whose document says `touch: true` — a person may have in one campaign, counted by the work about them there that succeeded or any attempt of which ended classed `ambiguous`, whatever came after; at it the claim refuses the next touch with `touch_ceiling_reached`, before anybody is asked to approve it, and the manager ends the line (§Provider operations); there is no 0 and no unlimited, and no verb writes it, only the settings file |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps

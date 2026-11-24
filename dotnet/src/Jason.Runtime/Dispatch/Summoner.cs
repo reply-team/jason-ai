@@ -140,7 +140,7 @@ public sealed class Summoner(
     /// <summary>
     /// The system's check-ins that stop a second one: in a status of <see cref="Open"/>, or waiting with no attempt and no
     /// block on their wait, which is a check-in held at the manager's daily limit. Such a check-in is the review that will
-    /// run after 00:00Z, so a trigger meanwhile summons no second check-in beside it; it summons the next review once the
+    /// run after the installation's next midnight, so a trigger meanwhile summons no second check-in beside it; it summons the next review once the
     /// held one has run, which the limit may hold to the next day. A check-in whose run yielded or that a provider block
     /// parked is not one of these. The unique index does not see a hold, because a waiting status is not in its filter, so
     /// this look alone keeps the one.
@@ -181,6 +181,7 @@ public sealed class Summoner(
                 campaign.ManagerEventWatermark,
                 campaign.ManagerReviewAnchor,
                 campaign.ManagerReviewSeconds,
+                campaign.DeepReviewDueAt,
             })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
@@ -210,10 +211,20 @@ public sealed class Summoner(
         var ours = await OursAsync(db, lines, ct).ConfigureAwait(false);
         var decision = ManagerTriggers.Read(lines, triggers, ours, before);
         decision = decision with { Cause = await NameDecisionAsync(db, decision.Cause, ct).ConfigureAwait(false) };
+        // The published decision, over kinds, identifiers and two columns: the deep review due runs, carrying any cause
+        // read; otherwise a cause runs as its own entry; otherwise the quick look, if it is due. The deep review is a review
+        // like the others, so it moves the quick anchor too: a day is three quick looks and one deep review.
+        var deep = DeepReviewSchedule.IsDue(read.DeepReviewDueAt, now);
         var due = decision.Cause is null
             && ReviewSchedule.IsDue(read.ManagerReviewAnchor, read.ManagerReviewSeconds, options.ReviewSeconds, now);
+        var entry = ManagerEntryChoice.Choose(new ManagerEntryInputs(
+            decision.Cause?.Kind,
+            await IsFirstStartAsync(db, campaignId, decision.Cause, ct).ConfigureAwait(false),
+            due,
+            deep));
+        var summon = decision.Cause is not null || due || deep;
 
-        if (decision.Cause is null && !due && decision.Watermark == before)
+        if (!summon && decision.Watermark == before)
         {
             // Nothing read and nothing due: the common answer, and it takes no transaction at all.
             return false;
@@ -230,14 +241,14 @@ public sealed class Summoner(
                 return false;
             }
 
-            if (decision.Cause is null && !due)
+            if (!summon)
             {
                 await transaction.CommitAsync(ct).ConfigureAwait(false);
                 return false;
             }
 
             var campaign = await db.Campaigns.FirstAsync(c => c.Id == campaignId, ct).ConfigureAwait(false);
-            await ManagerCheckIn.CreateAsync(items, db, campaign, decision.Cause, options, ct).ConfigureAwait(false);
+            await ManagerCheckIn.CreateAsync(items, db, campaign, decision.Cause, options, ct, entry).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await transaction.CommitAsync(ct).ConfigureAwait(false);
         }
@@ -261,7 +272,7 @@ public sealed class Summoner(
             return false;
         }
 
-        Summoned(logger, read.PublicId, decision.Cause is { } cause ? cause.Kind : "scheduled", null);
+        Summoned(logger, read.PublicId, deep ? ManagerEntryChoice.DeepReview : decision.Cause is { } cause ? cause.Kind : "scheduled", null);
         return true;
     }
 
@@ -293,6 +304,30 @@ public sealed class Summoner(
     }
 
     /// <summary>
+    /// Whether a <c>campaign_started</c> cause is the campaign's first going live: one lookup of the smallest journal id
+    /// among the campaign's lines of that kind, compared with the cause line by identifier. It reads no line's
+    /// <c>old</c>, <c>new</c>, <c>key</c> or reason, and the cause holds the line's public id, which names the same row
+    /// as its id does. A cause of any other kind asks nothing.
+    /// </summary>
+    private static async Task<bool> IsFirstStartAsync(JasonDbContext db, int campaignId, ManagerCause? cause, CancellationToken ct)
+    {
+        if (cause is not { } because || !string.Equals(because.Kind, JournalKinds.CampaignStarted, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var first = await db.Journal
+            .AsNoTracking()
+            .Where(line => line.CampaignId == campaignId && line.Kind == JournalKinds.CampaignStarted)
+            .OrderBy(line => line.Id)
+            .Select(line => line.PublicId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        return string.Equals(first, because.JournalEntryId, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Moves a campaign's watermark, and only from the value this summon read. A watermark another writer has
     /// moved on is refused rather than overwritten: that writer's read may already have become a review of
     /// exactly these lines, and putting an older number back would have them reviewed twice.
@@ -313,6 +348,13 @@ public sealed class Summoner(
     /// </summary>
     public static Task<bool> OpenCheckInAsync(JasonDbContext db, int campaignId, CancellationToken ct) =>
         OpenCheckIns(db).AnyAsync(item => item.CampaignId == campaignId, ct);
+
+    /// <summary>
+    /// The campaign's open check-in by its public id, by the same look that stops a second one here, a held one included, or
+    /// null where none is open: what a review a person asks for is refused naming.
+    /// </summary>
+    public static Task<string?> OpenCheckInIdAsync(JasonDbContext db, int campaignId, CancellationToken ct) =>
+        OpenCheckIns(db).Where(item => item.CampaignId == campaignId).OrderBy(item => item.Id).Select(item => (string?)item.PublicId).FirstOrDefaultAsync(ct);
 
     /// <summary>
     /// Which of these lines are a check-in's own: about a check-in, about one's attempt, or written <em>by</em>

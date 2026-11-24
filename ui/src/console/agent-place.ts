@@ -17,6 +17,9 @@ export const agentChatRoute = (id: string): Extract<Route, { screen: 'campaigns'
     filters: {},
 });
 
+/** The id of the heading of the agent's header that names the agent, which also names the region of its chat's pane. */
+export const agentNameId = (id: string): string => `agent-name-${id}`;
+
 /** The agent a chat is about: its campaign, for any chat but the Feed and a set-up chat. */
 export const agentOfChat = (chat: Chat | undefined): string | null =>
     chat === undefined || chat.main ? null : chat.campaignId;

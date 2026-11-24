@@ -114,5 +114,12 @@ public sealed class WorkItem
     /// </summary>
     public string? ReviewNote { get; set; }
 
+    /// <summary>
+    /// The named way into its role's job this item was created with, one of the role's in <c>RoleEntries</c>, or null.
+    /// Only the runtime writes it, when it creates its own work; no request names one, and nothing reads a context to
+    /// find one.
+    /// </summary>
+    public string? Entry { get; set; }
+
     public List<Attempt> Attempts { get; } = [];
 }

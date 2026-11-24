@@ -27,12 +27,13 @@ public static partial class DecisionRenderers
             return null;
         }
 
-        var table = new HumanTable("RAISED", "STATUS", "CAMPAIGN", "WORK ITEM", "ID", "QUESTION");
+        var table = new HumanTable("RAISED", "STATUS", "ANSWERED BY", "CAMPAIGN", "WORK ITEM", "ID", "QUESTION");
         foreach (var decision in page.Items)
         {
             table.Row(
                 RenderText.Moment(decision.RaisedAt),
                 RenderText.Snake(decision.Status),
+                RenderText.Actor(decision.AnsweredBy),
                 decision.CampaignId,
                 decision.WorkItemId,
                 decision.Id,

@@ -131,7 +131,7 @@ public sealed class PointerOnlyTests
 
         // Every channel was given the pointer, and every one of them said it was shown.
         Assert.NotNull(line);
-        Assert.Equal((1, 1, 1), (line.Approvals, line.Decisions, line.ProtectiveFailures));
+        Assert.Equal((1, 1, 1, 1), (line.Approvals, line.Decisions, line.ProtectiveFailures, line.Replies));
         Assert.All(line.Channels, outcome => Assert.Equal(ChannelResult.Delivered, outcome.Result));
 
         // The toast, as every platform composes it: command, stdin and environment; on Linux with notify-send, its help
@@ -197,6 +197,8 @@ public sealed class PointerOnlyTests
             var decision = await db.Decisions.AsNoTracking().SingleAsync(Ct);
             Assert.Equal("question-" + Marker, decision.Question);
             Assert.Contains("option-" + Marker, decision.Options!.ToJsonString(), StringComparison.Ordinal);
+            var verdict = await db.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.ReplyClassified, Ct);
+            Assert.Contains("interested-" + Marker, verdict.New!.ToJsonString(), StringComparison.Ordinal);
             var failed = await db.WorkItems.AsNoTracking().SingleAsync(item => item.PublicId == failedItem, Ct);
             Assert.Contains(Marker, failed.LastError!.Message, StringComparison.Ordinal);
         }
@@ -206,8 +208,9 @@ public sealed class PointerOnlyTests
         api.Runtime.Services.CreateScope().ServiceProvider.GetRequiredService<JasonDbContext>();
 
     /// <summary>
-    /// A parked enrollment, a raised question and a failed opt-out, each carrying the marker wherever a person's words or
-    /// a provider's error go: the campaign's public id, and the failed item's and its attempt's ids.
+    /// A parked enrollment, a raised question, a reply judged a person's own and a failed opt-out, each carrying the marker
+    /// wherever a person's words or a provider's error go: the campaign's public id, and the failed item's and its attempt's
+    /// ids.
     /// </summary>
     private static async Task<(string Campaign, string FailedItem, string FailedAttempt)> SeedAsync(RuntimeApiFixture api)
     {
@@ -260,6 +263,35 @@ public sealed class PointerOnlyTests
         await new DecisionService(db, new JournalWriter(TimeProvider.System), TimeProvider.System).RaiseAsync(
             new DecisionRaiseRequest(asking.PublicId, attempt.PublicId, "question-" + Marker, [new DecisionOption("option-" + Marker, null)], null, null),
             Ct);
+
+        // A reply the run judged a person's own, with the marker wherever the provider's or the role's words go: the
+        // plugin, the thread, the message and the category.
+        new JournalWriter(TimeProvider.System).Append(
+            db,
+            new Jason.Contracts.Api.ActorRef(Jason.Contracts.Api.ActorType.Attempt, attempt.PublicId),
+            JournalKinds.ReplyClassified,
+            campaign,
+            key: "sha256:reply-" + Marker,
+            updated: new JsonObject
+            {
+                ["plugin"] = "mail-" + Marker,
+                ["thread"] = "thread-" + Marker,
+                ["message_id"] = "message-" + Marker,
+                ["message_at"] = "2026-10-01T11:58:00.000Z",
+                ["contact_id"] = contact.PublicId,
+                ["category"] = "interested-" + Marker,
+                ["confidence"] = 0.9,
+                ["reaction"] = "draft",
+                ["goal_id"] = null,
+                ["goal_kind"] = null,
+                ["decision_id"] = null,
+                ["answered_by"] = null,
+                ["nature"] = "person",
+            },
+            workItem: asking,
+            attempt: attempt,
+            contact: contact);
+        await db.SaveChangesAsync(Ct);
 
         // An opt-out that failed, with the provider's error carrying the marker, and the line that says so.
         var failed = WorkItemFactory.NewProviderOp(campaign, "optout.record", Noon);

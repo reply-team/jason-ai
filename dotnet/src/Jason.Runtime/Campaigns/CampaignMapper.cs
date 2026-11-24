@@ -37,7 +37,8 @@ public static class CampaignMapper
             campaign.FolderPath,
             campaign.AudienceThreshold,
             new SendModesDto(campaign.SendModeCold, campaign.SendModeWarm),
-            SendModes.InForce(campaign, installation));
+            SendModes.InForce(campaign, installation),
+            campaign.DeepReviewDueAt is { } deepReviewDueAt ? Utc(deepReviewDueAt) : null);
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)

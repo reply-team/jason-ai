@@ -28,6 +28,7 @@ decision list
 events sources
 journal kinds
 journal list
+launches list
 logs
 operation describe
 plugin list

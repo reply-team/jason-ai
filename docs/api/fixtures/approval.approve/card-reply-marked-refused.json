@@ -1,0 +1,26 @@
+{
+  "operation": "approval.approve",
+  "case": "card-reply-marked-refused",
+  "request": {
+    "approval_id": "apr_1",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: context.input/body: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "context.input/body",
+          "code": "invalid",
+          "message": "The value here is one this schema excludes: a text holding markup, a tag such as `<br>`, `<p>` or `</div>` or an HTML entity such as `&nbsp;` or `&lt;`; a reply is plain text, with a line break written as a line break, never a tag and never an entity."
+        }
+      ]
+    }
+  }
+}

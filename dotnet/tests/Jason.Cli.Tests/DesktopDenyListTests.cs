@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Harness;
 using Jason.Contracts.Hosts;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
 
@@ -36,7 +37,7 @@ public class DesktopDenyListTests
     /// approval whether still asked or already given, stops its running attempts once the archive is committed, and
     /// cancels its pending questions.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive", "campaign review"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
@@ -59,6 +60,7 @@ public class DesktopDenyListTests
     /// written again, and the deny list's word decides whether it is on it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_allow_list_is_every_verb_of_the_cli_the_deny_list_does_not_cover()
     {
         using var paths = new TempPaths();
@@ -92,6 +94,7 @@ public class DesktopDenyListTests
         "audience preview", "block get", "block list", "campaign activity", "campaign activity-by-period", "campaign audience",
         "campaign get", "campaign list", "campaign list-contacts", "campaign summary", "contact get", "contact list",
         "contact thread", "contact threads", "decision get", "decision list", "events sources", "journal kinds", "journal list",
+        "launches list",
         "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "reply count", "report get",
         "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "sender list", "status",
         "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
@@ -101,7 +104,8 @@ public class DesktopDenyListTests
     /// <summary>The allow list's verbs that change something: a chat in Plan only never runs them.</summary>
     private static readonly string[] ChangesTheAgentMakes =
     [
-        "campaign add-contacts", "campaign create", "campaign pause", "campaign remove-contacts",
+        "campaign add-contacts", "campaign continue-contacts", "campaign create", "campaign finish-contacts", "campaign pause",
+        "campaign remove-contacts",
         "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
         "decision raise", "events backfill", "events signal", "journal append", "project create", "project update",
         "reply record", "rolenote set", "suppression add", "workitem cancel", "workitem complete", "workitem create",
@@ -121,6 +125,7 @@ public class DesktopDenyListTests
     /// list; the plan list is the reads, in the allow list's order.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_plan_list_is_the_allow_list_s_verbs_declared_reads()
     {
         var allowed = AllowList();
@@ -150,6 +155,7 @@ public class DesktopDenyListTests
     /// file and run file in every other mode, does not ride a Plan only turn.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void No_verb_of_the_plan_list_takes_a_request_on_standard_input()
     {
         using var paths = new TempPaths();
@@ -169,6 +175,7 @@ public class DesktopDenyListTests
     /// permission tool: a verb that gains such an option is red here until the desktop names it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_names_every_verb_that_reads_a_request_s_file()
     {
         using var paths = new TempPaths();
@@ -192,6 +199,7 @@ public class DesktopDenyListTests
     /// the CLI is red here until the desktop names it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_holds_the_cli_s_command_tree()
     {
         using var paths = new TempPaths();
@@ -214,6 +222,7 @@ public class DesktopDenyListTests
     /// the word after them. The root is named for the executable that runs it, jason in a release and the test host here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_cli_s_parser_takes_its_own_name_and_a_directive_before_the_noun()
     {
         using var paths = new TempPaths();
@@ -236,6 +245,7 @@ public class DesktopDenyListTests
     /// group, or was renamed, would take nothing out of the allow list, and its verbs would run without asking.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Each_verb_asked_each_time_is_a_leaf_of_the_cli_s_command_tree()
     {
         using var paths = new TempPaths();
@@ -284,8 +294,9 @@ public class DesktopDenyListTests
     {
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
-            "# preference, a campaign's send mode, a block cleared, work resumed, a send reviewed, a report and a subscription\n" +
-            "# rewound. The CLI gives them no default actor, and gives none to eight verbs further down either.\n",
+            "# preference, a campaign's send mode, an ended line reopened, a block cleared, work resumed, today's launch limits\n" +
+            "# lifted, a send reviewed, a report and a subscription rewound. The CLI gives them no default actor, and gives none to\n" +
+            "# eight verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
@@ -295,9 +306,10 @@ public class DesktopDenyListTests
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, linking a project's folder, which then becomes a working folder of every chat on the\n" +
-            "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, and archiving\n" +
-            "# one, which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still\n" +
-            "# asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.\n",
+            "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, archiving one,\n" +
+            "# which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still asked\n" +
+            "# or already given, stops its running attempts once the archive is committed, and cancels its pending questions, and\n" +
+            "# asking a campaign's manager for a review, which launches a check-in on the person's word.\n",
     };
 
     /// <summary>
@@ -305,6 +317,7 @@ public class DesktopDenyListTests
     /// table's commands in its order, and its operation lines are the ones the file already holds.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_deny_list_s_command_half_is_written_from_the_confined_verbs()
     {
         var text = DenyListHeader;
@@ -340,8 +353,10 @@ public class DesktopDenyListTests
         ["preference set"] = "a preference",
         ["preference unset"] = "a preference",
         ["campaign set-send-mode"] = "a campaign's send mode",
+        ["campaign reopen-contacts"] = "reopening an ended line",
         ["block clear"] = "clearing a block",
         ["workitem resume"] = "resuming work",
+        ["launches lift"] = "lifting today's launch limits",
         ["workitem review"] = "reviewing a send",
         ["report submit"] = "a report",
         ["subscription rewind"] = "rewinding a subscription",
@@ -356,6 +371,7 @@ public class DesktopDenyListTests
     /// is reached or what runs each listed in the table's order, and the number word before a group is that group's size.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_page_names_every_verb_the_chat_refuses_with_no_card()
     {
         var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "desktop.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -385,6 +401,7 @@ public class DesktopDenyListTests
     }
 
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_allow_list_names_no_verb_that_takes_no_default_actor_and_not_doctor()
     {
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
@@ -402,6 +419,7 @@ public class DesktopDenyListTests
     /// list names nothing under the noun, so its bare noun and its help go to the person's card.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Every_verb_under_the_notification_noun_is_confined_and_denied_in_both_forms()
     {
         using var paths = new TempPaths();
@@ -427,6 +445,7 @@ public class DesktopDenyListTests
     }
 
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_deny_list_holds_every_verb_that_takes_no_default_actor()
     {
         var listed = DenyList();
@@ -441,6 +460,7 @@ public class DesktopDenyListTests
     /// a verb that changes the installation, added later, is red here before it ships.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_deny_list_holds_every_verb_that_is_not_an_operation_but_the_reads_the_agent_keeps()
     {
         var listed = DenyList();
@@ -455,6 +475,7 @@ public class DesktopDenyListTests
 
     /// <summary>The reads the agent keeps are exactly that: none of them is one a deny-list entry takes away.</summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void No_read_the_agent_keeps_is_covered_by_the_deny_list()
     {
         var listed = DenyList();
@@ -470,6 +491,7 @@ public class DesktopDenyListTests
     /// acts that stop reaching a person stay on the allow list.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Starting_a_campaign_is_denied_by_command_and_by_operation_and_the_acts_that_stop_reaching_a_person_stay_allowed()
     {
         Assert.Contains("campaign start", DenyList());
@@ -490,6 +512,7 @@ public class DesktopDenyListTests
     /// are; pausing stays the chat's.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Archiving_a_campaign_is_denied_by_command_and_by_operation_and_pausing_stays_allowed()
     {
         Assert.Contains("campaign archive", DenyList());
@@ -500,6 +523,7 @@ public class DesktopDenyListTests
     }
 
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_deny_list_holds_the_verbs_the_chat_refuses_beyond_the_cli_s_table()
     {
         var listed = DenyList();
@@ -514,6 +538,7 @@ public class DesktopDenyListTests
     /// by that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_s_confining_variable_is_the_cli_s()
     {
         var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
@@ -528,6 +553,7 @@ public class DesktopDenyListTests
     /// that declaration; it is the CLI's own name, so the jason the chat runs is the jason that reads it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_s_chat_turn_variable_is_the_cli_s()
     {
         var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
@@ -542,6 +568,7 @@ public class DesktopDenyListTests
     /// declaration; it is the name the CLI reads the attempt from, so the name the chat may not claim is the one that counts.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_s_attempt_variable_is_the_cli_s()
     {
         var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
@@ -573,6 +600,7 @@ public class DesktopDenyListTests
     /// file added to those tables is red here until the model guards it too.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void The_desktop_s_guarded_names_hold_the_runtime_s_and_the_hosts_own_names()
     {
         var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
@@ -606,6 +634,7 @@ public class DesktopDenyListTests
 
     /// <summary>Every line names a command the CLI has, so a misspelt line is never a fence around nothing.</summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Every_line_of_the_deny_list_names_a_command_of_the_cli()
     {
         using var paths = new TempPaths();
@@ -633,6 +662,7 @@ public class DesktopDenyListTests
 
     /// <summary>Every operation line names an operation the Runtime API has, or its journal stream.</summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public void Every_operation_line_of_the_deny_list_names_an_operation_of_the_runtime_api()
     {
         var known = typeof(Operations).GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -653,6 +683,7 @@ public class DesktopDenyListTests
     /// drain and resume, which the verbs that are not run call, so that a command naming one is refused by the desktop.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "the Desktop chat's fence and the CLI's commands have drifted apart")]
     public async Task The_deny_list_names_every_operation_a_denied_verb_posts_and_no_allowed_verb_posts()
     {
         var denied = DenyList();

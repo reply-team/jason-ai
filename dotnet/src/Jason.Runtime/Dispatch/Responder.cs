@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -53,6 +54,8 @@ public sealed class Responder(
     RouteRegistry routes,
     PluginRegistry plugins,
     ResponderSkips skips,
+    JournalWriter journal,
+    HeldSendCancels cancels,
     ILogger<Responder> logger)
 {
     /// <summary>The role a reply wakes.</summary>
@@ -125,6 +128,14 @@ public sealed class Responder(
         new EventId(4, nameof(Failed)),
         "The respond step for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
 
+    private static readonly Action<ILogger, string, string, Exception?> NotHeld = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(6, nameof(NotHeld)),
+        "The respond step could not hold the line a reply of campaign {CampaignId} names: {Code}");
+
+    /// <summary>Where the transaction that passes a line goes back to when the hold there is refused: past the watermark's move.</summary>
+    private const string HoldSavepoint = "hold";
+
     private static readonly Action<ILogger, string, Exception?> Moved = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(5, nameof(Moved)),
@@ -170,7 +181,7 @@ public sealed class Responder(
             .Where(entry => entry.CampaignId == campaign.Id && entry.Id > before && entry.Kind == JournalKinds.InboundReplyObserved)
             .OrderBy(entry => entry.Id)
             .Take(LinesPerScan)
-            .Select(entry => new Line(entry.Id, entry.PublicId, entry.New))
+            .Select(entry => new Line(entry.Id, entry.PublicId, entry.New, entry.ContactId))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -252,6 +263,9 @@ public sealed class Responder(
                     return new Acted(LineOutcome.Moved);
                 }
 
+                // Before any skip and whether or not a responder is woken: a reply holds the person's line.
+                await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
+
                 var outcome = new Acted(LineOutcome.Read);
                 if (reply is not null)
                 {
@@ -276,7 +290,8 @@ public sealed class Responder(
 
         // Past the poisoned line alone, so it is not tried again on every scan and the lines after it are still read.
         // Only a refusal is the line's: a write that failed for any other reason, a disk or a lock, is rethrown above and
-        // fails the campaign for this scan, so the next scan reads the line again.
+        // fails the campaign for this scan, so the next scan reads the line again. The hold the rollback took back is set
+        // again here: a responder that could not be written is no reason to let the person's touches go on.
         await using var passing = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (await AccountForAsync(db, campaign.Id, before, line.Id, ct).ConfigureAwait(false) == 0)
         {
@@ -284,8 +299,58 @@ public sealed class Responder(
             return new Acted(LineOutcome.Moved);
         }
 
+        // The hold here is the line's too: one the domain or the database refuses is said once and taken back to where the
+        // watermark had moved, which still commits, so the campaign's respond step never stops on one line.
+        await passing.CreateSavepointAsync(HoldSavepoint, ct).ConfigureAwait(false);
+        try
+        {
+            await HoldAsync(db, campaign, line, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DomainException || Refused(ex))
+        {
+            await passing.RollbackToSavepointAsync(HoldSavepoint, ct).ConfigureAwait(false);
+            db.ChangeTracker.Clear();
+            var code = ex is DomainException domain ? domain.Code : "write_refused";
+            if (skips.FirstTime(campaign.Id, "hold " + code))
+            {
+                NotHeld(logger, campaign.PublicId, code, null);
+            }
+        }
+
         await passing.CommitAsync(ct).ConfigureAwait(false);
+        db.ChangeTracker.Clear();
         return new Acted(LineOutcome.Read);
+    }
+
+    /// <summary>
+    /// The hold a reply line sets (<see cref="LineHold"/>): the person the line names by its contact column, when they are
+    /// an enrolled member of the campaign and the line is not Jason's own letter moving the thread, read by the line's
+    /// thread and moment and, for a line the events store wrote, by whether its stored event names the other side, is
+    /// paused, and what the provider still holds for them there is taken back
+    /// (<see cref="HeldSendCancels"/>). A line that names nobody holds nobody. A take-back the domain or the database
+    /// refuses is said once, under the take-back's own event, and costs neither the hold nor the line.
+    /// </summary>
+    private async Task HoldAsync(JasonDbContext db, Active campaign, Line line, CancellationToken ct)
+    {
+        if (line.ContactId is not { } contact)
+        {
+            return;
+        }
+
+        var now = clock.GetUtcNow();
+        var said = line.New as JsonObject;
+        var thread = said?["thread"] is JsonValue named && named.TryGetValue<string>(out var t) ? t : null;
+        DateTime? moved = said?["last_activity_at"] is JsonValue at && at.TryGetValue<string>(out var moment)
+            && DateTime.TryParse(moment, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
+                ? parsed
+                : null;
+        var stored = said?["event_id"] is JsonValue evt && evt.TryGetValue<string>(out var e) ? e : null;
+        if (!await LineHold.ApplyAsync(db, journal, now.UtcDateTime, campaign.Id, contact, line.PublicId, thread, moved, stored, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await cancels.TakeBackAsync(db, campaign.Id, campaign.PublicId, [contact], now, ct).ConfigureAwait(false);
     }
 
     private async Task<Acted> ActAsync(JasonDbContext db, Active campaign, Line line, Reply reply, ResponderOptions options, CancellationToken ct)
@@ -595,7 +660,7 @@ public sealed class Responder(
 
     private sealed record OpenResponder(int Id, string PublicId, JsonObject Context);
 
-    private sealed record Line(int Id, string PublicId, JsonNode? New);
+    private sealed record Line(int Id, string PublicId, JsonNode? New, int? ContactId);
 
     private sealed record Acted(LineOutcome Outcome, string? WorkItemId = null);
 

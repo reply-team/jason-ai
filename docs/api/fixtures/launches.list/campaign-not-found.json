@@ -1,0 +1,15 @@
+{
+  "operation": "launches.list",
+  "case": "campaign-not-found",
+  "request": {
+    "campaign_id": "cmp_2"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_2'.",
+      "retryable": false
+    }
+  }
+}

@@ -114,6 +114,23 @@ public class ApprovalCommandsTests
             + "\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
     }
 
+    /// <summary>
+    /// A yes the runtime refused because the item's arguments no longer satisfy the operation's document, as it recorded
+    /// the refusal: printed as it came, the document's reason in it, and the exit of any act understood and refused.
+    /// </summary>
+    [Fact]
+    public async Task Approve_refused_for_arguments_the_document_no_longer_accepts_prints_the_refusal_and_exits_1()
+    {
+        var recorded = Human.CopyPromptTests.Fixture("approval.approve", "card-reply-marked-refused");
+        using var cli = new CliRun(recorded, status: System.Net.HttpStatusCode.BadRequest);
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "approval", "approve", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(recorded, cli.Text.Trim());
+        Assert.Contains("never a tag and never an entity", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Reject_sends_the_decision_with_the_person_who_made_it()
     {
@@ -545,9 +562,35 @@ public class ApprovalCommandsTests
         var exit = await cli.RunAsync("approval", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("REQUESTED", cli.Text, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^REQUESTED +OPERATION +STATUS +DECIDED BY +WORK ITEM +ID", cli.Text);
         Assert.Contains("campaign.enroll", cli.Text, StringComparison.Ordinal);
         Assert.Contains("pending", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("approved", "approval_required", """{"type": "human", "id": "ada"}""", "human:ada")]
+    [InlineData("approved", "automatic_mode", """{"type": "system", "id": "send_mode"}""", "system:send_mode (automatic_mode)")]
+    [InlineData("approved", "standing_approval", """{"type": "system", "id": "standing"}""", "system:standing (standing_approval)")]
+    [InlineData("pending", "approval_required", "null", null)]
+    public async Task List_shows_who_decided_and_the_automatic_reason_beside_it(string status, string reason, string decidedBy, string? shown)
+    {
+        var approval = OneApproval
+            .Replace("\"status\": \"pending\"", $"\"status\": \"{status}\"", StringComparison.Ordinal)
+            .Replace("\"reason\": \"approval_required\"", $"\"reason\": \"{reason}\"", StringComparison.Ordinal)
+            .Replace("\"decided_by\": null", $"\"decided_by\": {decidedBy}", StringComparison.Ordinal);
+        using var cli = new CliRun($$"""{"items": [{{approval}}], "next_cursor": null}""");
+
+        var exit = await cli.RunAsync("approval", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var row = cli.Text.ReplaceLineEndings("\n").Split('\n').Single(line => line.Contains("campaign.enroll", StringComparison.Ordinal));
+        if (shown is null)
+        {
+            Assert.Matches(@"pending +- +wi_", row);
+            return;
+        }
+
+        Assert.Contains(shown, row, StringComparison.Ordinal);
     }
 
     private const string OneStanding = """

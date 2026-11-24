@@ -29,6 +29,7 @@
   "channel_templates": null,
   "route_channel_argument": "channel",
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
+  "touch": false,
   "contact_projection": { "fields": ["id"], "channels": "consumed" },
   "precondition": "The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent.",
   "preview": {
@@ -73,7 +74,12 @@
             "minLength": 1,
             "maxLength": 12000,
             "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
-            "description": "The reply's text, exactly as the person approving it reads it: something other than white space, at most 12000 characters on email, the most `conversation.get` reads back of one message, and at most 8000 on LinkedIn, the most a LinkedIn message holds."
+            "not": {
+              "type": "string",
+              "pattern": "</?[A-Za-z][A-Za-z0-9]*(?::[A-Za-z][A-Za-z0-9]*)?(?:[\\t\\n\\f\\r ]*/?|[\\t\\n\\f\\r ]+[A-Za-z][A-Za-z0-9_:.-]*[\\t\\n\\f\\r ]*=[^<>]*)>|&(?:[A-Za-z][A-Za-z0-9]+|#[0-9]+|#[xX][0-9A-Fa-f]+);",
+              "description": "a text holding markup, a tag such as `<br>`, `<p>` or `</div>` or an HTML entity such as `&nbsp;` or `&lt;`; a reply is plain text, with a line break written as a line break, never a tag and never an entity"
+            },
+            "description": "The reply's text as plain text, exactly as the person approving it reads it and as the person it reaches will: a line break is a line break, and the plugin makes of the text whatever the provider's thread takes, so that the recipient reads exactly this text. Something other than white space and no markup — no tag and no HTML entity, which the person approving would read as written and the recipient would not — at most 12000 characters on email, the most `conversation.get` reads back of one message, and at most 8000 on LinkedIn, the most a LinkedIn message holds."
           },
           "reply_to_message": {
             "type": "object",

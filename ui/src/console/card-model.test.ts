@@ -197,7 +197,8 @@ describe('the people list', () => {
                     state: 'enrolled',
                     added_at: '2026-10-16T09:00:00.000Z',
                     updated_at: '2026-10-16T09:00:00.000Z',
-                    standing: ['waiting', 'sequence'],
+                    // A count this build has no word for is left out, as the People tab leaves it out.
+                    standing: ['waiting', 'sequence', 'paused'],
                 },
             ],
         };

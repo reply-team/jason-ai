@@ -44,6 +44,8 @@ public class InsideARunTests
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
         Operations.CampaignStart,
+        Operations.LaunchesLift,
+        Operations.CampaignReview,
     ];
 
     /// <summary>
@@ -68,6 +70,10 @@ public class InsideARunTests
         Assert.Equal(
             operation == Operations.CampaignStart
                 ? $"This request comes from inside attempt `{HeaderAttempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision."
+                : operation == Operations.LaunchesLift
+                ? $"This request comes from inside attempt `{HeaderAttempt}`. Lifting the daily limits of launches is a person's own word, given outside any run: a role leaves it to the person, or raises it as a decision."
+                : operation == Operations.CampaignReview
+                ? $"This request comes from inside attempt `{HeaderAttempt}`. Asking a campaign's manager for a review is a person's own word, given outside any run: a role leaves it to the cadence and the chronicle, or raises it as a decision."
                 : $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
             error.Message);
         Assert.Equal(before, await StateAsync(api));
@@ -120,7 +126,10 @@ public class InsideARunTests
     /// and a check-in that could start its own campaign under another actor would summon its own successor. A preference
     /// is among them for every key, not for the keys that steer sends alone: a preference
     /// is what a named person states, and in a dispatched run no person is there, so a run that names a person on any key
-    /// is what the refusal exists for. The gate is by operation and never reads the body, so it holds a key nobody has
+    /// is what the refusal exists for. A lift of the daily limits of launches is among them: a run that lifted them would
+    /// let every role in every campaign past them for the rest of the day on no person's word. A review asked of a campaign's
+    /// manager is among them: a run that asked for one would launch a check-in on no person's word, and a check-in that
+    /// asked for its own successor would review for ever. The gate is by operation and never reads the body, so it holds a key nobody has
     /// written yet; refusing some keys in the service instead would be a second mechanism the next sensitive key had to
     /// remember. The other verbs that take no default actor — a block's clear, a resume, a report and a subscription's
     /// rewind — are not among them: a resume and a report are a run's to make, and the rest are a person's already by
@@ -161,6 +170,78 @@ public class InsideARunTests
         Assert.Equal(
             [Operations.NotificationDisable, Operations.NotificationEnable, Operations.PluginGrant, Operations.PluginRevoke, Operations.ProfileSetDefault, Operations.ProfileUnsetDefault],
             Jason.Runtime.Api.InsideARun.ChangesJason.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A reopen is the person's decision carried two ways, and one of them is a run, so the gate cannot refuse it by
+    /// operation: from inside a run the service refuses one that names no question, with the gate's code and status and
+    /// whatever person it names, and changes nothing; one that names the question a person answered about the ended line
+    /// reopens it, the header and all.
+    /// </summary>
+    [Fact]
+    public async Task A_reopen_from_inside_a_run_needs_the_person_s_answered_question()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var campaign = await CampaignAsync(api);
+        var added = await api.PostOkAsync<AddContactsResult>(Operations.CampaignAddContacts, new { campaign_id = campaign, contacts = new[] { new { first_name = "Ingrid" } } }, Ct);
+        var ingrid = added.Items[0].ContactId!;
+        await api.PostOkAsync<FinishContactsResult>(Operations.CampaignFinishContacts, new { campaign_id = campaign, contact_ids = new[] { ingrid }, reason = "No answer.", actor = Ada }, Ct);
+        var before = await StateAsync(api);
+
+        var (status, text) = await api.PostAsync(Operations.CampaignReopenContacts, new { campaign_id = campaign, contact_ids = new[] { ingrid }, actor = Ada }, Inside, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"campaign.reopen_contacts answered {(int)status}: {text}");
+        var error = JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.Equal(
+            $"This request comes from inside attempt `{HeaderAttempt}`. Reopening a line is the person's decision: from inside a run, name the question they answered about it in decision_id, or raise it as a decision.",
+            error.Message);
+        Assert.Equal(before, await StateAsync(api));
+        Assert.DoesNotContain(Operations.CampaignReopenContacts, Jason.Runtime.Api.InsideARun.Refusing);
+
+        var (attempt, decision) = await AnsweredAboutTheEndAsync(api, campaign);
+        var asked = new Dictionary<string, string> { ["Jason-Attempt"] = attempt };
+        var (reopened, answer) = await api.PostAsync(
+            Operations.CampaignReopenContacts,
+            new { campaign_id = campaign, contact_ids = new[] { ingrid }, decision_id = decision, actor = new { type = "attempt", id = attempt }, reason = "She said yes." },
+            asked,
+            Ct);
+
+        Assert.True(reopened == HttpStatusCode.OK, $"campaign.reopen_contacts answered {(int)reopened}: {answer}");
+        var result = JsonSerializer.Deserialize<ReopenContactsResult>(answer, JasonJson.Options)!;
+        Assert.Equal(ReopenContactsItemStatus.Reopened, Assert.Single(result.Items).Status);
+    }
+
+    /// <summary>The manager's run that asked whether to write to the person again, and the question a person answered.</summary>
+    private static async Task<(string Attempt, string Decision)> AnsweredAboutTheEndAsync(RuntimeApiFixture api, string campaignId)
+    {
+        var now = Nine.UtcDateTime;
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignId, Ct);
+        var line = await db.Journal.AsNoTracking().SingleAsync(e => e.CampaignId == campaign.Id && e.Kind == Jason.Runtime.Journal.JournalKinds.ContactsFinished, Ct);
+        var item = WorkItemFactory.NewAiRole(campaign, "manager", now: now);
+        item.Status = WorkItemStatus.Processing;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, now);
+        db.WorkItems.Add(item);
+        var decision = new Decision
+        {
+            PublicId = "dec_01K7QN0000000000000000000B",
+            Campaign = campaign,
+            WorkItem = item,
+            Attempt = attempt,
+            Question = "Write to Ingrid again?",
+            References = [new JsonObject { ["kind"] = "journal_entry", ["id"] = line.PublicId }],
+            Status = DecisionStatus.Answered,
+            RaisedAt = now,
+            Answer = "Yes.",
+            AnsweredAt = now,
+            AnsweredByType = ActorType.Human,
+            AnsweredById = "ada",
+        };
+        db.Decisions.Add(decision);
+        await db.SaveChangesAsync(Ct);
+        return (attempt.PublicId, decision.PublicId);
     }
 
     public static TheoryData<string> OtherVerbs =>
@@ -250,6 +331,16 @@ public class InsideARunTests
             case Operations.CampaignGet:
                 return new { campaign_id = await CampaignAsync(api) };
 
+            case Operations.LaunchesLift:
+                return new { actor = Ada, reason = "a launch day" };
+
+            case Operations.CampaignReview:
+                {
+                    var campaign = await CampaignAsync(api);
+                    await api.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = campaign, actor = Ada }, Ct);
+                    return new { campaign_id = campaign, depth = "deep", actor = Ada, reason = "before the board meeting" };
+                }
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(operation), operation, "No world is arranged for this verb.");
         }
@@ -288,6 +379,7 @@ public class InsideARunTests
         db.Campaigns.Add(campaign);
         var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", now);
         item.Status = WorkItemStatus.AwaitingApproval;
+        item.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
         item.Contact = new Contact { PublicId = "cnt_" + id[4..], FirstName = "Ada", LastName = "Lovelace", CreatedAt = now, UpdatedAt = now };
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);

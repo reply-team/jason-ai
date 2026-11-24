@@ -30,10 +30,14 @@ public static class Operations
     public const string CampaignStart = "campaign.start";
     public const string CampaignPause = "campaign.pause";
     public const string CampaignArchive = "campaign.archive";
+    public const string CampaignReview = "campaign.review";
     public const string CampaignUpdateContext = "campaign.update_context";
     public const string CampaignSetSendMode = "campaign.set_send_mode";
     public const string CampaignAddContacts = "campaign.add_contacts";
     public const string CampaignRemoveContacts = "campaign.remove_contacts";
+    public const string CampaignFinishContacts = "campaign.finish_contacts";
+    public const string CampaignContinueContacts = "campaign.continue_contacts";
+    public const string CampaignReopenContacts = "campaign.reopen_contacts";
     public const string CampaignListContacts = "campaign.list_contacts";
     public const string CampaignSummary = "campaign.summary";
     public const string CampaignActivity = "campaign.activity";
@@ -82,6 +86,9 @@ public static class Operations
     public const string BlockList = "block.list";
     public const string BlockGet = "block.get";
     public const string BlockClear = "block.clear";
+
+    public const string LaunchesList = "launches.list";
+    public const string LaunchesLift = "launches.lift";
 
     public const string DecisionRaise = "decision.raise";
     public const string DecisionAnswer = "decision.answer";

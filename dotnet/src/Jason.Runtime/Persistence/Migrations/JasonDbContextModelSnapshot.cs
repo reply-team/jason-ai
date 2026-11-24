@@ -517,6 +517,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DeepReviewDueAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deep_review_due_at");
+
                     b.Property<DateTime?>("EventsFrom")
                         .HasColumnType("TEXT")
                         .HasColumnName("events_from");
@@ -1651,6 +1655,53 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.LaunchLimitLift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("local_date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("time_zone");
+
+                    b.HasKey("Id")
+                        .HasName("pk_launch_limit_lifts");
+
+                    b.HasIndex("LocalDate", "TimeZone")
+                        .IsUnique()
+                        .HasDatabaseName("ix_launch_limit_lifts_local_date_time_zone");
+
+                    b.ToTable("launch_limit_lifts");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Preference", b =>
                 {
                     b.Property<int>("Id")
@@ -2581,6 +2632,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("due_at");
 
+                    b.Property<string>("Entry")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("entry");
+
                     b.Property<string>("ExecutionProfile")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT")
@@ -3000,7 +3055,7 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_campaign_contacts_campaigns_campaign_id");
 
                     b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
-                        .WithMany()
+                        .WithMany("Memberships")
                         .HasForeignKey("ContactId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
@@ -3336,6 +3391,8 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Channels");
 
                     b.Navigation("ExternalIds");
+
+                    b.Navigation("Memberships");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfile", b =>

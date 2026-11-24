@@ -85,11 +85,29 @@ public sealed class ManagerOptions
     ];
 
     /// <summary>
-    /// How often an active campaign is reviewed when nothing has happened to it. Five hours by default: a
-    /// manager is a person running dailies, not a process watching a queue. A campaign may ask for its own pace
-    /// within the same bounds.
+    /// How often an active campaign is given a quick look when nothing has happened to it, counted from its last review
+    /// of any kind. Six hours by default: a manager is a person running dailies, not a process watching a queue. A
+    /// campaign may ask for its own pace within the same bounds.
     /// </summary>
-    public int ReviewSeconds { get; set; } = 18_000;
+    public int ReviewSeconds { get; set; } = 21_600;
+
+    /// <summary>
+    /// The interval of the deep review's grid: the first moment is this long after a campaign goes live, and every deep
+    /// review moves it on by whole intervals. A day by default. The installation's alone — no campaign carries its own —
+    /// and held to the bounds a campaign's quick pace is held to, so a scenario on a real machine can reach a deep review
+    /// in minutes rather than in a day.
+    /// </summary>
+    public int DeepReviewSeconds { get; set; } = 86_400;
+
+    /// <summary>
+    /// The reserve's default: the <c>audience_threshold</c> the runtime gives a campaign at its first start, from
+    /// <c>draft</c>, where the campaign holds none and its people come from a search that can top it up — an audience it
+    /// holds, or a search recorded for it. Twenty by default, one batch of the people a manager starts on at once, so the
+    /// reserve is said to be low while a top-up can still keep the next batch full. Read at each first start and held to
+    /// the range a campaign's own threshold is held to. A resume never reads it, and a campaign already live is never
+    /// given it.
+    /// </summary>
+    public int AudienceThreshold { get; set; } = 20;
 
     /// <summary>
     /// The budget of one check-in. A review reads a campaign and says what it thinks; the hour an

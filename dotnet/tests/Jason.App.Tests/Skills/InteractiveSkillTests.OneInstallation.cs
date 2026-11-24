@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Jason.Cli;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -13,6 +14,7 @@ public partial class InteractiveSkillTests
     /// updating this Jason. It never sends an agent round the refusal by restoring, deleting or starting an older build.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_names_a_newer_database_and_its_one_repair()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -32,6 +34,7 @@ public partial class InteractiveSkillTests
     /// agent to hand the person a browser's link again.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_skills_say_jason_ui_open_opens_jason_desktop_and_never_a_browser()
     {
         foreach (var name in new[] { "operating-the-installation", "managed-campaign-work" })
@@ -54,6 +57,7 @@ public partial class InteractiveSkillTests
     /// the desktop is open, in the code the verb refuses with.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_the_one_uninstall()
     {
         var skill = Flattened("operating-the-installation");
@@ -70,6 +74,7 @@ public partial class InteractiveSkillTests
     /// own apply while an update stands unfinished, never a resume in the middle of it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_names_the_dispatcher_check_and_its_repairs_once()
     {
         var skill = Flattened("operating-the-installation");
@@ -89,6 +94,7 @@ public partial class InteractiveSkillTests
     /// hand sets the machine up at its first start, and that a person is sent to open Jason Desktop rather than download it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_how_the_carried_update_goes_and_what_a_held_lock_means()
     {
         var skill = Flattened("operating-the-installation");
@@ -113,6 +119,7 @@ public partial class InteractiveSkillTests
     /// it never stops work.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_skills_say_how_a_command_line_install_moves_into_Jason_Desktop()
     {
         var operating = Flattened("operating-the-installation");

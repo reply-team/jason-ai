@@ -9,7 +9,12 @@ public enum CampaignStatus
     Archived,
 }
 
-/// <summary>Where a contact stands inside one campaign. Removal is the soft state <c>excluded</c>, never a deletion.</summary>
+/// <summary>
+/// Where a contact stands inside one campaign. Removal is the soft state <c>excluded</c>, never a deletion. A line ended
+/// by <c>campaign.finish_contacts</c> is <c>finished</c>, which the claim refuses a touch until
+/// <c>campaign.reopen_contacts</c> enrols the person again; <c>paused</c> is a person whose line is paused, whom
+/// <c>campaign.continue_contacts</c> enrols again.
+/// </summary>
 public enum MembershipState
 {
     Enrolled,
@@ -141,7 +146,8 @@ public enum ContactListOrder
 
 /// <summary>
 /// Where a campaign's people stand now, one count each. A person may be in several at once, and the counts need not add
-/// up to the campaign's people: <c>docs/work-execution.md</c> defines each one.
+/// up to the campaign's people: <c>docs/work-execution.md</c> defines each one. <c>Paused</c> and <c>Finished</c> are
+/// the members whose line is in that state.
 /// </summary>
 public enum CampaignSummaryFilter
 {
@@ -152,6 +158,8 @@ public enum CampaignSummaryFilter
     Idle,
     Sequence,
     Out,
+    Paused,
+    Finished,
     Removed,
 }
 
@@ -357,6 +365,37 @@ public enum RemoveContactsItemStatus
     Removed,
     NotMember,
     AlreadyExcluded,
+    Rejected,
+}
+
+/// <summary>Outcome of one item of <c>campaign.finish_contacts</c>.</summary>
+public enum FinishContactsItemStatus
+{
+    Finished,
+    AlreadyFinished,
+    NotMember,
+    Excluded,
+    Rejected,
+}
+
+/// <summary>Outcome of one item of <c>campaign.continue_contacts</c>.</summary>
+public enum ContinueContactsItemStatus
+{
+    Continued,
+    NotPaused,
+    NotMember,
+    Excluded,
+    Rejected,
+}
+
+/// <summary>Outcome of one item of <c>campaign.reopen_contacts</c>.</summary>
+public enum ReopenContactsItemStatus
+{
+    Reopened,
+    NotFinished,
+    NotMember,
+    Excluded,
+    NotInDecision,
     Rejected,
 }
 

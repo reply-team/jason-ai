@@ -57,7 +57,8 @@
             "scope": "account",
             "reason": "billing"
           }
-        }
+        },
+        "entry": null
       }
     ],
     "next_cursor": null

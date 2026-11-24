@@ -289,7 +289,7 @@ public sealed partial class CanonicalReadsDocTests
     {
         var text = Flat(Source("docs/work-execution.md"));
         var start = text.IndexOf("2. its campaign is `active`", StringComparison.Ordinal);
-        var end = text.IndexOf("3. `not_before`", start, StringComparison.Ordinal);
+        var end = text.IndexOf("3. it is not a touch of a person paused in its campaign", start, StringComparison.Ordinal);
         var item = text[start..end];
 
         Assert.Contains("— or `paused`", item, StringComparison.Ordinal);
@@ -341,7 +341,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The table of the claim's twenty-eight answers says, at row 10, which operations the suppression register does not
+    /// The table of the claim's thirty answers says, at row 10, which operations the suppression register does not
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]

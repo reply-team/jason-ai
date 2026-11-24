@@ -24,6 +24,7 @@ import {
     WorkItemSummary,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
+import { sentence } from '../attention/message-edit';
 import { keepEdited, withdrawn } from '../attention/reasking';
 import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
@@ -85,7 +86,8 @@ function failureText(error: unknown): string | null {
         session.clear();
         return null;
     }
-    return error instanceof ApiError ? error.message : String(error);
+    // The runtime's words, and the first detail after them where it names a field: what to change.
+    return sentence(error);
 }
 
 export function fail(error: unknown, into = failure): void {

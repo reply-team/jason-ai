@@ -841,9 +841,11 @@ export interface JasonDesktop {
         open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
         /**
          * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
-         * without one, a new set-up chat. A conversation newly made is in Full access, its `mode` saying so in this answer.
+         * without one, a new chat about no campaign: with `begun` the word `start`, one begun from Start's box, which its
+         * header says is where a campaign is set up; without it, the Chats plus's plain chat about no agent. A
+         * conversation newly made is in Full access, its `mode` saying so in this answer.
          */
-        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        create(campaignId?: string, begun?: 'start'): Promise<DesktopConversation | DesktopRefusal>;
         /**
          * New GTM agent's click: the desktop makes a campaign in the default project, "New agent N" after the highest
          * number such a name carries, archived agents included, under the key `clickId` gives it, and its conversation,

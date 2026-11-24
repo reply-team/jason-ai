@@ -35,7 +35,7 @@ directions.
 - Use when you are unsure whether an earlier approval still covers what you are about to do.
   The answer is usually no; this skill says when.
 - Do NOT use it to look up provider mechanics — scoped credentials and their enforcement
-  belong to the adapter pack.
+  belong to the provider's plugin.
 - Do NOT restate the derivation inside another skill. Two copies of a gate is how one of them
   ends up wrong; read it here.
 - Do NOT treat it as optional because the user seems in a hurry. Speed is not consent, and
@@ -116,7 +116,9 @@ the operation. Neither is fixed at execution time.
   renders over the composed input, and the review binds to those. What went out is read
   afterwards: `message.status` carries the sent text where the provider gives it, and the thread,
   `conversation.get`, carries it where the provider does not, once the thread holds the message.
-  Then wait.
+  Then wait. All of these, said about a list you showed them, is their word for each item where
+  each one's content was shown. Where it was not, say once how many would go out unread and ask
+  whether to show them first or approve them as they are; their answer is their word.
 
 ### A departure names its reason
 
@@ -182,7 +184,8 @@ refusal is at send time; a batch prepared against an earlier preview is re-scree
 - **Explicit.** A clear yes to the specific thing described. Silence is not consent, neither is
   "sounds good" to an earlier different question, nor the absence of an objection.
 - **Current.** Given in this conversation, about this action, after seeing what it does — for a
-  previewed call, after seeing the preview.
+  previewed call, after seeing the preview, or after being told how many would go out unread and
+  choosing to approve them as they are.
 - **Specific.** An approval covers the action described and nothing else. Approving one call
   over 214 contacts does not approve the next call. Approving `campaign.activate` does not
   approve a later `step.update` to the live campaign, which is its own act whose magnitude is
@@ -322,8 +325,8 @@ picked up; `escalation.resolve` records how it ended and whether the work return
 **Pre-authorisation is bounded**, conversationally and mechanically. A decision the user made in
 advance about a bounded scope — this campaign, this list, this volume, this window — is not a
 blanket permission; and the credential the run holds is scoped to only what the workflow needs,
-so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The adapter
-pack documents how the scoping is expressed.
+so a misbehaving agent *cannot* exceed the boundary even where its reasoning fails. The provider's
+plugin documents how the scoping is expressed.
 
 **A gate hit always leaves a record.** A silent stall is indistinguishable from a crash.
 `approval.request` and `escalation.raise` are that record while the run is alive;

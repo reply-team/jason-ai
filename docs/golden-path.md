@@ -328,9 +328,9 @@ provider's campaign, no read of Jason's fails over it.
 
 This is a real send, and it cannot be undone: one email that arrives, from one of your mailboxes at the provider, to
 your own address — the address you stated for `contacts.json` in step 6, never one taken from the account or guessed.
-It is the check for a message sent on its own, outside any provider campaign (`message.send`), as steps 6 to 8 are
-the check for an enrolment. It is run only when you ask for it. An agent proposes it, says what it will do, and runs
-nothing until you say yes.
+It is the check for a message sent on its own, not through one of the provider's campaigns (`message.send`), as
+steps 6 to 8 are the check for an enrolment. It is run only when you ask for it. An agent proposes it, says what it will
+do, and runs nothing until you say yes.
 
 Three things happen that you cannot take back. The message arrives. It counts against the allowance of the mailbox it
 goes from. And the provider may create you as a contact of its own, if it holds nobody under your address.

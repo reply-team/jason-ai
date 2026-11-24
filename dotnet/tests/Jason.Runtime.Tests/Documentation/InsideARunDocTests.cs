@@ -53,6 +53,31 @@ public sealed partial class InsideARunDocTests
         Assert.Equal(InsideARun.Refusing.Order(StringComparer.Ordinal), InsideARun.PersonsWord.Concat(named).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// A reopen is refused from inside a run by the operation itself, not by the gate, since a run carrying the person's
+    /// answered question is one of its two ways: the page says so beside the gate's operations, with the gate's status and
+    /// code, and in the operation's own line, in the order the service refuses.
+    /// </summary>
+    [Fact]
+    public void The_runtime_api_page_says_a_reopen_from_inside_a_run_needs_the_persons_answered_question()
+    {
+        var page = Flat(Page("runtime-api.md"));
+        var section = Flat(Section(Page("runtime-api.md"), "## How a program authorises"));
+        var refusal = DomainErrors.ReopenInsideARun("att_x");
+
+        Assert.DoesNotContain(Contracts.Api.Operations.CampaignReopenContacts, InsideARun.Refusing);
+        Assert.Equal((Refusal.StatusCode, Refusal.Code), (refusal.StatusCode, refusal.Code));
+        Assert.Contains(
+            $"Nor does `campaign.reopen_contacts`: a reopen is the person's decision, which a run carries only as the question the person answered, so one sent from there that names no `decision_id` is answered `{Status}` `{Refusal.Code}` by the operation itself, whatever person it names, and changes nothing.",
+            section,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"Refused, in this order: no named actor, `actor_required`; with no `decision_id`, a request from inside a run, `{Status}` `{Refusal.Code}`, and an actor that is no person, `{DomainErrors.ReopenNotHuman(Contracts.Api.ActorType.Role).Code}`;",
+            page,
+            StringComparison.Ordinal);
+        Assert.Contains("The runtime does not read the answer's words: the manager reopens only on an answer that says yes.", page, StringComparison.Ordinal);
+    }
+
     /// <summary>The bullet that lists a person's decisions lists exactly the ones that refuse, the rule, and what it is worth.</summary>
     [Fact]
     public void The_runtime_api_page_says_a_persons_decision_is_refused_from_inside_a_run_as_a_higher_bar()
@@ -79,7 +104,7 @@ public sealed partial class InsideARunDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"An approval, an answer, a preference, a campaign's send mode or its start sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
+            $"An approval, an answer, a preference, a campaign's send mode or its start, a lift of the daily limits, or a review asked of a campaign's manager, sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
             page,
             StringComparison.Ordinal);
     }

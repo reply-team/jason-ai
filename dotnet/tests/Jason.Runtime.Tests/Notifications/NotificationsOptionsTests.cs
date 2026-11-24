@@ -24,6 +24,33 @@ public sealed class NotificationsOptionsTests
         Assert.Equal(30, options.MinIntervalMinutes);
         Assert.Empty(options.Plugins);
         Assert.True(options.AnyChannel);
+        Assert.True(options.Replies);
+    }
+
+    /// <summary>
+    /// Replies are said unless a line of the settings file says otherwise; the switch is that line alone, and turning it off
+    /// leaves every channel as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Notifications":{"Replies":false}}""", false)]
+    [InlineData("""{"Notifications":{"Replies":true}}""", true)]
+    [InlineData("""{"Notifications":{"Toast":false}}""", true)]
+    public void Replies_are_said_unless_the_file_turns_them_off(string settings, bool replies)
+    {
+        var options = Read(settings);
+
+        Assert.Equal(replies, options.Replies);
+        Assert.Equal(!settings.Contains("Toast", StringComparison.Ordinal), options.AnyChannel);
+    }
+
+    /// <summary>A switch written as anything but a switch is refused by its path, as every mistyped setting is.</summary>
+    [Fact]
+    public void A_replies_switch_that_is_no_switch_is_refused_by_its_path()
+    {
+        var refused = Assert.Single(Validate("""{"Notifications":{"Replies":"sometimes"}}"""));
+
+        Assert.Contains("Notifications:Replies", refused, StringComparison.Ordinal);
+        Assert.DoesNotContain("sometimes", refused, StringComparison.Ordinal);
     }
 
     /// <summary>The defaults survive a settings file that does not mention the section at all.</summary>

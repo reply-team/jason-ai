@@ -16,6 +16,7 @@ import { approveWhole, fillApprovals, wholeReads } from '../../console/waiting';
 import { mergePage } from '../../lists/paging';
 import { displayName } from '../../pickers/search';
 import type { Tab, WorkItemFilters } from '../../router';
+import { sentence } from '../attention/message-edit';
 import { attentionStore } from '../attention/store';
 
 export type View = { tab: Tab; filters: WorkItemFilters };
@@ -92,7 +93,8 @@ function fail(error: unknown): void {
         session.clear();
         return;
     }
-    failure.value = error instanceof ApiError ? error.message : String(error);
+    // The runtime's words, and the first detail after them where it names a field: what to change.
+    failure.value = sentence(error);
 }
 
 /** The tab's first page and the three counts, together; an answer to a view the person has already left is dropped. */

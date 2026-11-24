@@ -43,7 +43,7 @@ behind it.
   is read there, not reconstructed here. What this skill adds is which action to reach for
   first, which is a different question from what it costs to ask.
 - Not a statement of what any provider supports. An operation named here is a job an SDR
-  organisation does; whether an installation fulfils it is the adapter's claim to make.
+  organisation does; whether an installation fulfils it is the provider's plugin's claim to make.
 
 ## Prerequisites
 

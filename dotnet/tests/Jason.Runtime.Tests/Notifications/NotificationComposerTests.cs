@@ -5,6 +5,8 @@ namespace Jason.Runtime.Tests.Notifications;
 /// <summary>A pointer says how many things wait and where to look, and nothing about any of them.</summary>
 public sealed class NotificationComposerTests
 {
+    private const string Lift = "To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.";
+
     [Theory]
     [InlineData(1, 0, "1 approval is waiting in Jason.")]
     [InlineData(30, 0, "30 approvals are waiting in Jason.")]
@@ -100,10 +102,10 @@ public sealed class NotificationComposerTests
 
     /// <summary>A hold alone says how many items wait and sends a person to the one list that shows them.</summary>
     [Theory]
-    [InlineData(1, "1 item waits on a budget.")]
-    [InlineData(3, "3 items wait on a budget.")]
-    [InlineData(10_000, "10k+ items wait on a budget.")]
-    public void A_hold_alone_says_how_many_items_wait_on_a_budget(int held, string summary)
+    [InlineData(1, "1 item waits on a daily limit. " + Lift)]
+    [InlineData(3, "3 items wait on a daily limit. " + Lift)]
+    [InlineData(10_000, "10k+ items wait on a daily limit. " + Lift)]
+    public void A_hold_alone_says_how_many_items_wait_on_a_daily_limit_and_how_to_lift_it(int held, string summary)
     {
         var message = NotificationComposer.Compose(0, 0, held: held);
 
@@ -117,12 +119,12 @@ public sealed class NotificationComposerTests
     /// one list of work items, and where it says both, one filter shows both.
     /// </summary>
     [Theory]
-    [InlineData(true, false, false, false, "2 approvals are waiting in Jason. 3 items wait on a budget.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status waiting.")]
-    [InlineData(false, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a budget.", "Ask your agent what failed and what is held, or run jason workitem list --status failed --status expired --status waiting.")]
-    [InlineData(true, true, false, false, "2 approvals are waiting in Jason. 1 protective action failed in Jason, in cmp_A. 3 items wait on a budget.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired --status waiting.")]
-    [InlineData(false, false, true, false, "3 items wait on a budget. 1 provider block holds 2 work items.", "Ask your agent, or run jason workitem list --status waiting and jason block list.")]
-    [InlineData(false, false, false, true, "3 items wait on a budget. 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status waiting and jason events sources.")]
-    [InlineData(false, true, true, true, "1 protective action failed in Jason. 3 items wait on a budget. 1 provider block holds 2 work items. 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting, jason block list and jason events sources.")]
+    [InlineData(true, false, false, false, "2 approvals are waiting in Jason. 3 items wait on a daily limit. " + Lift, "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status waiting.")]
+    [InlineData(false, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a daily limit. " + Lift, "Ask your agent what failed and what is held, or run jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(true, true, false, false, "2 approvals are waiting in Jason. 1 protective action failed in Jason, in cmp_A. 3 items wait on a daily limit. " + Lift, "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(false, false, true, false, "3 items wait on a daily limit. " + Lift + " 1 provider block holds 2 work items.", "Ask your agent, or run jason workitem list --status waiting and jason block list.")]
+    [InlineData(false, false, false, true, "3 items wait on a daily limit. " + Lift + " 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status waiting and jason events sources.")]
+    [InlineData(false, true, true, true, "1 protective action failed in Jason. 3 items wait on a daily limit. " + Lift + " 1 provider block holds 2 work items. 1 account has events Jason did not read.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting, jason block list and jason events sources.")]
     public void A_hold_beside_other_things_is_said_in_its_place_and_points_at_each_of_them(bool waiting, bool failed, bool blocked, bool gaps, string summary, string look)
     {
         var message = NotificationComposer.Compose(
@@ -146,10 +148,10 @@ public sealed class NotificationComposerTests
         var failures = new FailedProtectiveWork(5, ["cmp_A", "cmp_B", "cmp_C"], 2);
 
         Assert.Equal(
-            "5 protective actions failed in Jason, in cmp_A and 4 more. 1 item waits on a budget.",
+            "5 protective actions failed in Jason, in cmp_A and 4 more. 1 item waits on a daily limit. " + Lift,
             NotificationComposer.Compose(0, 0, failures, held: 1).Summary);
         Assert.Equal(
-            "5 protective actions failed in Jason. 1 item waits on a budget. 1 provider block holds 2 work items.",
+            "5 protective actions failed in Jason. 1 item waits on a daily limit. " + Lift + " 1 provider block holds 2 work items.",
             NotificationComposer.Compose(0, 0, failures, blocks: new HeldByBlocks(1, 2), held: 1).Summary);
     }
 
@@ -194,8 +196,8 @@ public sealed class NotificationComposerTests
     [InlineData(true, false, false, false, false, "2 approvals are waiting in Jason. 1 email bounced.", "Ask your agent, or run jason approval list and jason decision list.")]
     [InlineData(false, true, false, false, false, "1 protective action failed in Jason, in cmp_A. 1 email bounced.", "Ask your agent, or run jason workitem list --status failed --status expired.")]
     [InlineData(true, true, false, false, false, "2 approvals are waiting in Jason. 1 protective action failed in Jason, in cmp_A. 1 email bounced.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired.")]
-    [InlineData(false, false, true, false, false, "3 items wait on a budget. 1 email bounced.", "Ask your agent, or run jason workitem list --status waiting.")]
-    [InlineData(false, true, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a budget. 1 email bounced.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(false, false, true, false, false, "3 items wait on a daily limit. " + Lift + " 1 email bounced.", "Ask your agent, or run jason workitem list --status waiting.")]
+    [InlineData(false, true, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a daily limit. " + Lift + " 1 email bounced.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting.")]
     [InlineData(false, false, false, true, false, "1 provider block holds 2 work items. 1 email bounced.", "Ask your agent, or run jason block list.")]
     [InlineData(false, false, false, false, true, "1 account has events Jason did not read. 1 email bounced.", "Ask your agent, or run jason events sources.")]
     [InlineData(false, false, false, true, true, "1 provider block holds 2 work items. 1 account has events Jason did not read. 1 email bounced.", "Ask your agent, or run jason block list and jason events sources.")]
@@ -213,6 +215,62 @@ public sealed class NotificationComposerTests
         Assert.Equal((summary, look), (message.Summary, message.Look));
         Assert.Equal(1, message.Bounces);
     }
+
+    /// <summary>
+    /// A reply alone says how many replies came in and sends a person to their agent: no command lists the replies a role
+    /// judged a person's own, so none is named, and nothing of a reply is said.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "1 reply came in.")]
+    [InlineData(2, "2 replies came in.")]
+    [InlineData(9_999, "9999 replies came in.")]
+    [InlineData(10_000, "10k+ replies came in.")]
+    public void A_reply_alone_says_how_many_replies_came_in(int replies, string summary)
+    {
+        var message = NotificationComposer.Compose(0, 0, replies: replies);
+
+        Assert.Equal((summary, "Ask your agent who replied."), (message.Summary, message.Look));
+        Assert.Equal(NotificationComposer.LookAtReplies, message.Look);
+        Assert.Equal(replies, message.Replies);
+        Assert.Null(message.Item);
+    }
+
+    /// <summary>
+    /// Said straight after the approvals and questions, before everything else, and beside other things it names no command
+    /// of its own: where to look is the commands of the others, and the reply is left to the agent the pointer names first.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false, false, "1 approval is waiting in Jason. 1 reply came in.", "Ask your agent, or run jason approval list and jason decision list.")]
+    [InlineData(false, true, false, false, "1 reply came in. 1 protective action failed in Jason, in cmp_A.", "Ask your agent, or run jason workitem list --status failed --status expired.")]
+    [InlineData(false, false, true, false, "1 reply came in. 3 items wait on a daily limit. " + Lift, "Ask your agent, or run jason workitem list --status waiting.")]
+    [InlineData(false, false, false, true, "1 reply came in. 1 email bounced.", "Ask your agent.")]
+    [InlineData(true, false, false, true, "1 approval is waiting in Jason. 1 reply came in. 1 email bounced.", "Ask your agent, or run jason approval list and jason decision list.")]
+    public void A_reply_beside_other_things_is_said_after_what_waits_and_left_to_the_agent(bool waiting, bool failed, bool held, bool bounced, string summary, string look)
+    {
+        var message = NotificationComposer.Compose(
+            waiting ? 1 : 0,
+            0,
+            failed ? new FailedProtectiveWork(1, ["cmp_A"], 0) : null,
+            held: held ? 3 : 0,
+            bounces: bounced ? 1 : 0,
+            replies: 1);
+
+        Assert.Equal((summary, look), (message.Summary, message.Look));
+        Assert.Equal(1, message.Replies);
+    }
+
+    /// <summary>One approval beside a reply is still the one item a click can open: a reply is not a thing that waits.</summary>
+    [Fact]
+    public void One_item_beside_a_reply_is_still_carried() =>
+        Assert.Equal(Approval, NotificationComposer.Compose(1, 0, item: Approval, replies: 2).Item);
+
+    [Fact]
+    public void No_reply_is_no_sentence() =>
+        Assert.Equal(NotificationComposer.Compose(1, 0), NotificationComposer.Compose(1, 0, replies: 0));
+
+    [Fact]
+    public void A_negative_reply_count_is_not_a_pointer() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(0, 0, replies: -1));
 
     /// <summary>No bounce says nothing: no sentence and no command.</summary>
     [Fact]
@@ -232,22 +290,23 @@ public sealed class NotificationComposerTests
         Assert.Equal(Bound, NotificationComposer.MessageBound);
 
     /// <summary>
-    /// Every combination of the seven things a pointer says, every count at its longest and failed protective work with
-    /// three campaigns to name, fits the message the delivery contract takes; and where to look names the commands in the
-    /// order the things are said, until the next would pass the bound: the things said first keep their commands, a
-    /// command is left out only where naming it would pass the bound, and what is left out is the agent's.
+    /// Every combination of the eight things a pointer says, every count at its longest and failed protective work with
+    /// three campaigns to name, fits the message the delivery contract takes, and says every count it was given; and where
+    /// to look names the commands in the order the things are said, until the next would pass the bound: the things said
+    /// first keep their commands, a command is left out only where naming it would pass the bound, and what is left out is
+    /// the agent's.
     /// </summary>
     [Fact]
-    public void Every_combination_of_the_seven_fits_and_the_things_said_first_keep_their_commands()
+    public void Every_combination_of_the_eight_fits_and_the_things_said_first_keep_their_commands()
     {
         const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
         const int Count = int.MaxValue;
         var cut = 0;
-        for (var mask = 1; mask < 1 << 7; mask++)
+        for (var mask = 1; mask < 1 << 8; mask++)
         {
             var bits = mask;
             bool Has(int bit) => (bits & (1 << bit)) != 0;
-            var (approvals, decisions, failed, gaps, blocked, held, bounced) = (Has(0), Has(1), Has(2), Has(3), Has(4), Has(5), Has(6));
+            var (approvals, decisions, failed, gaps, blocked, held, bounced, replied) = (Has(0), Has(1), Has(2), Has(3), Has(4), Has(5), Has(6), Has(7));
             var pointer = NotificationComposer.Compose(
                 approvals ? Count : 0,
                 decisions ? Count : 0,
@@ -255,9 +314,15 @@ public sealed class NotificationComposerTests
                 gaps ? Count : 0,
                 blocked ? new HeldByBlocks(Count, Count) : null,
                 held: held ? Count : 0,
-                bounces: bounced ? Count : 0);
+                bounces: bounced ? Count : 0,
+                replies: replied ? Count : 0);
 
             Assert.True(pointer.Text.Length <= Bound, $"Combination {mask} is {pointer.Text.Length} characters; the delivery contract takes {Bound}: {pointer.Text}");
+
+            // Every count is said, however crowded the pointer: what gives way is a command, or the hold's way out.
+            Assert.Equal(replied, pointer.Summary.Contains("10k+ replies came in.", StringComparison.Ordinal));
+            Assert.Equal(bounced, pointer.Summary.Contains("10k+ emails bounced.", StringComparison.Ordinal));
+            Assert.Equal(held, pointer.Summary.Contains("10k+ items wait on a daily limit.", StringComparison.Ordinal));
 
             // Each thing's commands, in the order the things are said; failed protective work and a hold share one.
             var groups = new List<string[]>();
@@ -302,7 +367,7 @@ public sealed class NotificationComposerTests
             Assert.StartsWith("Ask your agent, or run ", pointer.Look, StringComparison.Ordinal);
         }
 
-        // The rule is seen at work: some combinations of the seven at their longest would not fit with every command named.
+        // The rule is seen at work: some combinations of the eight at their longest would not fit with every command named.
         Assert.True(cut > 0, "No combination left a command out, so the rule that leaves one out was never seen at work.");
 
         static string Named(string look)
@@ -364,43 +429,45 @@ public sealed class NotificationComposerTests
     /// <summary>
     /// Every shape a pointer with a hold can take, a bounce beside it or not, every count past four digits, held to its
     /// exact length. The longest two without a bounce are the hold beside both waits, failed protective work and a gap,
-    /// which names one campaign, and those with a block as well, which names none: 381 and 393 of the 400. With a bounce
-    /// beside each, the gap's command no longer fits and is left to the agent: 380 and 392.
+    /// which names one campaign, and those with a block as well, which names none: 386 and 398 of the 400. With a bounce
+    /// beside each, the gap's command no longer fits and is left to the agent: 385 and 397. A hold says the way out for today
+    /// (the lift sentence) only where the pointer still fits and still names every command it would have named without it, so a
+    /// crowded shape is the old pointer with its hold's new count words, and the shapes the sentence fits in grow by its length.
     /// </summary>
     [Theory]
     [Critical(Family.N3, "the message fits the contract")]
-    [InlineData(false, false, false, false, false, 102)]
-    [InlineData(true, false, false, false, false, 190)]
-    [InlineData(false, true, false, false, false, 241)]
-    [InlineData(true, true, false, false, false, 313)]
-    [InlineData(false, false, true, false, false, 153)]
-    [InlineData(false, false, false, true, false, 160)]
-    [InlineData(false, false, true, true, false, 221)]
-    [InlineData(true, false, true, false, false, 251)]
-    [InlineData(true, false, false, true, false, 258)]
-    [InlineData(true, false, true, true, false, 319)]
-    [InlineData(false, true, true, false, false, 227)]
-    [InlineData(false, true, false, true, false, 283)]
-    [InlineData(false, true, true, true, false, 295)]
-    [InlineData(true, true, true, false, false, 325)]
-    [InlineData(true, true, false, true, false, 381)]
-    [InlineData(true, true, true, true, false, 393)]
-    [InlineData(false, false, false, false, true, 110)]
-    [InlineData(true, false, false, false, true, 211)]
-    [InlineData(false, true, false, false, true, 233)]
-    [InlineData(true, true, false, false, true, 334)]
-    [InlineData(false, false, true, false, true, 174)]
-    [InlineData(false, false, false, true, true, 181)]
-    [InlineData(false, false, true, true, true, 242)]
-    [InlineData(true, false, true, false, true, 272)]
-    [InlineData(true, false, false, true, true, 279)]
-    [InlineData(true, false, true, true, true, 340)]
-    [InlineData(false, true, true, false, true, 248)]
-    [InlineData(false, true, false, true, true, 304)]
-    [InlineData(false, true, true, true, true, 316)]
-    [InlineData(true, true, true, false, true, 346)]
-    [InlineData(true, true, false, true, true, 380)]
-    [InlineData(true, true, true, true, true, 392)]
+    [InlineData(false, false, false, false, false, 212)]
+    [InlineData(true, false, false, false, false, 300)]
+    [InlineData(false, true, false, false, false, 351)]
+    [InlineData(true, true, false, false, false, 318)]
+    [InlineData(false, false, true, false, false, 263)]
+    [InlineData(false, false, false, true, false, 270)]
+    [InlineData(false, false, true, true, false, 331)]
+    [InlineData(true, false, true, false, false, 361)]
+    [InlineData(true, false, false, true, false, 368)]
+    [InlineData(true, false, true, true, false, 324)]
+    [InlineData(false, true, true, false, false, 337)]
+    [InlineData(false, true, false, true, false, 393)]
+    [InlineData(false, true, true, true, false, 300)]
+    [InlineData(true, true, true, false, false, 330)]
+    [InlineData(true, true, false, true, false, 386)]
+    [InlineData(true, true, true, true, false, 398)]
+    [InlineData(false, false, false, false, true, 220)]
+    [InlineData(true, false, false, false, true, 321)]
+    [InlineData(false, true, false, false, true, 343)]
+    [InlineData(true, true, false, false, true, 339)]
+    [InlineData(false, false, true, false, true, 284)]
+    [InlineData(false, false, false, true, true, 291)]
+    [InlineData(false, false, true, true, true, 352)]
+    [InlineData(true, false, true, false, true, 382)]
+    [InlineData(true, false, false, true, true, 389)]
+    [InlineData(true, false, true, true, true, 345)]
+    [InlineData(false, true, true, false, true, 358)]
+    [InlineData(false, true, false, true, true, 309)]
+    [InlineData(false, true, true, true, true, 321)]
+    [InlineData(true, true, true, false, true, 351)]
+    [InlineData(true, true, false, true, true, 385)]
+    [InlineData(true, true, true, true, true, 397)]
     public void Every_shape_of_a_pointer_with_a_hold_fits_the_delivery_contract(bool waiting, bool failed, bool blocked, bool gaps, bool bounced, int length)
     {
         const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -417,6 +484,115 @@ public sealed class NotificationComposerTests
 
         Assert.True(pointer.Text.Length <= bound, $"A pointer with a hold is {pointer.Text.Length} characters; the delivery contract takes {bound}: {pointer.Text}");
         Assert.True(pointer.Text.Length == length, $"This shape is {pointer.Text.Length} characters, not {length}: {pointer.Text}");
+    }
+
+    /// <summary>
+    /// The same shapes with a reply beside each, every count past four digits, held to their exact length. The reply's
+    /// sentence is always said, straight after what waits; where the pointer is full, the rule that already decides what
+    /// gives way decides again: the hold's way out goes first, and then the commands of the things said last. The longest is
+    /// the hold beside both waits, failed protective work, a block and a gap, with no bounce: 398 of the 400.
+    /// </summary>
+    [Theory]
+    [Critical(Family.N3, "the message fits the contract")]
+    [InlineData(false, false, false, false, false, 221)]
+    [InlineData(true, false, false, false, false, 322)]
+    [InlineData(false, true, false, false, false, 344)]
+    [InlineData(true, true, false, false, false, 340)]
+    [InlineData(false, false, true, false, false, 285)]
+    [InlineData(false, false, false, true, false, 292)]
+    [InlineData(false, false, true, true, false, 353)]
+    [InlineData(true, false, true, false, false, 383)]
+    [InlineData(true, false, false, true, false, 390)]
+    [InlineData(true, false, true, true, false, 346)]
+    [InlineData(false, true, true, false, false, 359)]
+    [InlineData(false, true, false, true, false, 310)]
+    [InlineData(false, true, true, true, false, 322)]
+    [InlineData(true, true, true, false, false, 352)]
+    [InlineData(true, true, false, true, false, 386)]
+    [InlineData(true, true, true, true, false, 398)]
+    [InlineData(false, false, false, false, true, 242)]
+    [InlineData(true, false, false, false, true, 343)]
+    [InlineData(false, true, false, false, true, 365)]
+    [InlineData(true, true, false, false, true, 361)]
+    [InlineData(false, false, true, false, true, 306)]
+    [InlineData(false, false, false, true, true, 313)]
+    [InlineData(false, false, true, true, true, 374)]
+    [InlineData(true, false, true, false, true, 299)]
+    [InlineData(true, false, false, true, true, 306)]
+    [InlineData(true, false, true, true, true, 367)]
+    [InlineData(false, true, true, false, true, 380)]
+    [InlineData(false, true, false, true, true, 331)]
+    [InlineData(false, true, true, true, true, 343)]
+    [InlineData(true, true, true, false, true, 373)]
+    [InlineData(true, true, false, true, true, 336)]
+    [InlineData(true, true, true, true, true, 330)]
+    public void Every_shape_of_a_pointer_with_a_hold_and_a_reply_fits_the_delivery_contract(bool waiting, bool failed, bool blocked, bool gaps, bool bounced, int length)
+    {
+        const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        const int Count = int.MaxValue;
+        var pointer = NotificationComposer.Compose(
+            waiting ? Count : 0,
+            waiting ? Count : 0,
+            failed ? new FailedProtectiveWork(Count, [Id, Id, Id], Count) : null,
+            gaps ? Count : 0,
+            blocked ? new HeldByBlocks(Count, Count) : null,
+            held: Count,
+            bounces: bounced ? Count : 0,
+            replies: Count);
+
+        Assert.True(pointer.Text.Length <= Bound, $"A pointer with a hold and a reply is {pointer.Text.Length} characters; the delivery contract takes {Bound}: {pointer.Text}");
+        Assert.True(pointer.Text.Length == length, $"This shape is {pointer.Text.Length} characters, not {length}: {pointer.Text}");
+        Assert.Contains("10k+ replies came in.", pointer.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The longest pointers with a reply beside the two shapes that compete for the longest without one, held to their exact
+    /// length, whatever the counts: the reply's sentence is said and the commands of the things said last give way for it —
+    /// 399 and 396 without a bounce, and 366 and 399 with one.
+    /// </summary>
+    [Theory]
+    [Critical(Family.N3, "the message fits the contract")]
+    [InlineData(9_999)]
+    [InlineData(10_000)]
+    [InlineData(int.MaxValue)]
+    public void The_longest_message_with_a_reply_fits_the_delivery_contract_whatever_the_counts(int count)
+    {
+        var id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        var failed = new FailedProtectiveWork(count, [id, id, id], count);
+        var withoutBlock = NotificationComposer.Compose(count, count, failed, eventGaps: count, replies: count);
+        var withBlock = NotificationComposer.Compose(count, count, failed, eventGaps: count, blocks: new HeldByBlocks(count, count), replies: count);
+        var withoutBlockBounced = NotificationComposer.Compose(count, count, failed, eventGaps: count, bounces: count, replies: count);
+        var withBlockBounced = NotificationComposer.Compose(count, count, failed, eventGaps: count, blocks: new HeldByBlocks(count, count), bounces: count, replies: count);
+
+        NotificationMessage[] pointers = [withoutBlock, withBlock, withoutBlockBounced, withBlockBounced];
+
+        Assert.All(pointers, pointer => Assert.True(pointer.Text.Length <= Bound, $"At {count} a longest pointer with a reply is {pointer.Text.Length} characters; the delivery contract takes {Bound}: {pointer.Text}"));
+        Assert.Equal([399, 396, 366, 399], pointers.Select(pointer => pointer.Text.Length));
+        Assert.All(pointers, pointer => Assert.Contains($"{(count > NotificationComposer.MaxSaid ? NotificationComposer.PastFourDigits : "9999")} replies came in.", pointer.Summary, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The way out for today is said straight after the hold's count, with no count and no name in it; where the pointer is
+    /// so crowded that it would pass the bound or cost a command, it is left out and the hold keeps its count and its command.
+    /// </summary>
+    [Fact]
+    public void The_way_out_is_said_after_the_hold_and_left_out_where_the_pointer_is_full()
+    {
+        var alone = NotificationComposer.Compose(0, 0, held: 2);
+        Assert.Equal("2 items wait on a daily limit. " + Lift, alone.Summary);
+        Assert.Equal(NotificationComposer.LiftHold, Lift);
+        Assert.Equal("Ask your agent what is held, or run jason workitem list --status waiting.", alone.Look);
+
+        var full = NotificationComposer.Compose(
+            int.MaxValue,
+            int.MaxValue,
+            new FailedProtectiveWork(int.MaxValue, ["cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"], int.MaxValue),
+            int.MaxValue,
+            new HeldByBlocks(int.MaxValue, int.MaxValue),
+            held: int.MaxValue,
+            bounces: int.MaxValue);
+        Assert.DoesNotContain("launches lift", full.Text, StringComparison.Ordinal);
+        Assert.Contains("10k+ items wait on a daily limit.", full.Summary, StringComparison.Ordinal);
     }
 
     /// <summary>A count is said as it is up to four digits, and past them as "10k+": a toast needs the size of it, not the figure.</summary>

@@ -275,8 +275,9 @@ internal sealed class CampaignWorld
         enroll.Result = new JsonObject { ["campaign_live"] = false };
         Approval(enroll, ApprovalStatus.Approved);
 
-        // Out: replied. His first reply was before the week; the follow-up line inside it doesn't count him again.
-        var jon = Enrolled("Jon");
+        // Out: replied. His first reply was before the week; the follow-up line inside it doesn't count him again. His line
+        // is ended since: Finished.
+        var jon = Enrolled("Jon", MembershipState.Finished);
         Reply(jon, written: new DateTime(2026, 10, 5, 11, 0, 0, DateTimeKind.Utc), moment: "2026-10-05T10:41:00.000Z");
         Reply(jon, written: At(14), moment: "2026-10-14T08:00:00.000Z");
 
@@ -320,8 +321,8 @@ internal sealed class CampaignWorld
             ["created_contact_ids"] = new JsonArray(),
         });
 
-        // Out: replied. Replied this week.
-        var rae = Enrolled("Rae");
+        // Out: replied. Replied this week, and her line is held on the reply: Paused.
+        var rae = Enrolled("Rae", MembershipState.Paused);
         Reply(rae, written: At(12), moment: "2026-10-12T08:00:00.000Z");
 
         // Out: replied in March; the line was written by this week's backfill. Not Replied this week.
@@ -385,10 +386,10 @@ internal sealed class CampaignWorld
         return contact;
     }
 
-    /// <summary>A member put into the provider's sequence before the week began.</summary>
-    private Contact Enrolled(string name)
+    /// <summary>A member put into the provider's sequence before the week began, their line standing in <paramref name="state"/>.</summary>
+    private Contact Enrolled(string name, MembershipState state = MembershipState.Enrolled)
     {
-        var contact = Member(name, Spring, Added);
+        var contact = Member(name, Spring, Added, state);
         Work(contact, "campaign.enroll", WorkItemStatus.Succeeded, Before);
         return contact;
     }

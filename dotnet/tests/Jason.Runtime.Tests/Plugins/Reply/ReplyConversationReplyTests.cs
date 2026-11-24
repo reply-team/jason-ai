@@ -593,6 +593,74 @@ public class ReplyConversationReplyTests
         Assert.Empty(account.Calls);
     }
 
+    // -------------------------------------------------------------------------------------------------------
+    // The text, as the recipient reads it
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The text a person approves is plain text, and Reply takes an email reply's body as HTML, so it reaches the CLI as
+    /// HTML that shows exactly that text — by the one function a direct email is written with: each character HTML reads
+    /// as markup escaped, and each line break, whichever way it is written, one `&lt;br&gt;`.
+    /// </summary>
+    [Fact]
+    public async Task An_email_reply_s_text_reaches_the_cli_as_html_that_shows_exactly_it()
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        const string text = "Hi Marta,\n\nQ&A: 2 < 3 and 5 > 4, it's \"fine\".\r\nBest,\rAda\u2028Jason";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(body: text)));
+
+        Assert.Equal(
+            "Hi Marta,<br><br>Q&amp;A: 2 &lt; 3 and 5 &gt; 4, it&#39;s &quot;fine&quot;.<br>Best,<br>Ada<br>Jason",
+            (string?)JsonNode.Parse(account.Calls[1].Body!)!["body"]);
+    }
+
+    /// <summary>
+    /// Reply takes a LinkedIn reply as text, so its text goes as written, its line breaks as line breaks and its angle
+    /// brackets as they are.
+    /// </summary>
+    [Fact]
+    public async Task A_linkedin_reply_s_text_goes_as_written()
+    {
+        var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
+        thread["contact"]!["linkedInProfileUrl"] = "https://www.linkedin.com/in/marta-alvarez";
+        using var account = new ReplyAccount().WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        const string text = "Hi Marta,\n\nQ&A: 2 < 3, and write to <ada@example.com>.\nBest, Ada";
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: Profile, body: text)));
+
+        Assert.Equal(text, (string?)JsonNode.Parse(account.Calls[1].Body!)!["body"]);
+    }
+
+    /// <summary>
+    /// Reply decodes an email's body before it reads it and drops a tag it does not know with everything after it, so an
+    /// email reply whose text holds a `&lt;` right before a letter, `/`, `!` or `?` — an address between angle brackets,
+    /// say — would arrive cut there. It is refused before anything is called, by the one check a direct email is held
+    /// to, and the refusal names the character without quoting the text; a `&lt;` before a space or a digit goes.
+    /// </summary>
+    [Theory]
+    [InlineData("Write to <marta@example.com> and Thursday works.", 10)]
+    [InlineData("Thursday works.\n<Marta, Ada", 17)]
+    [InlineData("<!-- a note -->", 1)]
+    public async Task An_email_reply_whose_text_holds_the_start_of_a_tag_is_refused_before_anything_is_called(string body, int position)
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(body: body)));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(
+            $"The body holds, at character {position}, a `<` Reply reads as markup, and Reply drops a tag it does not know with everything after it.",
+            (string?)error.Details!["reason"]);
+        Assert.Empty(account.Calls);
+    }
+
     [Fact]
     public async Task An_identifier_that_is_not_a_reply_thread_number_names_no_thread_and_nothing_is_called()
     {

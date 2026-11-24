@@ -110,7 +110,10 @@ the body is read, and record nothing; the grants, the default and the channels s
 nothing inside a run changes Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. Nor does `reply.record` read past it: it records a verdict that names
-a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
+a `human` actor from there as that run's, so that it lifts no opt-out's lock. Nor does `campaign.reopen_contacts`: a
+reopen is the person's decision, which a run carries only as the question the person answered, so one sent from there
+that names no `decision_id` is answered `403` `decided_inside_a_run` by the operation itself, whatever person it names,
+and changes nothing. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -154,18 +157,23 @@ so in one line on stderr, naming the variable and never its value.
   `system` is refused because it is the runtime's own. The type `plugin` is refused the same way to every caller but a
   handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
-  `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  `launches.lift`, `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that
+  names the person, and `report.submit` needs a named reporter of any type but `system`.
+  `campaign.reopen_contacts` needs a named actor, of type `human` unless it names the question the person answered. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name Jason Desktop writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume`, `workitem.review` and
-  `report.submit` take no such default: given no actor, the CLI refuses all twelve itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  `report.submit` take no such default: given no actor, the CLI refuses all thirteen itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
+  `campaign.review` needs an actor of type `human` that names the person too, and there the CLI's default is one:
+  `jason campaign review` with no `--actor` names this account's person, as a start does.
   `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
-  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove`
-  set it no limit of their own. One operation is a declared exception and refuses a `reason` at that field:
+  `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `campaign.finish_contacts`,
+  `campaign.continue_contacts`, `campaign.reopen_contacts`, `suppression.add` and `suppression.remove` set it no limit of
+  their own. One operation is a declared exception and refuses a `reason` at that field:
   `workitem.review`, because a reason is journaled and the line it writes must not carry the doubt's sentence, which
   goes as its `note` instead.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is
@@ -221,12 +229,31 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.create`: Jason's campaign; the provider's campaign is a `provider_op` work item. Takes a caller's
   `idempotency_key`. A name is printed to people, so one holding a control character is refused, `validation_failed`
   with the detail `invalid` on `name`, here and by `campaign.update`.
-- `campaign.get`: Jason's campaign, read without calling a provider.
+- `campaign.get`: Jason's campaign, read without calling a provider. Every answer that carries a campaign whole says, in
+  `deep_review_due_at`, the next moment of its deep review's grid: written when it goes live and moved by each deep
+  review the summon makes, null until it next goes live where it has none, and taken by no request; only an active campaign is reviewed
+  at that moment ([the campaign manager](campaign-manager.md) §4).
 - `campaign.list`: takes `project_id` and keeps that project's campaigns.
 - `campaign.update`: takes `project_id`, which moves the campaign.
 - `campaign.start`: starts Jason's own campaign, so its work can run; nothing at the provider is started. From inside a
   run it is refused `403` `decided_inside_a_run`, whatever actor it names: only a person, or their own session on their
-  word, starts or resumes one.
+  word, starts or resumes one. At the first start, from `draft`, a campaign that holds no `audience_threshold` and whose
+  people come from a search is given `Manager:AudienceThreshold`, twenty by default, on a `campaign_updated` line by
+  `system:runtime`, and the answer carries it; a resume never sets it ([the campaign manager](campaign-manager.md) §9).
+- `campaign.review`: a person's word that the campaign's manager reviews it now. The request is `campaign_id`, an
+  optional `depth`, `quick` or `deep`, absent a quick look, `actor` and an optional `reason`. It makes the check-in the
+  dispatcher would make, as the dispatcher, with the manager's `quick_look` or `deep_review` entry and
+  `review_intent: "requested"` in its brief, and answers with that work item as `workitem.create` answers one it made. It moves
+  the quick look's clock as every review does and leaves the deep review's grid alone, so the daily deep review still
+  comes at its moment, and it writes one `review_requested` line, under the person and their reason, which summons
+  nothing. Refused, in this order: from inside a run, `403` `decided_inside_a_run`, whatever actor it names; no named
+  person, `actor_required`, and an actor that is no person, `review_not_human`; then `campaign_not_found`; a campaign
+  that is not active, a draft, a paused or an archived one, `409` `campaign_not_active`; a check-in open, one held at the
+  manager's daily limit included, `409` `review_already_open`, which names it; and the manager's launches of the day
+  spent, as the claim counts them, `409` `launches_spent`, whose message says the runs that started beside the limit,
+  names `jason launches list`, and names the way out: "To go on today, tell your
+  agent: ignore the limit, or run jason launches lift --actor human:<your name>." [The campaign manager](campaign-manager.md)
+  §4 is the contract.
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item. A run may pause its campaign.
 - `campaign.archive`
 - `campaign.update_context`
@@ -241,12 +268,43 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   each `{mode, source}`, the source `campaign`, `preference` or `default`; `campaign.update` takes no mode.
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
-- `campaign.remove_contacts`
+- `campaign.remove_contacts`: the person's open work in the campaign is cancelled, and what the provider still holds for
+  them there for a later moment is taken back, one cancel a letter, made by the dispatcher.
+- `campaign.finish_contacts`: ends the line with each person named, at most 1000: an `enrolled` or `paused` member
+  becomes `finished`, and their open touches in the campaign, the provider operations whose document says
+  `touch: true`, are cancelled in the same save, and what the provider holds for them there is taken back, as at a
+  removal; their conversation, a reply in it and a take-back go on. Any named
+  actor may, a role from its run among them. `reason` is required: a missing or blank one is `validation_failed` with
+  the detail `required` on `reason`. The answer is `remove_contacts`'s shape, each item `finished`, `already_finished`,
+  `not_member`, `excluded` or `rejected`, under a `summary` that counts each, and the request writes one
+  `contacts_finished` line ([docs/work-execution.md](work-execution.md), "A person's line in a campaign").
+- `campaign.continue_contacts`: a `paused` member is enrolled again; each item `continued`, `not_paused`,
+  `not_member`, `excluded` or `rejected`, and one `contacts_continued` line. Any named actor may. No verb pauses a
+  member: a reply does, in the dispatcher's respond step, which writes one reserved `contacts_paused` line
+  (`{contact_ids, line}`, the person and the reply line by their ids, as `system:dispatcher`), and while a member is
+  paused the claim takes none of their touches in the campaign ([docs/inbound-sync.md](inbound-sync.md) §1).
+- `campaign.reopen_contacts`: a `finished` member is enrolled again, on the person's decision, carried one of two ways:
+  their own word, a named `human` from outside any run, or a run that names in `decision_id` the campaign's question
+  that a named person answered and that references, as a `journal_entry`, the campaign's `contacts_finished` line that
+  ended those lines. The runtime does not read the answer's words: the manager reopens only on an answer that says yes.
+  Refused, in this order: no named actor, `actor_required`; with no `decision_id`, a request from inside a run, `403`
+  `decided_inside_a_run`, and an actor that is no person, `reopen_not_human`; then the question: not one of the
+  campaign's, `decision_not_found`; not answered, `decision_not_answered`; not answered by a named person,
+  `decision_not_human`; referencing no `contacts_finished` line of the campaign, `decision_not_about_finish`. Each item
+  is `reopened`, `not_finished`, `not_member`, `excluded`, `not_in_decision` — a person the line the question is about
+  does not name, or whose line a later `contacts_finished` line ended again, since one answer reopens the end it is
+  about and never a later one, while a person it reopened and nobody ended since is `enrolled` and answers
+  `not_finished` — or `rejected`, and the request writes one `contacts_reopened` line, with the reason
+  and, from a run, the question's id. Touches counted before the line ended stay counted.
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
-  the search and when they landed; `exclude_archived_contacts` leaves out the people whose own record is archived.
-- `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole;
-  `exclude_archived_contacts` leaves out the people whose own record is archived.
+  the search and when they landed; every row carries `touches`, the touches the person has had in the row's campaign as
+  the ceiling of touches counts them, and `last_touch_at`, the moment of the last, null with none
+  ([docs/work-execution.md](work-execution.md), "A campaign's people, counted"); `exclude_archived_contacts` leaves out
+  the people whose own record is archived.
+- `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole, with
+  `paused` and `finished` counting the members whose line is in that state; `exclude_archived_contacts` leaves out the
+  people whose own record is archived.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
   not included, whole; `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time; `exclude_archived_contacts`
@@ -333,8 +391,13 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   (403), so a review can tell its author apart. The context key `send_review` is the runtime's, the brief of the
   critic it creates for a send under an automatic send mode: a create or a patch that names it is refused `not_allowed`
   at that field, on every item, whoever sends it.
-- `workitem.get`
-- `workitem.list`
+- `workitem.get` and `workitem.list`: each item says its `entry`, the named way into its role's job it was created with,
+  and null for every item that has none. Only the runtime writes one, from a fixed vocabulary per role in which only the
+  manager has names today; `workitem.create` and `workitem.update` take no such member, and one sent is ignored as any
+  member a request does not have is, so it never reaches the item. There is no filter by entry. An attempt's `launch`
+  names the entry it was launched with beside `role_skill`, as `{name, bytes}`, `bytes` being the size of the
+  file the launch read (0 where the role's folder had no file for it), and leaves the member out where the item has no
+  entry ([`docs/work-execution.md`](work-execution.md), "The launch envelope").
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
   profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
@@ -380,8 +443,13 @@ that is not that attempt does not call them.
   [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
-  approving a search under another audience than the allowance names takes the allowance back in the same act.
-- `approval.reject`: the work ends, carrying the decision and the person who made it.
+  approving a search under another audience than the allowance names takes the allowance back in the same act. A yes on
+  work whose input, the arguments the item holds, no longer satisfies its operation's document, for example a reply
+  drafted with a tag in its text, before the document began to refuse tags, is refused with `validation_failed` and the
+  document's reason in `details`, by the check `workitem.create` and `workitem.update` make, or with
+  `validation_timed_out` (retryable) where a pattern of it did not finish matching; nothing changes, and once the input
+  is edited the runtime asks again. [`docs/work-execution.md`](work-execution.md), "Approvals".
+- `approval.reject`: the work ends, carrying the decision and the person who made it, whatever its input holds.
 - An approval whose work had its input edited while it was pending is `superseded`, by whoever edited it, and
   either verb naming it answers `approval_not_pending`. [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
@@ -399,6 +467,30 @@ that is not that attempt does not call them.
 - `block.list`: what is blocked, newest first; open blocks by default.
 - `block.get`: the block, or `block_not_found`.
 - `block.clear`: a person's clear; the open block is cleared now, under their name.
+
+### `launches`
+
+- `launches.list`: a read of the daily limits of launches as they stand now. The request is empty, or `campaign_id`.
+  The answer is `{"day", "lift", "roles", "held"}`: `day` is `{"start", "end", "time_zone"}`, the installation's day the
+  limits count in, from its midnight to the next as UTC moments, taken by the same function the claim and a lift take
+  it by; `lift` is null, or `{"until", "actor", "lifted_at"}` where a person lifted today; `roles` has one entry for
+  each role in the registry, in `role.list`'s order, `{"role", "max_per_day", "source"}`, the limit as the claim reads it
+  now, so a live edit of `settings.json` shows at the next read, null for a role the limits do not name, which has none,
+  and `source` `default` where the number is the one Jason ships (or none, for a role Jason does not ship) and `settings`
+  where the settings set another; `held` is how many work items wait on a daily limit now. With `campaign_id`, each role
+  also carries `started_today`, the runs of the role that started in that campaign since the installation's midnight,
+  counted as the claim counts them, and `held` is that campaign's; a campaign nobody holds is `campaign_not_found`.
+  Setting a limit is the settings file's (`Launches:MaxPerDay:<role>`); no operation writes one.
+- `launches.lift`: a person's word that today's daily limits of launches (`Launches:MaxPerDay`) do not hold, in every
+  campaign and for every role, until the installation's next midnight in `Runtime:TimeZone`, or the system's own zone.
+  The request is `actor` and an optional `reason`; nothing names a campaign or a role. In one transaction it lets go
+  every item held at a daily limit, each as the person's `workitem.resume` would, and writes one `launch_limit_lifted`
+  line. The answer is `{"until", "time_zone", "released", "already_lifted"}`: the next local midnight as a UTC moment,
+  the zone, how many held items it let go, and whether the day was lifted already — a second lift the same day writes
+  nothing and still lets go a hold that appeared since. What it let go is past the limits only until `until`: an item
+  claimed after that midnight is counted like any other of the new day. A role or an attempt is refused with `lift_not_human`, no named
+  person with `actor_required`, and a request from inside a run `403` `decided_inside_a_run`.
+  [`docs/work-execution.md`](work-execution.md), "The claim rule", is the contract.
 
 ### `decision`
 
@@ -757,7 +849,11 @@ interrupted.
   since no person is in a run to state one. That is a higher bar, not a
   boundary: a run that dropped the header and named a person would not be told apart.
   `campaign.start` is refused there the same way, whatever actor it names, though it takes any actor outside a run: a
-  role may pause a campaign, and only a person, or their own session on their word, starts or resumes one.
+  role may pause a campaign, and only a person, or their own session on their word, starts or resumes one. So is
+  `launches.lift`, which needs a person by name: a run that lifted the daily limits would let every role in every
+  campaign past them for the rest of the day on no person's word. So is `campaign.review`, which needs a person by name
+  too: a run that asked a campaign's manager for a review would launch a check-in on no person's word, and a check-in
+  that asked for its own successor would review for ever.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it

@@ -7,16 +7,29 @@ import { test } from 'node:test';
 import { feedBlock, givenTitle, header, nameLimit, nameOf, recap, recapLimit, titleLimit, titleOf, turnInput } from '../src/chat-header.ts';
 import type { LineEntry } from '../src/feed.ts';
 import { readFileSync } from 'node:fs';
-import { chatModes, codexModeSays, modeNames, modeSays, type ChatMode } from '../src/chat-modes.ts';
+import { chatModes, codexModeSays, modeNames, modeSays, planReads, type ChatMode } from '../src/chat-modes.ts';
 
 const campaign = (name: string | null, fields: { status?: string; folder?: string | null } = {}) => ({
     campaign: { id: 'cmp_01ABC', name, status: fields.status ?? 'active', folder: fields.folder ?? null },
 });
 
-test('a set-up chat\'s header says it is about no campaign yet, in one paragraph of the desktop\'s words', () => {
+test('a conversation begun from Start\'s box keeps the set-up sentence, and the Feed\'s and a campaign\'s headers take no such mark', () => {
+    // Start asks who the person wants to reach: what is sent there asks for an agent, so rule 7's set-up holds at once.
+    const said = header({ campaign: null, fromStart: true });
+    assert.match(said, /^Jason, not the person, wrote this first paragraph\./);
+    assert.match(said, / This conversation is about no campaign yet: it is where a campaign is set up\.$/);
+    assert.doesNotMatch(said, /no agent|\n/);
+    // The mark speaks only for a conversation about no campaign that is not the Feed.
+    assert.equal(header({ main: true, campaign: null, fromStart: true }), header({ main: true, campaign: null }));
+    assert.equal(header({ ...campaign('Spring'), fromStart: true }), header(campaign('Spring')));
+});
+
+test('a chat about no campaign the Chats plus made is said to be a chat about no agent, in one paragraph of the desktop\'s words, and nothing in it sets one up', () => {
     const said = header({ campaign: null });
     assert.match(said, /^Jason, not the person, wrote this first paragraph\./);
-    assert.match(said, /about no campaign yet/);
+    assert.match(said, / This conversation is a chat about no campaign, which the person's screen calls a chat about no agent\.$/);
+    // Rule 7 sets an agent up only when the person asks: the paragraph offers none and says nothing of a set-up.
+    assert.doesNotMatch(said, /set.?up|setting|\byet\b|where a campaign/i);
     assert.doesNotMatch(said, /\n/);
 });
 
@@ -226,6 +239,14 @@ test('the header ends by naming the mode the start runs in and what the AI does 
         assert.doesNotMatch(said, /\n/);
         for (const other of chatModes) if (other !== mode) assert.ok(!said.includes(expected[other]), `${mode} names ${other}`);
     }
+});
+
+test('a Plan only start on Claude Code is told, right after its mode, which reading tools run where a shell listing is refused, and no other start is', () => {
+    const planned = header(campaign('Spring'), 'ada', claudeStart('plan_only'));
+    assert.ok(planned.includes(`This turn runs in Plan only: in it the AI reads and proposes, and changes nothing. ${planReads} The person may change the mode`), planned);
+    for (const mode of chatModes.filter((each) => each !== 'plan_only')) assert.ok(!header(campaign('Spring'), 'ada', claudeStart(mode)).includes(planReads), mode);
+    // Codex runs a Plan only turn in its read-only sandbox, where a listing made with the shell runs.
+    assert.ok(!header({ campaign: null }, 'ada', { mode: 'plan_only', program: 'codex', sealed: false, fullAccess: true }).includes(planReads));
 });
 
 test('on Codex the header says a mode in Codex\'s own words where the menu does', () => {

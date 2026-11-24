@@ -19,130 +19,221 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.49.3
+# Jason 0.50.0
 
-Jason Desktop is now the one window onto Jason. `jason ui open`, and a click on Jason's notification on Windows and now
-on Linux, open Jason Desktop at what waits for you, and never a browser: the browser tab's own screens and the chat in a
-tab are gone. A web interface of your own keeps its door: the runtime serves your build from `<data>/ui/custom/`,
-`jason ui pair` prints the link that pairs it, and `jason ui open --web` opens it in your browser.
+Jason 0.50 tunes how the work is done. A campaign's manager keeps two clocks, a quick look every six hours and a deep
+review once a day, each starting from where the last one stopped, and you can ask it for a review at any moment. Each
+person in a campaign has a line of their own: a reply pauses it, a ceiling of touches bounds it, and one command each
+ends, continues and reopens it. Every role has a daily limit of launches, counted by your installation's own day, and
+one word lifts it for today. The agent sets a campaign up with you and starts it on your yes, and your word outranks a
+rule of the skills.
 
-## What is new since 0.49.2
+## What is new since 0.49.3
 
-- **`jason ui open` opens Jason Desktop.** It opens the window on Needs you, and with `--approval <id>` or
-  `--question <id>` at that one item, through the desktop's own `jason-desktop:` link; `--no-open` prints that address
-  and opens nothing, for an agent to hand to you. It asks the runtime nothing and never opens a browser, so an id is
-  checked only for its kind and shape: one that is neither an approval's nor a question's is refused as the runtime
-  refuses an id it does not know (`approval_not_found`, `decision_not_found`). Where no Jason Desktop that takes its
-  links is installed for your account, as for a command-line install still waiting to move into it, it opens nothing
-  and refuses with `desktop_not_installed`. It no longer passes its own output streams to the program it starts, so a
-  program that reads its output to the end, an agent's tool call among them, is not kept waiting until the window
-  closes.
-  [Opening it](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#opening-it) says the rules on each
-  system.
-- **`jason ui pair` prints the link that pairs a page.** It sends the Runtime API's `ui.open`, which `jason ui open`
-  sent in 0.49.2, and prints what that printed: a link that pairs one page, once, within 60 seconds, with
-  `--approval <id>` or `--question <id>` at that item's address. It opens nothing. Jason Desktop pairs its own window
-  with it at each start.
-- **`jason ui open --web` opens a web interface of your own.** Where `<data>/ui/custom/` holds a build of your own,
-  an `index.html` and a `manifest.json` the runtime takes, it hands your default browser a link that pairs that
-  browser, as `jason ui pair`'s does, and `--web --no-open` prints the link. Without such a build it asks the runtime
-  nothing, opens nothing and refuses with `custom_ui_not_installed`: the release's own build is never opened in a
-  browser.
-  [A web interface of your own](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#a-web-interface-of-your-own)
-  says how such a page pairs, calls the Runtime API and follows the journal.
-- **On Linux, a click on Jason's notification opens Jason Desktop.** It opens at the one approval or question when
-  exactly one waits, and at Needs you otherwise, as `jason ui open` does; in 0.49.2 a click on it opened nothing of
-  Jason's on Linux. The notification waits on the session bus until it is clicked or dismissed, and the item's id stays
-  with the runtime: the notification server never receives it. Where notify-send hands on the click's activation token
-  (libnotify 0.8.8 and later), the window comes to the front. Where no Jason Desktop takes its links, nothing opens,
-  never a browser, and a second notification says why, in the words `jason ui open` would print. A click on a
-  notification from a runtime started at logon, before your desktop session set its display, opens the desktop all the
-  same, and a Jason Desktop a click started keeps running when the runtime stops. With dunst, the click is its middle
-  button.
-- **An AppImage's Jason Desktop takes its links.** Its menu entry, as the install line and the move from a command-line
-  install write it, now declares the `jason-desktop:` scheme and starts the file in a form xdg-open starts outside GNOME
-  and KDE too, and the folder's menu cache is written after it (`update-desktop-database`). So `jason ui open` and a
-  notification's click open an AppImage the install line placed or a command-line install moved into; an AppImage you
-  run from where you downloaded it has no menu entry and takes no links. The first start of this version brings the
-  entry an earlier version wrote for its file to this form, and leaves any other entry alone; `jason uninstall` writes
-  the menu cache again once the entry is gone.
-- **On Linux, a link goes where xdg-open would send it.** `jason ui open` and a click open Jason Desktop only where
-  xdg-open would start it for its scheme. Where your account's own default for `jason-desktop:` links names another
-  program, or a menu cache names an entry that is gone, they open nothing and refuse with a new code,
-  `desktop_links_elsewhere`, whose sentence names the file that sends the links elsewhere and the command or the line
-  that gives them back.
-- **A notification's click never opens a browser.** On Windows, with no Jason Desktop registered or its program gone,
-  the click opens nothing, where it opened the browser UI before, and where Windows cannot be handed the desktop's
-  address nothing else opens either.
-- **No second notification from Jason Desktop on Windows and Linux.** The runtime's notification opens Jason Desktop
-  on what waits, so the desktop no longer posts its own "Jason needs you" when its count rises; the tray's count and
-  Needs you stay. On macOS the desktop's own notification stays as it was.
-- **Jason Desktop is the one window.** Jason's screens, the Demo among them, are drawn in its window alone. Open in no
-  longer offers Browser, which opened the desktop's chat in a tab of your browser, and the desktop no longer listens on
-  `127.0.0.1` for such a tab. Over the release's build, a browser tab at the runtime's `/ui/` draws one sentence and
-  nothing else, whatever the address names: "This is the place for a web interface of your own. To build one, ask your
-  agent how." It has no link, no Demo and no console, reads no pairing and asks the runtime nothing. The page the
-  runtime serves may connect to its own origin and no other.
-- **The pages, the skills and the `ui` verbs' help say one window.** `docs/ui.md` is now the page of Jason Desktop's
-  screens, with a section on a web interface of your own, and the README, the other pages, the skills and the help of
-  the `ui` verbs say Jason Desktop, or a paired page, where they said the browser UI.
+**Your word, in the chat and in a terminal**
 
-## Fixed since 0.49.2
+- **Your word outranks a rule of the skills.** Where what you plainly ask departs from a rule the skills teach, the
+  agent says once what follows from departing and asks, then does what you answer. What the runtime itself refuses
+  stays refused, and the agent says so.
+- **A new chat from the Chats plus is a plain chat.** It answers what you ask and offers no set-up, and it sets an agent
+  up only when you ask for one. Start, with its box "Tell Jason what you sell and who you want to reach", still sets an
+  agent up at once.
+- **"Pause all" pauses at once.** A bare "pause all" pauses each campaign without asking first, and the agent then says
+  which were paused. A bare "all" for starting or archiving is still asked once.
+- **The command you name is the one run.** When you name a `jason` command yourself, `jason runtime status` say, the
+  agent runs that one. Where it is refused or does not exist, the agent says exactly what was answered, and never runs
+  another in its place.
+- **"All of these" covers what was shown.** Said about a list the agent showed, it is your word for each item whose
+  content was shown. Where some were not shown, the agent says how many would go out unread and asks whether to show
+  them first.
+- **A memory file is written on your word.** Otherwise the agent says the exact line and the file it would go in, and
+  asks once.
+- **Who decided, in the lists.** `jason approval list --human` has a DECIDED BY column, with the reason beside the actor
+  where a send mode or a standing approval let an approval go, for example `system:dispatcher (automatic_mode)`.
+  `jason decision list --human` has an ANSWERED BY column.
+- **What you read is in your language.** The chat's short lines between actions are in your language too.
+- **A memory file is what the agents plan by.** They read it and plan by it. It is never a rule Jason enforces: a
+  message you approved on a Friday goes out whatever a file says about Fridays, and the chat says so.
+- **On Codex, Ask first and Auto-edit read and propose.** Codex never asks in these chats, so they only read and
+  propose, and the chat now says so: nothing written there reaches a person without your approval.
+- **Plan only on Claude Code reads a folder with its own tools.** Asked what is in a folder, the chat reads it with its
+  reading tools instead of stopping at the refused shell line.
+- **In Plan only, the chat says why it cannot read outside its folders.** Claude Code refuses such a read on its own, so
+  there is no card to approve; the chat now tells you, and that another mode can let it read there.
 
-- **Jason Desktop puts the role skills back after `jason uninstall` kept the data.** Installing the same version of
-  Jason Desktop again after such an uninstall, the AppImage started by hand or the deb installed with
-  `sudo apt install ./jason-desktop-linux-x64.deb` say, set up the terminal command and the agents' skills but not the
-  role skills, so `jason status` read Not ready, failing `role_skills`. On every system, a start of Jason Desktop where
-  `jason status` finds no record of the role skills' deployment now deploys them from the package it carries, however
-  they went, so `jason status` no longer fails `role_skills`.
-- **A new chat with an agent names it as it is called now.** Its opening question, "Who should <agent> reach?", and the
-  empty chat's line take the agent's name from the console's list of agents, so a renamed agent's chat no longer asks
-  with the name the conversation was made with.
-- **Every agent's row in the console's list shows its time.** The row's time is the later of its conversation's last
-  activity and the agent's own last change, the moment the list is sorted by; an agent made from the command line, which
-  has no conversation, showed none.
-- **A plan card draws its answer as formatted text while it is live.** A Plan only answer's card showed a fenced block
-  as raw backticks until the conversation was read again; it now goes through the same view as every answer, so a fence
-  is a code block from the start.
+**Setting a campaign up and starting it**
 
-## Upgrading from 0.49.2
+- **The set-up, then the start on your yes.** The agent sets a campaign up with you. It asks for the sender's name once,
+  first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong now; says
+  once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you name.
+  Then it asks whether to start, and starts on your yes, under your name. A missing tone of voice holds nothing back:
+  the work goes on in a plain, neutral voice, and you are told once that you may name one. The question and the
+  confirmation of the start are said in the language you write in.
+- **A draft that stands is named at once.** The set-up reads the campaign list before its first question and names a
+  matching draft.
+- **The quick start takes up a draft that stands.** Where a draft campaign already stands for what you sell, the quick
+  start fills it in and makes no second one.
+- **A plan card's steps say when and by which channel.** A subject and a body go on a step only where you asked to see
+  a letter, and are called an example.
+- **After the start, the agent says what happens next, once.** What the set-up already said, about a check, the roles
+  or the notifications, is not said again.
+- **A reserve at the first start.** A campaign whose people come from a search gets a reserve threshold of twenty when
+  it first starts, so its manager hears that people are running low while a top-up still has time to land. The number
+  is `Manager:AudienceThreshold`. A threshold you set is kept, and `jason campaign update <cmp> --clear audience_threshold`
+  leaves a campaign with none.
 
-- **Where you used the browser UI.** Jason's screens and its chat are in Jason Desktop: open it as any application, or
-  with `jason ui open`, which opens it at what waits, and with `--approval <id>` or `--question <id>` at one item. A
-  browser you paired before keeps its token until you revoke it, though the release's page there no longer uses it:
-  `jason ui tokens` lists the pages paired, and `jason ui revoke <token-id>`, or Revoke all other browsers on the System
-  screen, ends one.
-- **A web interface of your own.** Its build, an `index.html` and a `manifest.json` that holds exactly `version` and
-  `api_version`, goes in `<data>/ui/custom/` (`~/.jason/ui/custom/` by default), where the runtime serves it in place of
-  the release's build at once. Jason Desktop's window is served it too and draws it in place of Jason's screens;
-  deleting `custom/` brings them back. `jason ui open --web` opens it in your browser, paired, and `jason ui pair`
-  prints a link that pairs one page, for a browser you open yourself. Its page may connect to the runtime's own origin
-  alone: a connection to another port on `127.0.0.1`, which 0.49.2 allowed, is refused.
-- **Scripts and agents that call `jason ui open`.** It now prints Jason Desktop's address,
-  `{"address":"jason-desktop://attention"}` say, where it printed a pairing link, and asks the runtime nothing. It exits
-  1 where no Jason Desktop takes its links (`desktop_not_installed`, under `--no-open` too), and on Linux outside a
-  graphical session, over ssh say, it opens nothing and exits 1 with `opener_not_started`. Take the pairing link from
-  `jason ui pair`, whose output is what `jason ui open` printed in 0.49.2.
-- **Going back.** This version adds no migration to the database, so 0.49.2 opens the same data as it is.
+**A campaign's manager**
+
+- **A quick look every six hours, and a deep review once a day.** A quick look reads the counts and acts on what is
+  off. A deep review, on a daily grid that starts when the campaign goes live, widens the first batch, goes over each
+  person's line and carries any cause that is waiting. `Manager:ReviewSeconds`, now 21600, sets the quick look's pace,
+  and the new `Manager:DeepReviewSeconds`, 86400 by default, the deep review's. `jason campaign get --human` says when
+  the next deep review is due.
+- **One entry for each reason it is woken.** The manager's skill is a head and five entries: the first start, a resume,
+  a quick look, a deep review and a reply. Each review begins from the note the last one left, so a deep review a few
+  hours after another covers only what changed since. To change one kind of review, edit that entry's file.
+- **Ask for a review now.** `jason campaign review <cmp>` asks the manager for a quick look now, and `--depth deep` for
+  a deep review, which leaves the day's own deep review where it is. The chat runs it on your word.
+  [The cadence](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/campaign-manager.md#4-the-cadence) says
+  when a manager looks in.
+
+**The line with a person**
+
+- **Each person has a line in the campaign.** By default it is a first letter and two follow-ups, each written when it
+  is due, one at a time. `jason campaign list-contacts` shows each person's `touches` and `last_touch_at`, and its
+  summary counts the people whose line is paused or finished.
+- **A ceiling of touches.** `Lines:MaxTouches`, 5 by default and from 1 to 20, is the most touches one person has in a
+  campaign. A touch past it is refused before anything is sent, and the manager ends the line. A letter Jason took back
+  is no touch.
+- **A reply pauses the line.** When a person replies, their line is paused: Jason writes nothing more to them until the
+  manager continues the line or ends it, and the person is still answered. A reply the provider names as the other
+  side's always pauses the line. An out-of-office reply continues it, with the next letter moved to the date the reply
+  names.
+- **A letter held for later is taken back on a reply.** Where the provider holds a letter for a later moment and says
+  it can be cancelled, a reply takes it back, and so does ending the person's line or removing them.
+- **Finish, continue and reopen.** `jason campaign finish-contacts` ends a line, always with a reason, and cancels the
+  person's waiting touches in that campaign. `jason campaign continue-contacts` takes a paused person back into their
+  line. `jason campaign reopen-contacts` reopens an ended line, which is your decision: on your own word, or by the
+  manager naming a question you answered yes. Where the person's touches already stand at the ceiling, the agent says
+  that reopening alone sends nothing more.
+  [A person's line in a campaign](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-persons-line-in-a-campaign)
+  says what each state means.
+- **The people in a campaign, in a table.** `jason campaign list-contacts --human` shows each person's touches and the
+  last one.
+- **An opt-out with no provider sequence is completed.** Where the campaign holds no provider's campaign, as
+  with Jason's own direct letters, recording the opt-out completes it, and the summary says nothing was stopped at the
+  provider, with no stop that could only fail.
+
+**Daily limits of launches**
+
+- **Every role has a daily limit of launches.** `Launches:MaxPerDay` now has a default for each role Jason ships, 25 for
+  the manager and the responder among them. A limit you set wins, entry by entry.
+- **The day is your installation's own.** It runs from one local midnight to the next, in the system's time zone or in
+  the IANA zone `Runtime:TimeZone` names, so the count no longer starts again in the middle of your afternoon.
+- **Lift today's limits with one word.** Tell your agent "ignore the limit", or run
+  `jason launches lift --actor human:<your name>`: what the limits hold is released at once, and nothing new is held
+  until the installation's midnight. The agent says until when, in your own time and naming the zone, and how long from now. The notification
+  of an item held at a daily limit says how to go on today.
+- **"Ignore the limit" lifts what is held.** Where something is held at a daily limit, that is what the word means and
+  it is lifted as you; the agent asks which limit only where nothing is held. Asked what the daily limits are, the chat
+  runs `jason launches list`.
+- **Read the limits.** `jason launches list` says the installation's day and when it ends, each role's limit and
+  whether it comes from the default or from your settings, a lift that stands and how many items are held. With
+  `--campaign`, it also says how many each role started there today. A limit is still set in the settings file.
+- **A line on Needs you while work is held.** It says how many items are held at a daily limit and until when, with a
+  button that lifts today's limits as you. It is not counted among what waits for you.
+
+**Notifications**
+
+- **A reply is notified, once.** When a role judges a reply to be the person's own, Jason tells you once, at the end of
+  the run that judged it: "1 reply came in." Automatic replies, bounces and opt-outs are not counted, and under "every
+  message" the reply and the approval its answer needs come as one notification. `Notifications:Replies` turns it off.
+- **An old outcome is said as history.** A channel's last notification outcome that is older than the switches' present
+  reading is told as what happened then; what `jason status` says now is the answer.
+
+**Jason Desktop**
+
+- **The plus buttons are smaller.** The plus beside Agents and the one beside Chats are drawn smaller and thinner, on
+  the centre of their square.
+- **The mark opens Start.** A click on Jason's mark at the top of the sidebar shows Start again, with the words you
+  typed there and did not send, and closes nothing.
+- **A chat you open has the caret in its box.** By any act of your own, from a row, Search, a plus, the Agents page, a
+  link or Back and Forward, you can type at once. Space on an agent's tab now opens it, as a click does, and a screen
+  reader hears which chat it enters.
+
+## Fixed since 0.49.3
+
+- **Words in another alphabet piped to `jason` on Windows are kept as written.** Standard input was read by the
+  console's code page, so Cyrillic, CJK and symbols were stored garbled. It is now read as UTF-8 on every system, a
+  file given by `--file`, `--value-file`, `--note-file` or `--result-file` is read the same way, and bytes that are not
+  UTF-8 are refused, never guessed. The skills' PowerShell examples set `$OutputEncoding` first, since Windows
+  PowerShell before 7 replaces such characters before Jason sees them.
+- **The refusal at a daily limit says the limit as a limit.** It names how many runs started, the limit beside it and
+  `jason launches list`, where it printed the limit as if it were the count.
+- **An act's reason is the agent's own short line**, never the text you pasted.
+- **The skills' examples pass long text on standard input.** A campaign's context, a role's brief or a note goes through
+  a here-document, so an agent copying an example no longer breaks it on an apostrophe or shows the text in the list of
+  running processes.
+- **A reply Jason drafts in somebody's thread is plain text:** a draft that carried the thread's own HTML, such as
+  `<br>`, is refused when it is written instead of reaching you with its tags on the card, and with the Reply plugin an
+  email reply now goes out as HTML that shows exactly the text you approved, line breaks included.
+- **An approval's summary no longer says a send is "outside any campaign".** It names the person, the format, the
+  account, the subject, the text and the send time.
+- **A "Jason asks" card's answers can be clicked when the same turn made the chat a campaign's conversation.** The line
+  that says so no longer locks the question above it, so a click sends that answer, as it does in any other chat.
+
+## Upgrading from 0.49.3
+
+- **Updating from 0.49.3.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
+  `jason update apply` in a terminal, which hands the update to Jason Desktop. On Linux, a deb takes it with the
+  system's own updates, Software Updater or `sudo apt update && sudo apt upgrade`, and an AppImage by its own update
+  item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
+- **This version migrates the database.** Its first start writes a backup under `~/.jason/state/backups/` first, then
+  adds the new record of a work item's entry, of the deep review's grid and of a day's lift. Each active campaign's
+  first deep review comes one day after the update.
+- **Going back.** From 0.49.0 on, a runtime refuses a database holding a migration it does not know (`data_newer`), so
+  0.49.x refuses data that 0.50 has opened; a version before 0.49.0 has no such check and runs its own model over the
+  newer schema, so it is not run on such data.
+  [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says
+  when `jason update rollback` restores the backup the migration took, and
+  [Restoring a database by hand](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#restoring-a-database-by-hand)
+  how you put it back yourself where it does not. The journal forwarder is now 1.8.0, which a runtime before 0.50.0
+  refuses;
+  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release)
+  says how to put back the package an older release published.
+- **What changes for the campaigns you have.** A quick look comes every six hours, unless a campaign sets its own
+  `review_seconds`. Every role has its daily limit, unless you set your own, and the day is the installation's from the
+  update on. The ceiling of touches counts the touches already made, so a person who has had five touches in a campaign
+  is sent no more there. A campaign already live is given no reserve threshold: only a first start sets one.
+- **Your chats.** A chat about no agent made before this version reads as a plain chat.
+- **A reply drafted before this release with HTML in its text, such as `<br>`, still waits for your approval.**
+  Approve refuses it and says what to remove, and the card stays; edit the tags out on the card, and Jason asks again;
+  approve then, or reject it.
 
 ## Known issues
 
-- **On GNOME, a link without the click's token does not bring a running Jason Desktop to the front.** `jason ui open`,
-  and on Ubuntu 24.04 a notification's click (its libnotify, 0.8.3, hands on no activation token), change the running
-  window's page where it is; GNOME says Jason Desktop "is ready", and a click on that brings it forward. On Hyprland
-  the window keeps its place unless `misc:focus_on_activate` is set.
-- **On macOS, a click on Jason's notification opens nothing of Jason's**, as before; `jason ui open` opens Jason
-  Desktop at what waits.
-- **On Windows, with no Jason Desktop registered or its program gone, a click on Jason's notification opens nothing,
-  and nothing that stays on screen says why.** The reason goes only to the output of the `jason` the click starts; on
-  Linux a second notification says it, and `jason ui open` in a terminal refuses with `desktop_not_installed`.
-- **On Linux, a click reaches Jason only while its notification waits.** At most ten wait at once, a newer one ending
-  the oldest one's wait; the runtime ends every wait when it stops, so a notification shown before a stop opens
-  nothing; and notify-send before 0.7.10, or gdbus where there is no notify-send, shows a notification no click
-  reaches.
-- **Outside GNOME and KDE, a `jason ui open` that starts Jason Desktop ends after ten seconds**, saying on stderr that
-  it handed the address on (`opener_timed_out`), and exits 0: xdg-open there runs the desktop until its window closes.
-  The desktop opens all the same.
-- **An AppImage in a folder whose path holds a space or a quote takes no links.** Its menu entry can start it only by a
-  quoted path, which xdg-open outside GNOME and KDE cannot start, so `jason ui open` and a click refuse with
+- The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches now count your
+  installation's own day.
+- Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
+  turn that runs in Ask first, Auto-edit or Plan only.
+- No screen lists the archived agents yet.
+- In a Codex chat in Full access none of Jason's own refusals apply, as in a terminal: the turn runs as Codex runs it.
+- An agent has one conversation: there is no second chat for the same agent yet.
+- On Windows, a `%NAME%` in the agent host's words may still be expanded by a Windows Terminal that is already
+  running, over its own environment.
+- On Windows, a dropped file's path whose name holds a single quote together with a `$` or a backtick, or a network
+  path whose name holds a single quote, is quoted as PowerShell reads it, and Git Bash reads it back wrong.
+- On GNOME, a link without the click's token does not bring a running Jason Desktop to the front. `jason ui open`, and on
+  Ubuntu 24.04 a notification's click, change the running window's page where it is; GNOME says Jason Desktop "is
+  ready", and a click on that brings it forward. On Hyprland the window keeps its place unless `misc:focus_on_activate`
+  is set.
+- On macOS, a click on Jason's notification opens nothing of Jason's; `jason ui open` opens Jason Desktop at what waits.
+- On Windows, with no Jason Desktop registered or its program gone, a click on Jason's notification opens nothing, and
+  nothing that stays on screen says why. `jason ui open` in a terminal refuses with `desktop_not_installed`.
+- On Linux, a click reaches Jason only while its notification waits. At most ten wait at once, a newer one ending the
+  oldest one's wait; the runtime ends every wait when it stops; and notify-send before 0.7.10, or gdbus where there is
+  no notify-send, shows a notification no click reaches.
+- Outside GNOME and KDE, a `jason ui open` that starts Jason Desktop ends after ten seconds, saying on stderr that it
+  handed the address on (`opener_timed_out`), and exits 0. The desktop opens all the same.
+- An AppImage in a folder whose path holds a space or a quote takes no links: `jason ui open` and a click refuse with
   `desktop_links_elsewhere`.

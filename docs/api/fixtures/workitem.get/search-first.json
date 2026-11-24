@@ -124,6 +124,7 @@
       "state": "root"
     },
     "campaign_name": "Spring launch",
-    "contact_name": null
+    "contact_name": null,
+    "entry": null
   }
 }

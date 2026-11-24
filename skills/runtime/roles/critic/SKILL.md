@@ -212,8 +212,8 @@ ahead of now, and one already past is refused. Once the wait is accepted this at
 more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
 while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
 wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
-above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
-is refused with `wait_not_allowed`.
+above. A campaign review — on its cadence, because a line asked for one, or because a person asked for one now —
+never waits: its wait is refused with `wait_not_allowed`.
 
 When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
 `resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,

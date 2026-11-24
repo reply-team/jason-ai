@@ -230,10 +230,20 @@ composed rather than a role nobody wrote for.
 **Who contributes what to that directory.** An operator composes `<data>/skills/roles/<role>/` from the
 skill packs, and the packs contribute **different files** so that installing one never overwrites the
 other. This repository's runtime pack contributes `SKILL.md`: the launch contract every role is held to
-and what that role is for. A business pack contributes `METHOD.md` beside it — the profession's method
+and what that role is for; and, for the manager, `entries/<name>.md` beside it, one file for each of its five entries,
+its `SKILL.md` then being the head every review shares. A business pack contributes `METHOD.md` beside it — the profession's method
 for that role — which the runtime copies across with everything else in the directory. A role whose
 directory holds only `SKILL.md` is taught the contract and nothing else, and that is complete on its
 own: nothing in the launch depends on a second file being there, or on the role reading one.
+
+**Entries.** A role's folder may hold `entries/<name>.md`, one file for each named way into the role's job. A work item
+that the runtime created with an entry — only the manager has entry names today: `start`, `resume`, `quick_look`,
+`deep_review` and `inbound_reply` — is launched with that file's text in its launch envelope (`entry`, in
+[work-execution.md](work-execution.md), "The launch envelope"), read whole from the copy in the work directory, so every
+host is handed the same words without any change to its command line. The folder is copied like the rest of the tree
+and counts toward `Roles:MaxSkillBytes`. A folder of a person's own, with no record of a deployment, is read the same
+way, so its own `entries/<name>.md` is what its role is handed. Where the file is not there, the envelope names the
+entry with no text and the attempt runs.
 
 ## 7. What a launched session is, and is not, given
 

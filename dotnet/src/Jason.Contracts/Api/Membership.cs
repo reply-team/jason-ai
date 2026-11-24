@@ -45,6 +45,41 @@ public sealed record RemoveContactsSummary(int Removed, int NotMember, int Alrea
 public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSummary Summary, IReadOnlyList<RemoveContactsItemResult> Items);
 
 /// <summary>
+/// Ends the line with each person named in a campaign: an enrolled or paused member becomes finished, and their open
+/// touches there are cancelled. <c>reason</c> is required: ending a line is a judgement, and the line records why.
+/// </summary>
+public sealed record FinishContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, ActorRef? Actor, string? Reason);
+
+public sealed record FinishContactsItemResult(int Index, FinishContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record FinishContactsSummary(int Finished, int AlreadyFinished, int NotMember, int Excluded, int Rejected);
+
+public sealed record FinishContactsResult(string CampaignId, FinishContactsSummary Summary, IReadOnlyList<FinishContactsItemResult> Items);
+
+/// <summary>Continues the line with each person named in a campaign: a paused member is enrolled again.</summary>
+public sealed record ContinueContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, ActorRef? Actor, string? Reason);
+
+public sealed record ContinueContactsItemResult(int Index, ContinueContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record ContinueContactsSummary(int Continued, int NotPaused, int NotMember, int Excluded, int Rejected);
+
+public sealed record ContinueContactsResult(string CampaignId, ContinueContactsSummary Summary, IReadOnlyList<ContinueContactsItemResult> Items);
+
+/// <summary>
+/// Reopens the line with each person named in a campaign: a finished member is enrolled again. It is the person's
+/// decision, carried two ways: their own word, from a named <c>human</c> outside any run, or a run that names, in
+/// <c>decision_id</c>, the question of the campaign a named person answered about the <c>contacts_finished</c> line that
+/// ended those people's lines.
+/// </summary>
+public sealed record ReopenContactsRequest(string? CampaignId, IReadOnlyList<string>? ContactIds, string? DecisionId, ActorRef? Actor, string? Reason);
+
+public sealed record ReopenContactsItemResult(int Index, ReopenContactsItemStatus Status, string? ContactId, ErrorBody? Error);
+
+public sealed record ReopenContactsSummary(int Reopened, int NotFinished, int NotMember, int Excluded, int NotInDecision, int Rejected);
+
+public sealed record ReopenContactsResult(string CampaignId, ReopenContactsSummary Summary, IReadOnlyList<ReopenContactsItemResult> Items);
+
+/// <summary>
 /// The people of the campaigns <c>campaign_ids</c> names (one to a hundred, archived ones included), or of the one
 /// <c>campaign_id</c> names, or of every campaign <c>campaign.list</c> shows when neither is given; both is refused.
 /// Each person is listed once. Excluded members are hidden unless <c>state</c> asks for them. <c>summary</c> lists the
@@ -73,8 +108,10 @@ public sealed record ListContactsRequest(
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>
 /// names each campaign asked that lists them, with what it counts them for when a filter asked: the latest first under an
-/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c> and
-/// <c>source</c> are the first of those memberships.
+/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c>,
+/// <c>source</c>, <c>touches</c> and <c>last_touch_at</c> are the first of those memberships. <c>touches</c> is how
+/// many touches the person has had in that campaign, counted as the ceiling of touches counts them, and
+/// <c>last_touch_at</c> the latest of them, null with none.
 /// </summary>
 public sealed record MembershipItemDto(
     ContactDto Contact,
@@ -83,7 +120,9 @@ public sealed record MembershipItemDto(
     DateTimeOffset UpdatedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipWhy? Why = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null,
+    int Touches = 0,
+    DateTimeOffset? LastTouchAt = null);
 
 /// <summary>
 /// Where a member came from, when a search brought them: the campaign's audience it ran under (<c>audience</c>, its id and

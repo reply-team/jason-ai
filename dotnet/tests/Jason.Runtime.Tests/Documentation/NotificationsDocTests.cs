@@ -17,24 +17,35 @@ public sealed partial class NotificationsDocTests
     private static string Page() => Flat(Source("docs/notifications.md"));
 
     [Theory]
-    [InlineData("A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to it.")]
-    [InlineData("Seven things, and only these:")]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    [InlineData("A notification is a pointer: how many approvals and questions are waiting, how many replies came in, how many protective actions failed, how many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items wait on a daily limit of launches, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to it.")]
+    [InlineData("Eight things, and only these:")]
+    [InlineData("**a reply a person wrote** — a reply a role judged, inside a run, a person's own: a `reply_classified` verdict with the nature `person` that names the run's attempt ([inbound-sync.md](inbound-sync.md)). It wakes a pointer when the run that judged it ends — its `workitem_succeeded`, `workitem_failed` or `workitem_expired` line — so the approval the answer the responder drafted needs, parked at the campaign's next claim, which in a quiet campaign is the next scan, is said in the same pointer; a verdict recorded after its run already ended wakes one by its own line.")]
+    [InlineData("The pointer counts each reply once, by the key every verdict on it carries, however many campaigns judged it, and never again once a pointer that reached anybody said it.")]
+    [InlineData("an automatic answer, a bounce, an opt-out and a verdict that does not say are no person's reply: none of them is counted, and an opt-out tells nobody.")]
+    [InlineData("not a reply no role judged a person's own or an invitation accepted")]
+    [InlineData("`counts.replies` is how many replies a role judged a person's own in the same window, counted by reply: by the key every `reply_classified` verdict on one reply carries, in each campaign that judged it")]
+    [InlineData("it is 0 while `Notifications:Replies` is `false`, and a line written before 0.50.0 has none.")]
+    [InlineData("Of a reply, nothing travels but how many came in: not the person, the address, what they wrote, the thread, the verdict's words, the plugin or a campaign.")]
+    [InlineData("A reply has no command of its own either")]
+    [InlineData("Nor is there one for replies alone: `Notifications:Replies` is a line of the file too, and it changes what is said, never a channel.")]
     [InlineData("**an email that bounced** — a provider event of the kind `bounce` that a read of an account found and the events store said in a campaign, as a `provider_event_observed` line ([events.md](events.md) §4). It wakes a pointer by that line, and the pointer counts each such event once, however many campaigns it reached. An event the store keeps as history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified.")]
     [InlineData("`counts.bounces` is how many emails bounced in the same window, counted by event: by the key every `provider_event_observed` line of one bounce carries, in each campaign it reached, so one bounce said in three campaigns is one.")]
-    [InlineData("A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named in the order the things are said until the next would not fit the message the delivery contract takes, and the things after it are left to the agent the pointer names first: the things said first keep their commands, and seven things said at once still fit.")]
+    [InlineData("A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named in the order the things are said until the next would not fit the message the delivery contract takes, and the things after it are left to the agent the pointer names first: the things said first keep their commands, and eight things said at once still fit.")]
     [InlineData("It is said once, by block, from the first `provider_blocked` line it writes; a block cleared before the pointer is sent is not said. A protective action a block holds is parked, not failed, so it is said here and never as a protective action that failed.")]
     [InlineData("An account whose reads keep failing is not counted while they fail: a failing read skips nothing, so no span went unread.")]
     [InlineData("and in the runtime's log, read with `jason logs`, as a warning naming the source, the code and the class.")]
     [InlineData("A failure that outlasts the 30 days leaves a gap, which the first read that succeeds says, and which is counted like any other.")]
     [InlineData("`counts.blocks` is how many provider blocks were first said in the same window")]
     [InlineData("`counts.held` is how many items waited on a daily limit when this notification was sent, read as it was sent")]
-    [InlineData("**an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a campaign, and the claim set the item aside until the next UTC day")]
+    [InlineData("**an item held at a daily limit of launches** — a role spent what `Launches:MaxPerDay` allows it for the day, in a campaign, and the claim set the item aside until the installation's next midnight")]
+    [InlineData("A hold also says the way out for today, straight after its count: \"To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.\"")]
     [InlineData("It wakes a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.")]
     [InlineData("Whether a block is the account's or one sending account's, and what lifts it, is read at `jason block list`; the pointer says only how many.")]
     [InlineData("A block is said while it is open, whatever it holds, because it is still the person's to fix and the next item parks on it.")]
     [InlineData("The work items it holds are the work items parked on it, as `block.get`'s `held_count` counts them, so a pointer's count, `jason block get` and `jason workitem list --block` agree.")]
     [InlineData("**a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out, pausing a campaign, taking back a send or stopping a search, that ended failed or expired, in a campaign of any status.")]
-    [InlineData("**What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read, nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign. Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the toast on Windows and Linux alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on: on Windows in the toast's `jason:` link (§7), on Linux kept by the runtime beside the notification it showed, which reaches only the command its click starts (§4). That id is never in the words, never in a plugin channel's input, never sent to Linux's notification server, and never in a toast on macOS.")]
+    [InlineData("**What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read, nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign. Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the bounce, the plugin or a campaign. Of a reply, nothing travels but how many came in: not the person, the address, what they wrote, the thread, the verdict's words, the plugin or a campaign. The pointer is made from eight counts, those ids, and nothing else — and in the toast on Windows and Linux alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on: on Windows in the toast's `jason:` link (§7), on Linux kept by the runtime beside the notification it showed, which reaches only the command its click starts (§4). That id is never in the words, never in a plugin channel's input, never sent to Linux's notification server, and never in a toast on macOS.")]
     [InlineData("A first start walks no history: a protective failure journaled before the first start that ever wrote a line is not counted by a pointer — the work-item list is where it shows.")]
     [InlineData("A notification that reached nobody carries `delivered_through` forward unchanged, as it carries `last_delivered_at`, so the next one counts those failures again with any new ones. Neither key is sent to a channel: `delivered_through` is a position in the journal, and the count reaches a channel only as words in the message.")]
     [InlineData("Everything here is computed at a dispatcher scan from what the journal records, never from a timer inside the runtime, which ends at every sign-out.")]
@@ -48,31 +59,52 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>Where a pointer about failed protective work sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_failed_work_sends_a_person() =>
         Assert.Contains($"1 protective action failed in Jason, in cmp_01K…. {Jason.Runtime.Notifications.NotificationComposer.LookAtFailures}", Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about an account whose events were not read sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_unread_events_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, eventGaps: 1).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about a provider block sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_a_block_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, blocks: new HeldByBlocks(1, 4)).Text, Page(), StringComparison.Ordinal);
 
     /// <summary>Where a pointer about items held at a daily limit sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_a_hold_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, held: 2).Text, Page(), StringComparison.Ordinal);
 
+    /// <summary>The way out the page quotes is the one the composer says, word for word.</summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_page_quotes_the_hold_s_way_out_as_the_composer_says_it() =>
+        Assert.Contains($"\"{Jason.Runtime.Notifications.NotificationComposer.LiftHold}\"", Regex.Replace(Page(), @"\s+", " "), StringComparison.Ordinal);
+
     /// <summary>Where a pointer about emails that bounced sends a person, as the composer writes it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_where_a_pointer_about_bounces_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, bounces: 2).Text, Page(), StringComparison.Ordinal);
 
+    /// <summary>Where a pointer about replies sends a person, alone and beside the approval an answer needs, as the composer writes it.</summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_page_shows_where_a_pointer_about_replies_sends_a_person()
+    {
+        Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, replies: 2).Text, Page(), StringComparison.Ordinal);
+        Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(1, 0, replies: 1).Text, Page(), StringComparison.Ordinal);
+    }
+
     /// <summary>How a count past four digits is said, as the composer says it.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_how_a_count_past_four_digits_is_said() =>
         Assert.Contains(
             $"A count past {Jason.Runtime.Notifications.NotificationComposer.MaxSaid.ToString(CultureInfo.InvariantCulture)} is said as \"{Jason.Runtime.Notifications.NotificationComposer.PastFourDigits}\", so the longest pointer fits whatever the counts are",
@@ -81,6 +113,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The settings table is the code's own: every name the section binds, with its default.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_table_prints_the_settings_this_build_has_with_their_defaults()
     {
         var page = Source("docs/notifications.md");
@@ -89,12 +122,13 @@ public sealed partial class NotificationsDocTests
         [
             (nameof(NotificationsOptions.Enabled), "true"),
             (nameof(NotificationsOptions.Toast), "true"),
+            (nameof(NotificationsOptions.Replies), "true"),
             (nameof(NotificationsOptions.QuietSeconds), defaults.QuietSeconds.ToString(CultureInfo.InvariantCulture)),
             (nameof(NotificationsOptions.MaxWaitSeconds), defaults.MaxWaitSeconds.ToString(CultureInfo.InvariantCulture)),
             (nameof(NotificationsOptions.MinIntervalMinutes), defaults.MinIntervalMinutes.ToString(CultureInfo.InvariantCulture)),
         ];
 
-        Assert.True(defaults.Enabled && defaults.Toast);
+        Assert.True(defaults.Enabled && defaults.Toast && defaults.Replies);
         foreach (var (name, value) in rows)
         {
             Assert.Contains($"| `{NotificationsOptions.Section}:{name}` | `{value}` |", page, StringComparison.Ordinal);
@@ -105,6 +139,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The ranges the table prints are the validator's own, read from the constants it checks against.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_table_prints_the_ranges_the_validator_holds()
     {
         var page = Page();
@@ -116,6 +151,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>"At most so many a day" is the floor's arithmetic at the defaults, said from the code.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_how_many_a_day_the_floor_allows_at_the_defaults()
     {
         var perDay = 24 * 60 / new NotificationsOptions().MinIntervalMinutes;
@@ -124,6 +160,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The words a line can carry, each printed on the page, from the constants the line is written with.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_prints_every_word_a_line_can_carry()
     {
         var page = Page();
@@ -135,6 +172,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>The pages that used to say nothing notifies anybody, or that notification plugins are only reserved, say what is true now.</summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md", "`kind: notification` plugins are invoked for the delivery contract, never for a canonical operation: §14")]
     [InlineData("docs/plugins.md", "a `notification` plugin was asked for a canonical operation, or a provider for a delivery")]
     [InlineData("docs/plugins.md", "**Notification plugins are not routed**: a route to one is refused at activation with `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).")]
@@ -153,22 +191,24 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/release-and-update.md", "A toast comes only from a runtime in the person's own session")]
     [InlineData("docs/release-and-update.md", "a runtime that 0.1.0's logon task started in session 0 shows none")]
     [InlineData("docs/release-and-update.md", "| on Windows, the notification registration | after the runtime, so its next toast cannot write it back")]
-    [InlineData("CLAUDE.md", "Notifications: a parked approval, a raised question, failed protective work, an account whose events were not read, an open provider block, an item held at a daily limit of launches and an email that bounced are notified as a pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.")]
+    [InlineData("CLAUDE.md", "Notifications: a parked approval, a raised question, failed protective work, an account whose events were not read, an open provider block, an item held at a daily limit of launches, an email that bounced and a person's reply a role judged their own are notified as a pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.")]
     [InlineData("CLAUDE.md", "One channel, the toast or a named plugin, is turned on or off by `notification.enable` and `notification.disable`, written through the runtime's one writer of the settings file and journaled as `notification_channel_updated`; notifications as a whole stay a line of that file. `docs/notifications.md` is the contract.")]
     [InlineData("CLAUDE.md", "The delivery contract, `notification.send`, is a family of its own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.")]
-    [InlineData("docs/contracts/notifications/notification.send.md", "sends **one pointer**: how many approvals and questions are waiting, whether protective actions failed, accounts have events Jason did not read or provider blocks are open, how many items wait on a launch budget, how many emails bounced, and where to look.")]
-    [InlineData("docs/contracts/notifications/notification.send.md", "What the plugin receives is `title`, `message` and the two counts, `approvals` and `decisions`. The message may also say that protective actions failed, and name up to three campaigns by public id — an opaque `cmp_…` that names nothing by itself — and count the accounts whose events Jason did not read, the open provider blocks, with the work items they hold, how many items wait on a launch budget, and how many emails bounced. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no error.")]
-    [InlineData("docs/contracts/notifications/notification.send.json", "\"intent\": \"Put a pointer in front of a person: how many approvals and questions are waiting in Jason, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, work waits on a launch budget or emails bounced, and where to look. Nothing else about the work travels.\"")]
+    [InlineData("docs/contracts/notifications/notification.send.md", "sends **one pointer**: how many approvals and questions are waiting, how many replies came in, whether protective actions failed, accounts have events Jason did not read or provider blocks are open, how many items wait on a daily limit of launches, how many emails bounced, and where to look.")]
+    [InlineData("docs/contracts/notifications/notification.send.md", "What the plugin receives is `title`, `message` and the two counts, `approvals` and `decisions`. The message may also count the replies a role judged a person's own, say that protective actions failed, and name up to three campaigns by public id — an opaque `cmp_…` that names nothing by itself — and count the accounts whose events Jason did not read, the open provider blocks, with the work items they hold, how many items wait on a daily limit of launches, and how many emails bounced. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no reply's words, no error.")]
+    [InlineData("docs/contracts/notifications/notification.send.json", "\"intent\": \"Put a pointer in front of a person: how many approvals and questions are waiting in Jason, how many replies came in, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, work waits on a daily limit of launches or emails bounced, and where to look. Nothing else about the work travels.\"")]
     [InlineData("plugins/ntfy/README.md", "**Nothing else about the work travels**: the runtime makes the pointer from counts and, when protective actions failed, at most three campaign ids, and the delivery contract, [`notification.send`](../../docs/contracts/notifications/notification.send.md), says exactly what a pointer may carry.")]
     [InlineData("plugins/README.md", "the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — published to an ntfy topic.")]
     [InlineData("plugins/ntfy/plugin.yaml", "description: Delivers Jason's notifications to an ntfy topic - the pointer the runtime composes, and nothing else.")]
     [InlineData("plugins/README.md", "the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — posted to a Slack channel.")]
     [InlineData("plugins/README.md", "the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — sent to a Telegram chat by a bot you make.")]
     [InlineData("docs/events.md", "A bounce's line is counted by each notification until one reaches anybody, once by that key however many campaigns the bounce reached ([notifications](notifications.md)).")]
+    [InlineData("docs/inbound-sync.md", "A person hears of a reply once a role, inside a run, judges it a person's own, when that run ends ([notifications](notifications.md) §1); a reply no responder was made for and no role judged is not said.")]
+    [InlineData("docs/campaign-manager.md", "A person is told one came only once a role, inside a run, has judged it a person's own, by a pointer at the end of that run ([notifications](notifications.md) §1).")]
     [InlineData("docs/notifications.md", "A notification plugin reaches wherever its service does — a phone following an ntfy topic, a Slack channel, a Telegram chat — whatever session the runtime runs in.")]
     [InlineData("docs/notifications.md", "Three are published with every release from 0.32.0 on, each placed by `jason plugin install <id>`: [ntfy](../plugins/ntfy/README.md), the reference plugin, [Slack](../plugins/slack/README.md) and [Telegram](../plugins/telegram/README.md).")]
-    [InlineData("docs/plugins.md", "A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a launch budget or emails bounced, and where to look — to a service a person reads.")]
-    [InlineData("docs/contracts/README.md", "put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a launch budget or emails bounced, and where to look.")]
+    [InlineData("docs/plugins.md", "A notification plugin carries Jason's pointer — how many approvals and questions are waiting, how many replies came in, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a daily limit of launches or emails bounced, and where to look — to a service a person reads.")]
+    [InlineData("docs/contracts/README.md", "put a pointer in front of a person: how many approvals and questions wait, how many replies came in, whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a daily limit of launches or emails bounced, and where to look.")]
     public void The_pages_around_it_say_what_is_true_now(string page, string sentence) =>
         Assert.Contains(sentence, Flat(Source(page)), StringComparison.Ordinal);
 
@@ -177,6 +217,7 @@ public sealed partial class NotificationsDocTests
     /// names is the one the sender writes, and it is reserved: only the runtime writes it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_decision_register_records_what_a_notification_is()
     {
         var architecture = Source("docs/architecture.md");
@@ -193,6 +234,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>What a page claims has to be as narrow as what the code does.</summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/notifications.md", "the next sign-in sends what is still waiting and was not said yet — once, after the start grace")]
     [InlineData("docs/notifications.md", "A pointer already sent is not sent again at the next sign-in: there are no reminders.")]
     [InlineData("docs/notifications.md", "The floor allows at most 48 a day at the defaults that reach somebody")]
@@ -233,6 +275,7 @@ public sealed partial class NotificationsDocTests
     /// values as properties, so that is what the page shows — the template the sender logs with, not a rendering of it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_shows_a_failed_channel_s_log_line_as_the_file_holds_it()
     {
         var page = Page();
@@ -250,6 +293,7 @@ public sealed partial class NotificationsDocTests
     /// take three launches, each at the channel's own bound, and none of them is on the scan.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_a_linux_toast_s_worst_case_at_the_channel_s_bound()
     {
         Assert.Equal(TimeSpan.FromSeconds(5), ToastChannel.Bound);
@@ -267,6 +311,7 @@ public sealed partial class NotificationsDocTests
 
     /// <summary>Every plugin in the marketplace's index is a row of one table: a blank line ends a Markdown table.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_marketplace_index_is_one_table()
     {
         var lines = Source("plugins/README.md").Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
@@ -276,6 +321,7 @@ public sealed partial class NotificationsDocTests
     }
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md", "invoking `kind: notification` plugins")]
     [InlineData("docs/plugins.md", "`kind: notification` is reserved")]
     [InlineData("docs/plugins.md", "its operation contract is not written yet")]
@@ -284,6 +330,11 @@ public sealed partial class NotificationsDocTests
     [InlineData("plugins/README.md", "and, later, deliver notifications")]
     [InlineData("plugins/ntfy/plugin.yaml", "under `operations` below")]
     [InlineData("docs/notifications.md", "Before its first toast the runtime writes")]
+    [InlineData("docs/notifications.md", "Seven things, and only these:")]
+    [InlineData("docs/notifications.md", "made from seven counts")]
+    [InlineData("docs/notifications.md", "not a reply the provider detected")]
+    [InlineData("docs/inbound-sync.md", "A reply is not notified")]
+    [InlineData("docs/campaign-manager.md", "nothing tells a person one came")]
     public void The_pages_no_longer_say_what_stopped_being_true(string page, string retired) =>
         Assert.DoesNotContain(retired, Flat(Source(page)), StringComparison.Ordinal);
 
@@ -293,6 +344,7 @@ public sealed partial class NotificationsDocTests
     /// toast host say no more than the walk saw.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_records_what_the_walk_proved_and_what_it_did_not()
     {
         var page = Page();

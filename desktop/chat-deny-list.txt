@@ -10,8 +10,9 @@
 # again. The operation lines are checked against the Runtime API and the verbs, and are edited by hand.
 #
 # The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a
-# preference, a campaign's send mode, a block cleared, work resumed, a send reviewed, a report and a subscription
-# rewound. The CLI gives them no default actor, and gives none to eight verbs further down either.
+# preference, a campaign's send mode, an ended line reopened, a block cleared, work resumed, today's launch limits
+# lifted, a send reviewed, a report and a subscription rewound. The CLI gives them no default actor, and gives none to
+# eight verbs further down either.
 approval approve
 approval reject
 approval set-standing
@@ -20,8 +21,10 @@ decision answer
 preference set
 preference unset
 campaign set-send-mode
+campaign reopen-contacts
 block clear
 workitem resume
+launches lift
 workitem review
 report submit
 subscription rewind
@@ -55,13 +58,15 @@ notification disable
 #
 # The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when
 # work names the role, linking a project's folder, which then becomes a working folder of every chat on the
-# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, and archiving
-# one, which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still
-# asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.
+# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, archiving one,
+# which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still asked
+# or already given, stops its running attempts once the archive is committed, and cancels its pending questions, and
+# asking a campaign's manager for a review, which launches a check-in on the person's word.
 role add
 project link
 campaign start
 campaign archive
+campaign review
 #
 # The Runtime API operations the verbs above call, so that a command naming one is refused by the desktop:
 approval.approve
@@ -72,8 +77,10 @@ decision.answer
 preference.set
 preference.unset
 campaign.set_send_mode
+campaign.reopen_contacts
 block.clear
 workitem.resume
+launches.lift
 workitem.review
 report.submit
 subscription.rewind
@@ -92,6 +99,7 @@ role.add
 project.link
 campaign.start
 campaign.archive
+campaign.review
 profile.create
 profile.update
 profile.get

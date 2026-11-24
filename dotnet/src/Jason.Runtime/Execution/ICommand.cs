@@ -36,6 +36,10 @@ namespace Jason.Runtime.Execution;
 /// The host the claim's profile names, which lays out the work directory and reads the end; null where no profile ran
 /// the work, and the directory keeps the layout it always had.
 /// </param>
+/// <param name="Entry">
+/// The entry the item carries, by its name, as the row says; null where it carries none. The launch hands its text to
+/// the host in the envelope, read from the work directory's copy of the role's folder.
+/// </param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -60,7 +64,8 @@ public sealed record CommandContext(
     MemoryFileLocations? MemoryFiles = null,
     Resumption? Resumption = null,
     AgentHostKind? Host = null,
-    IReadOnlyList<string>? Allow = null);
+    IReadOnlyList<string>? Allow = null,
+    string? Entry = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome

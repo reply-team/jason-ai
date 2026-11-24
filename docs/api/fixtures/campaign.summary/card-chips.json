@@ -24,6 +24,8 @@
         "idle": 1,
         "sequence": 0,
         "out": 1,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": true
       },
@@ -37,6 +39,8 @@
         "idle": 0,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       },
@@ -50,6 +54,8 @@
         "idle": 0,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       },
@@ -63,6 +69,8 @@
         "idle": 0,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       },
@@ -76,6 +84,8 @@
         "idle": 0,
         "sequence": 0,
         "out": 0,
+        "paused": 0,
+        "finished": 0,
         "removed": 0,
         "sequence_linked": false
       }
@@ -89,6 +99,8 @@
       "idle": 1,
       "sequence": 0,
       "out": 1,
+      "paused": 0,
+      "finished": 0,
       "removed": 0
     }
   }

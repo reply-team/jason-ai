@@ -99,6 +99,115 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// A person's lift of today's daily limits of launches, in an installation whose zone is Asia/Tokyo, nine hours ahead of
+    /// UTC with no daylight saving: the first lets go what the limits held and says until the next local midnight; a second
+    /// the same day says it was lifted already; a role is refused.
+    /// </summary>
+    [Fact]
+    public async Task Launches_lift_again_and_by_a_role()
+    {
+        var clock = new FixedClock(Nine) { Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: clock);
+        var ada = new { type = "human", id = "ada" };
+
+        var lifted = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "lifted", new { actor = ada, reason = "A launch day." }, Ct);
+        Assert.Equal(new LaunchesLiftDto(new DateTimeOffset(2026, 10, 16, 15, 0, 0, TimeSpan.Zero), "Asia/Tokyo", 0, AlreadyLifted: false), lifted);
+
+        var again = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "already-lifted", new { actor = ada }, Ct);
+        Assert.True(again.AlreadyLifted, "A second lift the same day did not say it was lifted already.");
+
+        var role = await api.RecordErrorAsync(Operations.LaunchesLift, "not-human", new { actor = new { type = "role", id = "manager" } }, HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("lift_not_human", role.Code);
+    }
+
+    /// <summary>
+    /// The daily limits of launches as they stand, in an installation whose zone is Asia/Tokyo and whose settings lower the
+    /// planner's limit to two: the day from the local midnight to the next, each role's limit and where it comes from, and
+    /// what is held in every campaign; with a campaign, each role's runs that started there today and that campaign's holds;
+    /// once a person lifted the day, the lift; and a campaign nobody holds is not found.
+    /// </summary>
+    [Fact]
+    public async Task Launches_list_with_and_without_a_campaign_and_once_lifted()
+    {
+        var clock = new FixedClock(Nine) { Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Launches":{"MaxPerDay":{"planner":2}}}"""),
+            clock: clock);
+        var spring = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct)).Id;
+        var autumn = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn outreach" }, Ct)).Id;
+        var midnight = new DateTime(2026, 10, 15, 15, 0, 0, DateTimeKind.Utc);
+        await Seed.LaunchedAsync(api, spring, "planner", midnight.AddMinutes(-30), midnight.AddHours(1), midnight.AddHours(2));
+        await Seed.LaunchedAsync(api, spring, "researcher", midnight.AddHours(3));
+        await Seed.LaunchedAsync(api, autumn, "planner", midnight.AddHours(1), midnight.AddHours(2));
+        await Seed.HeldAsync(api, spring, "planner", 2, 2);
+        await Seed.HeldAsync(api, autumn, "planner", 2, 2);
+
+        var limits = await api.RecordAsync<LaunchesListDto>(Operations.LaunchesList, "limits", null, Ct);
+        Assert.Equal(new LaunchesDayDto(new DateTimeOffset(midnight), new DateTimeOffset(midnight.AddDays(1)), "Asia/Tokyo"), limits.Day);
+        Assert.Null(limits.Lift);
+        Assert.Equal(new LaunchLimitDto("planner", 2, LaunchLimitSource.Settings), limits.Roles.Single(role => role.Role == "planner"));
+        Assert.Equal(new LaunchLimitDto("researcher", 40, LaunchLimitSource.Default), limits.Roles.Single(role => role.Role == "researcher"));
+        Assert.Equal(2, limits.Held);
+
+        var campaign = await api.RecordAsync<LaunchesListDto>(Operations.LaunchesList, "campaign", new { campaign_id = spring }, Ct);
+        Assert.Equal((2, 1, 0), (campaign.Roles.Single(r => r.Role == "planner").StartedToday, campaign.Roles.Single(r => r.Role == "researcher").StartedToday, campaign.Roles.Single(r => r.Role == "manager").StartedToday));
+        Assert.Equal(1, campaign.Held);
+
+        await api.PostOkAsync<LaunchesLiftDto>(Operations.LaunchesLift, new { actor = new { type = "human", id = "ada" }, reason = "A launch day." }, Ct);
+        var lifted = await api.RecordAsync<LaunchesListDto>(Operations.LaunchesList, "lifted", null, Ct);
+        Assert.Equal(new LaunchesStandingLiftDto(new DateTimeOffset(midnight.AddDays(1)), new ActorRef(ActorType.Human, "ada"), Nine), lifted.Lift);
+        Assert.Equal(0, lifted.Held);
+
+        var missing = await api.RecordErrorAsync(Operations.LaunchesList, "campaign-not-found", new { campaign_id = "cmp_01K7QN0000000000000000000Z" }, HttpStatusCode.NotFound, Ct);
+        Assert.Equal("campaign_not_found", missing.Code);
+    }
+
+    /// <summary>
+    /// The lift Needs you makes, as the paired person with Needs you's reason, in an installation whose zone is Asia/Tokyo:
+    /// it lets go the two items held at a daily limit in two campaigns and says until the next local midnight.
+    /// </summary>
+    [Fact]
+    public async Task Launches_lift_from_needs_you_lets_go_what_was_held()
+    {
+        var clock = new FixedClock(Nine) { Zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: clock);
+        var spring = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct)).Id;
+        var autumn = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn outreach" }, Ct)).Id;
+        await Seed.HeldAsync(api, spring, "planner", 2, 2);
+        await Seed.HeldAsync(api, autumn, "planner", 2, 2);
+
+        var lifted = await api.RecordAsync<LaunchesLiftDto>(Operations.LaunchesLift, "from-needs-you", new { actor = new { type = "human", id = "ada" }, reason = "Lifted from Needs you." }, Ct);
+        Assert.Equal(new LaunchesLiftDto(new DateTimeOffset(2026, 10, 16, 15, 0, 0, TimeSpan.Zero), "Asia/Tokyo", 2, AlreadyLifted: false), lifted);
+    }
+
+    /// <summary>
+    /// A person's review asked of a campaign's manager: a deep review of an active campaign answers the check-in it made,
+    /// a second while that one is open is refused naming it, a role is refused, and a draft is refused.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_review_requested_already_open_by_a_role_and_of_a_draft()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var ada = new { type = "human", id = "ada" };
+        var spring = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct)).Id;
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = spring, actor = ada }, Ct);
+
+        var item = await api.RecordAsync<WorkItemDto>(Operations.CampaignReview, "requested", new { campaign_id = spring, depth = "deep", actor = ada, reason = "Before the board meeting." }, Ct);
+        Assert.Equal(("manager", "deep_review", "requested"), (item.Role, item.Entry, item.Context["review_intent"]!.GetValue<string>()));
+
+        var open = await api.RecordErrorAsync(Operations.CampaignReview, "already-open", new { campaign_id = spring, actor = ada }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("review_already_open", open.Code);
+
+        var role = await api.RecordErrorAsync(Operations.CampaignReview, "not-human", new { campaign_id = spring, actor = new { type = "role", id = "manager" } }, HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("review_not_human", role.Code);
+
+        var autumn = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Autumn outreach" }, Ct)).Id;
+        var draft = await api.RecordErrorAsync(Operations.CampaignReview, "not-active", new { campaign_id = autumn, actor = ada }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("campaign_not_active", draft.Code);
+    }
+
+    /// <summary>
     /// What the blocks screen reads and writes: what is blocked now and what was, one block with the link a person clears
     /// it at, the work it holds, a person's clear, and the refusals a clear and a read can meet.
     /// </summary>
@@ -642,9 +751,9 @@ public class RecordedExchangesTests
         var all = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all", new { campaign_ids = listed, exclude_archived_contacts = true }, Ct);
         Assert.Equal(
             [
-                new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
-                new CampaignSummaryRow(seed.Autumn, 2, 0, 0, 0, 1, 1, 0, 0, Removed: 0, SequenceLinked: false),
-                new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Paused: 1, Finished: 1, Removed: 1, SequenceLinked: true),
+                new CampaignSummaryRow(seed.Autumn, 2, 0, 0, 0, 1, 1, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
+                new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: false),
             ],
             all.Campaigns);
         Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring }, exclude_archived_contacts = true }, Ct)).Campaigns);
@@ -1398,6 +1507,40 @@ public class RecordedExchangesTests
             return new WorkItemIds(Id("cmp", 1), Id("cmp", 2), Id("cnt", 1), Id("cnt", 3), Id("wi", 4), "wi_" + Approval[4..], Id("wi", 9), Id("wi", 10), Id("wi", 12));
         }
 
+        /// <summary>One finished item of the role in the campaign per moment, each with one attempt that started then.</summary>
+        public static async Task LaunchedAsync(RuntimeApiFixture api, string campaignId, string role, params DateTime[] started)
+        {
+            using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignId, Ct);
+            foreach (var moment in started)
+            {
+                var item = WorkItemFactory.NewAiRole(campaign, role: role, now: moment);
+                var run = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, moment);
+                (run.StartedAt, run.FinishedAt) = (moment, moment.AddMinutes(5));
+                (item.Status, item.AttemptCount, item.UpdatedAt) = (WorkItemStatus.Succeeded, 1, moment.AddMinutes(5));
+                db.WorkItems.Add(item);
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        /// <summary>An item of the role in the campaign held at its daily limit now, by the one routine that holds.</summary>
+        public static async Task HeldAsync(RuntimeApiFixture api, string campaignId, string role, int limit, int started)
+        {
+            using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignId, Ct);
+            var now = api.Resolve<TimeProvider>().GetUtcNow().UtcDateTime;
+            var item = WorkItemFactory.NewAiRole(campaign, role: role, now: now);
+            db.WorkItems.Add(item);
+            await db.SaveChangesAsync(Ct);
+            var day = api.Resolve<Jason.Runtime.Configuration.InstallationDay>().Of(now);
+            scope.ServiceProvider.GetRequiredService<Jason.Runtime.Execution.AttemptOutcomes>()
+                .Hold(db, item, day.End, Jason.Runtime.Dispatch.Claimer.LaunchesSpent(role, limit, started, day), limit, Actors.Dispatcher);
+            await db.SaveChangesAsync(Ct);
+        }
+
         public static async Task ApprovalAsync(RuntimeApiFixture api, string id, string first, string last, bool decided, string? reason = null, ApprovalStatus? status = null)
         {
             var final = status ?? (decided ? ApprovalStatus.Approved : ApprovalStatus.Pending);
@@ -1409,6 +1552,7 @@ public class RecordedExchangesTests
             var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
             item.PublicId = "wi_" + id[4..];
             item.Status = decided ? WorkItemStatus.Scheduled : WorkItemStatus.AwaitingApproval;
+            item.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
             item.Contact = new Contact { PublicId = "cnt_" + id[4..], FirstName = first, LastName = last, Company = "Kavali", Title = "CTO", CreatedAt = Noon, UpdatedAt = Noon };
             db.WorkItems.Add(item);
             db.Approvals.Add(new Approval
@@ -1533,6 +1677,8 @@ public class RecordedExchangesTests
             var ivyEnrol = Of("Ivy", "campaign.enroll");
             var cleoEnrol = Of("Cleo", "campaign.enroll");
             var adaEnrol = Of("Ada", "campaign.enroll");
+            // The enrolment a person approves from the campaign's row holds the arguments it was parked with, which a yes reads.
+            adaEnrol.Context = new JsonObject { ["input"] = Approvals.ParkedWork.Enrolment() };
             // The attempts the two endings were written by: a line of an ending names the attempt that ended the work.
             // Their ids stand apart from the counter, so every id after them stays the one the recording holds.
             Attempt Ran(WorkItem item, AttemptStatus status, int number)

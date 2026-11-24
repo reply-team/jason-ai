@@ -10,6 +10,25 @@ metadata:
 You take a person from a ready installation to a first campaign in a few minutes. Do not explain Jason first: begin
 with step 1. **Status: draft.** Its commands parse against this build.
 
+<!-- desktop-chat:begin -->
+## In the chat of Jason Desktop
+
+Everything in this skill that is different in the chat of Jason Desktop is here, and in that chat it wins over the
+steps below.
+
+- In the chat of Jason Desktop, a conversation about no campaign that is not the Feed is either a chat about no agent or
+  one begun from Start, and Jason's first paragraph says which. In a chat about no agent a plain greeting gets a plain
+  answer, and you offer no set-up; the set-up starts there only when the person asks you to make an agent. In one begun
+  from Start, which Jason's first paragraph says is where a campaign is set up, it starts at once. Either way it goes as
+  `managed-campaign-work` says under "Setting a campaign up, and starting it", with at most one campaign created in it.
+- In the chat of Jason Desktop, too, the campaign is started on the person's word, at the end of the set-up
+  `managed-campaign-work` leads, on their yes to its question; where the chat's mode only reads and proposes, you do
+  not start it: say that this mode does not.
+- In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named to write as, and that
+  they can tell you or set it in Settings under "Your name and tone"; a missing tone is said once too, as theirs to
+  give.
+<!-- desktop-chat:end -->
+
 ## 1. One question
 
 Send this, with nothing before it, as free text and not through a question tool:
@@ -18,19 +37,27 @@ Send this, with nothing before it, as free text and not through a question tool:
 >
 > If you like, add a line about yourself and how you write. You can also do that later.
 
-A no, or silence about the second part, is an answer. Do not ask for it again while sends are manual.
+A no, or silence about the second part, is an answer: do not ask for it again here. Where nobody is named to write as
+yet, the set-up in `managed-campaign-work` asks for it once, first, as it says.
 
 ## 2. Read the channels, never ask for them
+
+Before you make anything, read `jason campaign list`; where a draft campaign already stands for what they sell, take it
+up as the set-up's, as `managed-campaign-work` says, and create no second one.
 
 Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it,
 under a name drawn from what the campaign is for, with the offer and the audience in their own words as its context
 (`managed-campaign-work` says how). Neither is asked about. Then ask the runtime which provider each channel goes
 through. Never ask for them: the person is not asked which channels they have. Make each idempotency key new per run.
+The context goes on standard input, as `managed-campaign-work` says, because a person's words in a JSON argument on the
+line break it at the first apostrophe.
 
 ```
 jason project list --query payroll
 jason project create --name "Payroll for Latin America"
-jason campaign create --name "Seed-stage owners in Mexico and Colombia" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key payroll-latam-owners-20261114-1530
+jason campaign create --name "Seed-stage owners in Mexico and Colombia" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --idempotency-key payroll-latam-owners-20261114-1530 --file - <<'EOF'
+{"context":{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}}
+EOF
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel linkedin
 ```
@@ -54,7 +81,8 @@ Send one message that holds the plan: the goal, who Jason will look for, the cha
 and the campaign, and that both names are the person's to change. Say once, as a fact and never as a question, how messages go: "Every message
 waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who
 have: tell me when you want it, or in Jason Desktop set it in Settings, \"How messages go\"." It is a
-statement the person need not answer, and it is said in this message only. End it with exactly: "Say what to change, or say go." It
+statement the person need not answer, and in the quick start it is said in this message only; the set-up's question
+says it once more, as read from the campaign. End it with exactly: "Say what to change, or say go." It
 carries no list of questions and uses no question tool; only when the person asks to change something do you use the
 question tool, with the recommended choice first.
 
@@ -91,28 +119,24 @@ it a sample. Nobody who did not ask sees one.
 
 ## 5. After "go"
 
-Nothing is started before the person's go. From "go" the work goes on through `planner-in-session` for the plan and
-`managed-campaign-work`, which owns starting the campaign, the people and the work. `planner-in-session` takes the plan
-from the campaign that exists: the brief and the goals go into its context, and no second campaign is made. Then you
-start the campaign:
+Nothing is started before the person's go. "Go" is not yet the start: it says the plan stands. From "go" the set-up
+goes on in the campaign that exists, through `managed-campaign-work`, "Setting a campaign up, and starting it". It
+collects what is still missing, first who the messages are written as, then the people, what the campaign is for and
+how many to begin with; it records each as it comes, and ends with the question whether to start it, and the start.
+Where the person wants to plan the direction with you first, `planner-in-session` does that. `planner-in-session` takes
+the plan from the campaign that exists: the brief and the goals go into its context, and no second campaign is made.
 
-```
-jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason 'the plan agreed with the person'
-jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-```
+Either way you write no message, no template and no plan of steps, and you create no send: what the campaign says, to
+whom and when, is the work of Jason's roles once it has started. Where the person asks for one in plain words, you do
+it, as `managed-campaign-work` says.
 
-In the chat of Jason Desktop, too, you start the campaign on the person's word: once the plan is agreed and its work is
-queued, say once that it is ready and ask whether to start it, run `jason campaign start` when they say go, and never
-say it has started until `jason campaign get` answers the status `active`; where the chat's mode only reads and
-proposes, you do not start it: say that this mode does not. Elsewhere you start it on their go, as above.
-
-Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it: step 3 has said the fact, once. The message after "go" that hands over to the planning ends with one line: "There is a
+Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it: step 3 has said the fact, once. The message after "go" that hands over to the set-up ends with one line: "There is a
 guided check of the wiring; say so if you want it."
 
 ## Rules
 
-- Never ask for a preference. A preference is set only on the person's own word, never written from what you assume
-  or already know of them; you may say "I take it you are ..., tell me if not". Do not remind them of preferences
-  while sends are manual; the one sentence of step 3 on how messages go is a fact, said once, and is not a reminder. In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named
-  to write as, and that they can tell you or set it in Settings under "Your name and tone"; a missing tone is said once
-  too, as theirs to give.
+- Never ask for a preference here, in the quick start; the set-up in `managed-campaign-work` asks for who the messages
+  are written as, once, when the sender has no value. A preference is set only on the person's own word, never written
+  from what you assume or already know of them; you may say "I take it you are ..., tell me if not". Do not remind
+  them of preferences while sends are manual; the one sentence of step 3 on how messages go is a fact, said once, and
+  is not a reminder.

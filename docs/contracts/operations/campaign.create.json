@@ -25,6 +25,7 @@
   "channel_templates": null,
   "route_channel_argument": null,
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" },
+  "touch": false,
   "contact_projection": null,
   "precondition": "Jason's campaign is not linked yet to a provider's campaign of this plugin's: `campaign.external_ids.campaign` is absent. A linked one is refused as `campaign_already_linked` before the provider is called, because a second create would make a second provider's campaign beside the first link.",
   "preview": null,

@@ -32,10 +32,14 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Transition("start", "Start a draft campaign, or resume a paused one. " + ActorOption.RefusedInsideARun, Operations.CampaignStart, env, actor));
         campaign.Subcommands.Add(Transition("pause", "Pause an active campaign.", Operations.CampaignPause, env, actor));
         campaign.Subcommands.Add(Transition("archive", "Archive a campaign. Archiving is final.", Operations.CampaignArchive, env, actor));
+        campaign.Subcommands.Add(Review(env, actor));
         campaign.Subcommands.Add(UpdateContext(env, actor));
         campaign.Subcommands.Add(SetSendMode(env, actor));
         campaign.Subcommands.Add(AddContacts(env, actor));
         campaign.Subcommands.Add(RemoveContacts(env, actor));
+        campaign.Subcommands.Add(FinishContacts(env, actor));
+        campaign.Subcommands.Add(ContinueContacts(env, actor));
+        campaign.Subcommands.Add(ReopenContacts(env, actor));
         campaign.Subcommands.Add(ListContacts(env, actor));
         campaign.Subcommands.Add(Summary(env, actor));
         campaign.Subcommands.Add(Activity(env, actor));
@@ -175,7 +179,7 @@ public static class CampaignCommands
         };
         var reviewSeconds = new Option<int?>("--review-seconds")
         {
-            Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
+            Description = "How often this campaign is given a quick look, in seconds, counted from its last review; the deep review keeps the installation's own grid. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
         };
         var audienceThreshold = new Option<int?>("--audience-threshold")
         {
@@ -328,6 +332,54 @@ public static class CampaignCommands
         return command;
     }
 
+    /// <summary>
+    /// Asks a campaign's manager for a review now, on the person's word: the default actor applies, as it does to a start,
+    /// and the runtime refuses it from inside a run.
+    /// </summary>
+    private static Command Review(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "review",
+            "Ask the campaign's manager for a review now. --depth quick, the default, is a quick look (the manager's quick_look "
+            + "entry); --depth deep is a deep review (deep_review). The answer is the check-in it made, the same work item the "
+            + "dispatcher makes when a review falls due: follow it with jason workitem get. It moves the quick look's clock as "
+            + "every review does, and leaves the deep review's grid alone, so the daily deep review still comes at its moment. "
+            + "Refused for a campaign that is not active (campaign_not_active), while a check-in is open or held "
+            + "(review_already_open, naming it), and once the manager's launches of the day are spent (launches_spent: jason "
+            + "launches lift lifts them). " + ActorOption.RefusedInsideARun);
+        var id = CampaignId();
+        var depth = new Option<string?>("--depth")
+        {
+            Description = $"How deep a review to ask for: {string.Join(" or ", ReviewDepths.All)}. Absent, a quick look.",
+        };
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(depth);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var asked = parseResult.GetValue(depth);
+            if (asked is not null && !ReviewDepths.All.Contains(asked, StringComparer.Ordinal))
+            {
+                throw new UsageException($"--depth takes {string.Join(" or ", ReviewDepths.All)}; '{asked}' is not one of them.");
+            }
+
+            var body = RequestBody.Empty()
+                .Set("campaign_id", parseResult.GetValue(id))
+                .Set("depth", asked)
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+
+            return OperationRunner.RunAsync(
+                env, Operations.CampaignReview, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken);
+        });
+
+        return command;
+    }
+
     private static Command UpdateContext(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("update-context", "Edit top-level keys of the campaign context. Keys not named stay as they are.");
@@ -426,6 +478,109 @@ public static class CampaignCommands
         return command;
     }
 
+    /// <summary>
+    /// Ends people's lines in a campaign. Any named actor may, a role from its run among them, so the CLI's default actor
+    /// applies; the reason is the runtime's to require, and its refusal names the field.
+    /// </summary>
+    private static Command FinishContacts(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "finish-contacts",
+            "End the line with people in a campaign: an enrolled or paused member is finished, their open touches there "
+                + "(message.send, social_invitation.send, campaign.enroll) are cancelled, and no touch reaches them until the line is reopened. "
+                + "Their conversation goes on: a reply in their thread is not refused. --reason is required: the line records why it ended.");
+        return LineVerb(command, "A contact whose line to end, as cnt_.... Repeat the option for more than one.", Operations.CampaignFinishContacts, CampaignRenderers.FinishBatch, env, actor);
+    }
+
+    /// <summary>Continues the paused lines of people in a campaign; any named actor may, so the default actor applies.</summary>
+    private static Command ContinueContacts(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "continue-contacts",
+            "Continue the line with people whose line in a campaign is paused: a paused member is enrolled again, and the touches waiting for them may go again. "
+                + "A member who is not paused is answered not_paused.");
+        return LineVerb(command, "A paused contact to continue, as cnt_.... Repeat the option for more than one.", Operations.CampaignContinueContacts, CampaignRenderers.ContinueBatch, env, actor);
+    }
+
+    /// <summary>
+    /// Reopens people's ended lines: the person's decision, so the CLI's default actor does not apply. From a run the
+    /// actor is the attempt and <c>--decision</c> names the question the person answered; the runtime checks it.
+    /// </summary>
+    private static Command ReopenContacts(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "reopen-contacts",
+            "Reopen the line with people whose line in a campaign was ended: a finished member is enrolled again, and touches may reach them again. "
+                + "It is the person's decision: their own word, given outside any run, or from a run with --decision naming the question of the campaign "
+                + "that the person answered about the contacts_finished line that ended those lines; a contact that line does not name is answered not_in_decision. "
+                + "The runtime never reads the answer's words. From inside a run without --decision it is refused, decided_inside_a_run, and a role or an attempt "
+                + "without it is refused, reopen_not_human. " + ActorOption.NoDefault);
+        var decision = new Option<string?>("--decision")
+        {
+            Description = "The question, as dec_..., that the person answered about the line that ended: how a run carries their decision. Absent, the reopen is the person's own word.",
+        };
+        command.Options.Add(decision);
+        return LineVerb(
+            command,
+            "A contact whose ended line to reopen, as cnt_.... Repeat the option for more than one.",
+            Operations.CampaignReopenContacts,
+            CampaignRenderers.ReopenBatch,
+            env,
+            actor,
+            (body, parseResult) => body.Set("decision_id", parseResult.GetValue(decision)),
+            body => ActorOption.Named(body, "campaign reopen-contacts", "reopening a line is the person's decision"));
+    }
+
+    /// <summary>
+    /// The shape the three verbs of a line share with <c>remove-contacts</c>: the campaign, the contacts by a repeated
+    /// option or a file, the reason, and the answer counted as the API counts it.
+    /// </summary>
+    private static Command LineVerb(
+        Command command,
+        string contactHelp,
+        string operation,
+        Func<string, string?> render,
+        CliEnvironment env,
+        Option<string?> actor,
+        Action<JsonObject, ParseResult>? extra = null,
+        Func<JsonObject, JsonObject>? named = null)
+    {
+        var id = CampaignId();
+        var contact = VerbOptions.Repeatable("--contact", contactHelp);
+        var file = VerbOptions.File("The object holds contact_ids.");
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(contact);
+        command.Options.Add(file);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
+            body.Set("campaign_id", parseResult.GetValue(id))
+                .Set("contact_ids", VerbOptions.Strings(parseResult.GetValue(contact)));
+            extra?.Invoke(body, parseResult);
+            body.Set("reason", parseResult.GetValue(reason));
+            if (named is null)
+            {
+                body.SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+            }
+            else
+            {
+                body.SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+                named(body);
+            }
+
+            return await OperationRunner
+                .RunAsync(env, operation, body, new RunOptions(parseResult.GetValue(human), render), cancellationToken)
+                .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
     private static Command ListContacts(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command(
@@ -437,7 +592,7 @@ public static class CampaignCommands
         var state = Choice<MembershipState>.Only(new Option<string?>("--state") { Description = "Only members in this state: enrolled, paused, finished or excluded." });
         var summary = Choice<CampaignSummaryFilter>.Only(new Option<string?>("--summary")
         {
-            Description = "Only the people one count of campaign summary counts: waiting, failed, working, new, idle, sequence, out or removed.",
+            Description = "Only the people one count of campaign summary counts: waiting, failed, working, new, idle, sequence, out, paused, finished or removed.",
         });
         var activity = Choice<CampaignActivityFilter>.Only(new Option<string?>("--activity")
         {
@@ -491,7 +646,7 @@ public static class CampaignCommands
     {
         var command = new Command(
             "summary",
-            "How many of each campaign's people are waiting on you, failed, working, new, idle, in the sequence, out or removed, now. "
+            "How many of each campaign's people are waiting on you, failed, working, new, idle, in the sequence, out, paused, finished or removed, now. "
             + "A person may be in several counts; campaign list-contacts --summary lists who.");
         var ids = CampaignIds();
         var audience = AudienceOption();

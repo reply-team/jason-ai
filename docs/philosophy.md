@@ -46,10 +46,9 @@ own session, and each step the hosts take forward is a step for Jason too.
 
 Two things Jason is not follow from this. It is not a model or a chat: it uses the agent you already have. And it is
 not a sequencer: it runs no sequence of its own, plans a line per person and reaches people one at a time, and every
-operation that reaches a person waits for a person's approval. A direct message is approved as it will be sent. An
+operation that reaches a person waits for a person's approval until that person says otherwise. A direct message is approved as it will be sent. An
 enrolment into a provider's sequence is approved once for that person, and the provider then sends that sequence's
-steps on its own, without an approval for each: a provider's sequences stay the provider's, and a campaign may still
-enrol people into one where that is the better tool.
+steps on its own, without an approval for each: a provider's sequences stay the provider's.
 
 ## Providers and plugins
 
@@ -72,20 +71,23 @@ who is contacted, and work that needs a person's approval does not reach it unti
 still software you installed on your own machine, and [docs/plugins.md](plugins.md) says so in plain terms, with
 every rule a package is held to.
 
-## Four kinds of knowledge
+## Six kinds of knowledge
 
-Jason keeps four kinds of knowledge apart, because they come from different places and deserve different trust.
+Jason keeps six kinds of knowledge apart, because they come from different places and deserve different trust.
 
 - **Skills** are general: the profession, written once for everyone, versioned and shipped.
 - **Campaign context** is particular to one campaign: the brief in your own words and what the campaign has established.
-  It is part of the runtime's state, read by every role working on the campaign, and what you tell Jason about your
-  business lives beside it in plain files you can read and edit, one folder per project and campaign
-  ([docs/INSTALL.md](INSTALL.md) says where).
+  It is part of the runtime's state, read by every role working on the campaign.
+- **Memory files** are your own standing words, a plain `AGENTS.md` for all of your work, for a project and for a
+  campaign, which you read and edit and Jason never writes on its own: a session or the chat adds a line only on your
+  word ([docs/INSTALL.md](INSTALL.md) says where).
+- **Named preferences** are the few facts you state about yourself as the client — who messages are written as, how
+  the company sounds, how messages go — one value each, set only by you.
 - **Role notes** are a role's own working memory, written by that role for its later runs and kept for your business as
   a whole, a project or a campaign. They are deliberately not authoritative: where a note disagrees with the campaign's
   state, the state is what is true.
 - **Learned practice** would be the installation's own knowledge, distilled from what happened across campaigns. This
-  version does not have it. It is named here so that the other three are never stretched to play its part.
+  version does not have it. It is named here so that the other five are never stretched to play its part.
 
 The separation is the point. What works for one team fails for another, so general advice must never pass for a
 finding about your own campaigns, and one campaign's finding must never be taught to every campaign.
@@ -97,7 +99,8 @@ Jason is built to do as much as it can on its own and nothing that should be you
 - **Approvals.** An operation that reaches a real person is parked, with a record of exactly what would be done, until
   a person decides, and nothing is sent in the meantime; nothing runs but what they approved, and the approval is
   given under a person's name, through the command line or Jason Desktop. Whether an operation needs one is written
-  in its published contract, not in a setting.
+  in its published contract, not in a setting; a person may still decide in advance, by name, that messages to people
+  who have or have not answered go on their own, or that drafted answers to one kind of reply do.
 - **The do-not-contact register.** Work that would reach somebody on it fails before it starts. That floor never
   relaxes.
 - **A provider's block.** When the provider refuses an account for a cause the work cannot change, such as billing or

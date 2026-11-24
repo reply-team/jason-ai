@@ -359,7 +359,7 @@ export function recentView(): Html {
         ${act('side.start')}
         ${agentMaking.value ? html`disabled aria-busy="true"` : null}
     >
-        ${svg('plus', 14)}
+        ${svg('plus', 16)}
     </button>`;
     const newChat = html`<button
         class="rbtn plus"
@@ -368,7 +368,7 @@ export function recentView(): Html {
         aria-label="${t('side.newChat')}"
         ${act('side.new')}
     >
-        ${svg('plus', 14)}
+        ${svg('plus', 16)}
     </button>`;
     // Said once the list of agents is read, and CHATS' once the desktop listed its conversations: before that, none is
     // not yet known.

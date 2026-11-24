@@ -920,6 +920,8 @@ public class AgentPreflightTests
                 settings,
                 TestOptions.LaunchesSettings(),
                 TestOptions.SendingSettings(),
+                new InstallationDay(clock, TestOptions.RuntimeSettings()),
+                TestOptions.LinesSettings(),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>());
         }

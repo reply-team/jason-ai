@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { openedHere } from './box-focus';
 import { useApi } from '../api/context';
 import { ArchiveDialog } from '../screens/campaigns/archive';
 import { TransitionDialog, type Movable, type Transition } from '../screens/campaigns/pause-dialog';
@@ -129,7 +130,9 @@ export function RowMenu() {
         // An act that shows something in the area puts a narrow window's drawer away, as the row's own click does. Rename
         // shows its field in the row, in the drawer, so the drawer stays.
         if (item.kind === 'open' || item.kind === 'fresh' || item.kind === 'remove') sideAway.value += 1;
-        if (item.kind === 'open') (unspoken(row) ? openAgentRow : openRow)(row);
+        // Where the act opens the chat for the person to write in, its box takes the focus from the row it came back to.
+        const opened = openedHere();
+        if (item.kind === 'open') (unspoken(row) ? openAgentRow : openRow)(row, opened);
         else if (item.kind === 'folder' || item.kind === 'session') {
             const campaign = campaignOf(row);
             if (campaign !== null)
@@ -148,8 +151,9 @@ export function RowMenu() {
                     campaignId: drawn.campaignId,
                     conversationId: drawn.conversationId,
                 });
-        } else if (item.kind === 'fresh' || item.kind === 'remove')
-            void begin(row, item.kind, (held) => here().dock.showChat(held));
+        } else if (item.kind === 'fresh') void begin(row, 'fresh', (held) => here().dock.showChat(held, opened));
+        // Remove shows the chat to ask first: the question's Keep takes the focus, and the box is held while it stands.
+        else if (item.kind === 'remove') void begin(row, 'remove', (held) => here().dock.showChat(held));
     };
     const ended = (open: Open, done: boolean) => {
         setDialog(null);

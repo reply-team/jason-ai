@@ -32,14 +32,17 @@ public sealed class ReserveCounter(JournalWriter journal, ILogger<ReserveCounter
     public const int MaximumThreshold = 100_000;
 
     /// <summary>
-    /// The kinds that can move a campaign's untouched count: a member added or removed, a page of a search's people landed,
-    /// work created about somebody, and the campaign's own fields changed, its threshold among them. Kinds only: a rename or work the runtime made costs one
-    /// recount that finds nothing new, and the dispatcher keeps reading nothing but a kind.
+    /// The kinds that can move a campaign's untouched count: a member added or removed, a line ended or reopened, a page of a
+    /// search's people landed, work created about somebody, and the campaign's own fields changed, its threshold among
+    /// them. A line continued is not one: a paused person was never out of the count. Kinds only: a rename or work the
+    /// runtime made costs one recount that finds nothing new, and the dispatcher keeps reading nothing but a kind.
     /// </summary>
     public static readonly string[] ChangeKinds =
     [
         JournalKinds.ContactsAdded,
         JournalKinds.ContactsRemoved,
+        JournalKinds.ContactsFinished,
+        JournalKinds.ContactsReopened,
         JournalKinds.AudiencePeopleLanded,
         JournalKinds.WorkItemCreated,
         JournalKinds.CampaignUpdated,

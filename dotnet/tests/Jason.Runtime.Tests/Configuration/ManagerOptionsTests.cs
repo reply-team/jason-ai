@@ -90,11 +90,13 @@ public class ManagerOptionsTests
         Assert.DoesNotContain(JournalKinds.AudienceReserveRecovered, options.Triggers);
         Assert.DoesNotContain(JournalKinds.AudiencePeopleLanded, options.Triggers);
         Assert.DoesNotContain(JournalKinds.ProviderSendObserved, options.Triggers);
-        Assert.Equal(18_000, options.ReviewSeconds);
+        Assert.Equal(21_600, options.ReviewSeconds);
+        Assert.Equal(86_400, options.DeepReviewSeconds);
         Assert.Equal(900, options.TimeoutSeconds);
         Assert.Equal(1, options.MaxAttempts);
         Assert.Equal(0, options.Priority);
         Assert.Equal(500, options.MaxEntriesPerScan);
+        Assert.Equal(20, options.AudienceThreshold);
 
         // And every one of them is still a kind the runtime writes itself, which is what the validator is for.
         Assert.All(options.Triggers, kind => Assert.Contains(kind, JournalKinds.Reserved));
@@ -125,6 +127,8 @@ public class ManagerOptionsTests
     [Theory]
     [InlineData("Manager:ReviewSeconds", 299)]
     [InlineData("Manager:ReviewSeconds", 604_801)]
+    [InlineData("Manager:DeepReviewSeconds", 299)]
+    [InlineData("Manager:DeepReviewSeconds", 604_801)]
     [InlineData("Manager:TimeoutSeconds", 29)]
     [InlineData("Manager:TimeoutSeconds", 86_401)]
     [InlineData("Manager:MaxAttempts", 0)]
@@ -133,6 +137,8 @@ public class ManagerOptionsTests
     [InlineData("Manager:Priority", 1_001)]
     [InlineData("Manager:MaxEntriesPerScan", 49)]
     [InlineData("Manager:MaxEntriesPerScan", 10_001)]
+    [InlineData("Manager:AudienceThreshold", 0)]
+    [InlineData("Manager:AudienceThreshold", 100_001)]
     public void A_number_out_of_range_refuses_the_start(string setting, int value)
     {
         var failure = Validate(options =>
@@ -140,9 +146,11 @@ public class ManagerOptionsTests
             switch (setting)
             {
                 case "Manager:ReviewSeconds": options.ReviewSeconds = value; break;
+                case "Manager:DeepReviewSeconds": options.DeepReviewSeconds = value; break;
                 case "Manager:TimeoutSeconds": options.TimeoutSeconds = value; break;
                 case "Manager:MaxAttempts": options.MaxAttempts = value; break;
                 case "Manager:Priority": options.Priority = value; break;
+                case "Manager:AudienceThreshold": options.AudienceThreshold = value; break;
                 default: options.MaxEntriesPerScan = value; break;
             }
         });
@@ -153,17 +161,20 @@ public class ManagerOptionsTests
     [Theory]
     [InlineData("Manager:ReviewSeconds", 300)]
     [InlineData("Manager:ReviewSeconds", 604_800)]
+    [InlineData("Manager:DeepReviewSeconds", 300)]
+    [InlineData("Manager:DeepReviewSeconds", 604_800)]
     [InlineData("Manager:MaxEntriesPerScan", 50)]
+    [InlineData("Manager:AudienceThreshold", 1)]
+    [InlineData("Manager:AudienceThreshold", 100_000)]
     public void The_bound_itself_is_allowed(string setting, int value)
     {
         var options = new ManagerOptions();
-        if (setting == "Manager:ReviewSeconds")
+        switch (setting)
         {
-            options.ReviewSeconds = value;
-        }
-        else
-        {
-            options.MaxEntriesPerScan = value;
+            case "Manager:ReviewSeconds": options.ReviewSeconds = value; break;
+            case "Manager:DeepReviewSeconds": options.DeepReviewSeconds = value; break;
+            case "Manager:AudienceThreshold": options.AudienceThreshold = value; break;
+            default: options.MaxEntriesPerScan = value; break;
         }
 
         Assert.True(new ManagerOptionsValidator().Validate(null, options).Succeeded);
@@ -216,13 +227,14 @@ public class ManagerOptionsTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(
             dir.Paths.UserSettingsFile,
-            """{"Manager":{"ReviewSeconds":600,"Triggers":["workitem_failed"],"MaxAttempts":2}}""");
+            """{"Manager":{"ReviewSeconds":600,"DeepReviewSeconds":3600,"Triggers":["workitem_failed"],"MaxAttempts":2}}""");
 
         var options = new ManagerOptions();
         using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
         ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
 
         Assert.Equal(600, options.ReviewSeconds);
+        Assert.Equal(3_600, options.DeepReviewSeconds);
 
         // Narrowed, not widened. The standard binder appends to a list that already holds values, so this line
         // read "workitem_failed, approval_rejected, external_effect_reported, workitem_failed" until the section
@@ -285,6 +297,45 @@ public class ManagerOptionsTests
         }
 
         Assert.Equal(600, settings.Current.ReviewSeconds);
+    }
+
+    /// <summary>
+    /// The reserve's default is held to the range a campaign's own threshold is held to, at the start: a runtime that
+    /// would set an impossible threshold at every first start does not start.
+    /// </summary>
+    [Fact]
+    public async Task A_reserve_default_out_of_range_refuses_the_start_for_real()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"AudienceThreshold":0}}""");
+
+        var failure = await Assert.ThrowsAsync<InvalidSettingsException>(
+            () => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
+
+        Assert.Contains("Manager:AudienceThreshold", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>And on a live edit: the last good default stays the one the next first start uses.</summary>
+    [Fact]
+    public async Task A_live_edit_of_the_reserve_default_out_of_range_keeps_the_last_good_value()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Manager":{"AudienceThreshold":30}}"""));
+
+        var settings = fixture.Runtime.Services.GetRequiredService<LiveSettings<ManagerOptions>>();
+        Assert.Equal(30, settings.Current.AudienceThreshold);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Manager":{"AudienceThreshold":100001}}""");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && settings.Current.AudienceThreshold == 30)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Equal(30, settings.Current.AudienceThreshold);
     }
 
     private static string Validate(Action<ManagerOptions> configure)

@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_is_told_that_nothing_here_stores_a_message()
     {
         var skill = Flattened("copywriter");
@@ -22,6 +25,7 @@ public partial class RoleSkillTests
     /// what stays the provider's own doing on its schedule, so it does not write as though its copy could never reach anybody.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_is_told_which_operations_write_a_message_a_person_receives()
     {
         var skill = Flattened("copywriter");
@@ -29,7 +33,7 @@ public partial class RoleSkillTests
         Assert.DoesNotContain("No operation this build publishes sends outreach", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("Nothing here composes outreach and sends it.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go automatically.**",
+            "**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go automatically.**",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("Each is its own act, one message to one person, and the claim decides which when it runs the item: the choice is the person's and never a role's.", skill, StringComparison.Ordinal);
@@ -51,6 +55,7 @@ public partial class RoleSkillTests
     /// sender's value only where the provider holds it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_may_answer_with_a_template_where_the_brief_asks_for_one_message_per_audience()
     {
         var skill = Flattened("copywriter");
@@ -92,6 +97,7 @@ public partial class RoleSkillTests
     /// guesswork.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_writes_final_text_and_says_so_when_it_holds_no_copy_of_the_standard()
     {
         var skill = Flattened("copywriter");
@@ -110,6 +116,7 @@ public partial class RoleSkillTests
     /// the result at all.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_answers_with_every_text_of_the_format_as_a_template_together_for_whoever_raises_the_sends()
     {
         var skill = Flattened("copywriter");
@@ -126,6 +133,7 @@ public partial class RoleSkillTests
     /// role write by. Told neither, the role would read `sender.name` as the sender it signs as and write the signature twice.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_is_told_what_the_example_cannot_show_and_that_sender_names_are_the_providers()
     {
         var skill = Flattened("copywriter");
@@ -141,6 +149,7 @@ public partial class RoleSkillTests
     /// is a draft in its file, until a host reads it again.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_copywriter_is_a_draft_until_a_host_reads_its_current_text()
     {
         var file = SkillPack.Find("copywriter").File;

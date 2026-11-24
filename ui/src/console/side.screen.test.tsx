@@ -17,6 +17,7 @@ import { Console } from './console';
 import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
 import { chats, clock, conversations, feedId, feedUnseen, here } from './state';
+import { startDraft } from './start';
 
 // The sidebar: the rows in their order, the number on Needs you, More and what is under it, the two sections AGENTS
 // and CHATS with the plus over each, and Settings in the foot. Read against the recorded exchanges of the runtime's own
@@ -245,6 +246,8 @@ describe('the sidebar', () => {
         await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.click(newChat());
         await waitFor(() => expect(calls(desktop, 'chat.create')).toHaveLength(1));
+        // The plus makes a plain chat about no agent: nothing marks it begun from Start.
+        expect(calls(desktop, 'chat.create')[0]!.args).toEqual([]);
         await waitFor(() => expect(shown()).toMatch(/^chat:/));
     });
 
@@ -502,8 +505,8 @@ describe('the sidebar’s look', () => {
         await settled();
         for (const each of [newAgent(), newChat()])
             expect(styleOf(each), each.getAttribute('aria-label') ?? '').toMatchObject({
-                width: '20px',
-                height: '20px',
+                width: '16px',
+                height: '16px',
                 'border-radius': '5px',
                 border: '1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg))',
                 background: 'color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg))',
@@ -529,6 +532,59 @@ describe('the sidebar’s look', () => {
         // Neither is marked: a plus makes its kind, it brings no page forward.
         expect(newAgent().getAttribute('aria-current')).toBeNull();
         expect(newChat().getAttribute('aria-current')).toBeNull();
+    });
+
+    it('draws each plus at the filter’s size and weight, its cross on the square’s centre', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        const px = (value: string | null | undefined): number => Number(/^([\d.]+)(px)?$/.exec(value ?? '')?.[1]);
+        const filter = document.querySelector<SVGElement>('.jc-console .recent .rbtn:not(.plus) svg')!;
+        for (const button of [newAgent(), newChat()]) {
+            const name = button.getAttribute('aria-label') ?? '';
+            const box = styleOf(button);
+            const glyph = button.querySelector<SVGElement>('svg')!;
+            const drawn = styleOf(glyph);
+            // The square: its border inside its size, no padding of the browser's own, its one child on both centres.
+            expect(box, name).toMatchObject({
+                'box-sizing': 'border-box',
+                padding: '0',
+                border: expect.stringMatching(/^1px solid /),
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+            });
+            const side = px(box.width);
+            expect(px(box.height), name).toBe(side);
+            // The glyph is the size its markup says, which the stylesheet does not override.
+            const size = px(glyph.getAttribute('width'));
+            expect(px(glyph.getAttribute('height')), name).toBe(size);
+            expect(drawn.width ?? glyph.getAttribute('width'), name).toBe(String(size));
+            expect(drawn.height ?? glyph.getAttribute('height'), name).toBe(String(size));
+            expect(drawn.flex, name).toBe('none');
+            // The cross, on a 24-unit grid: two arms of the same length crossing at the grid's centre, so it is centred
+            // in its icon, and the icon is centred in the square.
+            expect(glyph.getAttribute('viewBox'), name).toBe('0 0 24 24');
+            const arms = [...glyph.querySelectorAll('path')].map((each) => each.getAttribute('d')).join('');
+            const [, x, y1, run, x1, y, across] = /^M(\d+) (\d+)v(\d+)M(\d+) (\d+)h(\d+)$/.exec(arms)!.map(Number);
+            expect([x, y, y1! + run! / 2, x1! + across! / 2, run], name).toEqual([12, 12, 12, 12, across]);
+            // The icon is the square's own size, so the two share one origin and one size and a scale's rounding moves
+            // both alike. At 150% a button's own padding (1px 6px) and a 22px icon in a 20px square left the icon's origin
+            // a half device pixel off the square's, which is what put the cross off the centre.
+            expect(size, name).toBe(side);
+            // Smaller than the 20px square and the 22px icon it replaced, and no larger than the filter's own button.
+            expect(side, name).toBeLessThanOrEqual(16);
+            // The margins keep the 20px square's place, 5px after the filter: the CHATS header keeps its height, the
+            // filter does not move, and the square's right edge stays on the rows' right edge.
+            const [top, right, bottom, left] = (box.margin ?? '').split(' ').map(px);
+            expect([side + top! + bottom!, side + left! + right!, right], name).toEqual([20, 25, 0]);
+            expect(size, name).toBeLessThan(22);
+            // The stroke is the filter's in pixels: the filter's 2 units of 24 at its size, the plus's units at its size.
+            const filterStroke = (2 * px(filter.getAttribute('width'))) / 24;
+            const stroke = (Number(drawn['stroke-width'] ?? glyph.getAttribute('stroke-width')) * size) / 24;
+            expect(stroke, name).toBeCloseTo(filterStroke, 3);
+            // The cross spans what the filter's lines span: 14 units of the plus at its size, 16 of the filter's at 14.
+            expect((run! * size) / 24, name).toBeCloseTo((16 * px(filter.getAttribute('width'))) / 24, 3);
+        }
     });
 
     it('shows a row’s three dots on hover and on focus alone, over the row’s right end', async () => {
@@ -808,5 +864,97 @@ describe('the strip in the Windows and Linux desktop’s window, whose caption b
         renderConsole(Object.assign(stubDesktop(), { platform: 'darwin' as const }), 'live');
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay')).toBe(false);
+    });
+});
+
+describe('Jason’s mark at the top of the sidebar', () => {
+    /** The mark and the wordmark: one button, named for the page it leads to. */
+    const brand = () => side().getByRole('button', { name: 'Start' });
+    const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Who do you want to reach?' });
+
+    beforeEach(() => {
+        startDraft.value = '';
+    });
+
+    it('shows Start again, with the words typed there and not sent, and leaves the Alpha badge out of the button', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.change(box(), { target: { value: 'CFOs of logistics firms in Ohio' } });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        expect(box().value).toBe('CFOs of logistics firms in Ohio');
+        // The button holds the mark and both wordmarks; the badge stands beside it, in the brand's strip.
+        const button = brand();
+        expect(button.getAttribute('type')).toBe('button');
+        expect(button.querySelector('.mark')).not.toBeNull();
+        expect(button.querySelector('.wordmark.light')).not.toBeNull();
+        expect(button.querySelector('.wordmark.dark')).not.toBeNull();
+        const alpha = document.querySelector<HTMLElement>('.jc-console .side .brand .alpha')!;
+        expect(alpha.textContent).toBe('Alpha');
+        expect(button.contains(alpha)).toBe(false);
+        expect(alpha.closest('button')).toBeNull();
+        expect(alpha.parentElement).toBe(button.parentElement);
+        // Start has no row: nothing marks the mark as where the area stands.
+        expect(button.hasAttribute('aria-current')).toBe(false);
+    });
+
+    it('closes nothing: a chat left is still drawn and in its row, and a page gives way to Start at the chat’s address', async () => {
+        const desktop = stubDesktop();
+        desktop.keep({ id: 'conv_01JDKEPT0000000000000000X2', title: 'Autumn' });
+        renderConsole(desktop);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const row = () => within(sections().chats).getByRole('button', { name: 'Autumn' });
+        fireEvent.click(await waitFor(row));
+        await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000X2'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        // The chat is only not chosen: its pane is held as it was left, and its row is in CHATS, where it opens again.
+        expect(
+            document.querySelector('.area > .pane[data-pane="chat:conv_01JDKEPT0000000000000000X2"]'),
+        ).not.toBeNull();
+        fireEvent.click(row());
+        await waitFor(() => expect(shown()).toBe('chat:conv_01JDKEPT0000000000000000X2'));
+        expect(calls(desktop, 'chat.remove')).toEqual([]);
+        expect(calls(desktop, 'chat.stop')).toEqual([]);
+        fireEvent.click(side().getByRole('button', { name: 'Settings' }));
+        await waitFor(() => expect(inFront()).toBe('page:settings'));
+        fireEvent.click(brand());
+        await waitFor(() => expect(shown()).toBe('start'));
+        expect(route.value.screen).toBe('chat');
+        // The Demo stays the Demo: the mark shows the Demo's own Start and asks the desktop for no other mode.
+        expect(mode.value).toBe('demo');
+        expect(calls(desktop, 'mode.set')).toEqual([]);
+    });
+
+    it('changes nothing at rest: no ground, border or padding of its own, the pointer and the focus ring the rows have, and no hover', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const button = brand();
+        expect(styleOf(button)).toMatchObject({
+            display: 'flex',
+            'align-items': 'center',
+            gap: '6px',
+            padding: '0',
+            border: '0',
+            background: 'none',
+            cursor: 'pointer',
+        });
+        // The ring is the console's one, for every control; nothing takes it off the mark.
+        expect(styleOf(button)['outline']).toBeUndefined();
+        const css = readFileSync('src/console/console.css', 'utf8');
+        expect(css).toContain(
+            '.jc-console :focus-visible {\n    box-shadow: none;\n    outline: 2px solid var(--teal);',
+        );
+        const hovers = css
+            .replace(/[/][*][^]*?[*][/]/g, '')
+            .split('}')
+            .map((rule) => rule.slice(0, rule.indexOf('{')))
+            .filter((head) => head.includes('.brand') && /:hover|:active|aria-current/.test(head));
+        expect(hovers).toEqual([]);
+        // Where the Mac's window has its buttons, the band is the sidebar's top 26 px; the brand starts below it, so the
+        // mark is in no drag region and needs no no-drag of its own.
+        expect(styleOf(button)['-webkit-app-region']).toBeUndefined();
     });
 });

@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
@@ -285,7 +286,7 @@ public class AiRoleCommandTests
         await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), projectId: "prj_one");
 
         var echoed = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
-        Assert.Contains("\"envelope_version\":5", echoed, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":6", echoed, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":", echoed, StringComparison.Ordinal);
 
         var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!;
@@ -312,6 +313,10 @@ public class AiRoleCommandTests
 
         // A run that follows no wait is told of none.
         Assert.Null(envelope.Resumption);
+
+        // And an item that carries no entry is told of none, by name.
+        Assert.Contains("\"entry\":null", echoed, StringComparison.Ordinal);
+        Assert.Null(envelope.Entry);
     }
 
     /// <summary>
@@ -512,7 +517,7 @@ public class AiRoleCommandTests
         using var document = JsonDocument.Parse(line);
         Assert.Equal("user", document.RootElement.GetProperty("event").GetString());
         var content = document.RootElement.GetProperty("message").GetProperty("content").GetString()!;
-        Assert.Contains("\"envelope_version\":5", content, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":6", content, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -540,6 +545,142 @@ public class AiRoleCommandTests
         Assert.DoesNotContain(Token, stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An item that carries an entry hands its file's text to the host inside the envelope, whole and as UTF-8 — line ends,
+    /// a heading, characters outside ASCII — read from the copy the launch made, and the launch record names it with the
+    /// size of that text. The folder here is a person's own, with no record of a deployment: it is the copy that is read.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W7, "an entry's text in the launch envelope")]
+    public async Task An_item_with_an_entry_hands_its_text_to_the_host_in_the_envelope_and_records_its_name_and_bytes()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await ManagerFolderAsync(directory.Paths, ("start", StartText));
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), role: "manager", entry: "start");
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(new LaunchEntry("start", StartText), Envelope(workDir).Entry);
+        Assert.Equal(StartText, await File.ReadAllTextAsync(Path.Combine(workDir, ".claude", "skills", "manager", "entries", "start.md"), Ct));
+        Assert.Equal(new LaunchEntryRecordDto("start", System.Text.Encoding.UTF8.GetByteCount(StartText)), exited.Launch.Entry);
+        Assert.Equal(new RoleSkillDto(true, "manager", exited.Launch.RoleSkill!.Bytes), exited.Launch.RoleSkill);
+    }
+
+    /// <summary>
+    /// An entry whose file the role's folder does not have is named with no text, the attempt runs all the same, and the
+    /// launch record says no bytes: never some other text in its place, and never a refusal.
+    /// </summary>
+    [Fact]
+    public async Task An_entry_whose_file_is_absent_is_named_with_no_text_and_the_attempt_runs()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await ManagerFolderAsync(directory.Paths, ("start", StartText));
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), role: "manager", entry: "quick_look");
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(new LaunchEntry("quick_look", null), Envelope(workDir).Entry);
+        Assert.Contains("\"entry\":{\"name\":\"quick_look\",\"text\":null}", await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct), StringComparison.Ordinal);
+        Assert.Equal(new LaunchEntryRecordDto("quick_look", 0), exited.Launch.Entry);
+    }
+
+    /// <summary>And a role with no folder at all: the entry is named, with no text, and the attempt runs untaught as it always did.</summary>
+    [Fact]
+    public async Task An_entry_of_a_role_with_no_folder_is_named_with_no_text_and_the_attempt_runs()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), role: "manager", entry: "resume");
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(new LaunchEntry("resume", null), Envelope(workDir).Entry);
+        Assert.Equal(new LaunchEntryRecordDto("resume", 0), exited.Launch.Entry);
+        Assert.Equal(new RoleSkillDto(false, "manager", 0), exited.Launch.RoleSkill);
+    }
+
+    /// <summary>
+    /// An item that carries no entry is told of none, by name, and its launch record names none — even where the role's
+    /// folder holds entry files: nothing is chosen for it.
+    /// </summary>
+    [Fact]
+    public async Task An_item_without_an_entry_carries_entry_null_and_its_launch_record_names_none()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await ManagerFolderAsync(directory.Paths, ("start", StartText));
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"), role: "manager");
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Contains("\"entry\":null", await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct), StringComparison.Ordinal);
+        Assert.Null(Envelope(workDir).Entry);
+        Assert.Null(exited.Launch.Entry);
+    }
+
+    /// <summary>
+    /// Every host the runtime registers is handed the same entry text, after its own framing of the standard input: the
+    /// stand-in echoes what it read, and the envelope inside it — the one line's content for a host that reads a stream,
+    /// the whole stream for every other — carries the text whole. Nothing of it is on the command line.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(HostKinds))]
+    public async Task Every_host_receives_the_same_entry_text_after_its_own_framing(AgentHostKind kind)
+    {
+        using var directory = new TempDataDir();
+        WriteDescriptor(directory.Paths);
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await ManagerFolderAsync(directory.Paths, ("deep_review", StartText));
+        var registered = RegisteredHosts();
+        var host = registered.Single(candidate => candidate.Kind == kind);
+        using var kill = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var command = FakeAgentHost.EntryCommand("echo-stdin");
+
+        var outcome = await RunAsync(directory.Paths, workDir, command, kill: kill, host: host, hosts: registered, role: "manager", entry: "deep_review");
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.Equal(0, exited.ExitCode);
+        Assert.Equal(command, exited.Launch.EntryCommand);
+        var stdout = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
+        var json = kind == AgentHostKind.AntigravityCli
+            ? JsonDocument.Parse(Assert.Single(stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))).RootElement.GetProperty("message").GetProperty("content").GetString()!
+            : stdout;
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(json, JasonJson.Options)!;
+        Assert.Equal(new LaunchEntry("deep_review", StartText), envelope.Entry);
+        Assert.Equal(new LaunchEntryRecordDto("deep_review", System.Text.Encoding.UTF8.GetByteCount(StartText)), exited.Launch.Entry);
+    }
+
+    public static TheoryData<AgentHostKind> HostKinds() => [.. AgentHosts.All.Select(facts => facts.Kind)];
+
+    /// <summary>An entry's text with what a file of one holds: a heading, line ends of both kinds, and characters outside ASCII.</summary>
+    private const string StartText = "# Start\n\nRead the brief first — then the campaign's état.\r\nAnd 日本.\n";
+
+    /// <summary>Every registration the runtime's composition makes, one instance each.</summary>
+    private static IReadOnlyList<IAgentHost> RegisteredHosts()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Jason.Runtime.Hosting.Modules.DispatcherModule.AddDispatcherModule(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        return [.. Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<IAgentHost>(provider)];
+    }
+
+    /// <summary>The manager's own folder where the runtime keeps role skills, with the entry files given, and no record of a deployment.</summary>
+    private static async Task ManagerFolderAsync(JasonPaths paths, params (string Name, string Text)[] entries)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, "manager")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(folder, "SKILL.md"), "---\nname: manager\ndescription: one line\n---\n\nReview the campaign.\n", Ct);
+        var entriesFolder = Directory.CreateDirectory(Path.Combine(folder, "entries")).FullName;
+        foreach (var (name, text) in entries)
+        {
+            await File.WriteAllBytesAsync(Path.Combine(entriesFolder, name + ".md"), System.Text.Encoding.UTF8.GetBytes(text), Ct);
+        }
+    }
+
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
     internal static Task<CommandOutcome> RunAsync(
         JasonPaths paths,
@@ -554,13 +695,16 @@ public class AiRoleCommandTests
         Resumption? resumption = null,
         IAgentHost? host = null,
         IReadOnlyList<string>? allow = null,
-        PluginRegistry? plugins = null)
+        PluginRegistry? plugins = null,
+        string role = "researcher",
+        string? entry = null,
+        IReadOnlyList<IAgentHost>? hosts = null)
     {
         var command = new AiRoleCommand(
             paths,
             new TokenRedactor(new RuntimeSecrets(Token)),
             TestOptions.RoleSettings(roles),
-            host is null ? [] : [host],
+            hosts ?? (host is null ? [] : [host]),
             plugins ?? new PluginRegistry(TimeProvider.System),
             NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
@@ -570,7 +714,7 @@ public class AiRoleCommandTests
             "cmp_one",
             "cnt_one",
             WorkItemKind.AiRole,
-            "researcher",
+            role,
             null,
             brief ?? new JsonObject { ["goal"] = "find the decision maker" },
             null,
@@ -584,7 +728,8 @@ public class AiRoleCommandTests
             MemoryFiles: memoryFiles,
             Resumption: resumption,
             Host: host?.Kind,
-            Allow: allow);
+            Allow: allow,
+            Entry: entry);
 
         return command.RunAsync(context, Ct);
     }

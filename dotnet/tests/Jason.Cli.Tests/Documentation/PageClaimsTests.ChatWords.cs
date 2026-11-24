@@ -1,3 +1,5 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.Cli.Tests.Documentation;
 
 public partial class PageClaimsTests
@@ -10,6 +12,7 @@ public partial class PageClaimsTests
     /// browser tab sends to a chat: the tab and its chat are gone.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_pages_say_the_turns_folder_the_way_back_from_an_earlier_desktop_and_where_the_feed_stands_and_no_tab_sends()
     {
         var desktop = Flat(Page("docs", "desktop.md"));
@@ -18,7 +21,12 @@ public partial class PageClaimsTests
         Assert.Contains("a file in the turn's folder named like one of the six", desktop, StringComparison.Ordinal);
         Assert.Contains("a read or a write that names a path under the data directory outside the turn's folder (the settings file", desktop, StringComparison.Ordinal);
         Assert.Contains("to the `.claude`, `.agents` and `.codex` folders of the turn's folder and to its `.mcp.json`.", desktop, StringComparison.Ordinal);
-        Assert.Contains("a read outside the turn's folder and the added folders", desktop, StringComparison.Ordinal);
+        Assert.Contains("a read outside the turn's folder and the added folders by a command, on an older Claude Code; a write outside them, or in a campaign's or a project's folder", desktop, StringComparison.Ordinal);
+        Assert.Contains("a file tool outside the chat's folders is refused by Claude Code itself, with no card, and the chat says so and that another mode may let it read there (Ask first and Auto-edit, from Claude Code 2.1.322 on).", desktop, StringComparison.Ordinal);
+        Assert.Contains("in Plan only it is refused, as any shell command is.", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("The cards left in Plan only are a read outside the chat's folders", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("in Plan only and on an older Claude Code; a write outside them", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("changing the mode lets it read there", desktop, StringComparison.Ordinal);
         foreach (var old in new[] { "strictly inside the chat folder", "a file in the chat folder named", "outside the chat folder (the settings file", "folders of the chat folder", "a read outside the chat folder" })
         {
             Assert.DoesNotContain(old, desktop, StringComparison.Ordinal);
@@ -26,6 +34,11 @@ public partial class PageClaimsTests
 
         Assert.Contains("If you go back to an earlier version of Jason Desktop and then return, a chat that version used opens in Ask first, unless it is in Plan only, and says once why: an earlier version keeps no chat's mode but Plan only.", desktop, StringComparison.Ordinal);
         Assert.Contains("drawn in the sidebar under **Needs you**, in Live and in the Demo, with a dot while it holds lines you have not seen; Search opens it too, as its page **Feed**.", desktop, StringComparison.Ordinal);
+
+        // Codex in exec never asks, so its Ask first, and the Auto-edit it runs as, only read and propose: a send such a turn
+        // writes waits for the person whatever the send mode, and the empty chat says the Plan only line there.
+        Assert.Contains("in Ask first and Auto-edit on Claude Code \"A message written here follows its campaign's send mode; the AI approves when you tell it to.\"; on Codex, whose Ask first and Auto-edit only read and propose, so that a send the chat writes waits for you, the Plan only line.", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("in Ask first and Auto-edit \"A message written here follows its campaign's send mode", desktop, StringComparison.Ordinal);
 
         var ui = Flat(Page("docs", "ui.md"));
         Assert.DoesNotContain("it sends only to a chat in", ui, StringComparison.Ordinal);
@@ -37,6 +50,7 @@ public partial class PageClaimsTests
     /// chat taught the other answered "is Jason running?" with a card in Ask first, or with a verb it said it did not know.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_skills_check_whether_jason_runs_with_jason_status()
     {
         var managed = Page("skills", "runtime", "managed-campaign-work", "SKILL.md");
@@ -62,6 +76,7 @@ public partial class PageClaimsTests
     /// where the cause holds a minute, and "until Jason Desktop starts again" only where a tool ran that the check never saw.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a page the Desktop chat reads teaches it what was not decided")]
     public void The_desktop_pages_say_what_a_full_access_turn_carries_and_how_long_a_bypass_not_available_holds()
     {
         const string carried = "a key and the credentials the turn carries reach the commands the agent runs";

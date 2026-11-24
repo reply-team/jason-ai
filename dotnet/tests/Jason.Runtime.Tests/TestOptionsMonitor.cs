@@ -74,9 +74,24 @@ public static class TestOptions
     public static LiveSettings<LaunchesOptions> LaunchesSettings(LaunchesOptions? options = null) =>
         Seam(new TestOptionsMonitor<LaunchesOptions>(options ?? new LaunchesOptions()), LaunchesOptions.Section);
 
+    /// <summary>
+    /// The seam over the runtime section, which the claim and the lift read for the installation's zone: none by default, so
+    /// the day is the zone of the clock the test hands the runtime.
+    /// </summary>
+    public static LiveSettings<RuntimeOptions> RuntimeSettings(IOptionsMonitor<RuntimeOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<RuntimeOptions>(new RuntimeOptions()), RuntimeOptions.Section);
+
     /// <summary>The seam over the sending section, which the claim reads for the daily ceiling of automatic sends.</summary>
     public static LiveSettings<SendingOptions> SendingSettings(IOptionsMonitor<SendingOptions>? monitor = null) =>
         Seam(monitor ?? new TestOptionsMonitor<SendingOptions>(new SendingOptions()), SendingOptions.Section);
+
+    /// <summary>The seam over the lines section, which the claim reads for the ceiling of touches a person may have in a campaign.</summary>
+    public static LiveSettings<LinesOptions> LinesSettings(IOptionsMonitor<LinesOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<LinesOptions>(new LinesOptions()), LinesOptions.Section);
+
+    /// <summary>The seam over the manager's section, which a campaign going live reads for the deep review's interval.</summary>
+    public static LiveSettings<ManagerOptions> ManagerSettings(IOptionsMonitor<ManagerOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<ManagerOptions>(new ManagerOptions()), ManagerOptions.Section);
 
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
     public static LiveSettings<DispatcherOptions> NothingValidated() =>

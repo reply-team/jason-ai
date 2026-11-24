@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -12,8 +13,23 @@ public partial class PageClaimsTests
     /// <summary>The release the section goes back to.</summary>
     private const string GoingBackTo = "0.48.7";
 
-    /// <summary>The newest migration 0.48.7 shipped: a database 0.49 opened is one 0.48.7 opens only while no later one exists.</summary>
+    /// <summary>
+    /// The newest migration 0.48.7 shipped, which is also 0.49's newest: 0.49 adds none, so a database 0.49 opened is one
+    /// 0.48.7 opens as it is.
+    /// </summary>
     private const string GoingBackToNewestMigration = "20261116053811_DecisionThread";
+
+    /// <summary>
+    /// The migrations the tree holds after <see cref="GoingBackToNewestMigration"/>, in order: each is newer than 0.49, and
+    /// a migration added in 0.50 is appended here. Where there is one, data a release after 0.49 opened is data the section's
+    /// steps do not take back, and the section says so.
+    /// </summary>
+    private static readonly string[] MigrationsAfter049 =
+    [
+        "20261122055316_WorkItemEntry",
+        "20261122065647_LaunchLimitLifts",
+        "20261122075940_DeepReviewGrid",
+    ];
 
     /// <summary>
     /// The newest line of each package's digest list at v0.48.7, the version and the digest of the package that release
@@ -32,12 +48,26 @@ public partial class PageClaimsTests
     ];
 
     /// <summary>
+    /// The lines each package's digest list holds after the one 0.49 published, in order, each a version a release after
+    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes, and Reply's
+    /// 0.19.1, which 0.50 places for a reply's text written as the person it reaches reads it. A package a later release
+    /// placed is data in the data directory that no release after 0.49 has opened, as the section's steps say of every such
+    /// data, and a package that moves in 0.50 is appended here.
+    /// </summary>
+    private static readonly (string Plugin, string Line)[] PackagesAfter049 =
+    [
+        ("journal-forwarder", "1.8.0 sha256:1af0e45e1a40781bc011a2968317a9bae1320cd4b6bb4a86d1567807bd86000e"),
+        ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
+    ];
+
+    /// <summary>
     /// The section's commands, in their order: the uninstall, the two pinned install lines, and what is put back. The
     /// two install lines are the install scripts' own pinned forms, read from the scripts, with the release this tree
     /// builds replaced by 0.48.7, and nothing added: an option that keeps the PATH unchanged would leave the new
     /// terminal of step 2 without <c>jason</c>.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_installs_0_48_7_by_the_scripts_own_pinned_lines()
     {
         var section = GoingBack();
@@ -70,6 +100,7 @@ public partial class PageClaimsTests
     /// <c>--purge-data</c>, and what the verb's own help says, so the step, the section and the verb are one claim.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public async Task Going_back_from_0_49_keeps_what_the_uninstall_keeps()
     {
         var section = Flat(GoingBack());
@@ -89,13 +120,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// "0.49 adds no migration to the database": the newest migration this tree compiles is the newest 0.48.7 shipped. A
-    /// migration added in 0.49 turns this red, and the section with it, since 0.48.7 refuses data a newer Jason migrated.
+    /// "0.49 adds no migration": the newest migration 0.48.7 shipped is in the tree, and every one after it is a migration
+    /// a later release adds, named in <see cref="MigrationsAfter049"/>. While the tree holds one, the section scopes its
+    /// steps to data no release after 0.49 opened and says what 0.49 and 0.48.7 make of data 0.50 has opened.
     /// </summary>
     [Fact]
-    public void Going_back_from_0_49_holds_while_0_49_adds_no_migration()
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void Going_back_from_0_49_holds_for_data_no_later_release_has_opened()
     {
-        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7 opens the same data as it is, and there is no backup to put back.", Flat(GoingBack()), StringComparison.Ordinal);
+        var section = Flat(GoingBack());
+        Assert.Contains("0.49 adds no migration to the database and keeps the layout 0.48.7 runs, so 0.48.7 opens the same data as it is, and there is no backup to put back.", section, StringComparison.Ordinal);
 
         var migrations = Directory.GetFiles(Path.Combine(Root(), "dotnet", "src", "Jason.Runtime", "Persistence", "Migrations"), "*.Designer.cs")
             .Select(file => MigrationId().Match(File.ReadAllText(file)))
@@ -103,8 +137,37 @@ public partial class PageClaimsTests
             .Select(match => match.Groups["id"].Value)
             .Order(StringComparer.Ordinal)
             .ToList();
-        Assert.NotEmpty(migrations);
-        Assert.Equal(GoingBackToNewestMigration, migrations[^1]);
+        var at = migrations.IndexOf(GoingBackToNewestMigration);
+        Assert.True(at >= 0, $"The tree no longer holds {GoingBackToNewestMigration}, the newest migration 0.48.7 shipped.");
+        Assert.Equal(MigrationsAfter049, migrations[(at + 1)..]);
+
+        if (MigrationsAfter049.Length > 0)
+        {
+            Assert.Contains("These steps, and that there is no backup to put back, hold for data that no release after 0.49 has opened.", section, StringComparison.Ordinal);
+            Assert.Contains(
+                "0.50 migrates the database. From 0.49.0 on, a runtime refuses a database holding a migration it does not know (`data_newer`, \"Going back\" above), so 0.49.x refuses data that 0.50 has opened; a version before 0.49.0, 0.48.7 among them, has no such check and runs its own model over the newer schema.",
+                section,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "\"Going back\" above says when `jason update rollback` restores the backup that migration took, which is only while the chronicle stands where it stood at `healthy`, and what the rollback of an update a carried `jason` handed to Jason Desktop puts back. Wherever the rollback leaves the database as it stands, and for the deb, whose `jason` refuses a rollback with `update_managed_by_package_manager`, \"Restoring a database by hand\" above is how you put that backup back yourself.",
+                section,
+                StringComparison.Ordinal);
+
+            // It points at no section that touches no database.
+            Assert.DoesNotContain("Applying an older release", section, StringComparison.Ordinal);
+
+            // The sections it points at say what it says they say, each read on its own.
+            var page = Page("docs", "release-and-update.md");
+            var back = Flat(Section(page, "### Going back\n"));
+            Assert.Contains("it also restores the backup that migration took", back, StringComparison.Ordinal);
+            Assert.Contains("**The database is restored only while it is certain that nothing has happened since.** That is decided from the chronicle:", back, StringComparison.Ordinal);
+            Assert.Contains("and the database, only while the chronicle stands where it stood at `healthy`.", back, StringComparison.Ordinal);
+            Assert.Contains("All three answers are the same answer: the executable goes back, the database is left exactly as it stands, and the message names the backup file.", back, StringComparison.Ordinal);
+            Assert.Contains("The `jason` the deb carries refuses a rollback with `update_managed_by_package_manager`", back, StringComparison.Ordinal);
+            Assert.Contains("From 0.49.0 on, a runtime whose database holds a migration its build does not know refuses to start, with `data_newer`", back, StringComparison.Ordinal);
+            Assert.Contains("A version before 0.49.0 has no such check, and EF Core passes over the history rows it has no migration for, so it runs its own model over the newer schema.", back, StringComparison.Ordinal);
+            Assert.Contains("Every start that migrates writes a backup under `~/.jason/state/backups/` first", Flat(Section(page, "### Restoring a database by hand\n")), StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -115,16 +178,30 @@ public partial class PageClaimsTests
     /// moves without this list and the section.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_holds_while_every_package_is_the_one_0_48_7_shipped()
     {
         Assert.Contains("Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.7 reads as it is.", Flat(GoingBack()), StringComparison.Ordinal);
         Assert.Contains("The Reply package 0.49.2 or later placed differs from the one 0.48.7 shipped: it stays the newer one, 0.19.0, which 0.48.7 still reads as it is, since it adds no manifest key, and which needs reply-cli 0.22.0 or newer, the same reply-cli 0.49.2 needs.", Flat(GoingBack()), StringComparison.Ordinal);
 
-        var newest = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
-            .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Line: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Last().Trim()))
+        var lists = Directory.GetFiles(Path.Combine(Root(), "plugins"), "*.digests")
+            .Select(file => (Plugin: Path.GetFileNameWithoutExtension(file), Lines: File.ReadAllLines(file).Where(line => line.Length > 0 && !line.StartsWith('#')).Select(line => line.Trim()).ToList()))
             .OrderBy(package => package.Plugin, StringComparer.Ordinal)
             .ToArray();
+
+        // A line a release after 0.49 appended stands at the end of its list, in the order declared, and the newest line
+        // before them is the one 0.48.7 shipped.
+        var newest = lists.Select(list =>
+        {
+            var later = PackagesAfter049.Where(package => package.Plugin == list.Plugin).Select(package => package.Line).ToList();
+            Assert.Equal(later, list.Lines.TakeLast(later.Count));
+            return (list.Plugin, Line: list.Lines[^(later.Count + 1)]);
+        }).ToArray();
         Assert.Equal(GoingBackToPackages, newest);
+        if (PackagesAfter049.Length > 0)
+        {
+            Assert.Contains("These steps, and that there is no backup to put back, hold for data that no release after 0.49 has opened.", Flat(GoingBack()), StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -133,6 +210,7 @@ public partial class PageClaimsTests
     /// that step 1 takes away: the words in the section are the check's own, so the section goes red the day they change.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_moves_a_folder_of_yours_out_of_the_way_before_0_48_7_deploys()
     {
         var section = Flat(GoingBack());
@@ -154,6 +232,7 @@ public partial class PageClaimsTests
     /// and whose install path holds a command-line executable again does not stand, and is a move to make again.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Going_back_from_0_49_leaves_a_done_move_record_that_no_longer_stands()
     {
         Assert.Contains("Under 0.48.7, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again,", Flat(GoingBack()), StringComparison.Ordinal);

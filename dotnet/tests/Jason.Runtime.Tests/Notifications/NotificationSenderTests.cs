@@ -70,6 +70,7 @@ public sealed class NotificationSenderTests
         Assert.Equal("ntf_test", written["notification_id"]!.GetValue<string>());
         Assert.Equal(3, written["counts"]!["approvals"]!.GetValue<int>());
         Assert.Equal(1, written["counts"]!["decisions"]!.GetValue<int>());
+        Assert.Equal(0, written["counts"]!["replies"]!.GetValue<int>());
         Assert.Equal("jrn_covered", written["covered_through"]!.GetValue<string>());
         Assert.Equal(["delivered", "not_attempted"], written["channels"]!.AsArray().Select(c => c!["outcome"]!.GetValue<string>()));
         Assert.Equal(line!.ToJson().ToJsonString(), written.ToJsonString());

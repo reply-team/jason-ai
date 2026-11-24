@@ -8,10 +8,12 @@ using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Launches;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
@@ -44,6 +46,8 @@ public sealed class Claimer(
     LiveSettings<DispatcherOptions> settings,
     LiveSettings<LaunchesOptions> launches,
     LiveSettings<SendingOptions> sending,
+    InstallationDay installation,
+    LiveSettings<LinesOptions> lines,
     JasonPaths paths,
     ILogger<Claimer> logger,
     PatternTiming? timing = null) : IClaimReading
@@ -107,13 +111,18 @@ public sealed class Claimer(
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
-        // And the daily limits, for the same reason: a limit raised halfway through a scan applies from the next one. The
-        // day is UTC, since a campaign has no time zone of its own.
+        // And the daily limits, for the same reason: a limit raised halfway through a scan applies from the next one. Their
+        // day is the installation's, from one midnight to the next in its zone, read once too: a campaign has no zone of its
+        // own, and a UTC midnight can fall in the middle of the person's afternoon.
         var limits = launches.Current.MaxPerDay;
-        var today = now.Date;
+        var day = installation.Of(now);
 
-        // And the daily ceiling of automatic sends, for the same reason and over the same UTC day.
-        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, today);
+        // And the daily ceiling of automatic sends, for the same reason. It keeps the UTC day, 00:00Z to 00:00Z: two days
+        // are counted here, and only the limits' day has moved to the installation's zone so far.
+        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, now.Date);
+
+        // And the ceiling of touches a person may have in a campaign, for the same reason.
+        var maxTouches = lines.Current.MaxTouches;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
@@ -123,6 +132,10 @@ public sealed class Claimer(
         // these snapshots or older ones, never newer ones than the claim then decides by.
         var packages = plugins.Snapshot;
         var routing = routes.Snapshot;
+
+        // Whether a person lifted the limits for this day, read once beside them and once the scan holds the database, so a
+        // lift committed before the scan began lets every item of this scan go and one made after it waits for the next.
+        var lifted = limits.Count > 0 && await LaunchLimitLifts.CoverAsync(db, day, ct).ConfigureAwait(false);
 
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
@@ -137,7 +150,7 @@ public sealed class Claimer(
             // The decision before the record of it. Everything that can refuse a provider item is decided here,
             // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
             // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
-            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, ct).ConfigureAwait(false) : null;
+            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, maxTouches, ct).ConfigureAwait(false) : null;
             var verdict = facts is null ? null : ProviderOpPreflight.Check(facts, packages, routing, _timing);
 
             // A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences
@@ -148,13 +161,13 @@ public sealed class Claimer(
             }
 
             // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
-            // responder's reply would reach it by a second path. It waits, with no attempt, for the next 00:00Z.
-            if (item.Kind == WorkItemKind.AiRole
+            // responder's reply would reach it by a second path. It waits, with no attempt, for the installation's next midnight.
+            // A day a person lifted holds nothing.
+            if (item.Kind == WorkItemKind.AiRole && !lifted
                 && item.Role is { } role && limits.TryGetValue(role, out var limit)
-                && await SpentAsync(db, item, limit, today, ct).ConfigureAwait(false))
+                && await SpentAsync(db, item, limit, day.Start, ct).ConfigureAwait(false) is { } started)
             {
-                var tomorrow = today.AddDays(1);
-                outcomes.Hold(db, item, tomorrow, LaunchesSpent(role, limit, today, tomorrow), limit, Actors.Dispatcher);
+                outcomes.Hold(db, item, day.End, LaunchesSpent(role, limit, started, day), limit, Actors.Dispatcher);
                 await SaveAsync(db, item, ct).ConfigureAwait(false);
                 continue;
             }
@@ -306,7 +319,9 @@ public sealed class Claimer(
     /// One item per campaign, the most important first, and never more than the free slots. Raw SQL because the
     /// per-campaign choice is a window function: doing it in memory would either idle a slot or read the whole
     /// backlog. Its campaign rule is the eligible predicate's, written a second time here and held to it by a test:
-    /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there.
+    /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there. Its
+    /// person's rule too: a touch (<see cref="OperationCatalog.Touches"/>) of a person whose line is paused in the item's
+    /// campaign is no candidate, so it neither runs nor holds its campaign's turn.
     /// </summary>
     internal static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
     {
@@ -316,9 +331,13 @@ public sealed class Claimer(
         var active = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Active);
         var paused = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Paused);
         var archived = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Archived);
+        var pausedMember = SnakeCaseEnumConverter<MembershipState>.Format(MembershipState.Paused);
         var runsInPaused = JsonSerializer.Serialize(OperationCatalog.RunsInPausedCampaign);
         var runsInArchived = JsonSerializer.Serialize(OperationCatalog.RunsInArchivedCampaign);
+        var touches = JsonSerializer.Serialize(OperationCatalog.Touches);
 
+        // The person's rule is written with the operation named not null: a NULL operation would make the whole test NULL,
+        // and NOT NULL takes a role's work out of the queue.
         return await db.WorkItems.FromSqlInterpolated($"""
             SELECT * FROM (
               SELECT w.*, ROW_NUMBER() OVER (PARTITION BY w.campaign_id ORDER BY w.priority DESC, w.id ASC) AS rn
@@ -327,6 +346,10 @@ public sealed class Claimer(
                 AND (c.status = {active}
                      OR (c.status = {paused} AND w.operation IN (SELECT value FROM json_each({runsInPaused})))
                      OR (c.status = {archived} AND w.operation IN (SELECT value FROM json_each({runsInArchived}))))
+                AND NOT (w.operation IS NOT NULL
+                         AND w.operation IN (SELECT value FROM json_each({touches}))
+                         AND EXISTS (SELECT 1 FROM campaign_contacts m
+                                     WHERE m.campaign_id = w.campaign_id AND m.contact_id = w.contact_id AND m.state = {pausedMember}))
                 AND (w.not_before IS NULL OR w.not_before <= {now})
                 AND (w.due_at IS NULL OR w.due_at > {now})
                 AND (w.retry_after IS NULL OR w.retry_after <= {now})
@@ -341,55 +364,96 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// Whether the work of <paramref name="item"/>'s role in its campaign has started <paramref name="limit"/> runs or more
-    /// since <paramref name="today"/>, 00:00Z. A run counts when its attempt started, so an attempt the claim refused, which
+    /// How many runs the work of <paramref name="item"/>'s role in its campaign has started since <paramref name="since"/>, the
+    /// installation's midnight as a UTC instant, where that is <paramref name="limit"/> or more, and null where it is fewer or
+    /// the item is let past the limit. A run counts when its attempt started, so an attempt the claim refused, which
     /// never started, spends nothing. One item is let go past the limit: a hold a person resumed. The hold alone writes its
     /// code as the item's last error, and its wait is the item's latest, released by a person, with no attempt and no
-    /// block; a wait released any other way, midnight among them, is counted as usual. Columns and the clock only.
+    /// block; a wait released any other way, midnight among them, is counted as usual, and so is one a lift let go, whose
+    /// release falls in the day a lift covers: a lift is bounded by its day, and the claim asks this only on a day no lift
+    /// covers. Columns and the clock only.
     /// </summary>
-    private static async Task<bool> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime today, CancellationToken ct)
+    private static async Task<int?> SpentAsync(JasonDbContext db, WorkItem item, int limit, DateTime since, CancellationToken ct)
     {
         if (AttemptErrors.IsDailyHold(item.LastError?.Code))
         {
             var latest = await db.WorkItemWaits.AsNoTracking()
                 .Where(w => w.WorkItemId == item.Id)
                 .OrderByDescending(w => w.Id)
-                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId })
+                .Select(w => new { w.Status, w.ReleaseReason, w.AttemptId, w.ProviderBlockId, w.ReleasedAt })
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
-            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null })
+            if (latest is { Status: WaitStatus.Released, ReleaseReason: WaitReleaseReason.ResumedByActor, AttemptId: null, ProviderBlockId: null, ReleasedAt: { } released }
+                && !await LaunchLimitLifts.ReleasedAsync(db, released, ct).ConfigureAwait(false))
             {
-                return false;
+                return null;
             }
         }
 
-        var started = await db.Attempts.AsNoTracking()
-            .CountAsync(
-                a => a.WorkItem!.CampaignId == item.CampaignId
-                    && a.WorkItem.Kind == WorkItemKind.AiRole
-                    && a.WorkItem.Role == item.Role
-                    && a.StartedAt >= today,
-                ct)
-            .ConfigureAwait(false);
-        return started >= limit;
+        var started = await StartedSinceAsync(db, item.CampaignId, item.Role!, since, ct).ConfigureAwait(false);
+        return started >= limit ? started : null;
     }
 
     /// <summary>
-    /// The last error of an item held at its role's limit for the day: the limit and its moment, and the three ways out — the next
-    /// 00:00Z, a person's resume, or a raised limit. Not retried: the moment releases it.
+    /// The claim's question for work not yet created: whether <paramref name="role"/> in a campaign has spent the limit
+    /// <c>Launches:MaxPerDay</c> sets it for the installation's <paramref name="day"/>, so an item of the role made now would
+    /// only be held. A role the limits do not name has none, and a day a person lifted holds nothing; otherwise the runs
+    /// are counted as <see cref="SpentAsync"/> counts them, by the attempts that started since the day's midnight. The
+    /// answer is how many started, where the day is spent, and null where it is not. Columns and the clock only.
     /// </summary>
-    internal static AttemptErrorDto LaunchesSpent(string role, int limit, DateTime today, DateTime tomorrow)
+    internal static async Task<int?> SpentTodayAsync(
+        JasonDbContext db,
+        int campaignId,
+        string role,
+        IReadOnlyDictionary<string, int> limits,
+        LocalDay day,
+        CancellationToken ct)
     {
-        var runs = limit == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{limit} runs");
-        return new AttemptErrorDto(
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(limits);
+        if (!limits.TryGetValue(role, out var limit) || await LaunchLimitLifts.CoverAsync(db, day, ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var started = await StartedSinceAsync(db, campaignId, role, day.Start, ct).ConfigureAwait(false);
+        return started >= limit ? started : null;
+    }
+
+    /// <summary>
+    /// How many runs of the role's work in the campaign started since <paramref name="since"/>, a UTC instant: the count the
+    /// claim holds a role by, and the one <c>launches.list</c> says.
+    /// </summary>
+    internal static Task<int> StartedSinceAsync(JasonDbContext db, int campaignId, string role, DateTime since, CancellationToken ct) =>
+        db.Attempts.AsNoTracking()
+            .CountAsync(
+                a => a.WorkItem!.CampaignId == campaignId
+                    && a.WorkItem.Kind == WorkItemKind.AiRole
+                    && a.WorkItem.Role == role
+                    && a.StartedAt >= since,
+                ct);
+
+    /// <summary>
+    /// The last error of an item held at its role's limit for the day: how many runs started, counted from the installation's
+    /// midnight with the zone the day is counted in, the limit as a limit beside that count — a limit lowered during the day
+    /// can stand below it — the moment the item waits until, where the limits are read, and the ways out: the installation's
+    /// next midnight, a person's resume of this item, a person's lift of the day, or a raised limit. The moments are UTC. Not
+    /// retried: the moment releases it.
+    /// </summary>
+    internal static AttemptErrorDto LaunchesSpent(string role, int limit, int started, LocalDay day) =>
+        new(
             AttemptErrors.LaunchesSpent,
-            $"Work of the {role} role in this campaign has reached the limit Launches:MaxPerDay:{role} sets, {runs} started since {Zulu(today)}; "
-            + $"this item waits until {Zulu(tomorrow)}. A person's workitem.resume lets it go sooner, past the limit, and a raised "
-            + "limit applies from the next scan to work not yet held, while this item keeps its moment.",
+            $"Work of the {role} role in this campaign has started {Runs(started)} since the installation's midnight "
+            + $"({Zulu(day.Start)}, {day.TimeZone}), and the limit Launches:MaxPerDay:{role} sets is {Runs(limit)} a day; this item "
+            + $"waits until {Zulu(day.End)}. jason launches list shows the limits as they stand. A person's workitem.resume lets it "
+            + "go sooner, past the limit, jason launches lift lets every role in every campaign past it until the installation's "
+            + "next midnight, and a raised limit applies from the next scan to work not yet held, while this item keeps its moment.",
             Retriable: false);
 
-        static string Zulu(DateTime moment) => moment.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
-    }
+    /// <summary>A count of runs as a sentence says it: <c>1 run</c>, <c>4 runs</c>.</summary>
+    internal static string Runs(int count) => count == 1 ? "1 run" : string.Create(CultureInfo.InvariantCulture, $"{count} runs");
+
+    private static string Zulu(DateTime moment) => moment.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
     private async Task<IReadOnlyList<string>?> CommandForAsync(JasonDbContext db, WorkItem item, CancellationToken ct) =>
         item.Kind == WorkItemKind.AiRole ? await resolver.ResolveAsync(db, item.Role!, ct).ConfigureAwait(false) : null;
@@ -586,7 +650,7 @@ public sealed class Claimer(
             .FirstAsync(w => w.Id == item.Id, ct)
             .ConfigureAwait(false);
         var routing = routes.Snapshot;
-        var facts = await FactsAsync(beside, current, routing, ct).ConfigureAwait(false);
+        var facts = await FactsAsync(beside, current, routing, lines.Current.MaxTouches, ct).ConfigureAwait(false);
         var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
         var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
         if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
@@ -843,7 +907,7 @@ public sealed class Claimer(
     /// read is the routed plugin's question, and an item nothing routes needs no reads at all. An audience the work names
     /// by its number is read by that number, in the work's own campaign.
     /// </summary>
-    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, CancellationToken ct)
+    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, int maxTouches, CancellationToken ct)
     {
         var campaign = item.Campaign!;
         var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
@@ -942,6 +1006,7 @@ public sealed class Claimer(
 
         var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
         var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
+        var line = OperationCatalog.Touches.Contains(contract.Id) ? await LineAsync(db, item, contact, maxTouches, ct).ConfigureAwait(false) : null;
         return new PreflightFacts(
             item,
             campaign,
@@ -957,7 +1022,32 @@ public sealed class Claimer(
             audience,
             inTheWay,
             thread,
-            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false));
+            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false),
+            line);
+    }
+
+    /// <summary>
+    /// Where the line with the person stands in the item's campaign, for a touch: their membership's state, and how many
+    /// touches that count they have had there besides this item (<see cref="LineTouches"/>), beside the ceiling this scan
+    /// read. Read inside the claim's transaction like every other fact.
+    /// </summary>
+    /// <remarks>
+    /// Two touches to one person cannot both pass the count. The claim takes at most one item per campaign per scan, and
+    /// none from a campaign while another of its items is scheduled or processing (<see cref="CandidatesAsync"/>), all
+    /// inside one immediate transaction; so every touch claimed before this one has left processing by the time this one
+    /// is counted, and it is in the count if it may have reached the person — it succeeded, or an attempt of it ended
+    /// classed ambiguous, whether the item ended since or was put back for a repeat, parked or held. A touch that has not run yet
+    /// counts for nothing here, and is counted at its own claim against every touch that ran meanwhile.
+    /// </remarks>
+    private static async Task<LineFacts> LineAsync(JasonDbContext db, WorkItem item, Contact contact, int ceiling, CancellationToken ct)
+    {
+        var state = await db.CampaignContacts.AsNoTracking()
+            .Where(membership => membership.CampaignId == item.CampaignId && membership.ContactId == contact.Id)
+            .Select(membership => (MembershipState?)membership.State)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        var touches = await LineTouches.OthersAsync(db, item.CampaignId, contact.Id, item.Id, ct).ConfigureAwait(false);
+        return new LineFacts(state, touches, ceiling);
     }
 
     /// <summary>

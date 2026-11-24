@@ -443,6 +443,20 @@
     gap: 6px;
     padding: 18px 18px 12px;
 }
+/* The mark and the wordmark are one button that shows Start: at rest it is drawn as the strip it stands in, with no
+   ground, border or padding of its own, the pointer every button has and the console's focus ring; no hover, no mark. */
+.jc-console .brand .home {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+}
 .jc-console .brand .mark {
     width: 20px;
     height: 20px;
@@ -1809,7 +1823,8 @@ body,
 .jc-console .needs-save-says {
     margin: 4px 0 0;
 }
-.jc-console .needs-left {
+.jc-console .needs-left,
+.jc-console .needs-held {
     margin: 0 0 12px;
 }
 .jc-console .needs-panel .needs-pane {
@@ -2509,9 +2524,14 @@ body,
     background: var(--hover);
     color: var(--ink);
 }
-/* The plus of a section header: a 20px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
+/* The plus of a section header: a 16px square at rest in a pale tint of the accent, with a 1px accent-tinted border and
    the plus in the accent's text colour (6.4:1 on the tint in light, 6.9:1 in dark).
-   The icon box is 22px, so the drawn cross (14/24 of it) is about 13px; the box overflows the 18px inside, the cross does not. */
+   The cross is drawn at the filter's size and weight beside it: a 16px icon whose arms span 14 of its 24 units, about
+   9.3px as the filter's lines span, stroked 1.75 units, the filter's 2 units at 14px, about 1.17px.
+   It sits on the square's centre by arithmetic, not by eye: the cross crosses at the centre of its 24-unit grid, and the
+   icon is the square's own size, centred by the flex box with no padding, so the two share one origin and one size and a
+   scale's rounding moves both alike. A button's own padding (1px 6px) and a 22px icon in a 20px square once left the
+   icon a half device pixel off the square at 150%. */
 .jc-console {
     --plus-tint: 14%;
     --plus-edge: 38%;
@@ -2531,9 +2551,12 @@ body,
 }
 .jc-console .rbtn.plus {
     box-sizing: border-box;
-    width: 20px;
-    height: 20px;
-    margin: 0 0 0 5px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    /* The 20px square's place, 5px after the filter, kept by the margins: the headers keep their height, the filter
+       stays where it was, and the square's right edge stays on the rows' right edge. */
+    margin: 2px 0 2px 9px;
     border: 1px solid color-mix(in srgb, var(--accent) var(--plus-edge), var(--side-bg));
     border-radius: 5px;
     background: color-mix(in srgb, var(--accent) var(--plus-tint), var(--side-bg));
@@ -2541,8 +2564,7 @@ body,
 }
 .jc-console .rbtn.plus svg {
     flex: none;
-    width: 22px;
-    height: 22px;
+    stroke-width: 1.75;
 }
 .jc-console .rbtn.plus:hover {
     background: color-mix(in srgb, var(--accent) var(--plus-tint-hover), var(--side-bg));

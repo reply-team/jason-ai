@@ -3,12 +3,14 @@ using System.Text.RegularExpressions;
 using Jason.Cli.Tests.Documentation;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Skills;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_is_told_that_a_reply_is_read_only_through_the_provider()
     {
         var skill = Flattened("responder");
@@ -23,7 +25,38 @@ public partial class RoleSkillTests
         CarriesTheLaunchContract("responder");
     }
 
+    /// <summary>
+    /// The skills decide whether a campaign is linked to a provider's sequence by the pin `jason campaign get` answers,
+    /// so the field names they use are held to the DTOs as they serialize: a skill cannot name a field that is not there.
+    /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
+    public void The_pin_fields_the_skills_name_are_the_ones_the_dto_serializes()
+    {
+        var naming = Jason.Contracts.Json.JasonJson.Options.PropertyNamingPolicy!;
+        var list = naming.ConvertName(nameof(Jason.Contracts.Api.CampaignDto.ExternalIds));
+        var kind = naming.ConvertName(nameof(Jason.Contracts.Api.ExternalIdDto.Kind));
+        Assert.Equal("external_ids", list);
+        Assert.Equal("kind", kind);
+        Assert.NotNull(typeof(Jason.Contracts.Api.CampaignDto).GetProperty(nameof(Jason.Contracts.Api.CampaignDto.ExternalIds)));
+        Assert.NotNull(typeof(Jason.Contracts.Api.ExternalIdDto).GetProperty(nameof(Jason.Contracts.Api.ExternalIdDto.Kind)));
+
+        var sentences = new[]
+        {
+            Flattened("responder"),
+            Flattened("manager"),
+            FlattenedEntry("manager", "start"),
+            FlattenedEntry("manager", "resume"),
+        };
+        foreach (var text in sentences)
+        {
+            Assert.Contains($"`{list}`", text, StringComparison.Ordinal);
+            Assert.Contains($"whose `{kind}` is `campaign`", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_a_stop_in_order_and_proposes_taking_the_person_out()
     {
         var skill = Flattened("responder");
@@ -37,6 +70,15 @@ public partial class RoleSkillTests
         Assert.True(register >= 0 && optout > register && stop > optout, "the register, then the opt-out, then the proposed stop");
         Assert.Contains("runs even while the campaign is paused", skill, StringComparison.Ordinal);
         Assert.Contains("waits for a person", skill, StringComparison.Ordinal);
+
+        // A stop takes a person out of a provider's campaign, and a campaign of Jason's own direct letters has none: there
+        // the proposal fails at its claim and costs a person a review at every opt-out, while `optout.record` already
+        // completed it.
+        Assert.Contains("Read `jason campaign get` first, and propose it only where its `external_ids` holds an item whose `kind` is `campaign`", skill, StringComparison.Ordinal);
+        Assert.Contains("which the contract calls `campaign.external_ids.campaign`, and the operation cannot run without it, whatever the context says.", skill, StringComparison.Ordinal);
+        Assert.Contains("your summary says in one clause that the campaign holds no provider's campaign, so nothing was stopped there.", skill, StringComparison.Ordinal);
+        Assert.Contains("jason campaign get cmp_", skill, StringComparison.Ordinal);
+        Assert.Contains("`optout.record` completes the opt-out, you propose no `enrollment.stop`", skill, StringComparison.Ordinal);
 
         // A campaign that is archived takes no new work, and the provider's opt-out is account-wide.
         Assert.Contains("record the opt-out through any active or paused campaign they are a member of that is routed to the same provider account", skill, StringComparison.Ordinal);
@@ -52,6 +94,7 @@ public partial class RoleSkillTests
     /// on the read it was created waiting on.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_reads_the_reply_from_the_read_its_brief_names()
     {
         var skill = Flattened("responder");
@@ -88,6 +131,7 @@ public partial class RoleSkillTests
     /// no draft and no act, and at most as many options as a question holds.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_rather_than_drafts_below_the_confidence_the_data_file_names()
     {
         var skill = Flattened("responder");
@@ -121,6 +165,7 @@ public partial class RoleSkillTests
     /// nothing is created, and a bounce never reaches the register of people who refused.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_notes_a_return_a_later_moment_or_a_bounce_and_sends_nothing()
     {
         var skill = Flattened("responder");
@@ -160,6 +205,7 @@ public partial class RoleSkillTests
     /// wrong. The catalog says the same of the role, and nothing says the answer is only words.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_in_the_person_s_own_thread_and_never_in_a_new_one()
     {
         var skill = Flattened("responder");
@@ -173,6 +219,16 @@ public partial class RoleSkillTests
             "Its `channel` is the thread's, as the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding.",
             skill,
             StringComparison.Ordinal);
+
+        // The read hands each message as the provider holds it, markup included, and a responder imitates what it read:
+        // the document refuses a text with a tag or an entity in it, so the skill says what the text is.
+        Assert.Contains(
+            "What a read returns may carry the provider's markup; what you write is plain text with ordinary line breaks, never a tag such as `<br>` and never an entity such as `&nbsp;`.",
+            skill,
+            StringComparison.Ordinal);
+
+        // A provider may cut the text at a `<` it takes for a tag's start, so an address goes without its angle brackets.
+        Assert.Contains("Write an address or a link without angle brackets, and put no `<` right before a letter.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then `-reply-501-2` — so that two replies in one thread are two keys.",
             skill,
@@ -207,6 +263,7 @@ public partial class RoleSkillTests
     /// approves nor bundles.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_one_approval_for_each_send()
     {
         var skill = Flattened("responder");
@@ -221,6 +278,7 @@ public partial class RoleSkillTests
     /// read that stops short of the end, or a last message nobody can place, does not show the latest message: a question.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_has_nothing_to_answer_when_the_latest_message_is_Jason_s_own()
     {
         var skill = Flattened("responder");
@@ -241,6 +299,7 @@ public partial class RoleSkillTests
     /// comes before the reply and says so. A stop from somebody Jason cannot name still reaches the register, by address.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_sends_no_answer_to_a_person_who_asked_to_stop()
     {
         var skill = Flattened("responder");
@@ -268,6 +327,7 @@ public partial class RoleSkillTests
     /// question for a person, never a guess, and the reply's own check is what stands behind a wrong one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_finds_the_person_through_the_thread_when_its_item_names_nobody()
     {
         var skill = Flattened("responder");
@@ -297,6 +357,7 @@ public partial class RoleSkillTests
     /// filed. A read of one thread reports only the category it sits in now, so nothing is checked against it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_files_the_thread_only_under_a_category_the_campaign_names()
     {
         var skill = Flattened("responder");
@@ -331,6 +392,7 @@ public partial class RoleSkillTests
     /// names one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void Every_provider_operation_the_responder_prints_carries_arguments_its_document_accepts()
     {
         var operations = new List<string>();
@@ -380,6 +442,7 @@ public partial class RoleSkillTests
     /// category is what a standing approval is set on, so two replies whose safe reaction differs never share one.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_s_categories_are_a_data_file_beside_its_skill()
     {
         var skill = SkillPack.Find("responder");
@@ -457,6 +520,7 @@ public partial class RoleSkillTests
     /// mirror, and the answer in the item's shape.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_goes_through_the_loop_in_order()
     {
         var skill = Flattened("responder");
@@ -491,6 +555,7 @@ public partial class RoleSkillTests
     /// never waits on the responder: it answers or parks the draft in the same run. Said without the provider's name.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_or_parks_at_once_because_a_follow_up_can_be_lost()
     {
         var skill = Flattened("responder");
@@ -509,6 +574,7 @@ public partial class RoleSkillTests
     /// read it names, which the responder was created waiting on and never waits on again.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_reads_its_brief_as_the_inbound_reply_the_runtime_wrote()
     {
         var skill = Flattened("responder");
@@ -529,6 +595,7 @@ public partial class RoleSkillTests
     /// classifying, and an open draft that already answers a verdict on this message ends the run with nothing done.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_one_verdict_per_reply_and_drafts_once_per_verdict()
     {
         var skill = Flattened("responder");
@@ -578,6 +645,7 @@ public partial class RoleSkillTests
     /// under an id of its own, and one of them is a refinement that always escalates.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_classifies_by_the_data_file_and_the_person_s_reply_categories()
     {
         var skill = Flattened("responder");
@@ -606,6 +674,7 @@ public partial class RoleSkillTests
 
     /// <summary>A campaign's goals are what a draft steers to; with none, the default goal is a demo and the verdict names none.</summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_drafts_toward_the_campaign_s_goals()
     {
         var skill = Flattened("responder");
@@ -620,6 +689,7 @@ public partial class RoleSkillTests
     /// and never the reply; a reply is always a draft, released by the runtime and never by the role.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_records_the_verdict_before_it_reacts_and_never_releases_its_own_draft()
     {
         var skill = Flattened("responder");
@@ -651,6 +721,7 @@ public partial class RoleSkillTests
     /// reply: the person reads the reply in the thread, never in the question, and no identifier in its text.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_asks_in_the_category_s_words_and_points_at_the_thread_by_reference()
     {
         var skill = Flattened("responder");
@@ -684,6 +755,7 @@ public partial class RoleSkillTests
     /// the skill and the code cannot name different outcomes.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_responder_answers_in_the_result_format_the_runtime_holds_it_to()
     {
         var skill = Flattened("responder");
@@ -706,5 +778,22 @@ public partial class RoleSkillTests
         var result = JsonNode.Parse(words[words.IndexOf("--result") + 1]);
         var problems = SchemaValidator.Verdicts(SchemaValidator.Validate(result, format));
         Assert.True(problems.Count == 0, $"The result the responder prints is refused by its format: {string.Join("; ", problems.Select(problem => $"{problem.Pointer} {problem.Message}"))}");
+    }
+
+    /// <summary>
+    /// A reply pauses the person's line and an ended line is finished, and neither stops an answer in their thread: the
+    /// line's state holds back touches alone. A responder that read paused as "say nothing" would leave the person who
+    /// wrote unanswered, which is the one thing the hold must never do.
+    /// </summary>
+    [Fact]
+    public void The_responder_answers_a_person_whose_line_is_paused_or_finished()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("**A person whose line is paused or finished is still answered.**", skill, StringComparison.Ordinal);
+        Assert.Contains("The line's state holds back new touches — a letter, an invitation, an enrolment — and never an answer in the thread the person wrote in", skill, StringComparison.Ordinal);
+        Assert.Contains("a `conversation.reply` reaches them whatever their line's state, and it is no touch", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("conversation.reply", OperationCatalog.Touches);
+        Assert.Equal(["campaign.enroll", "message.send", "social_invitation.send"], OperationCatalog.Touches.Order(StringComparer.Ordinal));
     }
 }

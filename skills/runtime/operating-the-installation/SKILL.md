@@ -202,21 +202,33 @@ the runtime by hand.
 ## Notifications
 
 When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective
-action fails, when it finds a span of an account's events it will not read, when a provider block is open, or when an
-email bounces, it tells them once, with a pointer: how many, and where to look. A pointer that says an account has
+action fails, when it finds a span of an account's events it will not read, when a provider block is open, when an
+item is held at a daily limit of launches, when an email bounces, or when a role has judged a reply a person's own, it
+tells them once, with a pointer: how many, and where to look. A pointer that says an account has
 events Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that
 says provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where
-the person clears it. One that says emails bounced names no command and leaves them to you: a bounce is a
-`provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its
-campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
+the person clears it. One that says items wait on a daily limit gives the person's way out itself, "tell your agent:
+ignore the limit"; read what is held (`jason launches list` for how many and the limits, then the waiting items whose
+`last_error` is `launches_spent` for which) and lift it only on their word, as `managed-campaign-work`'s "Ignore the limit"
+says. `jason launches list` says what the daily limits of launches are: each role's limit a day as the runtime reads it
+now, from the default or the settings, the installation's day they count in, a lift that stands, and how many items
+are held; `troubleshooting-jason` says how to read it. One that says emails bounced names no command and leaves them
+to you: a bounce is a `provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign
+it reached, naming its campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
 beside the replies the provider detected and the invitations accepted, so keep the bounces and say in which campaigns
 they were and, where a line names a contact, whose email it was. You may also read the period's `bounced` count with
-`jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. The toast,
+`jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. One that says
+replies came in names no command and leaves them to you as well: it counts each reply once, by the `reply_classified`
+verdicts a run recorded — the line names an attempt — whose `new.nature` is `person` and which carry no `confined` mark,
+however many campaigns judged it; a verdict a person recorded outside a run, an automatic answer, a bounce and an opt-out
+are never counted. `jason journal list --kind reply_classified` lists every verdict, of every nature and by whoever
+recorded it, so keep those and say who replied, where a line names a contact, and in which campaign. The toast,
 the operating system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says
 on its `Notify:` line what each channel did last. `Notifications:Enabled` set to `false` in
 `~/.jason/config/settings.json` turns all of it off, and `jason notification disable <channel> --actor human:<Name>`
 turns off one channel alone, `toast` or a notification plugin's id, as `jason notification enable` turns it on again,
-naming the person who asked: say a refusal as Jason says it, which names what is missing.
+naming the person who asked: say a refusal as Jason says it, which names what is missing. `Notifications:Replies` set
+to `false` in the same file turns replies alone off, with no verb, and leaves every channel as it is.
 `docs/notifications.md` says when a burst is said, and what a pointer never carries.
 
 Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person
@@ -224,7 +236,9 @@ asks, with the topic they choose. On the public ntfy server a topic is readable 
 them that before they pick one; the plugin's own README is the procedure.
 
 When someone says nothing ever tells them anything, read `jason status`'s `notifications` check and say what it found
-rather than guessing. Its states mean:
+rather than guessing. What a channel did last, which the `Notify:` line says, is history where it is older than the
+switches' present reading: a toast refused yesterday by a switch that is on now says nothing of today. Say what `jason
+status`'s `notifications` check says now, and the old outcome, if at all, as what happened then. Its states mean:
 
 - **`absent`, notifications off or no channel on** — say how to turn them on, and leave it to them.
 - **`absent`, a toast switched off** — Windows answered, when the toast was last sent, that Jason's notifications were

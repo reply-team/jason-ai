@@ -1,6 +1,6 @@
 ---
 name: audience-building
-description: Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source or import the people, state how two records become one person, check what is actually reachable, and freeze the result into a list a campaign can address. Use when the user wants to import contacts, find or build an audience, extend a list, define a segment, or asks what to do about duplicates and messy data.
+description: Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source or import the people, state how two records become one person, check what is actually reachable, and hold the result as a frozen list or a campaign's own members. Use when the user wants to import contacts, find or build an audience, extend a list, define a segment, or asks what to do about duplicates and messy data. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.
 metadata:
   status: draft
 ---
@@ -23,7 +23,8 @@ Who you contact decides more about the outcome than what you write. This skill c
 turning a pile of data — a file, an export, a search result, a pasted block — into an audience
 you can defend: a stated definition of who belongs, fields that mean what they claim, duplicates
 resolved under a policy somebody wrote down rather than by accident, addresses checked before
-they are sent to, and people frozen into a list a later campaign can address.
+they are sent to, and people held where a later campaign can address them: the campaign's own
+members, recorded one by one as they are added, or a list frozen with a date.
 
 ## When to use / when NOT to use
 
@@ -32,24 +33,38 @@ they are sent to, and people frozen into a list a later campaign can address.
 - Use *before* `campaign-launch` — the audience is a precondition for the launch, not a
   step inside it.
 - **Sourcing is in scope.** Earlier versions of this skill said the contract had no way to find
-  new people and offered four routes outside it. That premise is dead: the contract has twelve
+  new people and offered four routes outside it. That premise is dead: the catalogue has twelve
   discovery, enrichment and verification operations, and *Where an audience comes from* under
   *Planning guidance* names which operation each route actually is.
 - What is still NOT in scope is deciding **who is worth having**. The ICP is the user's call, and
   this skill refuses to infer one from whatever the data happens to contain.
 - Do NOT use for judging campaign results — that is `performance-analysis`.
 
+## Jason's set-up, and this skill as its method
+
+A campaign's people are brought in during its set-up, which `managed-campaign-work` leads and for
+which this skill is the method: a list the person brings, added with `jason campaign add-contacts`,
+which matches each record to a contact Jason already holds by the field named, or a search, whose
+definition is formed with the person as *Outward search with Jason* below says. The people are the
+campaign's members, and no separate list is frozen. Which of this skill's operations this build
+performs is for the operations it publishes under `docs/contracts/operations/` to say: today
+`audience.availability`, `audience.filter_values`, `audience.preview`, `audience.search`,
+`audience.search_cancel`, `audience.search_status`, `contact.update`, `list_membership.add` and
+`optout.record`, and no other; the do-not-contact register and an opt-out are checked at every
+send. Where this skill's body says "the contract", it means the catalogue in `sdr-operations`; the
+box at its top means the documents under `docs/contracts/operations/`.
+
 ## Prerequisites
 
 - Data in hand, or a route to it — see *Where an audience comes from*.
 - The user's ICP if one exists — check their stored preferences and ICP notes before asking
-  them to repeat it. The contract has `segment.define` for the audience definition, but the
-  user's durable preferences live in the agent's workspace rather than in the contract; that
+  them to repeat it. The catalogue has `segment.define` for the audience definition, but the
+  user's durable preferences live in the agent's workspace rather than in the catalogue; that
   boundary is real and not a gap to be filled with an invented operation.
 - A ceiling wherever a route spends. `enrichment_policy.define` fixes the buying order, the
   predicate that stops the chain and the spend ceiling per run and per period;
   `budget.set` is what makes a ceiling a hard stop instead of an alert (C5).
-- Operations this skill composes:
+- The catalogue's operations an audience touches, by stage:
   - **sourcing** — `candidate.search`, `company.search`, `company.resolve`, `candidate.promote`,
     `inbound_lead.record`;
   - **ingest** — `source.inspect`, `import.apply`, `import.get`, `import.revert`,
@@ -63,6 +78,7 @@ they are sent to, and people frozen into a list a later campaign can address.
     `list.create`, `list.get`, `list_membership.add`, `list_membership.remove`;
   - **signing it off** — `audience.assess`, `audience.screen`.
 
+  Which of them this build performs is said above; a name here is not an instruction to call it.
   See `sdr-operations` for their five properties. Approval is derived rather than chosen: the
   bulk writes and every metered call carry a gate, and `approval-boundaries` is where the
   derivation lives.
@@ -73,7 +89,8 @@ they are sent to, and people frozen into a list a later campaign can address.
 
 A user who says "I want to sell into LATAM" and has no list is asking a real question, and
 "discovery is a gap" was never an answer to it — it is now not even true. There are five routes,
-each one is a named operation, and the job is to choose between them rather than to invent one:
+each named in the catalogue, and the job is to choose between them rather than to invent one;
+which of them this build performs, and how, is the runtime's to say:
 
 1. **A list the user already has.** A CRM export, a conference roster, past customers, a
    spreadsheet someone on the team maintains. `source.inspect` reads it and writes nothing;
@@ -100,10 +117,10 @@ each one is a named operation, and the job is to choose between them rather than
    Do not talk a user out of it when the list is twenty companies. It is a human errand with no
    operation of its own — what it produces re-enters at route 1.
 
-**What the adapter decides, not this skill.** An operation existing in the contract is not a
+**What the provider's plugin decides, not this skill.** An operation existing in the contract is not a
 promise that the provider in use performs it. Whether `candidate.search` or `contact.enrich` is
-fulfilled, partially fulfilled or absent is a fact about the product, and the adapter skill for
-that provider is what states it. Consult it rather than assuming, and treat a partial as a
+fulfilled, partially fulfilled or absent is a fact about the product, and the provider's plugin
+is what states it. Consult it rather than assuming, and treat a partial as a
 partial when planning around it.
 
 ### Outward search with Jason
@@ -153,6 +170,8 @@ no way to separate bad targeting from bad copy.
 
 ### Decide these with the user, before touching anything
 
+Whoever performs the import, these are decided with the user first.
+
 1. **Who belongs.** State the segment in one sentence that could be checked against a row:
    "VP+ of engineering at 50–500 person B2B SaaS in EU/US". `segment.define` saves it, and every
    definition names the universe it is written against — a count is a count of what one universe
@@ -192,7 +211,8 @@ no way to separate bad targeting from bad copy.
    `list_membership.add` builds one directly. Reusing beats proliferating; a dozen
    near-identical lists is how audiences become unmanageable. `list_membership.remove` takes
    people off again, and removing somebody from a list removes them from that list and nothing
-   else (D3).
+   else (D3). A Jason campaign records its members one by one as they are added, and that record
+   is such a fact without a separate list.
 5. **Exclusions.** Anyone suppressed, anyone already in an active campaign, anyone contacted
    recently. Deciding this *now* is what prevents contacting the same person twice from two
    directions, and `audience.screen` is what enforces it against the frozen list.
@@ -215,6 +235,9 @@ permanent failure, a complaint or a legal hold: a merge unions negative state (B
 what makes "clean up the duplicates" safe to say out loud.
 
 ## Execution guidance
+
+The order below is the catalogue's, for a tool that performs these operations. A step nothing
+performs is the user's by hand or not made, and the user is told which; it is never improvised.
 
 1. **Inspect first — zero writes.** `source.inspect`: row count, headers, structural findings,
    and obvious junk — missing or malformed identities, empty rows, columns that are clearly
@@ -345,8 +368,8 @@ import — that is the part a future run actually benefits from.
   check nor refuse on any ground. Name who is in the audience, or fix the audience.
 - **Pulling the maximum.** A search for every person a preview counted spends the whole audience before anybody knows
   whether it answers. Probe, judge, then top up.
-- **Answering "I have no list" with a refusal.** There are five routes and every one of them is a
-  named operation. A user left at "that is a gap" has been given nothing they can act on — and
+- **Answering "I have no list" with a refusal.** There are five routes and every one of them is
+  named in the catalogue. A user left at "that is a gap" has been given nothing they can act on — and
   the gap they were being told about no longer exists.
 
 ## Safety
@@ -363,6 +386,7 @@ reports or logs beyond what the outcome requires.
 
 - `sdr-operations` — the discovery, contact, identity, list and audience operations this skill
   composes, and the invariants cited above by ID.
+- `managed-campaign-work` — leads the set-up and the start, and uses this skill as its method.
 - `campaign-launch` — the usual next step once the audience exists, and the owner of the second
   exclusion screen.
 - `sending-guardrails` — list quality is a deliverability input, not just a data concern.
@@ -370,6 +394,12 @@ reports or logs beyond what the outcome requires.
 
 ## Changelog
 
+- 3.2.0 (2026-11-22): the method of Jason's set-up: `managed-campaign-work` leads bringing a
+  campaign's people in and uses this skill as its method, and the description sends a host there
+  first. A campaign's recorded members are a frozen fact too, with no separate list. The catalogue
+  is called the catalogue; the order is for a tool that performs the operations, and a step nothing
+  performs is named, never improvised. The section on Jason says which operations this build
+  performs. No provider is named.
 - 3.1.0 (2026-11-11): *Outward search with Jason*. Route 2 is this runtime's `audience` family, whose names are not
   the catalogue's: `audience.preview` is a free `segment.preview` of the provider's database, `audience.search` is
   `candidate.search` and `candidate.promote` in one act, and the catalogue's `audience.assess` and `audience.screen`

@@ -37,9 +37,10 @@ is for a message written for one person; the copywriter's templates are written 
 the contact record holds that person's own data and is not a place to park drafts about them.
 
 **The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn
-message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and
-`conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a
-preview, unless that person has chosen that sends to this kind of contact go automatically.** Each is its own act, one
+message to one person, not through one of the provider's campaigns; `social_invitation.send`, a LinkedIn connection
+request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a
+person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go
+automatically.** Each is its own act, one
 message to one person, and the claim decides which when it runs the item: the choice is the person's and never a role's.
 What you write is this work item's result; completing it sends nothing. A template is the
 copywriter's shape; yours is final text for one person. The other operations write no message of their own: enrolling
@@ -216,8 +217,8 @@ ahead of now, and one already past is refused. Once the wait is accepted this at
 more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
 while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
 wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
-above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
-is refused with `wait_not_allowed`.
+above. A campaign review — on its cadence, because a line asked for one, or because a person asked for one now —
+never waits: its wait is refused with `wait_not_allowed`.
 
 When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
 `resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,

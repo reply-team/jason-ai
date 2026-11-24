@@ -148,8 +148,9 @@ export function messageSend(input, context) {
 }
 
 // The text as HTML that shows exactly it: the characters HTML reads as markup escaped, and each line break — a carriage
-// return and a line feed together, either alone, or a Unicode line or paragraph separator — one `<br>`.
-function html(written) {
+// return and a line feed together, either alone, or a Unicode line or paragraph separator — one `<br>`. A reply in an
+// email thread is written by this same function (reply.js), so the two sends that take HTML make it alike.
+export function html(written) {
   return written.replace(/[&<>"']/g, character => ESCAPES[character]).replace(/\r\n|[\r\n\u2028\u2029]/g, "<br>");
 }
 

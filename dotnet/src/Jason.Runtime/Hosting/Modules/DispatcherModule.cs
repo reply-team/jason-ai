@@ -10,6 +10,7 @@ using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Plugins.Subscriptions;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -59,6 +60,11 @@ public static class DispatcherModule
         services.TryAddScoped<WorkItemService>();
         services.TryAddScoped<WorkItemCanceller>();
 
+        // The respond step takes back what the provider holds for a person it holds, through the one routine the end of a
+        // line and a removal take it back through too; the contact module names it as well, for the same reason.
+        services.TryAddScoped<HeldSendCancels>();
+        services.TryAddSingleton<HeldSendCancelSkips>();
+
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
 
@@ -90,12 +96,21 @@ public static class DispatcherModule
         // scan rather than the setting.
         services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
-        services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
+        // Tried rather than added: the campaigns module states it too, for a campaign going live, and one seam is one value.
+        services.TryAddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
         services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
         services.AddSingleton(Seam<ResponderOptions>(ResponderOptions.Section));
-        services.AddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
+        // Tried as well: the campaigns module states it too, for a review a person asks for, which counts the same day.
+        services.TryAddSingleton(Seam<LaunchesOptions>(LaunchesOptions.Section));
         services.AddSingleton(Seam<SendingOptions>(SendingOptions.Section));
+        services.AddSingleton(Seam<LinesOptions>(LinesOptions.Section));
         services.AddSingleton(Seam<SubscriptionsOptions>(SubscriptionsOptions.Section));
+
+        // The installation's zone, read through its seam at each scan: the day the daily limits count and a lift covers runs
+        // from one midnight to the next in it. Named with TryAdd, since the lift's own module and the campaigns module need the same day and any
+        // module may be composed first.
+        services.TryAddSingleton(Seam<RuntimeOptions>(RuntimeOptions.Section));
+        services.TryAddSingleton<InstallationDay>();
 
         // Named here because the summon creates work through the work-item service, and that service reads the
         // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either

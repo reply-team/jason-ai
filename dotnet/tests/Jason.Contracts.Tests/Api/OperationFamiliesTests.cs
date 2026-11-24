@@ -43,12 +43,12 @@ public class OperationFamiliesTests
             "approval.get", "approval.list", "approval.list_standing", "block.get", "block.list", "campaign.activity",
             "campaign.activity_by_period", "campaign.audience", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
             "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.kinds", "journal.list",
-            "operation.describe", "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "reply.count", "report.get",
+            "launches.list", "operation.describe", "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "reply.count", "report.get",
             "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "subscription.list",
             "suppression.list", "workitem.count", "workitem.get", "workitem.list",
         ];
 
-        Assert.Equal(39, reads.Length);
+        Assert.Equal(40, reads.Length);
         Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
     }
 
@@ -110,7 +110,7 @@ public class OperationFamiliesTests
             "approval.approve", "approval.reject", "approval.set_standing", "approval.unset_standing", "block.clear",
             "decision.answer", "preference.set", "preference.unset", "workitem.resume", "workitem.complete",
             "workitem.heartbeat", "plugin.reload", "route.set", "system.shutdown", "ui.open", "suppression.remove",
-            "subscription.runs", "subscription.rewind",
+            "subscription.runs", "subscription.rewind", "launches.lift", "campaign.review",
         ];
         var everything = OperationFamilies.OperationsOf(OperationFamilies.All);
 
@@ -134,7 +134,7 @@ public class OperationFamiliesTests
         Assert.Equal(["suppression.add"], OperationFamilies.Writes["suppression"]);
         Assert.Equal(["contact.create", "contact.update", "contact.archive"], OperationFamilies.Writes["contact"]);
         Assert.Equal(
-            ["campaign.create", "campaign.update", "campaign.start", "campaign.pause", "campaign.archive", "campaign.update_context", "campaign.add_contacts", "campaign.remove_contacts"],
+            ["campaign.create", "campaign.update", "campaign.start", "campaign.pause", "campaign.archive", "campaign.update_context", "campaign.add_contacts", "campaign.remove_contacts", "campaign.finish_contacts", "campaign.continue_contacts"],
             OperationFamilies.Writes["campaign"]);
     }
 

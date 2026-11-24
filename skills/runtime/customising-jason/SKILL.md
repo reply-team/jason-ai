@@ -64,6 +64,12 @@ is in the folder `copywriter`. Edit that file. The runtime reads the folder at e
 to the role's next piece of work and nothing needs reloading. Work already running keeps the instruction it started
 with.
 
+The manager is taught by its `SKILL.md` and by one file for each kind of review it is launched for, in the folder
+`entries` beside it: `start.md`, `resume.md`, `quick_look.md`, `deep_review.md` and `inbound_reply.md`. To change how
+the manager does one kind of review, edit that entry's file, and the next review of that kind is handed your text; to
+change what every review shares, edit `SKILL.md`. Keep the file's name and its front matter: the runtime finds an entry
+by its file name. As with a role's `SKILL.md`, an update keeps a file the person edited.
+
 Keep the file's front matter as it is: its `name` must equal the folder's name, and a role whose file is a link, cannot
 be read, names itself differently from its folder or is over `Roles:MaxSkillBytes` is refused at launch rather than run
 untaught, which `jason status` reports in a sentence ending in its code. Change what the role is told to do, not its

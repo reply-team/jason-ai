@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -10,6 +11,7 @@ public partial class InteractiveSkillTests
     /// anything after the first clause.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_researcher_in_a_persons_session_is_described_by_the_moment_it_is_for()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("researcher-in-session").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -24,6 +26,7 @@ public partial class InteractiveSkillTests
     /// never written down: a block that lost one of them would teach both seats without it at once.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("researcher-in-session")]
     [InlineData("researcher")]
     public void The_researchers_judgement_says_what_is_established_and_what_is_never_written(string skill)
@@ -53,6 +56,7 @@ public partial class InteractiveSkillTests
     /// improvise the method; one that copied it would carry a second copy that drifts.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_researcher_in_a_persons_session_names_its_method_and_copies_no_rule()
     {
         var skill = Flattened("researcher-in-session");
@@ -86,6 +90,7 @@ public partial class InteractiveSkillTests
     /// operations from <c>docs/contracts/operations</c>, so that day turns this red rather than leaving the sentence wrong.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_researcher_in_a_persons_session_says_this_build_performs_none_of_the_discovery_family()
     {
         const string sentence = "today it performs none of the discovery family, so a step of that kind is your host's own doing";
@@ -113,6 +118,7 @@ public partial class InteractiveSkillTests
     /// it ends and nobody resumes them, and a list researched in the conversation never becomes anything Jason can show.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_researcher_in_a_persons_session_keeps_a_quick_look_and_sends_a_list_to_work_items()
     {
         var skill = Flattened("researcher-in-session");
@@ -126,6 +132,7 @@ public partial class InteractiveSkillTests
     /// managed-campaign-work's to say, once.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_researcher_in_a_persons_session_reads_the_note_and_never_writes_it()
     {
         var skill = Flattened("researcher-in-session");
@@ -151,6 +158,7 @@ public partial class InteractiveSkillTests
     /// in. Printed means inside any fence, and written whole in a code span in the prose as well.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public async Task The_researcher_in_a_persons_session_prints_only_reads()
     {
         var printed = SkillPack.PrintedCommands(SkillPack.Find("researcher-in-session").File);

@@ -7,6 +7,7 @@ public partial class InteractiveSkillTests
 {
     /// <summary>The catalog says how the planner in a session opens and names the campaign, so a reader choosing a skill learns it before opening the file.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_catalog_says_that_the_planner_in_a_session_asks_one_question_at_a_time_and_names_the_campaign_for_what_it_is_for()
     {
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
@@ -25,6 +26,7 @@ public partial class InteractiveSkillTests
     /// after the first clause.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_is_described_by_the_moment_it_is_for()
     {
         var description = SkillFrontMatter.Read(SkillPack.Find("planner-in-session").File).Top.GetValueOrDefault("description") ?? string.Empty;
@@ -34,6 +36,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_agrees_the_direction_and_hands_the_rest_on()
     {
         var skill = Flattened("planner-in-session");
@@ -60,6 +63,7 @@ public partial class InteractiveSkillTests
     /// reads the launched planner's notes at the three levels they are kept at, the client's first.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_reads_what_was_written_down_before_it_plans()
     {
         var skill = Flattened("planner-in-session");
@@ -89,6 +93,7 @@ public partial class InteractiveSkillTests
     /// that weakens one, is a change to this text and fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_agrees_before_anything_is_created_and_approves_nothing()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -136,6 +141,7 @@ public partial class InteractiveSkillTests
     /// person to run, and is held whole by a test of its own, so it is the one place that verb may stand.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public async Task The_planner_in_a_persons_session_prints_only_reads_and_the_persons_own_preferences()
     {
         var file = SkillPack.Find("planner-in-session").File;
@@ -159,6 +165,7 @@ public partial class InteractiveSkillTests
     /// <c>route resolve</c> as much as <c>get</c> — and nothing that changes campaign state or an attempt does.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", true)]
     [InlineData("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll", true)]
     [InlineData("jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", true)]
@@ -196,6 +203,7 @@ public partial class InteractiveSkillTests
     /// shared judgement, so a sentence moved down below the questions or reworded fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planners_first_words_say_where_the_files_live_and_how_to_change_that()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -220,6 +228,7 @@ public partial class InteractiveSkillTests
     /// list. Each step is said once in the paragraph, so a step moved or dropped fails here.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("planner-in-session")]
     [InlineData("planner")]
     public void The_planners_judgement_opens_a_first_campaign_in_the_order_a_real_start_needs(string skill)
@@ -251,8 +260,44 @@ public partial class InteractiveSkillTests
 
         Assert.Contains("confirms it before anything is sent", paragraph, StringComparison.Ordinal);
         Assert.Contains("never as a form", paragraph, StringComparison.Ordinal);
-        Assert.Contains("nothing that would write to anybody is settled while either is unknown", paragraph, StringComparison.Ordinal);
+        Assert.Contains("nothing that would write to anybody is settled while who writes is unknown", paragraph, StringComparison.Ordinal);
+        Assert.Contains(MissingTone, paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("while either is unknown", paragraph, StringComparison.Ordinal);
         Assert.Contains("is a rule for the messages after it, so it is kept at the level it belongs to", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a missing tone does, one sentence wherever the planner works, in a person's own session, in the chat and as a
+    /// launched role: it holds nothing back, the messages are written plainly, and the person hears once that they may name
+    /// one. Only a missing sender's name holds the work that writes. A set-up that waited on a tone would stop in a terminal
+    /// where the chat goes on, for the same person and the same campaign.
+    /// </summary>
+    internal const string MissingTone =
+        "A missing tone holds nothing back: the work goes on in a plain, neutral voice, and the person is told once that they may name one.";
+
+    /// <summary>
+    /// In a person's own session a set-up with a sender and no tone goes on, as it does in the chat: the sender's name holds
+    /// what writes to anybody, the tone holds nothing. Said once in the section that asks for both, and the old sentence that
+    /// held everything on both is gone from the file.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_planner_in_a_persons_session_holds_the_work_on_a_missing_sender_and_never_on_a_missing_tone()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## Who writes, and how the company sounds"), " ");
+        foreach (var held in new[]
+        {
+            "Until the sender has a value, nothing that writes to anybody is agreed or created.",
+            MissingTone,
+        })
+        {
+            Assert.True(section.Contains(held, StringComparison.Ordinal), $"'Who writes, and how the company sounds' reads '{section.Trim()}', without '{held}'.");
+        }
+
+        var skill = Flattened("planner-in-session");
+        Assert.DoesNotContain("Until both have a value", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("while either is unknown", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -262,6 +307,7 @@ public partial class InteractiveSkillTests
     /// compare for a difference the copy carries. Said whole in the shared judgement, so both seats say the same rule.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("planner-in-session")]
     [InlineData("planner")]
     public void The_planners_judgement_never_splits_a_campaign_only_to_give_some_of_its_people_another_tone(string skill)
@@ -278,6 +324,7 @@ public partial class InteractiveSkillTests
 
     /// <summary>The catalog says that the planner never splits a campaign only for a tone, in both seats, so a reader learns the rule before opening a file.</summary>
     [Theory]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     [InlineData("- [`planner-in-session`]")]
     [InlineData("- [`roles/planner`]")]
     public void The_catalog_says_that_the_planner_never_splits_a_campaign_only_for_a_tone(string entry)
@@ -294,14 +341,15 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// Who writes and how the company sounds are the person's word: read before the first question, asked when the order
     /// reaches each, and set on the answer under the person's own name — a preference is refused from anything but a
-    /// person, and one set under another name records a word nobody gave. Nothing is agreed or created while either has
-    /// no value, so the section stands before the agreement, and the read before the two sets.
+    /// person, and one set under another name records a word nobody gave. Nothing that writes to anybody is agreed or
+    /// created while the sender has no value, so the section stands before the agreement, and the read before the two sets.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_has_both_preferences_before_it_plans_and_sets_them_as_the_persons()
     {
         var skill = Flattened("planner-in-session");
-        Assert.Contains("Until both have a value, nothing is agreed and nothing is created.", skill, StringComparison.Ordinal);
+        Assert.Contains("Until the sender has a value, nothing that writes to anybody is agreed or created.", skill, StringComparison.Ordinal);
         Assert.Contains("under their own name as the actor", skill, StringComparison.Ordinal);
         Assert.Contains("Ask for the forms; a name does not tell you them.", skill, StringComparison.Ordinal);
 
@@ -339,12 +387,14 @@ public partial class InteractiveSkillTests
     /// own and written from no conversation it was in.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_shows_the_first_message_and_keeps_a_standing_rule_at_its_level()
     {
         var skill = Flattened("planner-in-session");
-        Assert.Contains("show it to the person as it would go out. Change it with them until they confirm it.", skill, StringComparison.Ordinal);
+        Assert.Contains("In a session you neither write the first message nor have it written before the start", skill, StringComparison.Ordinal);
+        Assert.Contains("When the person brings it to you, read it with them as it would go out, and change it with them until they confirm it.", skill, StringComparison.Ordinal);
         Assert.Contains("Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.", skill, StringComparison.Ordinal);
-        Assert.Contains("into their memory file at the level it belongs to: the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone", skill, StringComparison.Ordinal);
+        Assert.Contains("The level is the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone; when that is not plain, ask.", skill, StringComparison.Ordinal);
         Assert.Contains("nor a role's note, which is that role's own", skill, StringComparison.Ordinal);
 
         // A launched planner cannot write the person's file and raises the rule as a decision instead; a session that did
@@ -353,11 +403,44 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// When a person's memory file is written, one sentence for a person's own session and the chat alike: only on the
+    /// person's word, and a rule they state without saying so is proposed, its line and its file, and asked once. A
+    /// session taught to write it unasked writes into a file of the person's what they never said should be kept there, and
+    /// the same sentence from the person then ends one way in a terminal and another in the chat.
+    /// </summary>
+    internal const string MemoryRule =
+        "A standing rule the person states is written into their memory file, at the level it belongs to, only when they "
+        + "tell you to write it; where they state one without saying so, say the exact line and the file it belongs in, and "
+        + "ask once whether to add it.";
+
+    /// <summary>
+    /// The first message's standing rules are written on the person's word alone: the section says the one rule, and once
+    /// they tell you, the line goes in as they said it. The sentence that wrote it unasked is gone.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_persons_session_writes_a_standing_rule_only_on_the_persons_word()
+    {
+        var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = Whitespace().Replace(SectionOf(text, "## The first message, before anything is sent"), " ");
+        foreach (var held in new[]
+        {
+            MemoryRule,
+            "When they tell you to, write exactly that line, in their words, into that file.",
+        })
+        {
+            Assert.True(section.Contains(held, StringComparison.Ordinal), $"'The first message, before anything is sent' reads '{section.Trim()}', without '{held}'.");
+        }
+
+        Assert.DoesNotContain("Write it, in their words, into their memory file", Flattened("planner-in-session"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The brief becomes a project with its first campaign: the project named from what is sold, never the default for a
     /// named product, and how is the managed path's to print. And the wiring check is no step of the opening: a person who
     /// skipped it plans the same way, so a session that waited on it would hold the real work behind a walk they declined.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_commits_a_first_campaign_under_the_project_of_what_is_sold()
     {
         var skill = Flattened("planner-in-session");
@@ -378,6 +461,7 @@ public partial class InteractiveSkillTests
     /// wait, and the file names the failure it forbids, a numbered list of questions: once, where the opening is described.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_asks_the_opening_one_question_per_message()
     {
         var text = File.ReadAllText(SkillPack.Find("planner-in-session").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -405,6 +489,7 @@ public partial class InteractiveSkillTests
     /// the campaign is created.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_names_a_campaign_for_what_it_is_for()
     {
         const string Sentence =
@@ -418,6 +503,24 @@ public partial class InteractiveSkillTests
         Assert.True(said == 1, $"planner-in-session says 'a name of its own' {said} times; it is said once, where the campaign is created.");
     }
 
+    /// <summary>
+    /// What a session commits is the set-up, and the set-up is the managed path's to lead to its question and the start:
+    /// a planner in a session that created the letters, the sends or a plan of steps would do, before the start and
+    /// unread by any critic, the work the roles do after it. And after an audience's window is agreed it goes on with the
+    /// set-up instead of ending its turn with a campaign nobody started.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_planner_in_a_persons_session_commits_the_set_up_and_creates_nothing_that_writes()
+    {
+        var skill = Flattened("planner-in-session");
+        Assert.Contains("Once the direction is agreed, it is recorded, and the set-up goes on in `managed-campaign-work`, \"Setting a campaign up, and starting it\".", skill, StringComparison.Ordinal);
+        Assert.Contains("What you commit in a session is the set-up: the campaign, its context and goals, and its people or the probe that will find them.", skill, StringComparison.Ordinal);
+        Assert.Contains("You create no work that writes to anybody: no letter, no send and no plan of steps.", skill, StringComparison.Ordinal);
+        Assert.Contains("Then go on with the set-up there, which creates the probe and ends with the question whether to start, and the start.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("say so, and end your turn", skill, StringComparison.Ordinal);
+    }
+
     /// <summary>The sentence the planner opens with, as the install says it.</summary>
     private const string OpeningSentence =
         "Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and "
@@ -428,12 +531,16 @@ public partial class InteractiveSkillTests
     /// managed-campaign-work's, and what waits on a person approvals-and-questions'. A run of eight words the session file
     /// shares with one of them is a rule copied rather than pointed to, and copies drift. Read over the prose that is the
     /// session file's own: not the shared block, which the launched planner must carry because it cannot read
-    /// campaign-planning, not the commands, and not the status line every skill words the same way.
+    /// campaign-planning, not the commands, and not the status line every skill words the same way. One sentence is
+    /// passed over, by name: the plan card's, <see cref="PlanCardSentence"/>, which the owner ruled is said word for word
+    /// in the chat passages of this skill and of managed-campaign-work, since a host planning in the chat may load this
+    /// skill alone; its test holds the two to one wording, so the copy cannot drift.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_copies_no_rule_from_the_skills_it_points_to()
     {
-        var own = Runs(Prose(SkillPack.Find("planner-in-session").File));
+        var own = Runs(Prose(SkillPack.Find("planner-in-session").File).Replace(PlanCardSentence, " ", StringComparison.Ordinal));
         Assert.True(own.Count > 50, $"planner-in-session's own prose gave {own.Count} runs of eight words, so this guard holds little.");
 
         foreach (var sibling in new[]
@@ -451,59 +558,6 @@ public partial class InteractiveSkillTests
         }
     }
 
-    /// <summary>
-    /// The prose of a skill: its body without the front matter, the status paragraph, any fenced block, the headings and
-    /// the craft block.
-    /// </summary>
-    private static string Prose(string file)
-    {
-        var kept = new List<string>();
-        var status = false;
-        foreach (var (line, fenced) in SkillPack.Fenced(SkillPack.Body(file).Split('\n')))
-        {
-            var start = line.TrimStart();
-            if (fenced || start.StartsWith('#'))
-            {
-                continue;
-            }
-
-            if (start.StartsWith("**Status:", StringComparison.Ordinal))
-            {
-                status = true;
-            }
-
-            if (status)
-            {
-                status = start.Length > 0;
-                continue;
-            }
-
-            kept.Add(line);
-        }
-
-        // The form of the person's word in the chat is rule 13 of the chat's instructions, given where each skill sets or
-        // runs an act on that word; quoting the chat's own rule is not copying a sibling's.
-        var prose = Regex.Replace(CraftBlockText().Replace(string.Join('\n', kept), " "), @"\s+", " ");
-        return ChatsForm().Replace(prose, " ");
-    }
-
-    /// <summary>The form of the person's word that rule 13 of the chat's instructions gives, as a skill quotes it.</summary>
-    [GeneratedRegex(@"with `--actor human:<account>` as Jason's first paragraph names them and `--reason '\.\.\.'` in your own words(?: \([^)]*\))?, at the end of the command")]
-    private static partial Regex ChatsForm();
-
-    /// <summary>Every run of eight consecutive words, lower-cased, punctuation and emphasis dropped.</summary>
-    private static HashSet<string> Runs(string prose)
-    {
-        var words = ProseWord().Matches(prose.ToLowerInvariant()).Select(match => match.Value).ToList();
-        var runs = new HashSet<string>(StringComparer.Ordinal);
-        for (var index = 0; index + 8 <= words.Count; index++)
-        {
-            runs.Add(string.Join(' ', words.Skip(index).Take(8)));
-        }
-
-        return runs;
-    }
-
     [GeneratedRegex(@"`(jason [^`]+)`")]
     private static partial Regex InlineCommand();
 
@@ -515,18 +569,13 @@ public partial class InteractiveSkillTests
     [GeneratedRegex(@"\bon (the person's|their|his|her|somebody's|someone's) behalf\b|\bapprove (it|them|this|that|the \w+) (here|now|yourself|for (them|the person|him|her))\b", RegexOptions.IgnoreCase)]
     private static partial Regex ApprovesForSomebody();
 
-    [GeneratedRegex(@"<!-- craft:begin -->.*?<!-- craft:end -->", RegexOptions.Singleline)]
-    private static partial Regex CraftBlockText();
-
-    [GeneratedRegex(@"[a-z0-9']+")]
-    private static partial Regex ProseWord();
-
     /// <summary>
     /// In a person's session the goals are asked as one question once the audience and the channels are settled, with
     /// the default said aloud where the person has not said, and they go into the campaign with the brief when it is
     /// made, not afterwards. Without the last the campaign is made with no goals and the person is never told.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_planner_in_a_persons_session_asks_what_the_campaign_is_for_and_writes_it_with_the_campaign()
     {
         var skill = Flattened("planner-in-session");
@@ -542,11 +591,28 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
+    /// The quick start reads the campaigns that exist before it makes one: a draft that already stands for what the
+    /// person sells is taken up as the set-up's, and no second one is created. A real host given a seeded draft made a
+    /// second campaign beside it, because nothing in the skill read what was there.
+    /// </summary>
+    [Fact]
+    public void The_quick_start_takes_up_a_standing_draft_and_creates_no_second_campaign()
+    {
+        var skill = Flattened("quick-start");
+        var makes = skill.IndexOf("Make a project named from what the person sells", StringComparison.Ordinal);
+        var reads = skill.IndexOf("Before you make anything, read `jason campaign list`; where a draft campaign already stands for what they sell, take it up as the set-up's, as `managed-campaign-work` says, and create no second one.", StringComparison.Ordinal);
+
+        Assert.True(reads >= 0, "the quick start does not read the campaigns that exist");
+        Assert.True(reads < makes, "the quick start reads the campaigns only after it makes one");
+    }
+
+    /// <summary>
     /// The quick start is what a person meets first, so the words the person sees are held exactly: the one question and
     /// its invitation, the plan message's last line, the line of fact about connected channels, the firm line when none is
     /// connected, and the wiring line in the message after "go". A paraphrase would change what the first minutes say.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_quick_start_says_its_words_exactly()
     {
         var skill = Flattened("quick-start");
@@ -591,7 +657,14 @@ public partial class InteractiveSkillTests
         Assert.Contains("With one channel routed, name only that channel's accounts.", skill, StringComparison.Ordinal);
         Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
         Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
-        Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("The message after \"go\" that hands over to the set-up ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+
+        // "Go" says the plan stands and starts nothing: the set-up goes on in the campaign that exists and ends with its
+        // own question, and the quick start writes no letter and creates no send.
+        Assert.Contains("\"Go\" is not yet the start: it says the plan stands.", skill, StringComparison.Ordinal);
+        Assert.Contains("From \"go\" the set-up goes on in the campaign that exists, through `managed-campaign-work`, \"Setting a campaign up, and starting it\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Either way you write no message, no template and no plan of steps, and you create no send", skill, StringComparison.Ordinal);
+        Assert.Contains("Never ask for a preference here, in the quick start; the set-up in `managed-campaign-work` asks for who the messages are written as, once, when the sender has no value.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
 
         // The accounts are read on request in step 2, before the plan message and before "go", and never submitted as work:
@@ -601,5 +674,19 @@ public partial class InteractiveSkillTests
         var read = skill.IndexOf("jason sender list --campaign", StringComparison.Ordinal);
         Assert.True(channels >= 0 && read > channels && read < plan, $"The account read is at offset {read}; it belongs in step 2, between offsets {channels} and {plan}.");
         Assert.DoesNotContain("--operation sender.list", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The planner in a session speaks of a campaign's letters with the same line the launched planner has: three touches
+    /// written when due, never past the ceiling. A session that offered the person a fixed run of letters planned at once
+    /// would promise what the manager does not do.
+    /// </summary>
+    [Fact]
+    public void The_planner_in_a_session_says_the_default_line_and_the_ceiling()
+    {
+        var skill = Flattened("planner-in-session");
+
+        Assert.Contains(RoleSkillTests.PlannerLine, skill, StringComparison.Ordinal);
+        Assert.Contains(RoleSkillTests.PlannerCeiling, skill, StringComparison.Ordinal);
     }
 }

@@ -8,7 +8,9 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Execution;
 
@@ -44,6 +46,46 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
             reason: reason,
             workItem: item,
             attempt: attempt);
+    }
+
+    /// <summary>
+    /// What a touch's success asks for once it is saved: where the item is a touch of a person (<see cref="OperationCatalog.Touches"/>)
+    /// that succeeded, and the person is <c>paused</c> in its campaign by then, what the provider holds for them there is
+    /// taken back (<see cref="HeldSendCancels.TakeBackAsync"/>), in one transaction of its own. A letter on its way when a
+    /// reply held the person, which the provider then took for a later moment, is cancelled as one it took before the
+    /// hold; a take-back the runtime refuses is said once and costs the success nothing. Run after the save, because the
+    /// one definition of a held send reads the saved record, and outside the save, so the success is never refused for
+    /// it. Answers how many cancels it queued.
+    /// </summary>
+    public async Task<int> TakeBackAfterSuccessAsync(JasonDbContext db, WorkItem item, HeldSendCancels cancels, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(cancels);
+        if (item.Status != WorkItemStatus.Succeeded
+            || item.ContactId is not { } person
+            || item.Operation is not { } operation
+            || !OperationCatalog.Touches.Contains(operation, StringComparer.Ordinal))
+        {
+            return 0;
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var campaign = await db.CampaignContacts
+            .AsNoTracking()
+            .Where(m => m.CampaignId == item.CampaignId && m.ContactId == person && m.State == MembershipState.Paused)
+            .Select(m => m.Campaign!.PublicId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (campaign is null)
+        {
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
+            return 0;
+        }
+
+        var queued = await cancels.TakeBackAsync(db, item.CampaignId, campaign, [person], clock.GetUtcNow(), ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return queued;
     }
 
     /// <summary>

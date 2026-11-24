@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Jason.Cli.Doctor;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -12,6 +13,7 @@ public partial class InteractiveSkillTests
     /// the field a contract declares, and the operations that declare it today, every one the catalogue runs there.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_a_draft_and_names_what_runs_in_a_paused_campaign()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -30,25 +32,133 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// A hold at a daily limit reads as state 11 and is no run's doing, so the state says what it is, where a person sees it, and
-    /// each of the three ways out, a raised limit among them with what it does not reach.
+    /// each of the four ways out, the lift and a raised limit among them with what it does not reach. The day is the
+    /// installation's, from its midnight to the next in its zone, and no longer a UTC day ending at 00:00Z.
     /// </summary>
     [Theory]
-    [InlineData("**A budget hold is the claim's own wait, and no run stands behind it.**")]
-    [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in a UTC day")]
-    [InlineData("its `last_error` is `launches_spent`, whose message names the setting")]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    [InlineData("**A hold at a daily limit is the claim's own wait, and no run stands behind it.**")]
+    [InlineData("`Launches:MaxPerDay:<role>` limits how many runs of a role one campaign starts in the installation's day, from its midnight to the next in `Runtime:TimeZone`, or in the machine's own zone where that is not set")]
+    [InlineData("its wait is the installation's next midnight, its `last_error` is `launches_spent`, whose message names the setting and the midnight it counted from, with the zone")]
     [InlineData("its `workitem_waiting` line in the chronicle says `held_by` with the code, the limit and the role")]
-    [InlineData("A notification counts it among the items that wait on a budget")]
-    [InlineData("at 00:00Z the runtime releases the item by itself and counts the new day, so a day already spent by then holds it again")]
+    [InlineData("A notification counts it among the items that wait on a daily limit")]
+    [InlineData("at the installation's next midnight the runtime releases the item by itself and counts the new day, so a day already spent by then holds it again")]
     [InlineData("a person resumes that one item under their name, as above, and it goes past the limit with its run counted like any other")]
+    [InlineData("a person lifts today's limits, `jason launches lift`, below")]
     [InlineData("a person raises the setting, which applies from the next scan to work not yet held, while an item already held keeps its moment")]
-    public void The_troubleshooting_skill_says_what_a_budget_hold_is_and_its_three_ways_out(string sentence) =>
+    public void The_troubleshooting_skill_says_what_a_budget_hold_is_and_its_four_ways_out(string sentence) =>
         Assert.Contains(sentence, Flattened("troubleshooting-jason"), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The limits are read, never guessed: the skill names the read, what it answers — the day, a lift, each role's limit
+    /// and where it comes from, none for a role with none, what is held, and with a campaign the runs started there — that
+    /// the hold's message says the runs beside the limit, and that a limit is set in the settings file and by no command.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_reads_the_limits_with_launches_list()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "**The limits are read, never guessed: `jason launches list`.**",
+            "each role's limit a day as the runtime reads it now, `default` where it is the number Jason ships and `settings` where the settings set another, and `none` for a role with no limit",
+            "and `held`, how many work items wait on a daily limit now",
+            "With `--campaign`, each role also says the runs it started in that campaign today, counted as the claim counts them, and `held` is that campaign's.",
+            "says how many runs started since then and the limit beside them",
+            "Setting a limit is the person's, in the settings file under `Launches:MaxPerDay:<role>`; no command sets one.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("jason launches list --human", SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)));
+    }
+
+    /// <summary>
+    /// The day of a launch limit is the installation's, so no sentence of the skill says a UTC day, a wait until 00:00Z, or
+    /// the notification's old words, and the ways out are four.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_no_longer_counts_the_launch_limit_by_a_utc_day()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var retired in new[] { "starts in a UTC day", "its wait is the next 00:00Z", "at 00:00Z the runtime releases", "wait on a budget", "There are three ways out" })
+        {
+            Assert.DoesNotContain(retired, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("There are four ways out", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "Ignore the limit" is the person's word: the session reads what is held, lifts as the person under their name,
+    /// and says which campaigns and roles it let go, until when as the clock time in the answer's zone, named, with how
+    /// long from now in brackets, and that the released items are counted again after midnight. It never lifts on its
+    /// own initiative, and a role cannot lift.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_lifts_the_limit_on_the_person_s_word_and_says_what_it_did()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "**\"Ignore the limit\" is the person's word, and the lift is its verb.**",
+            "When the person tells you to ignore the limit, or names the lift, read first what is held",
+            "`jason launches list` says how many items are held and whether a lift already stands today, and the waiting items whose `last_error` is `launches_spent` say which, each with its campaign and its role",
+            "Where something is held, that is what they mean; only where nothing is held, ask which limit they mean, and lift nothing.",
+            "Then run the lift as the person, under their own name, with a short reason of your own that says it is their word.",
+            "It lets go every item held at a daily limit, in every campaign holding one and for every role, and holds nothing more until the installation's next midnight.",
+            "Then say three things: which campaigns and roles it released; until when, as the clock time of the answer's `until` in the answer's `time_zone`, naming the zone, and in brackets how long from now, such as \"until 00:00 Europe/Berlin (in five and a half hours)\"; and that the items it released are counted again after that midnight",
+            "Never lift on your own initiative",
+            "A role inside a run cannot lift, and its attempt is refused.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        var printed = SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)).ToList();
+        var read = printed.FindIndex(line => line == "jason workitem list --status waiting --kind ai_role");
+        var counted = read - 1;
+        var lift = printed.FindIndex(line => line.StartsWith("jason launches lift --actor human:", StringComparison.Ordinal) && line.Contains(" --reason '", StringComparison.Ordinal));
+        Assert.True(read > 0 && printed[counted] == "jason launches list --human", "The troubleshooting skill prints `jason launches list --human` before the read of the held items.");
+        Assert.True(read >= 0 && lift > read, $"The troubleshooting skill prints the read of what is held at {read} and the lift at {lift}: the read comes first.");
+    }
+
+    /// <summary>
+    /// A touch of a person whose line is paused waits in an active campaign with no moment ahead, which neither state 1 nor
+    /// state 2 explained; the skill names the case, who settles it, and that nobody resumes, cancels or recreates it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_troubleshooting_skill_names_a_touch_waiting_on_a_held_line()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        foreach (var fact in new[]
+        {
+            "A touch listed there with no such moment ahead, in a campaign that is active, is the paused line under state 2.",
+            "**One person's line can be paused where the campaign is not.**",
+            "that is `created` and `--not-eligible` in an active campaign, with no `not_before` or `retry_after` ahead, waits because that person's line in the campaign is `paused`: the person replied, and the runtime paused their line.",
+            "The campaign's manager continues the line or ends it, by the reply's verdict",
+            "Do not resume, cancel or create it again; say whose line is paused and that the manager settles it.",
+        })
+        {
+            Assert.Contains(fact, skill, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            "jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary paused",
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("troubleshooting-jason").File)));
+    }
 
     /// <summary>
     /// The two installation skills teach the journal's kinds and the subscription verbs, and what the person alone does:
     /// where a chain stands, why it waits, what a failed chain left, and a rewind that needs a named person and an offset.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_installation_skills_teach_the_journal_kinds_and_the_subscription_verbs()
     {
         var operating = Flattened("operating-the-installation");
@@ -69,6 +179,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_honest_about_what_this_version_does_not_have()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -96,6 +207,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_collects_the_bundle_for_the_person_and_reads_the_logs_with_the_verb()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -165,6 +277,7 @@ public partial class InteractiveSkillTests
     /// submitted, so it goes to the support address only — the skill says so in the words the command prints.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_offers_the_issue_link_as_the_person_s_act_and_a_journal_file_to_support_only()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -199,6 +312,7 @@ public partial class InteractiveSkillTests
     /// the readings cannot explain, and nobody knows what that is before reading them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_makes_its_four_readings_binding_before_any_doctor()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -216,6 +330,7 @@ public partial class InteractiveSkillTests
     /// readings it refers to and before the three that stay advice.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_says_what_to_read_when_a_notification_brought_the_person()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -233,6 +348,7 @@ public partial class InteractiveSkillTests
     /// the person choosing between things they had not asked about, and wrote nothing they had.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_asks_one_question_after_the_dry_run_and_offers_nothing_else()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -248,15 +364,24 @@ public partial class InteractiveSkillTests
     /// the words a continuing conversation uses are there.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_is_chosen_by_the_words_a_continuing_conversation_uses()
     {
         Assert.Contains(
             "collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.",
             SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
             StringComparison.Ordinal);
+
+        // The notification of a hold says "tell your agent: ignore the limit", and a session in a terminal chooses its skill
+        // by the description: the words are there, so the skill that reads the hold and lifts it is the one loaded.
+        Assert.Contains(
+            "Also when the person says ignore the limit: read what Jason holds at a daily limit of launches, and lift it on their word.",
+            SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
+            StringComparison.Ordinal);
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_transient_end_from_a_refusal_and_from_a_lost_answer()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -291,6 +416,7 @@ public partial class InteractiveSkillTests
     /// "the ten states"; a phrase such as "either of two states" counts nothing and is not held to it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_counts_its_states_the_way_its_headings_number_them()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -318,6 +444,7 @@ public partial class InteractiveSkillTests
     /// killed, so a session that read both skills is never told two different things.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_restart_repair_points_at_the_one_rule_for_a_stop()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -343,6 +470,7 @@ public partial class InteractiveSkillTests
     /// word, and the line printed for it names them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_waiting_item_apart_and_leaves_its_early_end_to_a_person()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -379,6 +507,7 @@ public partial class InteractiveSkillTests
     /// first, points at it, and the summary counts it among the ones nobody can fix where the work was asked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_tells_a_capability_the_provider_does_not_offer_apart()
     {
         var file = SkillPack.Find("troubleshooting-jason").File;
@@ -405,6 +534,7 @@ public partial class InteractiveSkillTests
     /// reader to the operation's document, which says nothing of that object.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void State_seven_names_the_refusal_of_the_provider_object_and_its_repair()
     {
         var text = File.ReadAllText(SkillPack.Find("troubleshooting-jason").File).ReplaceLineEndings("\n");
@@ -435,6 +565,7 @@ public partial class InteractiveSkillTests
     /// once, where the states are told apart, and state 8 says how such a refusal looks.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_reads_a_refusal_recorded_ambiguous_as_an_interrupted_attempt_first()
     {
         var skill = Flattened("troubleshooting-jason");
@@ -477,6 +608,7 @@ public partial class InteractiveSkillTests
     /// block on its own judgement would be saying the cause is gone when nobody had looked.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_troubleshooting_skill_reads_a_park_on_a_block_and_leaves_its_repair_to_the_person()
     {
         var skill = Flattened("troubleshooting-jason");

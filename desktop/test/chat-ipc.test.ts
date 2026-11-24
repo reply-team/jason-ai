@@ -63,6 +63,8 @@ test('the chat registers its fifteen calls, and each reaches the chat from the r
     listeners.get('jason:chat.list')?.(page);
     listeners.get('jason:chat.open')?.(page, 'conv_1');
     await listeners.get('jason:chat.create')?.(page, 'cmp_1', 'claude');
+    // Start's box names the one word that marks a chat begun there; nothing else rides beside the campaign.
+    await listeners.get('jason:chat.create')?.(page, null, 'start');
     await listeners.get('jason:chat.createAgent')?.(page, '0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10', 'cmp_PLANTED');
     listeners.get('jason:chat.remove')?.(page, 'conv_1');
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
@@ -79,6 +81,7 @@ test('the chat registers its fifteen calls, and each reaches the chat from the r
         ['list'],
         ['open', 'conv_1'],
         ['create', 'cmp_1'],
+        ['create', null, 'start'],
         ['createAgent', '0b5c1e4f-1d7a-4c3e-9f6b-2a8d4e6f8a10'],
         ['remove', 'conv_1'],
         ['restart', 'conv_1'],
@@ -88,7 +91,7 @@ test('the chat registers its fifteen calls, and each reaches the chat from the r
         ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
         ['cardRefused', 'conv_1', 'choice', 'schema'],
-    ], 'a chat is made for the campaign named alone, whatever else the page sends');
+    ], 'a chat is made for the campaign named alone, or marked begun from Start by that one word, whatever else the page sends');
 });
 
 test('no channel of the page reads, gives or takes back a standing choice of Full access: there is none', () => {

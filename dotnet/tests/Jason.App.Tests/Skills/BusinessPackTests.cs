@@ -17,6 +17,7 @@ namespace Jason.App.Tests.Skills;
 public class BusinessPackTests
 {
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_business_pack_ships_nine_skills_and_a_catalog()
     {
         var skills = SkillPack.Business();
@@ -68,6 +69,7 @@ public class BusinessPackTests
     /// for reasons nobody could reconstruct.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_business_skill_declares_itself_in_the_shape_the_pack_agreed()
     {
         var skills = SkillPack.Business();
@@ -104,6 +106,7 @@ public class BusinessPackTests
     /// where a reader ends up, and a pointer is as broken there as it is in a skill's own text.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_business_file_points_at_a_pack_this_repository_does_not_ship()
     {
         foreach (var file in Files())
@@ -122,6 +125,7 @@ public class BusinessPackTests
     /// it clean afterwards.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_business_file_teaches_the_model_this_runtime_replaced()
     {
         foreach (var file in Files())
@@ -148,6 +152,7 @@ public class BusinessPackTests
     /// which is a worse outcome than the problem.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_skill_that_names_an_enforced_operation_points_at_the_contract()
     {
         var enforced = Directory
@@ -186,6 +191,7 @@ public class BusinessPackTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Every_business_skill_is_in_the_catalog_and_every_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.BusinessCatalog());
@@ -213,6 +219,7 @@ public class BusinessPackTests
     /// row carrying one would be a claim about a reading that never happened.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_catalog_row_records_a_reading_that_never_happened()
     {
         Assert.DoesNotContain("sha256:", File.ReadAllText(SkillPack.BusinessCatalog()), StringComparison.Ordinal);
@@ -230,6 +237,7 @@ public class BusinessPackTests
     /// a second copy of it.
     /// </remarks>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public async Task Any_jason_command_this_pack_prints_is_a_real_one()
     {
         foreach (var skill in SkillPack.Business())
@@ -247,6 +255,7 @@ public class BusinessPackTests
     /// what went out is read afterwards, in vendor-neutral words.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_approval_boundaries_say_what_is_approved_of_a_message_composed_as_a_template()
     {
         var skill = string.Join(' ', File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), "approval-boundaries", "SKILL.md"))
@@ -276,6 +285,7 @@ public class BusinessPackTests
     /// put two answers in front of one prospect.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Inbox_triage_starts_from_what_the_responder_left_and_never_drafts_a_second_answer()
     {
         var skill = Flat("inbox-triage");
@@ -294,6 +304,22 @@ public class BusinessPackTests
     }
 
     /// <summary>
+    /// A reply to a real prospect stays <c>confirm_each</c>, and "all of these", said about replies whose rendered text
+    /// was shown, is the person's word for each one: a word for each item, never a lowered class. Where the text was not
+    /// shown, the agent says how many would go unread and asks once. The old "no exceptions, no batching" said the
+    /// opposite of what the session skills say, so an agent in the inbox refused what one at the approvals list did.
+    /// </summary>
+    [Fact]
+    public void Inbox_triage_takes_all_of_these_about_shown_replies_as_a_word_for_each_and_keeps_the_class()
+    {
+        var skill = Flat("inbox-triage");
+
+        Assert.Contains("Sending a reply to a real prospect is `confirm_each`: the user confirms the exact rendered text, for this person, on this channel, every time.", skill, StringComparison.Ordinal);
+        Assert.Contains("All of these, said about replies whose rendered text you showed them, is their word for each one: a word for each item, not a lowered class. Where a text was not shown, say once how many would go out unread and ask whether to show them first or approve them as they are; their answer is their word.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("no exceptions, no batching", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The agent that drafts a campaign's copy with the user keeps a first message short and builds it on what is known
     /// about the person, the user's word included; a search's criteria are never such a fact, and what the user states of
     /// everyone on a list they brought is; a template is judged as it renders for one person and for one whose fields
@@ -301,6 +327,7 @@ public class BusinessPackTests
     /// Length and depth are answered; the openers to avoid, subject lines and the ask stay open for an expert.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Campaign_launch_keeps_a_first_message_short_and_built_on_what_is_known_about_the_person()
     {
         var skill = Flat("campaign-launch");
@@ -327,6 +354,7 @@ public class BusinessPackTests
     /// campaign's allowance for searches is the other kind, capped in people.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_approval_boundaries_map_a_standing_approval_onto_a_campaign_and_a_category_of_reply()
     {
         var skill = Flat("approval-boundaries");
@@ -361,6 +389,110 @@ public class BusinessPackTests
         Assert.Equal("standing_approval", Jason.Runtime.Approvals.ApprovalGate.StandingApproval);
     }
 
+    /// <summary>
+    /// The launch skill is the method of Jason's set-up, and a host that matched "start a campaign" on it has to be sent
+    /// to the set-up first: the skill that leads the person through it and records it in Jason. Its broad trigger stays,
+    /// a sequence, a cadence and a drip among the words it is recognised by, and its last sentence sends the host on. A
+    /// description that lost the last sentence would have a host conduct a launch from the method alone, with nothing
+    /// recorded.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
+    public void Campaign_launch_defers_to_the_set_up()
+    {
+        Assert.Equal(
+            "Prepare and launch an outreach campaign with every precondition checked and the user's explicit approval of what will actually be sent. Covers sending capability, the content the user reads, timing, the checks before the first message and the go-live gate. Use when the user wants to create or start a campaign, add contacts to one, or begin sending — including when they call it a sequence, a cadence or a drip. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.",
+            Description("campaign-launch"));
+    }
+
+    /// <summary>
+    /// The same door for the people: the audience skill is the method by which the set-up brings a campaign's people in,
+    /// and its description ends by sending the host to the set-up.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
+    public void Audience_building_defers_to_the_set_up()
+    {
+        Assert.Equal(
+            "Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source or import the people, state how two records become one person, check what is actually reachable, and hold the result as a frozen list or a campaign's own members. Use when the user wants to import contacts, find or build an audience, extend a list, define a segment, or asks what to do about duplicates and messy data. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.",
+            Description("audience-building"));
+    }
+
+    /// <summary>
+    /// The launch skill names some fifty operations of the catalogue, and this build performs a few of them. Its section on
+    /// Jason says which, and that is a fact about what <c>docs/contracts/operations</c> publishes: the names the skill
+    /// prints that are published there must be exactly the names the sentence lists, so the day another one is published
+    /// this turns red rather than leaving the sentence wrong.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
+    public void Campaign_launch_says_which_of_its_operations_this_build_performs()
+    {
+        SaysWhichOfItsOperationsThisBuildPerforms("campaign-launch");
+    }
+
+    /// <summary>The same fact for the audience skill, whose names include the runtime's own <c>audience</c> family.</summary>
+    [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
+    public void Audience_building_says_which_of_its_operations_this_build_performs()
+    {
+        SaysWhichOfItsOperationsThisBuildPerforms("audience-building");
+    }
+
+    /// <summary>
+    /// A launch is not a provider's programme of steps. The skill used to have its reader prepare and enrol, author the
+    /// cadence as steps and follow the catalogue's launch chain step by step; with Jason the roles send one message at a
+    /// time, so a text that kept those sentences would have a session build at the provider what Jason's roles then send
+    /// beside. The go-live gate says whose it is, and what holds where messages go one at a time.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
+    public void Campaign_launch_assumes_no_shape_of_campaign()
+    {
+        var skill = Flat("campaign-launch");
+
+        Assert.DoesNotContain("Use to prepare or start a campaign, and to enrol contacts into one.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("and follow it there", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("are inputs to `step.add`", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "This gate is a provider's programme's: one decision over a population. Where messages go one at a time, as Jason's do, each is its own decision, approved as it goes or released by a standing choice the user made, and no single act releases the population; E2 still holds: no route may cost fewer approvals than the people it reaches.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "how many touches one person gets, and how far apart, is the roles' under a ceiling the settings hold",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    private static string Description(string name) =>
+        SkillFrontMatter.Read(Assert.Single(SkillPack.Business(), skill => skill.Name == name).File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+    private static void SaysWhichOfItsOperationsThisBuildPerforms(string name)
+    {
+        const string Opening = "Which of this skill's operations this build performs is for the operations it publishes under `docs/contracts/operations/` to say: today ";
+        const string Close = ", and no other";
+        var skill = Flat(name);
+
+        var start = skill.IndexOf(Opening, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"'{name}' does not say \"{Opening}…\".");
+        var end = skill.IndexOf(Close, start, StringComparison.Ordinal);
+        Assert.True(end > start, $"'{name}' says \"{Opening}…\" and never closes it with \"{Close}\".");
+        var listed = OperationNames(skill[start..end]).ToHashSet(StringComparer.Ordinal);
+
+        var contracts = Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "operations");
+        var published = OperationNames(skill).Where(one => File.Exists(Path.Combine(contracts, one + ".json"))).ToHashSet(StringComparer.Ordinal);
+        Assert.True(published.Count > 0, $"'{name}' names no operation docs/contracts/operations publishes, so this guard holds nothing.");
+
+        Assert.True(
+            listed.SetEquals(published),
+            $"'{name}' names [{string.Join(", ", published.Order(StringComparer.Ordinal))}] that docs/contracts/operations publishes, "
+            + $"and its sentence on what this build performs lists [{string.Join(", ", listed.Order(StringComparer.Ordinal))}]. "
+            + "Rewrite the sentence to list what is published.");
+    }
+
+    private static IEnumerable<string> OperationNames(string text) =>
+        System.Text.RegularExpressions.Regex.Matches(text, @"`([a-z_]+\.[a-z_]+)`").Select(match => match.Groups[1].Value).Distinct(StringComparer.Ordinal);
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 
@@ -370,6 +502,7 @@ public class BusinessPackTests
     /// provider's own, and a skill that quoted it would teach one provider's tariff as the operation's.
     /// </summary>
     [Theory]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     [InlineData("audience-building")]
     [InlineData("sdr-operations")]
     public void The_skills_that_map_the_audience_family_name_no_provider(string name)

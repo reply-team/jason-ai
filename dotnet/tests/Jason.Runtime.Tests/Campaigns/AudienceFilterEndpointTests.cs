@@ -31,10 +31,10 @@ public class AudienceFilterEndpointTests
         var withoutArchived = await api.RecordAsync<CampaignSummaryResponse>(
             Operations.CampaignSummary, "audience-without-archived", new { campaign_ids = new[] { spring }, audience = 1, exclude_archived_contacts = true }, Ct);
 
-        Assert.Equal([new CampaignSummaryRow(spring, 5, 2, 1, 0, 1, 1, 0, 1, Removed: 1, SequenceLinked: true)], summary.Campaigns);
-        Assert.Equal(new CampaignSummaryTotal(5, 2, 1, 0, 1, 1, 0, 1, Removed: 1), summary.Total);
-        Assert.Equal([new CampaignSummaryRow(spring, 4, 2, 1, 0, 0, 1, 0, 1, Removed: 1, SequenceLinked: true)], withoutArchived.Campaigns);
-        Assert.Equal(new CampaignSummaryTotal(4, 2, 1, 0, 0, 1, 0, 1, Removed: 1), withoutArchived.Total);
+        Assert.Equal([new CampaignSummaryRow(spring, 5, 2, 1, 0, 1, 1, 0, 1, Paused: 0, Finished: 1, Removed: 1, SequenceLinked: true)], summary.Campaigns);
+        Assert.Equal(new CampaignSummaryTotal(5, 2, 1, 0, 1, 1, 0, 1, Paused: 0, Finished: 1, Removed: 1), summary.Total);
+        Assert.Equal([new CampaignSummaryRow(spring, 4, 2, 1, 0, 0, 1, 0, 1, Paused: 0, Finished: 1, Removed: 1, SequenceLinked: true)], withoutArchived.Campaigns);
+        Assert.Equal(new CampaignSummaryTotal(4, 2, 1, 0, 0, 1, 0, 1, Paused: 0, Finished: 1, Removed: 1), withoutArchived.Total);
     }
 
     /// <summary>
@@ -160,8 +160,8 @@ public class AudienceFilterEndpointTests
             Operations.CampaignActivity, "audience-nobody-landed", new { campaign_ids = new[] { spring }, audience = 3, since = Week.Since, until = Week.Until }, Ct);
         var members = await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, new { campaign_id = spring, audience = 3 }, Ct);
 
-        Assert.Equal([new CampaignSummaryRow(spring, 0, 0, 0, 0, 0, 0, 0, 0, Removed: 0, SequenceLinked: true)], summary.Campaigns);
-        Assert.Equal(new CampaignSummaryTotal(0, 0, 0, 0, 0, 0, 0, 0, Removed: 0), summary.Total);
+        Assert.Equal([new CampaignSummaryRow(spring, 0, 0, 0, 0, 0, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0, SequenceLinked: true)], summary.Campaigns);
+        Assert.Equal(new CampaignSummaryTotal(0, 0, 0, 0, 0, 0, 0, 0, Paused: 0, Finished: 0, Removed: 0), summary.Total);
         Assert.Equal([new CampaignActivityRow(spring, 0, 0, 0, 0, 0, 0, 0, Removed: 0)], activity.Campaigns);
         Assert.Empty(members.Items);
     }

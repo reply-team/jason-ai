@@ -51,7 +51,7 @@ public static class OperationFamilies
         [
             Operations.CampaignCreate, Operations.CampaignUpdate, Operations.CampaignStart, Operations.CampaignPause,
             Operations.CampaignArchive, Operations.CampaignUpdateContext, Operations.CampaignAddContacts,
-            Operations.CampaignRemoveContacts,
+            Operations.CampaignRemoveContacts, Operations.CampaignFinishContacts, Operations.CampaignContinueContacts,
         ],
         [Contact] = [Operations.ContactCreate, Operations.ContactUpdate, Operations.ContactArchive],
         [WorkItem] = [Operations.WorkItemCreate, Operations.WorkItemUpdate, Operations.WorkItemCancel],
@@ -62,11 +62,13 @@ public static class OperationFamilies
 
     /// <summary>
     /// The operations no grant opens: a person's own doors, the installation's, and an executor's fenced verbs. Lifting a
-    /// do-not-contact entry is a decision about a person, so a plugin may add to the register and never take from it.
+    /// do-not-contact entry is a decision about a person, so a plugin may add to the register and never take from it; so is
+    /// reopening a line that was ended, so a plugin may end or continue a person's line and never reopen one.
     /// Moving a subscribed kind's cursor back is the installation's, beside asking for an account's events again. A
     /// subscription run's record carries the envelopes other plugins' handlers made: a handler in the chain already holds
     /// the envelope handed to it, and a person reads the final one through the run token, so no plugin reads another
-    /// chain's envelopes. A review of a send is the look of a role's run or of a person before the send goes, never a
+    /// chain's envelopes. A review asked of a campaign's manager is a person's word, as a lift of the day's limits is. A
+    /// review of a send is the look of a role's run or of a person before the send goes, never a
     /// plugin's.
     /// </summary>
     public static IReadOnlySet<string> Never { get; } = new[]
@@ -74,7 +76,7 @@ public static class OperationFamilies
         Operations.SystemInfo, Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume,
         Operations.UiOpen, Operations.UiTokens, Operations.UiRevoke,
         Operations.ProjectCreate, Operations.ProjectUpdate, Operations.ProjectLink,
-        Operations.PreferenceSet, Operations.PreferenceUnset, Operations.CampaignSetSendMode,
+        Operations.PreferenceSet, Operations.PreferenceUnset, Operations.CampaignSetSendMode, Operations.CampaignReopenContacts,
         Operations.ContactThreads, Operations.ContactThread,
         Operations.AudiencePreview, Operations.AudienceFilterValues, Operations.AudienceAvailability,
         Operations.SenderList,
@@ -82,6 +84,7 @@ public static class OperationFamilies
         Operations.WorkItemResume, Operations.WorkItemReview,
         Operations.ApprovalApprove, Operations.ApprovalReject, Operations.ApprovalSetStanding, Operations.ApprovalUnsetStanding,
         Operations.BlockClear,
+        Operations.LaunchesLift, Operations.CampaignReview,
         Operations.DecisionRaise, Operations.DecisionAnswer,
         Operations.ReplyRecord,
         Operations.SuppressionRemove,

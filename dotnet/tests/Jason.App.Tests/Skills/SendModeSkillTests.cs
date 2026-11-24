@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -49,6 +50,7 @@ public partial class SendModeSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_responder_states_a_nature_on_every_verdict_and_leaves_the_register_to_the_runtime()
     {
         var skill = RoleSkillTests.Flattened("responder");
@@ -72,12 +74,13 @@ public partial class SendModeSkillTests
     /// the person's own later verdict does, which no run records.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_responder_says_what_the_lock_refuses_and_that_no_answer_lifts_it()
     {
         var skill = RoleSkillTests.Flattened("responder");
 
         Assert.Contains("the claim refuses, in every campaign, every provider operation about them that the register gates, on a value they gain later too", skill, StringComparison.Ordinal);
-        Assert.Contains("What is for exactly such a person still runs: the provider's `optout.record` and a proposed `enrollment.stop`, below.", skill, StringComparison.Ordinal);
+        Assert.Contains("What is for exactly such a person still runs: the provider's `optout.record` and, where the campaign holds a provider's campaign, a proposed `enrollment.stop`, below.", skill, StringComparison.Ordinal);
         Assert.Contains("and that an answer naming another category has the register's entries taken off but leaves the lock, which only a verdict the person records themselves lifts", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("refuses any work about them", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("only the person's own word lifts it", skill, StringComparison.Ordinal);
@@ -88,6 +91,7 @@ public partial class SendModeSkillTests
     /// category gives: a person who picks <c>opt_out</c> after another guess gets the register and the lock from it.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_states_the_nature_the_answer_says_the_reply_is_never_the_guesss()
     {
         var skill = RoleSkillTests.Flattened("manager");
@@ -113,6 +117,7 @@ public partial class SendModeSkillTests
 
     /// <summary>The lock the guess made stays, and the manager says whose act lifts it rather than leaving someone to ask.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_manager_says_the_lock_stays_and_whose_act_lifts_it()
     {
         var skill = RoleSkillTests.Flattened("manager");
@@ -125,6 +130,7 @@ public partial class SendModeSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_critic_records_its_review_against_the_hash_it_read_with_a_code_from_the_closed_list()
     {
         var skill = RoleSkillTests.Flattened("critic");
@@ -147,6 +153,7 @@ public partial class SendModeSkillTests
     /// under an automatic mode is the last look; the review's actor rule is the contract's, further down the file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_critic_doubts_for_every_reason_the_codes_name_and_knows_its_pass_may_be_the_last_look()
     {
         var skill = RoleSkillTests.Flattened("critic");
@@ -169,6 +176,7 @@ public partial class SendModeSkillTests
     /// releases nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_critic_reviews_the_send_the_runtime_named_in_its_context()
     {
         var skill = RoleSkillTests.Flattened("critic");
@@ -185,6 +193,7 @@ public partial class SendModeSkillTests
     /// critic read it, so no role queues a review of its own send.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_roles_that_write_or_create_a_send_leave_its_review_to_the_runtime()
     {
         const string ruled = "Under an automatic send mode the runtime has a critic read your send before it is claimed; do not create a review for it yourself.";
@@ -197,6 +206,7 @@ public partial class SendModeSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_composing_roles_say_when_to_ask_the_person_and_to_read_memory_first()
     {
         foreach (var role in new[] { "copywriter", "personalizer" })
@@ -212,6 +222,7 @@ public partial class SendModeSkillTests
 
     /// <summary>A composer's doubt is written in its answer; whoever creates the send from that answer carries it on.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void Whoever_creates_a_send_carries_the_doubt_it_came_with()
     {
         foreach (var skill in new[] { RoleSkillTests.Flattened("planner"), InteractiveSkillTests.Flattened("planner-in-session") })
@@ -232,6 +243,7 @@ public partial class SendModeSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_two_modes_question_is_put_until_it_is_answered_and_set_by_the_persons_own_act()
     {
         var skill = InteractiveSkillTests.Flattened("approvals-and-questions");
@@ -259,6 +271,7 @@ public partial class SendModeSkillTests
     /// chooses automatic is told once, never as a condition, what it means and what makes it err less.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_two_modes_question_says_how_the_chat_sets_one_and_what_automatic_means()
     {
         var skill = InteractiveSkillTests.Flattened("approvals-and-questions");
@@ -279,6 +292,7 @@ public partial class SendModeSkillTests
     /// on their word too, outside Plan only, and then says plainly whose opt-out it lifted.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_persons_session_shows_the_one_act_that_lifts_an_opt_out()
     {
         var skill = InteractiveSkillTests.Flattened("approvals-and-questions");
@@ -296,6 +310,7 @@ public partial class SendModeSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_approval_boundaries_say_the_automatic_mode_plainly_beside_the_standing_approval()
     {
         var skill = Business("approval-boundaries");

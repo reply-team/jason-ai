@@ -38,7 +38,7 @@ public sealed class Campaign
     public string? ExecutionProfile { get; set; }
 
     /// <summary>
-    /// How often this campaign is reviewed, in seconds, when the installation's cadence is not what it wants.
+    /// How often this campaign is given a quick look, in seconds, when the installation's cadence is not what it wants.
     /// Null means <c>Manager:ReviewSeconds</c>. It lives here rather than in the context because the dispatcher
     /// reads it, and the dispatcher must never read the context for meaning.
     /// </summary>
@@ -96,6 +96,15 @@ public sealed class Campaign
     /// campaign has never been live, which is also why such a campaign is never due.
     /// </summary>
     public DateTime? ManagerReviewAnchor { get; set; }
+
+    /// <summary>
+    /// The next moment of the deep review's grid. Set at every going live to that moment plus <c>Manager:DeepReviewSeconds</c>,
+    /// so a resume starts the grid again, and moved on by whole intervals to the first moment after now by each deep review
+    /// the runtime creates, and by nothing else: a quick look or a triggered review leaves it alone. Null until the campaign
+    /// next goes live where it has none — one never started, or one paused or archived when the column was added — and a
+    /// null grid is never due.
+    /// </summary>
+    public DateTime? DeepReviewDueAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

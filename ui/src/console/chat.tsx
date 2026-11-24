@@ -1,4 +1,5 @@
 import { computed, effect, signal } from '@preact/signals-react';
+import { openedHere } from './box-focus';
 import {
     useCallback,
     useEffect,
@@ -13,6 +14,7 @@ import { useApi } from '../api/context';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { t } from '../platform/i18n';
+import { agentNameId } from './agent-place';
 import { act, argsOf, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
@@ -225,9 +227,11 @@ async function hold(id: string): Promise<string> {
 
 /**
  * The conversation to show: the campaign's one, made on first use and opened with what it kept, or with no campaign
- * a new set-up chat. Resolves with its id, or with null when the desktop refused, which the sidebar says.
+ * a new chat about no campaign: marked begun from Start's box where `begun` says `start`, which the desktop's header for
+ * it says is where a campaign is set up, else a plain chat about no agent, as the Chats plus makes. Resolves with its id,
+ * or with null when the desktop refused, which the sidebar says.
  */
-export async function startChat(campaign?: { id: string; name: string }): Promise<string | null> {
+export async function startChat(campaign?: { id: string; name: string }, begun?: 'start'): Promise<string | null> {
     try {
         const { desktop } = here();
         let id: string;
@@ -235,7 +239,9 @@ export async function startChat(campaign?: { id: string; name: string }): Promis
             const made = unless(await desktop.chat.create(campaign.id));
             id = await hold(made.id);
         } else {
-            const made = unless(await desktop.chat.create());
+            const made = unless(
+                await (begun === 'start' ? desktop.chat.create(undefined, 'start') : desktop.chat.create()),
+            );
             // The mode the desktop made it in: its line shows at once.
             chats.value = {
                 ...chats.value,
@@ -668,10 +674,11 @@ define('chat.answer', ([id, request, answer]) => {
         .catch(() => changeChat(id, (chat) => lost(chat, request)));
 });
 
+// A Feed line's agent, and the Dashboard's line about one: the person's act, so the agent's box takes the focus.
 define('feed.campaign', ([id]) => {
     if (typeof id !== 'string') return;
     const name = campaigns.value.find((each) => each.id === id)?.name ?? id;
-    here().dock.chat({ id, name });
+    here().dock.chat({ id, name }, openedHere());
 });
 
 define('feed.needs', () => {
@@ -1136,14 +1143,16 @@ function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
 }
 
 /**
- * What the empty chat says about approval, one short sentence true of its mode: in Plan only nothing written reaches a
- * person unapproved; in Ask first and Auto-edit a message follows its campaign's send mode, and the AI approves when the
- * person tells it to. Full access, where a program the AI writes can act as the person, and a mode word this desktop
- * does not know say nothing.
+ * What the empty chat says about approval, one short sentence true of its mode on its host: in Plan only nothing written
+ * reaches a person unapproved; in Ask first and Auto-edit on Claude Code a message follows its campaign's send mode, and
+ * the AI approves when the person tells it to; on Codex, whose Ask first, and the Auto-edit it runs as, only read and
+ * propose, a send the turn writes waits for the person, so Plan only's sentence. Full access, where a program the AI
+ * writes can act as the person, and a mode word this desktop does not know say nothing.
  */
-function approvalSentence(mode: Chat['mode']): string | null {
+function approvalSentence(mode: Chat['mode'], codex: boolean): string | null {
     if (mode === 'plan_only') return t('chat.empty.planOnly');
-    if (mode === 'ask_first' || mode === 'auto_edit') return t('chat.empty.onYourWord');
+    if (mode === 'ask_first' || mode === 'auto_edit')
+        return codex ? t('chat.empty.planOnly') : t('chat.empty.onYourWord');
     return null;
 }
 
@@ -1160,6 +1169,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         </div>`;
     // The sentence about approval holds in the mode the next turn runs in (`drawnMode`), and in no mode word unknown here.
     const drawn = drawnMode(chat, host, 'window').mode;
+    const approval = approvalSentence(drawn, host !== null && codexHosts.has(host.id));
     // An agent made at the click asks Start's question above, in its panel, with its box: here are its chips alone.
     if (asksStart(chat)) return html`<div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     if (chat.entries.length === 0)
@@ -1168,7 +1178,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 <h2>
                     ${chat.campaignId ? `What should Jason do in ${agentNameOf(chat)}?` : 'What should Jason work on?'}
                 </h2>
-                ${approvalSentence(drawn) ? html`<p>${approvalSentence(drawn)}</p>` : null}
+                ${approval ? html`<p>${approval}</p>` : null}
             </div>
             <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);
@@ -1975,8 +1985,14 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             <ChatNotes chat={chat} />
         </form>
     );
+    // Every chat's pane is a region named by the chat, so a reader that lands in its box hears which chat it is in: an
+    // agent's by the heading of its header, which names the agent above the pane; a set-up chat's and the Feed's, which
+    // have no heading that names them, by the name their row in the sidebar shows. The box keeps its own name.
+    const named = underHead
+        ? { 'aria-labelledby': agentNameId(chat.campaignId!) }
+        : { 'aria-label': chat.main ? t('side.feed') : chat.title };
     return (
-        <div className="chat-panel" ref={panel} data-chat={chatId}>
+        <div className="chat-panel" ref={panel} data-chat={chatId} role="region" {...named}>
             <div className="chat-bar">
                 {/* A chat of no agent says so on a standing line; an agent's is named by its header, the Feed by its own. */}
                 {chat.main || chat.campaignId !== null ? null : (

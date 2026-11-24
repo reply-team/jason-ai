@@ -1,0 +1,39 @@
+{
+  "kind": "contacts_paused",
+  "version": 1,
+  "since": "0.50.0",
+  "summary": "A reply paused a person's line in a campaign: the person, enrolled until then, is paused, so none of their touches there is taken until the line is continued or ended; the line names the person and the reply line that paused them.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "always", "each": true }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contact_ids", "line"],
+        "properties": {
+          "contact_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people paused, each enrolled in the campaign until the reply."
+          },
+          "line": {
+            "type": "string",
+            "pattern": "^jrn_",
+            "description": "The campaign's inbound_reply_observed line that paused them, by its id."
+          }
+        }
+      }
+    }
+  }
+}

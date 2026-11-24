@@ -103,13 +103,21 @@ runs commands is called the AI.
 The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
 its **Agents** and **Chats** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
+A chat you open, by any act of your own, has the caret in its box, after the words already there, so you can type at
+once, unless that same act opened a control of the chat's own that takes the focus, a name's field or a question's
+**Keep**, or opened nothing, as removing a chat, which leaves Start in its place. Nothing else moves it there: not moving along the rows
+or with the arrows along an agent's tabs, a row's menu or a rename, nor an answer or a card arriving. A screen reader
+hears which chat it is in as it enters it: an agent's chat by the agent's name, a set-up chat and the Feed by the name
+of their row.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
 without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
-**Take back** returns the words. Start opens every time the window opens, also when campaigns exist.
+**Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and a click on
+Jason's mark at the top of the sidebar opens it again, with the words you typed there and did not send; it closes
+nothing, and in the Demo it opens the Demo's Start. Its box then has the caret, as a chat you open does.
 
 Under Search, Needs you, the Feed and Accounts the sidebar holds two sections, **Agents** above **Chats**, each a
 header with a small plus at its right. **Agents** lists the agents that are not archived, each by the agent's name,
@@ -147,7 +155,13 @@ agent's header instead, and the Feed by its own.
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
   and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
   if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
-  agents**.
+  agents**. While work items wait on a daily limit of launches, one line at the top of Needs you says how many and until
+  when, the day's end on your clock with its zone named, says that a lift lets every role in every agent run past
+  today's limits until then, and offers **Lift today's limits**, which lifts as you, the person who approves there, with
+  the reason "Lifted from Needs you."; it then says how many items the lift let go and until when, until you next come
+  to Needs you, and a lift that fails is said on the line in Jason's own words. While the line shows and nothing else
+  waits, Needs you does not say you are caught up, and still says nothing is waiting for your decision. The line is no
+  item of the list: no number on Needs you, in the sidebar or on the tray counts it, and the Demo has none.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a
   reply in a conversation, from the account this conversation is in, which it does not name), on which channel, and
@@ -641,8 +655,10 @@ Claude Code.
   sentence that names the version found, the floor and how to update, it cannot be chosen, and a turn sent to it is
   refused before the host starts, a key provider's turn on it included. The reason is one setting: a turn in Plan only,
   and in Ask first and Auto-edit on a Claude Code older than 2.1.322, carries
-  `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders the chat
-  works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
+  `permissions.blockReadsOutsideWorkingDirectories`. Where it stands, a file tool outside the folders the chat works
+  in is refused by Claude Code itself, with no card. Below 2.1.322, in Ask first and Auto-edit, a command that reads
+  such a path asks you first; in Plan only it is refused, as any shell command is.
+  A Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn that does not run in Full access also passes `--no-chrome`, the first version whose changelog
   names the flag; below it that turn's settings alone keep the browser out.
 - **In Full access on your own Claude Code sign-in the chat loads your own Claude Code configuration: your skills,
@@ -743,7 +759,9 @@ Claude Code.
 
 Each campaign has one conversation, and any number of set-up chats are about no campaign yet. An agent's conversation is
 made at your first message or choice in it: opening its Chat, by a link, a reload, Back or the Agents list, makes
-nothing. The window opens on Start, and a set-up chat is made when you send from it. A set-up chat whose turn made exactly one campaign becomes that
+nothing. The window opens on Start, and a set-up chat is made when you send from it: what you send there asks for an
+agent, and the AI sets one up at once. A chat the plus over **Chats** makes is a plain chat about no agent: the AI there
+answers what you ask, may speak of any agent, and offers to make none; it makes one only when you ask it to. A set-up chat whose turn made exactly one campaign becomes that
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
 conversation is kept from its first turn, and one never sent to leaves nothing. An agent's conversation is its **Chat**
 tab, the first of its tabs, under the agent's one header, which stays while you move between its tabs: its name, its
@@ -905,9 +923,10 @@ of every new chat. **Ask first** is the chat as the next section describes it. *
 passes only the allowed verbs that read and the nouns' help, Jason asks Claude Code for its plan mode with the exit from
 it removed, and every other request is refused. On macOS and Windows, where a Plan only turn carries
 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` (below), Claude Code starts it in its default mode instead, and Jason's own rules hold
-the turn just the same. The cards left in Plan only are a read outside the chat's folders and a web
-page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode but Full
-access, where it runs with none.
+the turn just the same. The card left in Plan only is a web
+page; a file tool outside the chat's folders is refused by Claude Code itself, with no card, and the chat says so and
+that another mode may let it read there (Ask first and Auto-edit, from Claude Code 2.1.322 on). Every refusal of the
+next section stays. A Codex turn runs in its read-only sandbox in every mode but Full access, where it runs with none.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as formatted text as any answer is, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
@@ -984,8 +1003,9 @@ and then is not run, and the turn goes on; one line under its title says that Cl
 "Allow for this chat" works on it as in Ask first. Jason does not read a
 program the AI writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a program
 can still act as you, which is why an empty chat whose next turn runs in Full access carries no line about approval. The empty chat draws one in the other modes, true of each: in
-Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit "A message written
-here follows its campaign's send mode; the AI approves when you tell it to." A turn in Full access uses your own Claude
+Plan only "Nothing written here reaches a person without your approval."; in Ask first and Auto-edit on Claude Code "A
+message written here follows its campaign's send mode; the AI approves when you tell it to."; on Codex, whose Ask first
+and Auto-edit only read and propose, so that a send the chat writes waits for you, the Plan only line. A turn in Full access uses your own Claude
 Code configuration, and a turn in any other mode does not (see Hosts); Jason's check does not see the commands a skill
 of yours runs from its `!` lines, which Claude Code runs itself. A folder an earlier version gave a chat in Full access is moved aside when Jason starts; the chat says
 where it is, with an Open folder button, and Jason removes it after seven days.
@@ -1078,9 +1098,10 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test; for each noun with a verb on that list, its help, exactly
   `jason <noun> --help`, which prints and changes nothing; and outside Plan only, these as well: `approval approve`,
-  `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, and `preference set` and
-  `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow rule. When you ask
-  the chat to approve, reject, answer, start a campaign, take back a standing approval or set your name or tone, it runs
+  `approval reject`, `approval unset-standing`, `decision answer`, `campaign start`, `campaign review`, and
+  `preference set` and `preference unset` of two keys alone, `sender.identity` and `tone_of_voice`, each one host allow
+  rule. When you ask the chat to approve, reject, answer, start a campaign, ask its manager for a review, take back a
+  standing approval or set your name or tone, it runs
   the command with no card, and the act is recorded under the actor the command names. On a Claude Code older than
   2.1.322, Ask first and Auto-edit give Claude Code no rule for a verb that reads a request's content from a file or from
   standard input, `preference set` and `campaign start` among them, and the desktop's permission tool runs each one
@@ -1090,12 +1111,13 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   Full access.
 - **Refused, with no card.** In Plan only, the verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any
   letter case: everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
-  preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
-  subscription), everything that changes the installation, follows it without end or carries it off the machine
+  preference, a campaign's send mode, reopening an ended line, clearing a block, resuming work, lifting today's launch
+  limits, reviewing a send, a
+  report, rewinding a subscription), everything that changes the installation, follows it without end or carries it off the machine
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `install`, `ui`, `session`,
   `journal watch`, `export`, `import`), and eight more that decide who is reached or what runs (`suppression remove`,
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`, `notification enable`,
-  `notification disable`), and `role add`, `project link`, `campaign start` and `campaign archive`. A command that
+  `notification disable`), and `role add`, `project link`, `campaign start`, `campaign archive` and `campaign review`. A command that
   names an operation these verbs call is refused there too. In every other mode none of them is refused: those the bullet
   above names run with no card; every other one, a standing approval, another preference and a campaign's send mode
   among them, is a card in Ask first and Auto-edit on an older Claude Code and runs in Full access, as any `jason`
@@ -1119,9 +1141,9 @@ than 2.1.322; where Plan only, Full access or Ask first and Auto-edit from 2.1.3
   and `.codex` folders of the turn's folder and to its `.mcp.json`. In Full access the turn's folder is its own, and Jason
   puts its own files back before the next turn.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included on
-  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the turn's
-  folder and the added folders, in Plan only and on an older Claude Code; a write outside them, or in a campaign's or a
-  project's folder to a file the host loads
+  an older Claude Code, and from 2.1.322 on the `jason` commands above that keep a card; a read outside the
+  turn's folder and the added folders by a command, on an older Claude Code; a write outside them, or in a campaign's or
+  a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
   Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
   each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A

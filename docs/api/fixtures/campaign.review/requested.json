@@ -1,0 +1,111 @@
+{
+  "operation": "campaign.review",
+  "case": "requested",
+  "request": {
+    "campaign_id": "cmp_1",
+    "depth": "deep",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "Before the board meeting."
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_1",
+    "campaign_id": "cmp_1",
+    "contact_id": null,
+    "kind": "ai_role",
+    "role": "manager",
+    "operation": null,
+    "execution_profile": null,
+    "status": "created",
+    "eligible": true,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": 900,
+    "heartbeat_seconds": null,
+    "max_attempts": 1,
+    "created_by": {
+      "type": "system",
+      "id": "dispatcher"
+    },
+    "context": {
+      "review_intent": "requested",
+      "allowed_operations": [
+        "workitem.create",
+        "workitem.update",
+        "workitem.cancel",
+        "campaign.update_context",
+        "campaign.finish_contacts",
+        "campaign.continue_contacts",
+        "campaign.reopen_contacts",
+        "journal.append",
+        "rolenote.set",
+        "approval.list",
+        "report.list",
+        "reply.record",
+        "decision.raise",
+        "decision.list",
+        "campaign.pause"
+      ],
+      "escalation": "decision.raise"
+    },
+    "result_format": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "acted",
+            "escalated",
+            "nothing"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "created_work_items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cancelled_work_items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decisions_raised": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "summary"
+      ]
+    },
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Spring outreach",
+    "contact_name": null,
+    "entry": "deep_review"
+  }
+}

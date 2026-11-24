@@ -46,6 +46,13 @@ public static class CampaignRenderers
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
 
+        // The next moment of the deep review's grid, only while the campaign is active: a paused or archived campaign keeps the
+        // moment it had, and nothing runs at it.
+        if (campaign.Status == CampaignStatus.Active && campaign.DeepReviewDueAt is { } deep)
+        {
+            lines.Add(Line("Deep review:", RenderText.Moment(deep)));
+        }
+
         if (campaign.AudienceThreshold is { } threshold)
         {
             lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
@@ -106,8 +113,9 @@ public static class CampaignRenderers
         RenderText.Lines([$"Project: {RenderText.Shown(project)}, from the working directory (--all-projects lists every project's)", string.Empty, rows]);
 
     /// <summary>
-    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, the campaigns that list them,
-    /// the audience a search brought them from and, under a count, what it counts them for.
+    /// A page of the campaigns' people: who they are, where they stand, how to recognize them, how many touches they have had
+    /// and when the latest was, the campaigns that list them, the audience a search brought them from and, under a count,
+    /// what it counts them for.
     /// </summary>
     public static string? Members(string json)
     {
@@ -117,7 +125,7 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "CAMPAIGNS", "SOURCE", "WHY");
+        var table = new HumanTable("CONTACT", "NAME", "STATE", "EMAIL", "TOUCHES", "LAST TOUCH", "CAMPAIGNS", "SOURCE", "WHY");
         foreach (var member in page.Items)
         {
             var names = (member.Contact?.Campaigns ?? []).ToDictionary(campaign => campaign.CampaignId, campaign => campaign.CampaignName, StringComparer.Ordinal);
@@ -126,6 +134,8 @@ public static class CampaignRenderers
                 RenderText.Name(member.Contact?.FirstName, member.Contact?.LastName),
                 RenderText.Snake(member.State),
                 RenderText.Email(member.Contact?.Channels),
+                member.Touches.ToString(CultureInfo.InvariantCulture),
+                RenderText.Moment(member.LastTouchAt),
                 string.Join(", ", (member.Counted ?? []).Select(counted => names.GetValueOrDefault(counted.CampaignId, counted.CampaignId))),
                 member.Source is { } source ? string.Create(CultureInfo.InvariantCulture, $"audience {source.Audience.Number}") : null,
                 member.Why is { } why ? string.Join(" ", new[] { why.Text ?? why.Code, RenderText.Moment(why.At) }.Where(part => part is not null)) : null);
@@ -147,7 +157,7 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "REMOVED");
+        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "WAITING", "FAILED", "WORKING", "NEW", "IDLE", "SEQUENCE", "OUT", "PAUSED", "FINISHED", "REMOVED");
         foreach (var row in summary.Campaigns)
         {
             table.Row(
@@ -161,6 +171,8 @@ public static class CampaignRenderers
                 Count(row.Idle),
                 row.SequenceLinked ? Count(row.Sequence) : "-",
                 row.SequenceLinked ? Count(row.Out) : "-",
+                Count(row.Paused),
+                Count(row.Finished),
                 Count(row.Removed));
         }
 
@@ -170,7 +182,7 @@ public static class CampaignRenderers
             var linked = summary.Campaigns.Any(row => row.SequenceLinked);
             table.Row(
                 "TOTAL", null, Count(total.People), Count(total.Waiting), Count(total.Failed), Count(total.Working), Count(total.New), Count(total.Idle),
-                linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Removed));
+                linked ? Count(total.Sequence) : "-", linked ? Count(total.Out) : "-", Count(total.Paused), Count(total.Finished), Count(total.Removed));
         }
 
         return table.Render();
@@ -262,6 +274,67 @@ public static class CampaignRenderers
         };
         lines.AddRange(result.Items
             .Where(item => item.Status == RemoveContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of ending lines, counted the way the API counts it.</summary>
+    public static string? FinishBatch(string json)
+    {
+        var result = RenderText.Read<FinishContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"finished {result.Summary.Finished}, already finished {result.Summary.AlreadyFinished}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == FinishContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of continuing paused lines, counted the way the API counts it.</summary>
+    public static string? ContinueBatch(string json)
+    {
+        var result = RenderText.Read<ContinueContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"continued {result.Summary.Continued}, not paused {result.Summary.NotPaused}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == ContinueContactsItemStatus.Rejected)
+            .Select(item => Rejected(item.Index, item.Error)));
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>The outcome of reopening ended lines, counted the way the API counts it.</summary>
+    public static string? ReopenBatch(string json)
+    {
+        var result = RenderText.Read<ReopenContactsResult>(json);
+        if (result?.Summary is null || result.Items is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"reopened {result.Summary.Reopened}, not finished {result.Summary.NotFinished}, not members {result.Summary.NotMember}, excluded {result.Summary.Excluded}, "
+                + $"not in the decision {result.Summary.NotInDecision}, rejected {result.Summary.Rejected}",
+        };
+        lines.AddRange(result.Items
+            .Where(item => item.Status == ReopenContactsItemStatus.Rejected)
             .Select(item => Rejected(item.Index, item.Error)));
 
         return RenderText.Lines(lines);

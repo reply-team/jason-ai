@@ -71,6 +71,16 @@ public sealed class RuntimeOptionsValidator : IValidateOptions<RuntimeOptions>
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
         OptionRules.Range(failures, "Runtime:Port", options.Port, 0, 65535);
+
+        // The zone is held to the rule a contact's zone is held to: an IANA id this system resolves, never a Windows id,
+        // which names a different vocabulary on every machine. The text is described, never said back.
+        if (!string.IsNullOrWhiteSpace(options.TimeZone) && InstallationDay.ZoneOf(options.TimeZone) is null)
+        {
+            failures.Add(
+                "Runtime:TimeZone must be an IANA time zone id spelled as the zone spells it, such as Asia/Tokyo, or left out for the system's own zone; "
+                + OptionRules.Written("value", options.TimeZone, "is not one this system knows by that spelling"));
+        }
+
         return OptionRules.Result(failures);
     }
 }
@@ -491,6 +501,12 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
             options.ReviewSeconds,
             ManagerOptions.MinimumReviewSeconds,
             ManagerOptions.MaximumReviewSeconds);
+        OptionRules.Range(
+            failures,
+            "Manager:DeepReviewSeconds",
+            options.DeepReviewSeconds,
+            ManagerOptions.MinimumReviewSeconds,
+            ManagerOptions.MaximumReviewSeconds);
         OptionRules.Range(failures, "Manager:TimeoutSeconds", options.TimeoutSeconds, 30, 86_400);
         OptionRules.Range(failures, "Manager:MaxAttempts", options.MaxAttempts, 1, 10);
 
@@ -498,6 +514,14 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
         // review permanently ahead of the work it is reviewing would be a hard thing to notice from the outside.
         OptionRules.Range(failures, "Manager:Priority", options.Priority, -1_000, 1_000);
         OptionRules.Range(failures, "Manager:MaxEntriesPerScan", options.MaxEntriesPerScan, 50, 10_000);
+
+        // The default is a campaign's threshold the runtime writes, so it is held to the range a campaign's own is held to.
+        OptionRules.Range(
+            failures,
+            "Manager:AudienceThreshold",
+            options.AudienceThreshold,
+            Dispatch.ReserveCounter.MinimumThreshold,
+            Dispatch.ReserveCounter.MaximumThreshold);
 
         return OptionRules.Result(failures);
     }
@@ -601,6 +625,28 @@ public sealed class SendingOptionsValidator : IValidateOptions<SendingOptions>
             options.AutomaticMaxPerDay,
             SendingOptions.MinimumPerDay,
             SendingOptions.MaximumPerDay);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
+/// The ceiling of touches a person may have in one campaign, within its bounds: at least one, since there is no zero and
+/// no unlimited, and at most twenty.
+/// </summary>
+public sealed class LinesOptionsValidator : IValidateOptions<LinesOptions>
+{
+    public ValidateOptionsResult Validate(string? name, LinesOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(
+            failures,
+            LinesOptions.Section + ":" + nameof(LinesOptions.MaxTouches),
+            options.MaxTouches,
+            LinesOptions.MinimumTouches,
+            LinesOptions.MaximumTouches);
 
         return OptionRules.Result(failures);
     }

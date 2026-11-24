@@ -37,6 +37,7 @@
         "mode": "every_message",
         "source": "default"
       }
-    }
+    },
+    "deep_review_due_at": null
   }
 }

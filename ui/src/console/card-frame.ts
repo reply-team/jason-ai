@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { openedHere } from './box-focus';
 import { ApiError } from '../api/client';
 import { asOf, drawsAs, lastReading } from './card-model';
 import { cardLayout, placeOf, readCard, type Card, type CardKind, type PlacedCard } from './cards';
@@ -238,9 +239,12 @@ export function frame<T>(view: {
     </div>`;
 }
 
-/** A control of a data card that opens one of Jason's pages, by its address: navigation only. */
+/**
+ * A control of a data card that opens one of Jason's pages, by its address: navigation only. Where the address is an
+ * agent's Chat, its box takes the focus, as for any chat the person opens; a page of no chat takes none.
+ */
 define('card.page', ([hash]) => {
-    if (typeof hash === 'string' && hash.startsWith('#/')) here().dock.page(parseRoute(hash));
+    if (typeof hash === 'string' && hash.startsWith('#/')) here().dock.page(parseRoute(hash), openedHere());
 });
 
 /**

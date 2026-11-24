@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.8.0
+
+The manifest declares `contacts_finished`, `contacts_continued`, `contacts_reopened` and `contacts_paused`, which Jason
+0.50.0 writes when people's lines in a campaign are ended, continued, reopened or held at a reply, so a person can grant
+them. Nothing else changes.
+
+Jason 0.50.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
+
 ## 1.7.0
 
 The manifest declares `notification_channel_updated`, which Jason 0.48.5 writes when one notification channel is turned

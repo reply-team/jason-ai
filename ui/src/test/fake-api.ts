@@ -65,11 +65,15 @@ export class FakeApi implements Api {
     /**
      * The paired person the client puts on every write, as the recordings were made with. The console reads the routes
      * and the plugins when it starts, for the mode strip (`console/unavailable.ts`); a test that says nothing of them is
-     * answered as an installation with no route and no plugin, which says nothing there.
+     * answered as an installation with no route and no plugin, which says nothing there. It reads the daily limits of
+     * launches for Needs you, answered with nothing held.
      */
     constructor(private readonly actorId = 'ada') {
         this.otherwise('route.list', () => 'route.list/empty');
         this.otherwise('plugin.list', () => 'plugin.list/none');
+        // Needs you reads the daily limits of launches beside what waits, and draws its line only while items are held;
+        // a test that says nothing of them is answered with nothing held.
+        this.otherwise('launches.list', () => 'launches.list/lifted');
     }
 
     /**

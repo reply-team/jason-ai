@@ -330,6 +330,59 @@ public static class DomainErrors
     public static InvalidRequestException BlockActorRequired() =>
         new("actor_required", "actor.id is required on a block clear: what is recorded has to name the person whose word it is.");
 
+    /// <summary>A role, an attempt or the system lifting the daily limits: a lift is a person's word, as a block's clear is.</summary>
+    public static InvalidRequestException LiftNotHuman(ActorType type) =>
+        new(
+            "lift_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot lift the daily limits of launches; a lift is a person's word.");
+
+    /// <summary>The same code a block clear without a named person is refused with: a lift records whose word it is.</summary>
+    public static InvalidRequestException LiftActorRequired() =>
+        new("actor_required", "actor.id is required on a lift of the daily limits: what is recorded has to name the person whose word it is.");
+
+    /// <summary>
+    /// A role, an attempt or the system asking a campaign's manager for a review: a review asked for is a person's word, as a
+    /// lift is; a role is reviewed by the cadence and the chronicle, and a check-in that asked for its own successor would
+    /// review for ever.
+    /// </summary>
+    public static InvalidRequestException ReviewNotHuman(ActorType type) =>
+        new(
+            "review_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot ask a campaign's manager for a review; a review asked for is a person's word.");
+
+    /// <summary>The same code a lift without a named person is refused with: the request's line names whose word it is.</summary>
+    public static InvalidRequestException ReviewActorRequired() =>
+        new("actor_required", "actor.id is required on a review asked for: what is recorded has to name the person whose word it is.");
+
+    /// <summary>A review asked of a campaign that is not active: only an active campaign is reviewed, as the summon reviews it.</summary>
+    public static ConflictException CampaignNotActive(string id, CampaignStatus status) =>
+        new(
+            "campaign_not_active",
+            $"Campaign '{id}' is {SnakeCaseEnumConverter<CampaignStatus>.Format(status)}; only an active campaign is reviewed. Start it first, and starting it summons a review of its own.");
+
+    /// <summary>
+    /// A review asked of a campaign that has a check-in open, a held one included: one check-in is open per campaign, and the
+    /// one open is the review; it is named, so the person can follow it.
+    /// </summary>
+    public static ConflictException ReviewAlreadyOpen(string campaignId, string checkInId) =>
+        new(
+            "review_already_open",
+            $"Campaign '{campaignId}' has a check-in open, '{checkInId}', and one is open per campaign; the review asked for is that one. Follow it with jason workitem get {checkInId}.");
+
+    /// <summary>
+    /// A review asked of a campaign whose manager has started as many runs today as <c>Launches:MaxPerDay:manager</c> allows,
+    /// counted as the claim counts them: the check-in would only be held to the installation's next midnight. The message
+    /// says how many started and the limit as a limit beside them, since a limit lowered during the day can stand below that
+    /// count, names the read that shows the limits, and the way out in the words a held item's notification uses.
+    /// </summary>
+    public static ConflictException ReviewLaunchesSpent(string campaignId, int limit, int started, string midnight, string zone) =>
+        new(
+            Execution.AttemptErrors.LaunchesSpent,
+            $"The manager of campaign '{campaignId}' has started {Dispatch.Claimer.Runs(started)} since the installation's midnight ({midnight}, {zone}), "
+            + $"and the limit Launches:MaxPerDay:manager sets is {Dispatch.Claimer.Runs(limit)} a day, so a review asked for now would wait until the "
+            + "next one. jason launches list shows the limits as they stand. "
+            + Notifications.NotificationComposer.LiftHold);
+
     /// <summary>
     /// The decision has already been made, or the work it was about has moved on without it. Either way there is
     /// nothing here to decide, and the row says which of the two happened.
@@ -388,6 +441,18 @@ public static class DomainErrors
         new(
             "decided_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. Starting a campaign, or resuming a paused one, is a person's own word, given outside any run: a role may pause a campaign and leaves its start to the person, or raises it as a decision.");
+
+    /// <summary>Inside a run, a lift of the daily limits of launches: the code of a person's word, in a sentence of its own.</summary>
+    public static ForbiddenException LiftInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Lifting the daily limits of launches is a person's own word, given outside any run: a role leaves it to the person, or raises it as a decision.");
+
+    /// <summary>Inside a run, a review asked of a campaign's manager: the code of a person's word, in a sentence of its own.</summary>
+    public static ForbiddenException ReviewInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Asking a campaign's manager for a review is a person's own word, given outside any run: a role leaves it to the cadence and the chronicle, or raises it as a decision.");
 
     /// <summary>
     /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
@@ -581,6 +646,48 @@ public static class DomainErrors
     /// </summary>
     public static InvalidRequestException VerdictDecisionNotAboutReply(string id) =>
         new("decision_not_about_reply", $"Decision '{id}' was not raised by a run that recorded a verdict on this reply; a verdict carries the answer to the question asked about its own reply.");
+
+    /// <summary>
+    /// A reopen records whose decision it was: the person who said so, or the run that carries their answer, named.
+    /// </summary>
+    public static InvalidRequestException ReopenActorRequired() =>
+        new("actor_required", "actor.id is required on a reopen: what is recorded has to name whose word reopened the line, a person's or the run's that carries their answer.");
+
+    /// <summary>
+    /// A reopen sent from inside a run that names no question: a run carries the person's decision only as the question
+    /// they answered, and the person's own word is given outside any run. The attempt is quoted as the request named it.
+    /// </summary>
+    public static ForbiddenException ReopenInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Reopening a line is the person's decision: from inside a run, name the question they answered about it in decision_id, or raise it as a decision.");
+
+    /// <summary>A role or an attempt reopening a line with no question named: deciding it for the person.</summary>
+    public static InvalidRequestException ReopenNotHuman(ActorType type) =>
+        new(
+            "reopen_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot reopen a line on its own word; reopening is the person's decision: name the question they answered about it in decision_id.");
+
+    /// <summary>A reopen carries the answer to a question of its own campaign; another campaign's is refused as if it were not there.</summary>
+    public static InvalidRequestException ReopenDecisionNotFound(string id) =>
+        new("decision_not_found", $"Decision '{id}' is not a question of this campaign; a reopen carries the answer to one of its own.");
+
+    /// <summary>A question nobody has answered, or one taken back, has no answer for a reopen to carry.</summary>
+    public static InvalidRequestException ReopenDecisionNotAnswered(string id, DecisionStatus status) =>
+        new(
+            "decision_not_answered",
+            $"Decision '{id}' is {SnakeCaseEnumConverter<DecisionStatus>.Format(status)}; only an answered question carries a person's answer into a reopen.");
+
+    /// <summary>What a reopen carries as the person's decision has to have been given by a person who gave their name.</summary>
+    public static InvalidRequestException ReopenDecisionNotHuman(string id) =>
+        new("decision_not_human", $"Decision '{id}' was not answered by a named person; only a person's answer reopens a line.");
+
+    /// <summary>
+    /// A person's answer is about the end of a line: the question names, among its references, the <c>contacts_finished</c>
+    /// line of this campaign that ended it. A question about anything else is no answer about this.
+    /// </summary>
+    public static InvalidRequestException ReopenDecisionNotAboutFinish(string id) =>
+        new("decision_not_about_finish", $"Decision '{id}' names no contacts_finished line of this campaign among its references; a reopen carries the answer to the question asked about the end of a line.");
 
     /// <summary>
     /// A standing approval is a decision made in advance, so it is refused to whoever may not decide: the code a decision's

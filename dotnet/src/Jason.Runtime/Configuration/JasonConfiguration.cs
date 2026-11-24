@@ -797,6 +797,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<ResponderOptions>, BindingFailureValidator<ResponderOptions>>();
         services.AddSingleton<IValidateOptions<LaunchesOptions>, BindingFailureValidator<LaunchesOptions>>();
         services.AddSingleton<IValidateOptions<SendingOptions>, BindingFailureValidator<SendingOptions>>();
+        services.AddSingleton<IValidateOptions<LinesOptions>, BindingFailureValidator<LinesOptions>>();
         services.AddSingleton<IValidateOptions<HarnessOptions>, BindingFailureValidator<HarnessOptions>>();
         services.AddSingleton<IValidateOptions<SubscriptionsOptions>, BindingFailureValidator<SubscriptionsOptions>>();
 
@@ -822,6 +823,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<ResponderOptions>, ResponderOptionsValidator>();
         services.AddSingleton<IValidateOptions<LaunchesOptions>>(new LaunchesOptionsValidator(configuration));
         services.AddSingleton<IValidateOptions<SendingOptions>, SendingOptionsValidator>();
+        services.AddSingleton<IValidateOptions<LinesOptions>, LinesOptionsValidator>();
         services.AddSingleton<IValidateOptions<NotificationsOptions>>(new NotificationsOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<HarnessOptions>>(new HarnessOptionsValidator(paths, home));
 
@@ -834,6 +836,7 @@ public static class JasonConfiguration
         Bound<ResponderOptions>(services, configuration.GetSection(ResponderOptions.Section), Installed).ValidateOnStart();
         Bound<LaunchesOptions>(services, configuration.GetSection(LaunchesOptions.Section), Installed).ValidateOnStart();
         Bound<SendingOptions>(services, configuration.GetSection(SendingOptions.Section), Installed).ValidateOnStart();
+        Bound<LinesOptions>(services, configuration.GetSection(LinesOptions.Section), Installed).ValidateOnStart();
         Bound<HarnessOptions>(services, configuration.GetSection(HarnessOptions.Section), Installed).ValidateOnStart();
 
         // The scalars and each named plugin's Enabled are bound; each binding is JSON, which the binder cannot make,

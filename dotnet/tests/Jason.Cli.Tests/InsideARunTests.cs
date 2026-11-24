@@ -30,11 +30,16 @@ public class InsideARunTests
         ["campaign", "create", "--name", "Spring outreach"],
         ["--actor", "human:ada", "approval", "approve", "apr_A"],
         ["--actor", "human:ada", "decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
+        ["campaign", "reopen-contacts", "cmp_A", "--contact", "cnt_A", "--decision", "dec_A"],
+        ["--actor", "human:ada", "launches", "lift"],
     ];
 
     public static TheoryData<string[]> Verbs() => [.. Rows];
 
-    /// <summary>A read, a write and a person's own word each name the attempt, the last whatever person it claims.</summary>
+    /// <summary>
+    /// A read, a write and a person's own word each name the attempt, the last whatever person it claims; and a reopen that
+    /// carries the person's answered question, which the run sends as its attempt, with no person named.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Verbs))]
     public async Task A_verb_run_inside_a_run_names_its_attempt_on_the_request(string[] args)
@@ -310,7 +315,7 @@ public class InsideARunTests
         Walk(CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)), string.Empty);
 
         Assert.Equal(
-            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "campaign set-send-mode", "campaign start", "decision answer", "preference set", "preference unset" },
+            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "campaign review", "campaign set-send-mode", "campaign start", "decision answer", "launches lift", "preference set", "preference unset" },
             saying.Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)

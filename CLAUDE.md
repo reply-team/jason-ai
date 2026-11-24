@@ -114,7 +114,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   there and at startup, a campaign's `route.set`/`route.unset` copy the global half from the active snapshot, with
   scope `global` they write the section through the runtime's one writer of the settings file, which keeps every byte
   it does not own, and run that reload in the same act, putting the file back when it refuses, and a bad route rejects
-  the whole reload. The claim is fail-closed: twenty-eight checks in one published
+  the whole reload. The claim is fail-closed: thirty checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
@@ -173,7 +173,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   account and nothing else and brings its next read forward, never within a minute of the last; `events.sources` is the
   accounts' record and never answers a cursor. `docs/events.md` is the contract.
 - Notifications: a parked approval, a raised question, failed protective work, an account whose events were not
-  read, an open provider block, an item held at a daily limit of launches and an email that bounced are notified as a
+  read, an open provider block, an item held at a daily limit of launches, an email that bounced and a person's reply a
+  role judged their own are notified as a
   pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a
   reserved `notification_sent` line. One channel, the toast or a named plugin, is turned on or off by
   `notification.enable` and `notification.disable`, written through the runtime's one writer of the settings file and

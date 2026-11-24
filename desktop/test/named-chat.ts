@@ -33,10 +33,10 @@ export class NamedChat {
     }
 
     /** Makes the conversation behind a name on its first use, and resolves with its id. */
-    async made(name: string, campaignId?: unknown): Promise<string> {
+    async made(name: string, campaignId?: unknown, begun?: unknown): Promise<string> {
         const known = this.#ids.get(name);
         if (known !== undefined) return known;
-        const made = await this.#chat().create(campaignId);
+        const made = await (begun === undefined ? this.#chat().create(campaignId) : this.#chat().create(campaignId, begun));
         if (this.#mode !== undefined && made.mode !== this.#mode) await this.#chat().setMode(made.id, this.#mode, 'claude');
         this.#ids.set(name, made.id);
         this.#names.set(made.id, name);

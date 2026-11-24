@@ -142,7 +142,7 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             ConsoleText.Guarded(error, encoding),
             JasonPaths.FromEnvironment(),
             null,
-            Console.In,
+            StandardInputText.For(Console.IsInputRedirected, Console.OpenStandardInput, () => Console.In),
             RuntimeProcessControl.Instance,
             null,
             AutostartRegistrars.ForThisMachine(),

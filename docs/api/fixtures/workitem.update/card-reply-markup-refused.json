@@ -1,0 +1,36 @@
+{
+  "operation": "workitem.update",
+  "case": "card-reply-markup-refused",
+  "request": {
+    "work_item_id": "wi_1",
+    "set": {
+      "input": {
+        "channel": "email",
+        "thread": {
+          "external_id": "t_501"
+        },
+        "body": "Thanks Kai,<br><br>Thursday at ten works for me."
+      }
+    },
+    "reason": "Message text edited on the approval card.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: context.input/body: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "context.input/body",
+          "code": "invalid",
+          "message": "The value here is one this schema excludes: a text holding markup, a tag such as `<br>`, `<p>` or `</div>` or an HTML entity such as `&nbsp;` or `&lt;`; a reply is plain text, with a line break written as a line break, never a tag and never an entity."
+        }
+      ]
+    }
+  }
+}

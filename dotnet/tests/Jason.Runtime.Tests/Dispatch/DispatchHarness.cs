@@ -87,6 +87,10 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton<IOptionsMonitor<ResponderOptions>>(Responder);
         services.AddSingleton<IOptionsMonitor<LaunchesOptions>>(Launches);
         services.AddSingleton<IOptionsMonitor<SendingOptions>>(Sending);
+        services.AddSingleton<IOptionsMonitor<LinesOptions>>(Lines);
+
+        // The installation's zone: none, so the day is the clock's zone, UTC unless a test names another.
+        services.AddSingleton<IOptionsMonitor<RuntimeOptions>>(Runtime);
 
         // The subscription runner's numbers, as the runtime ships them unless a test changes them between turns.
         services.AddSingleton<IOptionsMonitor<SubscriptionsOptions>>(Subscriptions);
@@ -182,8 +186,14 @@ internal sealed class DispatchHarness : IDisposable
 
     public TestOptionsMonitor<LaunchesOptions> Launches { get; } = new(new LaunchesOptions());
 
+    /// <summary>The runtime section, whose zone the day of the daily limits is counted in; none unless a test names one.</summary>
+    public TestOptionsMonitor<RuntimeOptions> Runtime { get; } = new(new RuntimeOptions());
+
     /// <summary>The daily ceiling of automatic sends, as the runtime ships it unless a test changes it between turns.</summary>
     public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
+
+    /// <summary>The ceiling of touches a person may have in a campaign, as the runtime ships it unless a test changes it between turns.</summary>
+    public TestOptionsMonitor<LinesOptions> Lines { get; } = new(new LinesOptions());
 
     public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
 

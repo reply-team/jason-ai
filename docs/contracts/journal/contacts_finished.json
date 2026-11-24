@@ -1,0 +1,38 @@
+{
+  "kind": "contacts_finished",
+  "version": 1,
+  "since": "0.50.0",
+  "summary": "One request ended people's lines in a campaign, which cancels their open touches there: the line counts what happened to its items, names the people whose line it ended, and carries the reason, which is required.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "sometimes", "each": true }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finished", "already_finished", "not_member", "excluded", "rejected", "contact_ids"],
+        "properties": {
+          "finished": { "type": "integer", "minimum": 0, "description": "Items that ended an enrolled or a paused member's line." },
+          "already_finished": { "type": "integer", "minimum": 0, "description": "Items naming a person whose line was ended already." },
+          "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
+          "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },
+          "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },
+          "contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people whose line was ended, in the order of the request; empty when nobody's was."
+          }
+        }
+      }
+    }
+  }
+}

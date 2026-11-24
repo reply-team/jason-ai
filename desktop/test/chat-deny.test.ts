@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { allowListFile, allowRules, denyListFile, denyRules, fenceRefusal, helpNouns, helpRules, instructionsFile, modeFence, parsePlanList, parseAllowList, parseDenyList, personsWordForms, personsWordPreferenceKeys, personsWordVerbs, cardedVerbs, planListFile, readFence } from '../src/chat-deny.ts';
+import { allowListFile, allowRules, cliCommandTree, denyListFile, denyRules, fenceRefusal, helpNouns, helpRules, instructionsFile, modeFence, parsePlanList, parseAllowList, parseDenyList, personsWordForms, personsWordPreferenceKeys, personsWordVerbs, cardedVerbs, planListFile, readFence } from '../src/chat-deny.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
 
 const desktop = join(import.meta.dirname, '..');
@@ -185,12 +185,36 @@ test('rule 18 of the chat\'s instructions names exactly the nouns whose help run
     // Plan only keeps the nouns' exact help rules (`helpRules`) and refuses root help, and so does a turn no hook rides below
     // Claude Code's floor of Full access, so the rule gives both the noun's alone.
     assert.match(rule, /where this mode only reads and proposes, or where `jason --help` does not run, read only `jason <noun> --help`\./);
-    assert.doesNotMatch(rule, /refused|exactly those three words/);
+    // No help is said to be refused; the one refusal the rule names is of a command the person named.
+    assert.doesNotMatch(rule, /help[^.]*refused|refused[^.]*help|exactly those three words/);
 });
 
-test('the person\'s word runs with no card outside Plan only in five verbs and two preference keys, each verb on the deny list and none on the allow list or the plan list', () => {
+test('rule 18 names every noun and every verb with no noun of the CLI\'s own tree, the help nouns first and the rest after them', () => {
+    // A noun or a verb the rule leaves out reads as one that does not exist: a chat told to run `jason runtime status`
+    // answered that there is no such command and ran `jason status` instead.
     const fence = readFence(desktop);
-    assert.deepEqual([...personsWordVerbs].sort(), ['approval approve', 'approval reject', 'approval unset-standing', 'campaign start', 'decision answer']);
+    const rule = (fence.instructions ?? '').split(/\r?\n/).find((line) => line.startsWith('18. ')) ?? '';
+    const ticked = (text: string) => [...text.matchAll(/`([a-z-]+)`/g)].map((match) => match[1] as string);
+    const help = helpNouns(fence.allowed, fence.reads);
+    const nouns = [...new Set(cliCommandTree.filter((verb) => verb.includes(' ')).map((verb) => verb.split(' ')[0] as string))];
+    const more = /The CLI has (\w+) nouns more, each with verbs of its own: ([^;]+);/.exec(rule);
+    assert.ok(more, rule);
+    assert.deepEqual(ticked(more[2]!), nouns.filter((noun) => !help.includes(noun)).sort());
+    assert.deepEqual([...help, ...ticked(more[2]!)].sort(), [...nouns].sort(), 'the two lists together are the tree\'s nouns, each once');
+    const alone = /(\w+) verbs stand alone, with no noun: ([^.]+)\./.exec(rule);
+    assert.ok(alone, rule);
+    const named = [...alone[2]!.matchAll(/`jason ([a-z-]+)`/g)].map((match) => match[1] as string);
+    assert.deepEqual(named.sort(), cliCommandTree.filter((verb) => !verb.includes(' ')).sort());
+    const counted = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    assert.equal(alone[1]!.toLowerCase(), counted[named.length - 2]);
+    assert.equal(more[1]!.toLowerCase(), counted[ticked(more[2]!).length - 2]);
+    assert.ok(cliCommandTree.includes('runtime status'));
+    assert.match(rule, /`jason runtime status`, for one, says whether the runtime answers\./);
+});
+
+test('the person\'s word runs with no card outside Plan only in six verbs and two preference keys, each verb on the deny list and none on the allow list or the plan list', () => {
+    const fence = readFence(desktop);
+    assert.deepEqual([...personsWordVerbs].sort(), ['approval approve', 'approval reject', 'approval unset-standing', 'campaign review', 'campaign start', 'decision answer']);
     assert.deepEqual([...personsWordPreferenceKeys].sort(), ['sender.identity', 'tone_of_voice']);
     assert.deepEqual([...personsWordForms].sort(), [...personsWordVerbs, 'preference set sender.identity', 'preference set tone_of_voice', 'preference unset sender.identity', 'preference unset tone_of_voice'].sort());
     for (const verb of [...personsWordVerbs, 'preference set', 'preference unset']) {

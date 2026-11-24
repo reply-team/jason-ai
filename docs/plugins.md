@@ -1527,7 +1527,7 @@ family, or in none:
 | Family | Opens |
 |---|---|
 | `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds`, `describe` or `audience`, and its noun is not `system`, `ui` or `sender` |
-| `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
+| `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts`, `campaign.finish_contacts`, `campaign.continue_contacts` |
 | `contact` | `contact.create`, `contact.update`, `contact.archive` |
 | `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
 | `suppression` | `suppression.add` |
@@ -1539,14 +1539,15 @@ No grant opens the rest: the installation's and the UI's own doors (every `syste
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `notification.enable`,
 `notification.disable`, `events.backfill`, `events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
-`suppression.remove`, `campaign.set_send_mode`), a send's review (`workitem.review`), which a run or a person makes, an
+`launches.lift`, `campaign.review`, `suppression.remove`, `campaign.set_send_mode`, `campaign.reopen_contacts`), a send's review (`workitem.review`), which a run or a person makes, an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
 conversation reads `contact.threads` and `contact.thread`, a campaign's audience reads `audience.preview`,
 `audience.filter_values` and `audience.availability`, and the provider's accounts, `sender.list`, which are no read here
-because answering one spends a provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
-chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
-reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
-manifest names that is not one of the seven is `api_family_unknown`.
+because answering one spends a provider call, and `subscription.runs`, whose records carry the envelopes other plugins'
+handlers made: a handler in a chain already holds the envelope handed to it, and a person reads the final one through
+the run token, so no plugin reads another chain's envelopes. `subscription.list` is a read by the rule above. An
+operation the API adds later is in none until it is classified, which a test holds. A family the manifest names that is
+not one of the seven is `api_family_unknown`.
 
 A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what
 that role does afterwards is ordinary work.
@@ -1838,9 +1839,9 @@ not published, and this guide and those documents are the whole of what a plugin
 
 ## 14. Writing a notification plugin
 
-A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective actions
-failed, accounts have events Jason did not read, provider blocks are open, items wait on a launch budget or emails
-bounced, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
+A notification plugin carries Jason's pointer — how many approvals and questions are waiting, how many replies came in,
+whether protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a
+daily limit of launches or emails bounced, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
 operator has named it under `Notifications:Plugins:<id>`. No work item names it and no route reaches it.
 [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.

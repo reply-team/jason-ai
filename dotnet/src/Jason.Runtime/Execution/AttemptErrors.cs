@@ -100,9 +100,10 @@ public static class AttemptErrors
     public const string ProviderBlocked = "provider_blocked";
 
     /// <summary>
-    /// Work of a role in the item's campaign has started as many runs since 00:00Z as <c>Launches:MaxPerDay:&lt;role&gt;</c>
-    /// allows. Not a refusal of the work: the claim holds the item, with no attempt, until the next 00:00Z, and a person's
-    /// <c>workitem.resume</c> lets it go sooner. Only that hold writes this code.
+    /// Work of a role in the item's campaign has started as many runs since the installation's midnight as
+    /// <c>Launches:MaxPerDay:&lt;role&gt;</c> allows. Not a refusal of the work: the claim holds the item, with no attempt,
+    /// until the installation's next midnight, and a person's <c>workitem.resume</c> of the item, or <c>launches.lift</c> of
+    /// the day, lets it go sooner. Only that hold writes this code.
     /// </summary>
     public const string LaunchesSpent = "launches_spent";
 
@@ -137,6 +138,18 @@ public static class AttemptErrors
     /// campaign, whatever value the work would use. Lifted only by a person's own later verdict on that reply: a named human, outside any run, stating a nature other than opt_out.
     /// </summary>
     public const string OptedOut = "opted_out";
+
+    /// <summary>
+    /// The work touches a person — opens or carries on the line with them — whose line in this campaign was ended: their
+    /// membership is <c>finished</c>. Only the person reopens it.
+    /// </summary>
+    public const string LineFinished = "line_finished";
+
+    /// <summary>
+    /// The work touches a person who has already had, in this campaign, the most touches <c>Lines:MaxTouches</c> allows:
+    /// the manager ends the line rather than the claim letting one more through.
+    /// </summary>
+    public const string TouchCeilingReached = "touch_ceiling_reached";
 
     /// <summary>
     /// The operation works by the routed plugin's pin alone, and that plugin has pinned nothing for the person: nobody at

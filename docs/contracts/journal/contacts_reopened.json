@@ -1,0 +1,44 @@
+{
+  "kind": "contacts_reopened",
+  "version": 1,
+  "since": "0.50.0",
+  "summary": "One request reopened people's ended lines in a campaign on the person's decision: the line counts what happened to its items, names the people enrolled again, and, where a run carried the decision, the question whose answer it was.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "sometimes", "each": true }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "null" },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reopened", "not_finished", "not_member", "excluded", "not_in_decision", "rejected", "contact_ids", "decision_id"],
+        "properties": {
+          "reopened": { "type": "integer", "minimum": 0, "description": "Items that enrolled a member whose line was ended again." },
+          "not_finished": { "type": "integer", "minimum": 0, "description": "Items naming a member whose line was not ended: enrolled, or paused." },
+          "not_member": { "type": "integer", "minimum": 0, "description": "Items naming a person the campaign never held." },
+          "excluded": { "type": "integer", "minimum": 0, "description": "Items naming a person removed from the campaign." },
+          "not_in_decision": { "type": "integer", "minimum": 0, "description": "Items naming a person the ended line the question is about does not name, or whose line a later contacts_finished line ended again." },
+          "rejected": { "type": "integer", "minimum": 0, "description": "Items refused, each answered with its error in the response." },
+          "contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people enrolled again, in the order of the request; empty when nobody was."
+          },
+          "decision_id": {
+            "type": ["string", "null"],
+            "pattern": "^dec_",
+            "description": "The question a named person answered about the ended line, where a run carried the decision; null where the person's own word reopened it."
+          }
+        }
+      }
+    }
+  }
+}

@@ -39,7 +39,7 @@ public class SchemaTests
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
              "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from",
              "project_id", "folder_path", "responder_watermark", "audience_threshold", "audience_watermark", "send_mode_cold",
-             "send_mode_cold_set_by", "send_mode_warm", "send_mode_warm_set_by", "bounce_watermark"],
+             "send_mode_cold_set_by", "send_mode_warm", "send_mode_warm_set_by", "bounce_watermark", "deep_review_due_at"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id", "contact_id"],
@@ -81,7 +81,7 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "ask_person_note", "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at",
+                "ask_person_note", "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at", "entry",
                 "execution_profile", "finished_at", "heartbeat_seconds", "id", "idempotency_digest", "idempotency_key", "kind", "last_error_json", "lineage_from_attempt_id",
                 "lineage_profile_name", "lineage_profile_revision", "lineage_state", "max_attempts", "not_before", "operation",
                 "priority", "public_id", "result_format_json", "result_json", "retry_after", "review_note", "role", "status", "timeout_seconds",

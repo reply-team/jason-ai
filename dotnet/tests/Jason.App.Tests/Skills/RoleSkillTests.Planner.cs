@@ -1,8 +1,11 @@
+using Jason.Runtime.Tests;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_is_told_that_nothing_here_stores_a_plan()
     {
         var skill = Flattened("planner");
@@ -26,6 +29,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_meets_a_population_that_moved_with_a_new_item_for_the_new_number()
     {
         var skill = Flattened("planner");
@@ -34,6 +38,12 @@ public partial class RoleSkillTests
         // edited the failed item, or copied its input, would ask nobody about the number that is actually there.
         Assert.Contains("with both numbers in the failed attempt's `trace`. Read the count again and create a new item for the new number", skill, StringComparison.Ordinal);
         Assert.Contains("a different population is a different decision, never an edit of the old one", skill, StringComparison.Ordinal);
+
+        // And the start of a provider's campaign is never the planner's to propose: it is prepared only on the person's
+        // direct word. A planner that prepared one for every campaign would put a sequence at the provider beside the
+        // letters Jason's roles write.
+        Assert.Contains("**Starting a provider's campaign is a person's decision over a population, and only on their direct word.** You never propose it.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("plan the horizon from that", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -41,6 +51,7 @@ public partial class RoleSkillTests
     /// planner leaves in campaign context. Pinned here once; the craft guard carries it to the other file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_says_who_decides_and_which_roles_read_the_campaign()
     {
         var skill = Flattened("planner");
@@ -78,6 +89,7 @@ public partial class RoleSkillTests
     /// provider's own unit, and leaves the probe, the threshold and the allowance to the person.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_forms_the_audience_and_leaves_what_it_spends_to_the_person()
     {
         var skill = Flattened("planner");
@@ -93,7 +105,15 @@ public partial class RoleSkillTests
         // campaign: a planner that started one, or quoted a price of its own, would spend before anybody decided.
         Assert.Contains("say what it costs beside the number, in the provider's own unit and at the provider's own price", skill, StringComparison.Ordinal);
         Assert.Contains("The probe waits for the person who owns the campaign, who sees the definition and the number before anything is spent", skill, StringComparison.Ordinal);
-        Assert.Contains("You propose both, with the numbers, and set neither: the threshold and the allowance are the person's.", skill, StringComparison.Ordinal);
+        Assert.Contains("You propose the allowance with its numbers and name the threshold the start sets, and you set neither: changing the threshold and giving the allowance are the person's.", skill, StringComparison.Ordinal);
+
+        // The threshold is twenty, the runtime's own number whatever the first batch, which it sets at the first start: a planner still proposing a fifth of the
+        // probe would name a number under which the next batch is already short, and one that never said the start sets
+        // it would leave the person thinking a null means none.
+        Assert.Contains("is running out of people nobody has started on: twenty, the runtime's own number.", skill, StringComparison.Ordinal);
+        Assert.Contains("The runtime sets it at the campaign's first start, because its people come from a search; the person may change it, or clear it after the start to have none.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("a fifth of the probe", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("one batch", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -101,17 +121,31 @@ public partial class RoleSkillTests
     /// craft guard carries it to the other file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_plans_a_direct_send_as_one_item_for_one_person_and_never_again_after_an_unknown_end()
     {
         var skill = Flattened("planner");
 
-        // The fact the judgement about pilots rests on: a send is approved one person at a time, so it fits a few people
-        // and a population is a campaign's. A planner that believed one approval covered a batch of sends would put two
-        // hundred people behind a single question, or build a one-person campaign to send one message.
+        // The fact the judgement about pilots rests on: a send is approved one person at a time, so each batch is that
+        // many sends, each with its own approval. A planner that believed one approval covered a batch of sends would put
+        // two hundred people behind a single question, or build a one-person campaign to send one message.
         Assert.Contains(
             "Each send is one work item for one person, and each waits for a person to approve exactly what it would send",
             skill,
             StringComparison.Ordinal);
+
+        // And one message at a time is how a campaign's people are written to, every batch of them: a provider's sequence
+        // is never proposed, and a campaign linked to one gets no letters of Jason's own. A planner told that a population
+        // is a provider campaign's would build a sequence at the provider for every campaign past its pilot, and one that
+        // planned sends in a linked campaign would send beside the sequence's own steps.
+        Assert.Contains("**A person is reached one message at a time.**", skill, StringComparison.Ordinal);
+        Assert.Contains("That is how a campaign's people are written to, its first batch and the batches after it alike.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A provider's sequence is never part of that, and never proposed: a campaign linked to one gets no letters of Jason's own, so you create no send in it, and a person who asks for one directly is answered as `managed-campaign-work` says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("is used only where the person asks for one by name.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("a population is a campaign's", skill, StringComparison.Ordinal);
 
         // The runtime never repeats an attempt whose send ended without knowing whether it went out, but a planner that
         // creates a new work item for the same message has made a second message, and nothing else stops it. The only safe
@@ -123,6 +157,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_leaves_the_account_a_send_goes_from_to_the_person()
     {
         var skill = Flattened("planner");
@@ -134,6 +169,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_leaves_the_watching_to_the_manager()
     {
         var skill = Flattened("planner");
@@ -146,6 +182,7 @@ public partial class RoleSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_asks_what_the_opening_needs_through_a_decision()
     {
         var skill = Flattened("planner");
@@ -158,6 +195,20 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A launched planner holds the work that writes on a missing sender alone: where only the tone is missing it plans on,
+    /// as the session and the chat do, and says once where its answer has room that a tone can be named, without a
+    /// decision of its own. One that raised a decision for a tone would hold a first batch the chat set up and started.
+    /// </summary>
+    [Fact]
+    public void The_launched_planner_raises_a_decision_for_a_missing_sender_and_plans_on_without_a_tone()
+    {
+        var skill = Flattened("planner");
+        Assert.Contains("Where the preferences you read say nothing of who writes, or the brief does not say what a step needs, raise one decision that names what is missing, and answer with the plan up to that step.", skill, StringComparison.Ordinal);
+        Assert.Contains(InteractiveSkillTests.MissingTone + " Say it in your answer where its shape has room, and raise no decision for it.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("say nothing of who writes or how the company sounds", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A standing rule the person gives has one route from a launched planner, whatever its level: a decision that
     /// carries the rule in the person's words and names the memory file it belongs in, which the person or their own
     /// session writes. The planner's note is read by the planner alone, so a rule kept there never reaches the role that
@@ -166,6 +217,7 @@ public partial class RoleSkillTests
     /// rule's home again, or a dropped "until then" fails here.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_raises_a_standing_rule_as_a_decision_and_keeps_it_nowhere_else()
     {
         var text = File.ReadAllText(SkillPack.Find("planner").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -188,31 +240,60 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// The pilot is several runs of the planner, each raising the next step's work and ending by waiting for it, in the
-    /// order the runtime's own end-to-end chain takes: research, the sends a person approves, a hold for the replies, the
-    /// analyst, and the turn taken back to the person. Said in the launched planner's own part of the file, because the
-    /// judgement it shares with the session file is the same wherever the planner works, and a session does not wait.
+    /// The pilot is the medium chain: three runs of the planner, each raising the next step's work and ending by waiting
+    /// for it — the line's messaging by one copywriter's item, with research only where the person asked or the planner can
+    /// say why; one personalizer's item per person for the first letter, written from what is already known; and one send
+    /// per person. The replies, the follow-ups, the analyst's reading and the turn after it are the manager's, at its deep
+    /// reviews. Said in the launched planner's own part of the file, because the judgement it shares with the session file
+    /// is the same wherever the planner works, and a session does not wait.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_runs_a_pilot_as_waits_in_the_order_the_chain_takes()
     {
         var file = SkillPack.Find("planner").File;
         var skill = Flattened("planner");
 
-        var steps = new[] { "**Research.**", "**The sends.**", "**The replies.**", "**The reading.**", "**The turn.**" };
+        var steps = new[] { "### The medium chain", "**The line.**", "**The first letters.**", "**The sends.**", "**A later batch**" };
         var at = steps.Select(step => skill.IndexOf(step, StringComparison.Ordinal)).ToList();
         Assert.True(
             at.All(index => index >= 0) && at.Zip(at.Skip(1)).All(pair => pair.First < pair.Second),
             $"The planner names the pilot's steps at [{string.Join(", ", at)}] for [{string.Join(", ", steps)}]: each must be there, in that order.");
 
         Assert.Contains("each run raises the next step's work, waits for it with `jason workitem wait`, and ends", skill, StringComparison.Ordinal);
-        Assert.Contains("Raise a researcher's item for each of the ten, and wait on all ten.", skill, StringComparison.Ordinal);
+        Assert.Contains("A pilot is the campaign's first batch: twenty people, unless the campaign's context names another number as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("For a pilot of ten people", skill, StringComparison.Ordinal);
+
+        // The line is the copywriter's, once for the campaign; research for one person is raised only where it was asked
+        // for or the planner can say why, and nobody is researched by default.
+        Assert.Contains("Raise one copywriter's item for the campaign's line: the first letter's frame, and each follow-up as a general template, one message for the batch rather than one per person.", skill, StringComparison.Ordinal);
+        Assert.Contains("Raise a researcher's item for one person only where the person who owns the campaign asked for research, or you can say why this person needs it, and say why in its brief; nobody is researched by default.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Raise a researcher's item for each person of the batch, and wait on all of them.", skill, StringComparison.Ordinal);
+
+        // One personalizer per person, never one for the batch, writing from what is already known, carried in its context.
+        Assert.Contains("raise one personalizer's item for each person of the batch, never one for the whole batch", skill, StringComparison.Ordinal);
+        Assert.Contains("each writes that person's first letter from what is already known", skill, StringComparison.Ordinal);
+        Assert.Contains("its context carries all of it, since a personalizer does not read the campaign", skill, StringComparison.Ordinal);
+
+        // The judgement both seats share says the same number where it names the pilot.
+        Assert.Contains("The deep work per person and the first outreach go to a pilot, the campaign's first batch: twenty people, or the number the person named, which the campaign's context keeps as `first_batch`, or everybody where the campaign holds fewer.", skill, StringComparison.Ordinal);
         Assert.Contains("Each send goes to its claim: it parks for a person to approve what it would send, unless they have chosen that this kind of contact goes automatically", skill, StringComparison.Ordinal);
-        Assert.Contains("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
+        Assert.Contains("Under an automatic mode the runtime adds one critic for each send by itself.", skill, StringComparison.Ordinal);
         Assert.Contains("A reply that arrives meanwhile is the manager's and the responder's, never yours.", skill, StringComparison.Ordinal);
-        Assert.Contains("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
-        Assert.Contains("Their answer wakes the manager, not you.", skill, StringComparison.Ordinal);
         Assert.Contains("rather than wait for the same thing again", skill, StringComparison.Ordinal);
+
+        // The pilot ends with the sends: no hold for the replies and no analyst of the planner's own. The follow-ups, the
+        // analyst's reading and the turn are the manager's deep reviews', and a follow-up is the copywriter's template.
+        Assert.Contains("Your pilot ends with the sends.", skill, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups, the analyst's reading of the first batch and the turn after it are the manager's, at its deep reviews, and so is the end of each line", skill, StringComparison.Ordinal);
+        Assert.Contains("each follow-up is a send from the copywriter's template, written for one person by a personalizer only where the manager decides so", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Their answer wakes the manager, not you.", skill, StringComparison.Ordinal);
+
+        // A later batch skips the line and is two runs.
+        Assert.Contains("is the same chain without the line, which the first batch's copywriter already wrote", skill, StringComparison.Ordinal);
+        Assert.Contains("so it is two runs of you", skill, StringComparison.Ordinal);
 
         // A printed moment is in the past by the time a planner reads it, and a wait until a past moment is refused.
         Assert.Contains("The moments in these two lines are examples: work yours out from now", skill, StringComparison.Ordinal);
@@ -221,9 +302,9 @@ public partial class RoleSkillTests
             .Where(line => line.StartsWith("jason workitem wait ", StringComparison.Ordinal))
             .ToList();
         Assert.True(
-            waits.Any(line => line.Contains(" --on ", StringComparison.Ordinal))
-            && waits.Any(line => line.Contains(" --until ", StringComparison.Ordinal) && !line.Contains(" --on ", StringComparison.Ordinal)),
-            $"The planner prints [{string.Join(" | ", waits)}]: a wait on the items a step raised, and a hold with --until alone.");
+            waits.Count(line => line.Contains("the first letters", StringComparison.Ordinal) || line.Contains("the line and the research", StringComparison.Ordinal)) == 2
+            && waits.All(line => line.Contains(" --on ", StringComparison.Ordinal) && line.Contains(" --until ", StringComparison.Ordinal)),
+            $"The planner prints [{string.Join(" | ", waits)}]: a wait on the line and one on the first letters, each on the items its step raised with a deadline of its own, and no hold.");
 
         // The craft block is the session file's as well, and a session never waits: the pilot as waits is the launched planner's.
         var craft = CraftBlock.Extract(file) ?? string.Empty;
@@ -242,6 +323,7 @@ public partial class RoleSkillTests
     /// planner that raised it as final text would send the braces, or have the item refused.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planners_judgement_gives_a_message_send_that_carries_a_template_compose_template()
     {
         var skill = Flattened("planner");
@@ -259,6 +341,7 @@ public partial class RoleSkillTests
     /// campaign that behaved like a demo what it had been given.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_planner_settles_the_goals_with_the_person_and_states_the_default_in_both_seats()
     {
         foreach (var name in new[] { "planner", "planner-in-session" })
@@ -283,6 +366,7 @@ public partial class RoleSkillTests
     /// writes them only as the person gave them. The patch replaces the list, so it is told to send every goal back.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a role's skill teaches the role what was not decided")]
     public void The_launched_planner_reads_the_goals_from_the_campaign_and_keeps_them_there()
     {
         var skill = Flattened("planner");
@@ -296,4 +380,24 @@ public partial class RoleSkillTests
             SkillPack.PrintedCommands(SkillPack.Find("planner").File),
             line => line.StartsWith("jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{\"goals\":[", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The planner, where it speaks of a campaign's letters, says the default line: three touches, each written when it
+    /// is due, another number only where the plan says why, and never past the ceiling the settings hold. A planner that
+    /// planned the whole line at once would queue letters that a reply then has to race.
+    /// </summary>
+    [Fact]
+    public void The_planner_says_a_line_is_three_touches_written_when_due_under_the_ceiling()
+    {
+        var skill = Flattened("planner");
+
+        Assert.Contains(PlannerLine, skill, StringComparison.Ordinal);
+        Assert.Contains(PlannerCeiling, skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>The planner's sentence on a person's line, in the judgement both planner files share.</summary>
+    internal const string PlannerLine = "**A person's line is three touches where nothing better was thought out.** The first letter and two follow-ups, each written when it is due, one at a time, and the line never planned ahead as a whole";
+
+    /// <summary>The planner's words on the ceiling, in the same shared judgement.</summary>
+    internal const string PlannerCeiling = "never more than `Lines:MaxTouches`, the ceiling the settings hold, which no role raises and none asks to have raised";
 }

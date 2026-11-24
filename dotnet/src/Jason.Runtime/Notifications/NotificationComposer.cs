@@ -7,7 +7,7 @@ using Jason.Runtime.Decisions;
 namespace Jason.Runtime.Notifications;
 
 /// <summary>
-/// What a notification says, made from seven counts and, for failed protective work, at most three campaign public ids
+/// What a notification says, made from eight counts and, for failed protective work, at most three campaign public ids
 /// — opaque ids that name nothing by themselves — and nothing else. That is half of why nothing about the work — a
 /// campaign's name, a contact, a subject, a question's words, an error — can reach a channel: this signature has
 /// nowhere to take it from.
@@ -47,6 +47,13 @@ public static class NotificationComposer
     /// <summary>The command that shows the provider blocks, the work each holds and where a person clears it.</summary>
     public const string LookAtBlocksCommand = "jason block list";
 
+    /// <summary>
+    /// What a hold says beside its count, where it fits: the way out for today, in the words a person gives their agent or
+    /// the command they run as written, with their own name put in. Fixed words, no count and no name, so a pointer about
+    /// a hold stays counts and where to look.
+    /// </summary>
+    public const string LiftHold = "To go on today, tell your agent: ignore the limit, or run jason launches lift --actor human:<your name>.";
+
     /// <summary>Where to look when items wait on a daily limit and nothing else is said.</summary>
     public const string LookAtHeld = "Ask your agent what is held, or run " + LookAtHeldCommand + ".";
 
@@ -72,6 +79,13 @@ public static class NotificationComposer
         : "Ask your agent what bounced.";
 
     /// <summary>
+    /// Where to look when replies came in and nothing else is said: the agent alone. The journal's list of verdicts shows a
+    /// person's own and the automatic answers, the bounces and the opt-outs beside each other, so, as for a bounce, no command
+    /// is named, and the pointer names no campaign, contact or thread.
+    /// </summary>
+    public const string LookAtReplies = "Ask your agent who replied.";
+
+    /// <summary>
     /// The longest message the delivery contract takes, read from the contract itself: where to look names no command past
     /// it.
     /// </summary>
@@ -87,8 +101,9 @@ public static class NotificationComposer
     /// <param name="blocks">The provider blocks opened since the last pointer that reached anybody and open still, and the work items they hold.</param>
     /// <param name="held">How many items wait, as this is sent, on a daily limit of launches.</param>
     /// <param name="bounces">How many emails bounced, said since the last pointer that reached anybody: provider events, each once however many campaigns it reached.</param>
+    /// <param name="replies">How many replies a role judged a person's own, said since the last pointer that reached anybody: each once however many campaigns judged it.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
-    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null, string? item = null, int held = 0, int bounces = 0)
+    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null, string? item = null, int held = 0, int bounces = 0, int replies = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(approvals);
         ArgumentOutOfRangeException.ThrowIfNegative(decisions);
@@ -100,12 +115,13 @@ public static class NotificationComposer
         ArgumentOutOfRangeException.ThrowIfNegative(blocks?.WorkItems ?? 0);
         ArgumentOutOfRangeException.ThrowIfNegative(held);
         ArgumentOutOfRangeException.ThrowIfNegative(bounces);
-        if (approvals == 0 && decisions == 0 && failures == 0 && eventGaps == 0 && blocked == 0 && held == 0 && bounces == 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(replies);
+        if (approvals == 0 && decisions == 0 && failures == 0 && eventGaps == 0 && blocked == 0 && held == 0 && bounces == 0 && replies == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(approvals), "Nothing is waiting, so there is nothing to say.");
         }
 
-        var sentences = new List<string>(6);
+        var sentences = new List<string>(8);
         if (approvals > 0 || decisions > 0)
         {
             var parts = new List<string>(2);
@@ -123,6 +139,13 @@ public static class NotificationComposer
             sentences.Add($"{string.Join(" and ", parts)} {verb} waiting in Jason.");
         }
 
+        // Straight after what waits: a reply is what a person most often wants to hear of, and what its answer needs, an
+        // approval, is said in the sentence before it. The singular is spelt with its verb, never as a word alone.
+        if (replies > 0)
+        {
+            sentences.Add($"{Count(replies, "reply came", "replies came")} in.");
+        }
+
         // Beside a block or a hold, failed protective work names one campaign and counts the rest, and beside both it names
         // none: every thing said, with three campaigns named, would not fit the message the delivery contract takes.
         if (failures > 0)
@@ -130,9 +153,11 @@ public static class NotificationComposer
             sentences.Add(Failed(failed!, held == 0 ? (blocked > 0 ? 1 : MaxCampaignsNamed) : (blocked > 0 ? 0 : 1)));
         }
 
+        var holdAt = -1;
         if (held > 0)
         {
-            sentences.Add($"{Count(held, "item", "items")} {(held == 1 ? "waits" : "wait")} on a budget.");
+            sentences.Add($"{Count(held, "item", "items")} {(held == 1 ? "waits" : "wait")} on a daily limit.");
+            holdAt = sentences.Count;
         }
 
         if (blocked > 0)
@@ -156,11 +181,25 @@ public static class NotificationComposer
 
         // Either alone, never their sum: two counts near the largest an int holds would add up to less than nothing.
         var waiting = approvals > 0 || decisions > 0;
-        var look = eventGaps > 0 || blocked > 0 || held > 0 || bounces > 0 ? Pointing(summary, waiting, failures > 0, held > 0, blocked > 0, eventGaps > 0, bounces > 0)
+        string Looking(string said) => eventGaps > 0 || blocked > 0 || held > 0 || bounces > 0 || replies > 0 ? Pointing(said, waiting, replies > 0, failures > 0, held > 0, blocked > 0, eventGaps > 0, bounces > 0)
             : failures == 0 ? Look
             : waiting ? LookAtBoth
             : LookAtFailures;
-        return new NotificationMessage(Title, summary, look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item), held, bounces);
+        var look = Looking(summary);
+
+        // A hold says the way out for today straight after its count, but only where nothing else gives way: the pointer
+        // must still fit the message the delivery contract takes and still name every command it named without it.
+        if (held > 0)
+        {
+            var lifted = string.Join(" ", sentences.Take(holdAt).Append(LiftHold).Concat(sentences.Skip(holdAt)));
+            var liftedLook = Looking(lifted);
+            if (liftedLook == look && lifted.Length + 1 + liftedLook.Length <= MessageBound)
+            {
+                summary = lifted;
+            }
+        }
+
+        return new NotificationMessage(Title, summary, look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item), held, bounces, replies);
     }
 
     /// <summary>
@@ -176,18 +215,24 @@ public static class NotificationComposer
         };
 
     /// <summary>
-    /// Where to look when items are held, a provider block holds work, an account's events were not read or emails bounced:
-    /// alone, the agent and the one command that shows it; beside other things, the agent and the commands of the things
-    /// said, in the order they were said, without the questions each would ask. The commands are named until the next would
-    /// pass the bound the delivery contract sets on the message, and the things after it are left to the agent: the
-    /// things said first keep their commands. A thing with no command of its own, a bounce today, is the agent's alone.
+    /// Where to look when items are held, a provider block holds work, an account's events were not read, emails bounced or
+    /// replies came in: alone, the agent and the one command that shows it; beside other things, the agent and the commands
+    /// of the things said, in the order they were said, without the questions each would ask. The commands are named until
+    /// the next would pass the bound the delivery contract sets on the message, and the things after it are left to the
+    /// agent: the things said first keep their commands. A thing with no command of its own, a bounce or a reply today, is
+    /// the agent's alone.
     /// </summary>
-    private static string Pointing(string summary, bool waiting, bool failed, bool held, bool blocked, bool gaps, bool bounced)
+    private static string Pointing(string summary, bool waiting, bool replied, bool failed, bool held, bool blocked, bool gaps, bool bounced)
     {
-        var things = new List<string[]>(6);
+        var things = new List<string[]>(8);
         if (waiting)
         {
             things.Add(["jason approval list", "jason decision list"]);
+        }
+
+        if (replied)
+        {
+            things.Add([]);
         }
 
         if (failed)
@@ -218,10 +263,10 @@ public static class NotificationComposer
         {
             // One thing said, or failed protective work beside a hold, which share one command: its own words. Failed
             // protective work comes here only beside a hold, since alone it has its own words too.
-            return failed ? LookAtFailedAndHeld : held ? LookAtHeld : blocked ? LookAtBlocks : gaps ? LookAtGaps : LookAtBounces;
+            return failed ? LookAtFailedAndHeld : held ? LookAtHeld : blocked ? LookAtBlocks : gaps ? LookAtGaps : bounced ? LookAtBounces : LookAtReplies;
         }
 
-        var named = new List<string>(6);
+        var named = new List<string>(8);
         var look = "Ask your agent.";
         foreach (var thing in things.Where(thing => thing.Length > 0))
         {
@@ -274,7 +319,7 @@ public static class NotificationComposer
 /// One pointer: a title, a summary of the counts, and where to look. A toast shows the title, then the summary and
 /// where to look as two lines; a channel that carries one line sends <see cref="Text"/>.
 /// </summary>
-public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0, string? Item = null, int Held = 0, int Bounces = 0)
+public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0, string? Item = null, int Held = 0, int Bounces = 0, int Replies = 0)
 {
     public string Text => $"{Summary} {Look}";
 }

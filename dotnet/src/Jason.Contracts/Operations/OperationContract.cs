@@ -41,6 +41,7 @@ public sealed record OperationContract(
     IReadOnlyList<string>? ChannelTemplates,
     string? RouteChannelArgument,
     DispatchRule Dispatch,
+    bool Touch,
     ContactProjection? ContactProjection,
     string Precondition,
     OperationPreview? Preview,
@@ -293,6 +294,7 @@ public sealed record OperationContract(
             reader.OptionalTextList("channel_templates"),
             reader.OptionalText("route_channel_argument"),
             ReadDispatch(reader.Object("dispatch"), reader),
+            reader.Flag("touch"),
             ReadProjection(reader.OptionalObject("contact_projection"), reader),
             reader.Text("precondition"),
             ReadPreview(reader.OptionalObject("preview"), reader),
@@ -314,6 +316,7 @@ public sealed record OperationContract(
         RefuseUnroutableChannelArgument(source, contract);
         RefuseKeyedReadWithoutRepeat(source, contract);
         RefuseUncheckedReach(source, contract);
+        RefuseTouchThatReachesNobody(source, contract);
         RefuseUnpausableWork(source, contract);
         RefuseUnarchivableWork(source, contract);
         RefuseUnheldReach(source, contract);
@@ -671,6 +674,19 @@ public sealed record OperationContract(
         {
             throw new InvalidOperationException(
                 $"{source}: `preflight.suppression` is `not_applicable`, but `reach` is `{contract.Reach.Value}`; only an operation whose reach is `control` takes a person out rather than reaching them.");
+        }
+    }
+
+    /// <summary>
+    /// A touch opens or carries on the line with a person, so it reaches one: only an operation whose <c>reach</c> is
+    /// <c>act</c>, read as its dangerous value, may say so.
+    /// </summary>
+    private static void RefuseTouchThatReachesNobody(string source, OperationContract contract)
+    {
+        if (contract.Touch && !string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `touch` is `true`, but `reach` is `{contract.Reach.Value}`; a touch reaches a person, and only an operation whose reach is `act` does.");
         }
     }
 

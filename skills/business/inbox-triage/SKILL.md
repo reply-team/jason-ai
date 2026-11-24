@@ -243,7 +243,10 @@ interested people with no meeting yet, and the follow-up that should exist for t
 ## Safety
 
 Sending a reply to a real prospect is `confirm_each`: the user confirms the exact rendered
-text, for this person, on this channel, every time — no exceptions, no batching. Where the
+text, for this person, on this channel, every time. All of these, said about replies whose
+rendered text you showed them, is their word for each one: a word for each item, not a
+lowered class. Where a text was not shown, say once how many would go out unread and ask
+whether to show them first or approve them as they are; their answer is their word. Where the
 draft was machine-generated, the moment the user approves that rendered text is the moment a
 human editorial review exists; record it with `editorial_review.record` then, or the send
 carries the disclosure obligation instead (`A21`).

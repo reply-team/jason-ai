@@ -45,7 +45,7 @@ internal static partial class CriticalTier
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
-        [Family.B1] =  [  9,   2,   4,   2,   8],
+        [Family.B1] =  [  9,   2,   4,   2,   9],
         [Family.B2] =  [  4,   2,   0,   0,   6],
         [Family.B3] =  [  0,   0,   4,   1,  29],
         [Family.B4] =  [  0,   0,   0,   0,   7],
@@ -60,16 +60,16 @@ internal static partial class CriticalTier
         [Family.W4] =  [  0,   0,   0,   0,  17],
         [Family.W5] =  [  0,   0,   6,   2,  22],
         [Family.W6] =  [  0,   0,   0,   0,  10],
-        [Family.W7] =  [  0,   0,   2,   0,  22],
+        [Family.W7] =  [  0,   0,   2,   0,  23],
         [Family.W8] =  [  0,   1,   1,   0,  12],
         [Family.W9] =  [  0,   0,   0,   0,   7],
         [Family.W10] = [  0,   0,   0,   0,  15],
         [Family.W11] = [  0,   0,   0,   0,  17],
         [Family.P1] =  [  0,   0,   0,   0,  12],
-        [Family.P2] =  [  0,   5,   0,   0, 104],
+        [Family.P2] =  [  0,   5,   0,   0, 108],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  25],
-        [Family.S2] =  [  2,   1,  10,   0,  93],
+        [Family.S2] =  [  2,   1,  10,   0,  94],
         [Family.S3] =  [  0,   3,   3,   9,  27],
         [Family.S4] =  [  0,  30,   0,   0,   3],
         [Family.S5] =  [  0,   0,   0,   0,  23],
@@ -88,17 +88,18 @@ internal static partial class CriticalTier
         [Family.F1] =  [  0,   0,   9,   1,  14],
         [Family.F2] =  [  0,   0,   0,   0,   4],
         [Family.F3] =  [  1,   4,   2,   1,   6],
-        [Family.F4] =  [  1,   1,   4,   4,  11],
+        [Family.F4] =  [  2,   2,   4,   4,  11],
         [Family.F5] =  [  0,   4,   2,   0,   1],
         [Family.F6] =  [  0,   0,   0,   0,   3],
         [Family.C1] =  [  0,   0,   0,   0,  15],
         [Family.M1] =  [  0,   0,   0,   0,  16],
         [Family.N1] =  [  0,   0,   0,   0,   7],
-        [Family.N2] =  [  0,   0,   0,   0,  24],
-        [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1,  12,   0,   0,   2],
+        [Family.N2] =  [  0,   0,   0,   0,  25],
+        [Family.N3] =  [  0,   0,   0,   0,  81],
+        [Family.D1] =  [ 12,  13,   0,   0,   2],
         [Family.D2] =  [  4,   0,   0,   0,   0],
-        [Family.D3] =  [  2,   0,   0,   0,   3],
+        [Family.D3] =  [  2, 298,   0,   0, 168],
+        [Family.D4] =  [401, 122,   0,   0,   5],
         [Family.X1] =  [  0,  10,   3,   1,  14],
         [Family.X2] =  [  0,  20,   4,   3,  24],
         [Family.X3] =  [  0,   1,   0,   0,   6],
@@ -115,11 +116,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
-        (31, 444, 722, 34),      // Jason.App.Tests
-        (219, 3449, 6567, 477),  // Jason.Cli.Tests
-        (107, 864, 4589, 138),   // Jason.Contracts.Tests
-        (48, 302, 479, 54),      // Jason.PluginHost.Tests
-        (749, 6338, 13053, 954), // Jason.Runtime.Tests
+        (362, 546, 848, 447),     // Jason.App.Tests
+        (412, 3585, 6898, 911),   // Jason.Cli.Tests
+        (107, 864, 4589, 138),    // Jason.Contracts.Tests
+        (48, 302, 479, 54),       // Jason.PluginHost.Tests
+        (814, 6634, 13663, 1167), // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>

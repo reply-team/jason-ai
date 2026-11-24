@@ -19,6 +19,11 @@ public static class ContactModule
         services.AddScoped<ContactThreadService>();
         services.TryAddScoped<IProviderReadInvoker, PluginProviderReadInvoker>();
         services.AddScoped<MembershipService>();
+
+        // Ending a line and removing a person take back what the provider still holds for them, through the routine the
+        // respond step's hold takes it back through; the dispatcher module names it too.
+        services.TryAddScoped<HeldSendCancels>();
+        services.TryAddSingleton<HeldSendCancelSkips>();
         services.AddScoped<SuppressionService>();
 
         // The claim asks the register one question, through the service that owns what suppression means.
@@ -42,6 +47,9 @@ public static class ContactModule
         // belongs to the contact slice, which owns every rule about who a contact is.
         app.MapOperation<MembershipService, AddContactsRequest, AddContactsResult>(Operations.CampaignAddContacts, (service, request, ct) => service.AddAsync(request, ct));
         app.MapOperation<MembershipService, RemoveContactsRequest, RemoveContactsResult>(Operations.CampaignRemoveContacts, (service, request, ct) => service.RemoveAsync(request, ct));
+        app.MapOperation<MembershipService, FinishContactsRequest, FinishContactsResult>(Operations.CampaignFinishContacts, (service, request, ct) => service.FinishAsync(request, ct));
+        app.MapOperation<MembershipService, ContinueContactsRequest, ContinueContactsResult>(Operations.CampaignContinueContacts, (service, request, ct) => service.ContinueAsync(request, ct));
+        app.MapOperation<MembershipService, ReopenContactsRequest, ReopenContactsResult>(Operations.CampaignReopenContacts, (service, request, ct) => service.ReopenAsync(request, ct));
         app.MapOperation<MembershipService, ListContactsRequest, Page<MembershipItemDto>>(Operations.CampaignListContacts, (service, request, ct) => service.ListAsync(request, ct));
 
         app.MapOperation<SuppressionService, SuppressionAddRequest, SuppressionDto>(Operations.SuppressionAdd, (service, request, ct) => service.AddAsync(request, ct));

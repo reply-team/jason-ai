@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
@@ -62,10 +63,14 @@ public static class ManagerCheckIn
         "workitem.update",
         "workitem.cancel",
         "campaign.update_context",
+        Operations.CampaignFinishContacts,
+        Operations.CampaignContinueContacts,
+        Operations.CampaignReopenContacts,
         "journal.append",
         "rolenote.set",
         "approval.list",
         "report.list",
+        Operations.ReplyRecord,
         Operations.DecisionRaise,
         Operations.DecisionList,
         Operations.CampaignPause,
@@ -76,18 +81,43 @@ public static class ManagerCheckIn
     /// rather than derived: the actor, which is the dispatcher, and the lineage, which is the chain of the
     /// thing the review is about.
     /// </summary>
+    /// <param name="entry">
+    /// The named way into the manager's job the check-in is created with, one of the manager's in
+    /// <see cref="RoleEntries"/>, or null for none. This is the one writer of a work item's entry. A name the table does
+    /// not give the manager is a programming error, refused before anything is written.
+    /// </param>
+    /// <param name="requested">
+    /// Whether a person asked for this review (<c>campaign.review</c>) rather than the summon deciding it. A requested
+    /// review has no cause, says <c>review_intent: requested</c>, moves the quick anchor as every check-in does, and never
+    /// moves the deep review's grid, so the daily deep review still comes at its moment. A cause with it is a programming
+    /// error.
+    /// </param>
     public static async Task<WorkItem> CreateAsync(
         WorkItemService items,
         JasonDbContext db,
         Campaign campaign,
         ManagerCause? cause,
         ManagerOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? entry = null,
+        bool requested = false)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(options);
+        if (requested && cause is not null)
+        {
+            throw new ArgumentException("A review a person asked for has no cause in the chronicle.", nameof(cause));
+        }
+
+        if (entry is not null && !RoleEntries.Carries(Role, entry))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(entry),
+                entry,
+                $"The {Role} has no entry of that name; its entries are {string.Join(", ", RoleEntries.Of(Role).Order(StringComparer.Ordinal))}.");
+        }
 
         var lineage = await LineageAsync(db, cause, cancellationToken).ConfigureAwait(false);
         var request = new WorkItemCreateRequest(
@@ -103,17 +133,26 @@ public static class ManagerCheckIn
             options.TimeoutSeconds,
             HeartbeatSeconds: null,
             options.MaxAttempts,
-            Context(cause),
+            Context(cause, requested),
             ResultFormat.DeepClone(),
             Actor: null,
-            Reason: cause is null ? "the review cadence came round" : "the chronicle asked for a review");
+            Reason: requested ? "a person asked for a review" : cause is null ? "the review cadence came round" : "the chronicle asked for a review");
 
-        var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken).ConfigureAwait(false);
+        var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken, entry).ConfigureAwait(false);
 
         // The cadence is measured from the last check-in the runtime created, not from the last one that
         // finished: a review whose host was missing, or whose answer was refused, must not stop the loop. The
         // next one comes round on time either way.
         campaign.ManagerReviewAnchor = item.CreatedAt;
+
+        // A deep review, and only a deep review the summon decided, moves the grid: on by whole intervals to its first moment
+        // after this one, read from the interval in force now, so a runtime that was down for days owes one deep review and
+        // not one a day. One a person asked for leaves it, so the daily one still comes at its moment.
+        if (!requested && string.Equals(entry, ManagerEntryChoice.DeepReview, StringComparison.Ordinal))
+        {
+            campaign.DeepReviewDueAt = DeepReviewSchedule.Next(campaign.DeepReviewDueAt, options.DeepReviewSeconds, item.CreatedAt);
+        }
+
         return item;
     }
 
@@ -122,11 +161,13 @@ public static class ManagerCheckIn
     /// manager and not one thing about what the manager will find; a sentence here would be the dispatcher
     /// reading meaning, which is the one thing it must never do.
     /// </summary>
-    private static JsonObject Context(ManagerCause? cause)
+    private static JsonObject Context(ManagerCause? cause, bool requested)
     {
         var context = new JsonObject
         {
-            ["review_intent"] = cause is null ? "scheduled" : "triggered",
+            // Three values: scheduled when a clock came round, triggered when a line of the chronicle asked, and requested
+            // when a person asked (campaign.review). A requested review names no trigger and no cause, as a scheduled one.
+            ["review_intent"] = requested ? "requested" : cause is null ? "scheduled" : "triggered",
             ["allowed_operations"] = new JsonArray([.. AllowedOperations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
 
             // The one verb that changes what happens next, in a key of its own beside a list that also holds

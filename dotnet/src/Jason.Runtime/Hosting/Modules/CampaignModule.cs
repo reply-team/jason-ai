@@ -2,9 +2,11 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Api;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -14,7 +16,18 @@ public static class CampaignModule
     public static IServiceCollection AddCampaignModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services.AddScoped<CampaignService>().AddScoped<CampaignNumbers>().AddScoped<CampaignAudienceView>().AddScoped<JournalService>();
+
+        // A campaign going live reads the deep review's interval from the manager's section, so the seam is stated here
+        // as well as beside the loop: whichever module comes first registers it, and a composition without the dispatcher
+        // still reads the installation's setting rather than the shipped default.
+        services.TryAddSingleton(DispatcherModule.Seam<ManagerOptions>(ManagerOptions.Section));
+
+        // A review asked for counts the manager's launches of the day as the claim counts them: the same limits and the same
+        // day, read through the same seams the dispatcher module names; either may be composed first.
+        services.TryAddSingleton(DispatcherModule.Seam<LaunchesOptions>(LaunchesOptions.Section));
+        services.TryAddSingleton(DispatcherModule.Seam<RuntimeOptions>(RuntimeOptions.Section));
+        services.TryAddSingleton<InstallationDay>();
+        return services.AddScoped<CampaignService>().AddScoped<CampaignReviews>().AddScoped<CampaignNumbers>().AddScoped<CampaignAudienceView>().AddScoped<JournalService>();
     }
 
     public static void MapCampaignOperations(this IEndpointRouteBuilder app)
@@ -35,6 +48,8 @@ public static class CampaignModule
             Operations.CampaignPause, (service, request, cancellationToken) => service.PauseAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignTransitionRequest, CampaignDto>(
             Operations.CampaignArchive, (service, request, cancellationToken) => service.ArchiveAsync(request, cancellationToken));
+        app.MapOperation<CampaignReviews, CampaignReviewRequest, WorkItemDto>(
+            Operations.CampaignReview, (service, request, cancellationToken) => service.ReviewAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignUpdateContextRequest, CampaignDto>(
             Operations.CampaignUpdateContext, (service, request, cancellationToken) => service.UpdateContextAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignSetSendModeRequest, CampaignDto>(

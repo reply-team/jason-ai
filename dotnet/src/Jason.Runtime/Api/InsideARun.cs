@@ -26,7 +26,10 @@ public static class InsideARun
     /// a dispatched run no person is there. Refused here by operation, never by key, so a key added later is refused before
     /// anybody remembers to. A campaign's start, or its resume, is one: a role may pause a campaign, and only a person, or
     /// their own session on their word, starts one; a check-in that started its campaign under a role's or a person's name
-    /// would write a start that is not its own line, and that start would summon its successor.
+    /// would write a start that is not its own line, and that start would summon its successor. A lift of the daily limits
+    /// of launches is one: a run that lifted them would let every role in every campaign run past them for the rest of the
+    /// day on no person's word. A review asked of a campaign's manager is one: a run that asked for one would launch a check-in
+    /// on no person's word, and a check-in that asked for its own successor would review for ever.
     /// </summary>
     public static IReadOnlySet<string> PersonsWord { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -39,6 +42,8 @@ public static class InsideARun
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
         Operations.CampaignStart,
+        Operations.LaunchesLift,
+        Operations.CampaignReview,
     };
 
     /// <summary>
@@ -65,6 +70,8 @@ public static class InsideARun
         Operations.ProfileSetDefault or Operations.ProfileUnsetDefault => Domain.DomainErrors.DefaultProfileInsideARun(attempt),
         Operations.NotificationEnable or Operations.NotificationDisable => Domain.DomainErrors.NotificationInsideARun(attempt),
         Operations.CampaignStart => Domain.DomainErrors.StartInsideARun(attempt),
+        Operations.LaunchesLift => Domain.DomainErrors.LiftInsideARun(attempt),
+        Operations.CampaignReview => Domain.DomainErrors.ReviewInsideARun(attempt),
         _ when ChangesJason.Contains(operation) => Domain.DomainErrors.ChangesJasonInsideARun(attempt),
         _ => Domain.DomainErrors.DecidedInsideARun(attempt),
     };

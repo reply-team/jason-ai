@@ -22,7 +22,7 @@ public sealed partial class LaunchEnvelopeDocTests
 
         Assert.Equal(LaunchEnvelope.CurrentVersion, (int?)shown["envelope_version"]);
         Assert.Equal(Members(written), Members(shown));
-        foreach (var member in (string[])["runtime", "role_memory", "memory_files", "resumption"])
+        foreach (var member in (string[])["runtime", "role_memory", "memory_files", "resumption", "entry"])
         {
             Assert.True(shown[member] is JsonObject, $"The example's '{member}' is {shown[member]?.ToJsonString() ?? "null"}, not an object.");
             Assert.Equal(Members(written[member]!.AsObject()), Members(shown[member]!.AsObject()));
@@ -72,7 +72,8 @@ public sealed partial class LaunchEnvelopeDocTests
             1,
             DateTimeOffset.UnixEpoch,
             WaitReleaseReason.ChildrenEnded,
-            [new ResumedItem("wi_R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, null, null, new JsonObject(), false)]));
+            [new ResumedItem("wi_R", WorkItemKind.AiRole, "researcher", null, WorkItemStatus.Succeeded, null, null, new JsonObject(), false)]),
+        new LaunchEntry("start", "text"));
 
     private static List<string> Members(JsonObject node) => [.. node.Select(pair => pair.Key).Order(StringComparer.Ordinal)];
 

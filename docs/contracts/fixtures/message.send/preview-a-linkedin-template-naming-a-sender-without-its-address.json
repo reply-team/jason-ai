@@ -29,7 +29,7 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (—), outside any campaign — subject: —; text: Hi {{contact.first_name}}, my profile is {{sender.address}}.; send after: —",
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (—) — subject: —; text: Hi {{contact.first_name}}, my profile is {{sender.address}}.; send after: —",
     "highlights": {
       "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
       "/args/channel": "linkedin",

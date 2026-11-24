@@ -154,7 +154,9 @@ anything else that reads replies or provider events, reads it.
   read's own line carries none of the three, since the thread it names is the campaign's own by the read that listed it.
   It is keyed as the inbound read keys it, by the plugin, the thread and the moment, so a move both reads found is said
   once. A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a
-  reply is said again, as the inbound read says it.
+  reply is said again, as the inbound read says it. Such a line holds the person's line as the inbound read's does, and
+  may be skipped as Jason's own move by its moment; a line from an event that names the other side always holds, whatever
+  the moments ([inbound sync](inbound-sync.md) §4, "What a line does not know").
 - **`provider_event_observed`** carries the event, the person it is about, `attributed_by`, and the kind's own
   identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
   by the event's own key. A bounce's line is counted by each notification until one reaches anybody, once by that

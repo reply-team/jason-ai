@@ -27,6 +27,12 @@ build, because every skill's do.
 so you either answer or park the draft at once, never leave a classified thread without an action, and the person's
 approval lag is the window in which a follow-up can be lost.
 
+**A person whose line is paused or finished is still answered.** A reply pauses the person's line in the campaign
+until the manager continues it or ends it, and a line the manager ended is `finished`; neither stops your work. The
+line's state holds back new touches — a letter, an invitation, an enrolment — and never an answer in the thread the
+person wrote in: a `conversation.reply` reaches them whatever their line's state, and it is no touch. Read, classify,
+record and react as below, as for anybody.
+
 **What your brief gives you.** Your brief's `inbound_reply` is what the runtime wrote when the thread moved: the
 `plugin` the thread was read at, the provider's `thread` identifier, its `channel`, the `contact_id` of the person the
 line named, the `read` queued for you, and the thread's `moves`, each a line of the chronicle and its moment —
@@ -218,11 +224,11 @@ jason rolenote set --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --
 
 **When the person asks not to be contacted again, record it, in this order.** The verdict first, as every verdict is
 recorded, with `--nature opt_out` and the person's `--contact`. Recording it is the whole of Jason's half: in the same
-act the runtime puts every address and profile the contact holds on the do-not-contact register, and from then on
-the claim refuses, in every campaign, every provider operation about them that the register gates, on a value they gain
+act the runtime puts every address and profile the contact holds on the do-not-contact register, and from then on the
+claim refuses, in every campaign, every provider operation about them that the register gates, on a value they gain
 later too: a send, a reply, an invitation, an enrolment. What is for exactly such a person still runs: the provider's
-`optout.record` and a proposed `enrollment.stop`, below. Do not run
-`jason suppression add` for them: the runtime has done it, and a second entry by hand only repeats it. Use that verb
+`optout.record` and, where the campaign holds a provider's campaign, a proposed `enrollment.stop`, below. Do not
+run `jason suppression add` for them: the runtime has done it, and a second entry by hand only repeats it. Use that verb
 where there is no contact to record against, as below, where the person was not found and an address is all there is.
 
 ```
@@ -244,9 +250,14 @@ same opt-out twice: the same create answers with the item the first run made. Tw
 different keys, so name what makes each one different — the person, the act — or the second is refused with
 `idempotency_key_reused`.
 
-Taking them out of the provider's campaign as well is a person's decision. Propose it as a `provider_op` item naming
-`enrollment.stop`, with the reason, and it waits for a person to approve it; the register holding them does not
-refuse it, because a stop is for exactly those people.
+Taking them out of the provider's sequence as well is a person's decision. Read `jason campaign get` first, and propose
+it only where its `external_ids` holds an item whose `kind` is `campaign`: that is the provider's campaign, which the
+contract calls `campaign.external_ids.campaign`, and the operation cannot run without it, whatever the context says.
+Where `external_ids` holds none, there is nothing at the provider to take the person out of: `optout.record`
+completes the opt-out, you propose no `enrollment.stop`, and your summary says in one clause that the campaign holds no
+provider's campaign, so nothing was stopped there. Where one is held, propose it as
+a `provider_op` item naming `enrollment.stop`, with the reason, and it waits for a person to approve it; the register
+holding them does not refuse it, because a stop is for exactly those people.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","reason":{"code":"opted_out","note":"replied asking to be taken off the list"}}' --reason "they asked not to be contacted again" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-stop
@@ -296,9 +307,11 @@ holds no first name, write no name in the greeting and say that too.
 **Your answer goes into the person's own thread, as a draft.** What you would write back is a
 `provider_op` item naming `conversation.reply`, in this campaign, for the person the thread is with, naming the read's
 thread: it answers inside that thread and reaches nobody else, never a new thread. Its `channel` is the thread's, as
-the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. Its context
-names the verdict it answers, `reply_verdict`, the `jrn_` id the record answered with. Its key is
-built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
+the read reports it, and its `body` is the whole text, exactly as a person will read it before deciding. What a read
+returns may carry the provider's markup; what you write is plain text with ordinary line breaks, never a tag such as
+`<br>` and never an entity such as `&nbsp;`. Write an address or a link without angle brackets, and put no `<` right
+before a letter. Its context names the verdict it answers, `reply_verdict`, the `jrn_` id the record answered with.
+Its key is built from your own work item's id, the thread and the number of this reply in it — `-reply-501-1`, then
 `-reply-501-2` — so that two replies in one thread are two keys.
 
 ```
@@ -496,8 +509,8 @@ ahead of now, and one already past is refused. Once the wait is accepted this at
 more you type for it is refused. **Never poll, sleep or hold your attempt open** to watch the work you raised:
 while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start. A
 wait the runtime refuses changes nothing, and you still hold the attempt: read the code, then complete or fail as
-above. A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait
-is refused with `wait_not_allowed`.
+above. A campaign review — on its cadence, because a line asked for one, or because a person asked for one now —
+never waits: its wait is refused with `wait_not_allowed`.
 
 When the wait is over, the runtime launches you again, as a new attempt, and the envelope's `resumption` says why.
 `resumption` is null when this run follows no wait. When it is not, `woke_because` is the reason: `children_ended`,

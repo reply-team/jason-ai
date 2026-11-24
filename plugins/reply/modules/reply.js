@@ -11,10 +11,21 @@
 // messages one message long — and `reply inbox reply` reads the thread once more itself, for its channel, before it
 // posts. The text reaches the CLI on stdin and nowhere else, and a reply that may have gone is never sent again: the
 // document says `never`.
+//
+// The text a person approves is plain text, and the document refuses one with a tag or an entity in it before anybody is
+// asked. Reply takes an email reply's body as HTML — its API says the message "may contain HTML", and the thread's own
+// messages are HTML — so on email the text is written as HTML that shows exactly it, by the function a direct email is
+// written with (message.js): what HTML reads as markup escaped, and each line break one `<br>`. Reply decodes an email's
+// body before it reads it and drops a tag it does not know with everything after it, so an email reply holding a `<`
+// right before a letter, `/`, `!` or `?` — an address between angle brackets — is refused before anything is called, by
+// the check a direct email is held to (template.js). Reply's API names no HTML for a LinkedIn reply, so it goes as written,
+// as a direct LinkedIn message does.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { identifier, isReplyNumber, lookup, text } from "./reading.js";
 import { sameValue } from "./contacts.js";
+import { html } from "./message.js";
+import { refuseTagStart } from "./template.js";
 
 const OPERATION = "conversation.reply";
 const READ = "inbox get";
@@ -43,6 +54,10 @@ export function conversationReply(input, context) {
 
   if (args.body.indexOf(PLACEHOLDER) >= 0) {
     fail(OPERATION, { call: null, row: "placeholder_in_the_text" }, undefined);
+  }
+
+  if (args.channel === "email") {
+    refuseTagStart(OPERATION, "body", args.body);
   }
 
   const read = run(context, {
@@ -84,9 +99,10 @@ export function conversationReply(input, context) {
   }
 
   const learned = { contact: found.id };
+  const body = channel === "email" ? html(args.body) : args.body;
   const message = args.reply_to_message
-    ? { body: args.body, reply_to_message_id: args.reply_to_message.external_id }
-    : { body: args.body };
+    ? { body: body, reply_to_message_id: args.reply_to_message.external_id }
+    : { body: body };
   const sent = run(context, {
     operation: OPERATION,
     command: SEND,

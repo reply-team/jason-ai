@@ -24,8 +24,10 @@ public class ConfinedVerbsTests
         ["preference set"] = ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference unset"] = ["preference", "unset", "outreach.tone"],
         ["campaign set-send-mode"] = ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
+        ["campaign reopen-contacts"] = ["campaign", "reopen-contacts", "cmp_A", "--contact", "cnt_A"],
         ["block clear"] = ["block", "clear", "blk_A"],
         ["workitem resume"] = ["workitem", "resume", "wi_A"],
+        ["launches lift"] = ["launches", "lift"],
         ["workitem review"] = ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report submit"] = ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription rewind"] = ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
@@ -54,6 +56,7 @@ public class ConfinedVerbsTests
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
         ["campaign start"] = ["campaign", "start", "cmp_A"],
         ["campaign archive"] = ["campaign", "archive", "cmp_A"],
+        ["campaign review"] = ["campaign", "review", "cmp_A"],
     };
 
     public static TheoryData<string> Entries() => [.. ConfinedVerbs.Table.Select(entry => entry.Command)];
@@ -101,10 +104,12 @@ public class ConfinedVerbsTests
     [InlineData("decision answer")]
     [InlineData("preference set")]
     [InlineData("block clear")]
+    [InlineData("launches lift")]
     [InlineData("route set")]
     [InlineData("role add")]
     [InlineData("campaign start")]
     [InlineData("campaign archive")]
+    [InlineData("campaign review")]
     public async Task Unset_the_verb_reaches_the_runtime(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(WithActor(entry), new Dictionary<string, string>());
@@ -370,14 +375,15 @@ public class ConfinedVerbsTests
 
     /// <summary>
     /// The person's own word, whose help says the act is the person's: the verbs that take no default actor and name the
-    /// person. Three entries of the same kind are left out, as a role runs them itself: <c>workitem review</c>, which the
-    /// critic sends from its own run, <c>report submit</c>, whose reporter may be <c>role:&lt;id&gt;</c>, and
-    /// <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not.
+    /// person. Four entries of the same kind are left out, as a role runs them itself: <c>workitem review</c>, which the
+    /// critic sends from its own run, <c>report submit</c>, whose reporter may be <c>role:&lt;id&gt;</c>,
+    /// <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not, and
+    /// <c>campaign reopen-contacts</c>, which a run sends carrying the question the person answered.
     /// </summary>
     private static readonly string[] PersonsOwnWord =
     [
         "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer",
-        "preference set", "preference unset", "campaign set-send-mode", "block clear", "subscription rewind",
+        "preference set", "preference unset", "campaign set-send-mode", "block clear", "subscription rewind", "launches lift",
     ];
 
     /// <summary>
@@ -416,7 +422,7 @@ public class ConfinedVerbsTests
 
     /// <summary>
     /// The person's own word is exactly the table's entries of that kind that name the person with no default actor, less
-    /// the three a role runs itself; a verb added to either side is red here until it is placed.
+    /// the four a role runs itself; a verb added to either side is red here until it is placed.
     /// </summary>
     [Fact]
     public void The_person_s_own_word_is_the_entries_that_name_the_person_less_those_a_role_runs()
@@ -429,8 +435,9 @@ public class ConfinedVerbsTests
             .Where(command => Find(root, command)!.Description!.Contains(ActorOption.NoDefault, StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal([.. namingThePerson.Except(["workitem review"]).Order(StringComparer.Ordinal)], PersonsOwnWord.Order(StringComparer.Ordinal));
+        Assert.Equal([.. namingThePerson.Except(["workitem review", "campaign reopen-contacts"]).Order(StringComparer.Ordinal)], PersonsOwnWord.Order(StringComparer.Ordinal));
         Assert.Contains("workitem review", namingThePerson);
+        Assert.Contains("campaign reopen-contacts", namingThePerson);
     }
 
     /// <summary>

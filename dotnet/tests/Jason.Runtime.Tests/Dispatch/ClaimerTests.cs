@@ -1297,6 +1297,43 @@ public partial class ClaimerTests
         Assert.Equal("Thursday at 11 works.", (string?)approvals[1].Subject["input"]!["args"]!["body"]);
     }
 
+    /// <summary>
+    /// A reply drafted with HTML in its text, parked before the document refused markup, waits on a person as it was.
+    /// Approved after the update, it is refused at its claim as `input_invalid`, final, before anything exists that could
+    /// send it: the composed input no longer satisfies the document, which is read before the decision is, and the
+    /// refusal says what the text may not hold. Nothing is rewritten, so nothing goes out that the person did not read.
+    /// The question is parked here by a claim, which the document lets through only with a text it accepts, so the item's
+    /// text is then set to the drafted one, as the item held it all along under the older document.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_with_markup_parked_before_the_document_refused_it_is_refused_at_its_claim_once_approved()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["conversation.reply"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Reply(db, campaign, "Hi there, fair question.");
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        item.Context = new JsonObject { [WorkItemService.InputKey] = Replying("Hi there,<br><br>Fair question.") };
+        await db.SaveChangesAsync(Ct);
+
+        await Decide(db, ApprovalStatus.Approved);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((AttemptErrors.InputInvalid, FailureClass.Validation, false), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Null(attempt.Launch);
+        var detail = Assert.Single(attempt.Error.Details!);
+        Assert.Equal("/args/body", detail.Field);
+        Assert.Contains("never a tag", detail.Message, StringComparison.Ordinal);
+        Assert.Equal(WorkItemStatus.Failed, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
     /// <summary>A reply in a thread with nothing wrong with it, so the only thing that can stop it is a person.</summary>
     private static WorkItem Reply(JasonDbContext db, Campaign campaign, string body)
     {
@@ -2150,6 +2187,7 @@ public partial class ClaimerTests
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             var clock = new FixedClock(at ?? Noon);
+            Clock = clock;
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);
@@ -2199,6 +2237,8 @@ public partial class ClaimerTests
                 settings,
                 TestOptions.LaunchesSettings(),
                 TestOptions.SendingSettings(Sending),
+                new InstallationDay(clock, TestOptions.RuntimeSettings(Runtime)),
+                TestOptions.LinesSettings(Lines),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
@@ -2213,8 +2253,17 @@ public partial class ClaimerTests
 
         public Claimer Claimer { get; }
 
+        /// <summary>The claim's clock, whose zone is the system's own where the runtime section names none.</summary>
+        public FixedClock Clock { get; }
+
+        /// <summary>The runtime section the claim reads the installation's zone from, which a test may change between scans.</summary>
+        public TestOptionsMonitor<RuntimeOptions> Runtime { get; } = new(new RuntimeOptions());
+
         /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
         public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
+
+        /// <summary>The lines section the claim reads at each scan's start, which a test may change between scans.</summary>
+        public TestOptionsMonitor<LinesOptions> Lines { get; } = new(new LinesOptions());
 
         /// <summary>
         /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen

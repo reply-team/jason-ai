@@ -91,7 +91,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
 | [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
 | [`message.cancel`](operations/message.cancel.md) | `scheduled_message.cancel` | `control` | `auto` | `safe` | `not_used` | stop a send the provider still holds for its moment |
-| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | send a person a message, outside any campaign, from one of the provider's accounts |
+| [`message.send`](operations/message.send.md) | `message.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | send a person a message from one of the provider's accounts, not through one of its campaigns |
 | [`message.status`](operations/message.status.md) | `scheduled_message.list` | `read` | `auto` | `safe` | `not_used` | read one send by the reference the provider gave it |
 | [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 | [`schedule.list`](operations/schedule.list.md) | `schedule.resolve` | `read` | `auto` | `safe` | `not_used` | the provider's sending schedules, with the windows each one sets |
@@ -172,9 +172,9 @@ the operation stays work as well.
 
 One more document is published here, and it is not a canonical operation:
 [`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked for
-— put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed, accounts
-have events Jason did not read, provider blocks are open, items wait on a launch budget or emails bounced, and where to
-look. It is a family of its own, under `notifications/` rather than `operations/`, read by its own catalog. The
+— put a pointer in front of a person: how many approvals and questions wait, how many replies came in, whether
+protective actions failed, accounts have events Jason did not read, provider blocks are open, items wait on a daily
+limit of launches or emails bounced, and where to look. It is a family of its own, under `notifications/` rather than `operations/`, read by its own catalog. The
 operation catalog has no notion of kind: a document dropped among the operations would become a provider operation a
 work item could name, a route could carry and a lease would be sized for. So it has none of an operation's level-one
 fields — no reach, no approval, no preflight, no repeat rule — because a delivery is not SDR work, and only its input,
@@ -414,7 +414,11 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
 | [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |
 | [`contacts_added`](journal/contacts_added.json) | `0.1.0` | yes | campaign, contact | One request added people to a campaign: the line counts what happened to its items and names the people it added. |
+| [`contacts_continued`](journal/contacts_continued.json) | `0.50.0` | yes | campaign, contact | One request continued the paused lines of people in a campaign: the line counts what happened to its items and names the people enrolled again. |
+| [`contacts_finished`](journal/contacts_finished.json) | `0.50.0` | yes | campaign, contact | One request ended people's lines in a campaign, which cancels their open touches there: the line counts what happened to its items, names the people whose line it ended, and carries the reason, which is required. |
+| [`contacts_paused`](journal/contacts_paused.json) | `0.50.0` | yes | campaign, contact | A reply paused a person's line in a campaign: the person, enrolled until then, is paused, so none of their touches there is taken until the line is continued or ended; the line names the person and the reply line that paused them. |
 | [`contacts_removed`](journal/contacts_removed.json) | `0.1.0` | yes | campaign, contact | One request removed people from a campaign, which cancels their open work there: the line counts what happened to its items and names the people it removed. |
+| [`contacts_reopened`](journal/contacts_reopened.json) | `0.50.0` | yes | campaign, contact | One request reopened people's ended lines in a campaign on the person's decision: the line counts what happened to its items, names the people enrolled again, and, where a run carried the decision, the question whose answer it was. |
 | [`context_updated`](journal/context_updated.json) | `0.1.0` | yes | campaign | One key of a campaign's context was set, changed or removed; a change of several keys writes one line for each. |
 | [`decision_answered`](journal/decision_answered.json) | `0.1.0` | yes | campaign, contact, work_item, attempt, decision | A person answered a question an attempt raised, and the review that continues the work is summoned from this line; the answer is kept on the decision. |
 | [`decision_cancelled`](journal/decision_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, attempt, decision | A question still waiting for a person was cancelled because its campaign was archived. |
@@ -429,6 +433,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`external_id_pinned`](journal/external_id_pinned.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A provider's identifier for a campaign or a contact was pinned for the first time, by the attempt that returned it, and is never overwritten. |
 | [`global_routes_updated`](journal/global_routes_updated.json) | `0.42.0` | yes | plugin | A global route was set or taken away by route.set or route.unset, so an operation, one channel of an operation, or all provider work goes to the plugin it names for every campaign with no route of its own, or no longer does. |
 | [`inbound_reply_observed`](journal/inbound_reply_observed.json) | `0.4.0` | yes | campaign, contact, work_item, attempt, plugin | A conversation thread of a campaign moved because the other side wrote, as the inbound read of the campaign or a read of the account's provider events found it. |
+| [`launch_limit_lifted`](journal/launch_limit_lifted.json) | `0.50.0` | no | none | A person lifted the daily limits of launches for the rest of the installation's day, so every role in every campaign runs past them until the next local midnight, and what they held was let go. |
 | [`message_bounce_observed`](journal/message_bounce_observed.json) | `0.43.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it; said once per send, and once more where a bounce first said soft is found to stop. |
 | [`message_sent_observed`](journal/message_sent_observed.json) | `0.22.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message went out, with the moment it went and the provider's identifier for it. |
 | [`notification_channel_updated`](journal/notification_channel_updated.json) | `0.48.5` | yes | none | One notification channel, the toast or a notification plugin, was turned on or off by notification.enable or notification.disable: whether it was on before and after, apart from the switch for every notification. |
@@ -449,6 +454,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`provider_event_observed`](journal/provider_event_observed.json) | `0.12.0` | yes | campaign, contact, plugin | A provider event read from an account reached a campaign: a reply the provider detected, an invitation accepted, or a bounce. |
 | [`provider_send_observed`](journal/provider_send_observed.json) | `0.47.0` | yes | campaign, contact, plugin | A message the account sent, read from the account's events, reached the campaign whose provider campaign it belongs to. |
 | [`reply_classified`](journal/reply_classified.json) | `0.25.0` | yes | campaign, contact, work_item, attempt, plugin, decision | A reply in a campaign was given a verdict: what kind of reply it is, how sure the verdict is, and what is to be done about it. |
+| [`review_requested`](journal/review_requested.json) | `0.50.0` | no | campaign, work_item | A person asked a campaign's manager for a review now, a quick look or a deep review, and the line names the check-in it made, the summon's own, with that check-in's entry; it summons nothing. |
 | [`role_added`](journal/role_added.json) | `0.1.0` | yes | role | A role was registered, so work can name it and an attempt can run as it. |
 | [`role_note_set`](journal/role_note_set.json) | `0.1.0` | yes | campaign, project, role | A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says. |
 | [`role_updated`](journal/role_updated.json) | `0.1.0` | yes | role, profile | The execution profile a role's work runs under was set, changed or cleared. |
@@ -515,6 +521,7 @@ The second group is Jason's own, and it is about execution:
 | `channel_templates` | the channels on which the operation's message may be a template the provider fills in for the person, which a plugin writes one on only where its manifest lists the channel under `templates` ([`docs/plugins.md`](../plugins.md) §3), the claim refusing a template elsewhere as `template_not_offered`: a non-empty list, or null where the message is never one. The loader holds each to be a channel the arguments offer, named once, of an operation whose `preflight.channel` is `from_args` and whose `message` declares `compose` |
 | `route_channel_argument` | the argument whose value is the channel a route may name under the operation, so that one operation's calls on one channel go to one plugin and on another to another: `channel` on `message.send` and `conversation.reply`, `sender_channel` on `sender.list`, null on every other operation. It is routing metadata — nothing a plugin receives changes, so it keeps the operation's version — and the channels a route may name are that argument's `enum`. The loader holds it to be an argument the arguments declare, written as a string with an `enum`, every value of it a channel the channel rules know, spelled as they keep it, and `channel` itself where `preflight.channel` is `from_args`. A caller may leave the argument out where the arguments allow it, as `sender.list`'s filter: such a call names no channel and is routed by the operation alone. An argument that is the address a person is found by, an open pattern, is never one. A route that names a channel under the operation is resolved by this field, and the levels, the settings and the checks are in [`docs/routing.md`](../routing.md) |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm; `in_archived_campaign` is `cancelled` — archiving the campaign cancels the work, as it cancels all open work — or `runs`, allowed only where `in_paused_campaign` is `runs`, for a stop without which the provider goes on spending: the work is created, kept and claimed in an archived campaign, today `audience.search_cancel` alone; `under_provider_block` is `waits` — the claim parks the work on an open provider block of its plugin and binding, and it goes back to the queue when the block clears — or `runs`, the work going through an open block and a `blocked` answer ending it. An operation whose `reach` is `act` waits; a block's trial goes to its `act` work first, and a control's answer never clears a block |
+| `touch` | whether the operation's act opens or carries on the line with a person: `true` for exactly three today, `message.send`, `social_invitation.send` and `campaign.enroll`, and `false` for every other operation, `conversation.reply` among them, because it answers somebody who wrote. `campaign.enroll` is one as a guard alone: a person whose line has ended is not put into a provider's campaign. The loader refuses a `touch` of `true` on an operation whose `reach` value is not `act`, since a touch reaches a person. It is required, like every field, and the catalog derives the set of touches from the documents, so that every check that counts or holds a touch reads one published fact and not a list a plugin author cannot see: the claim's checks 29 and 30, eligibility rule 3, the people list's `touches`, the cancel at `campaign.finish_contacts`, and the hold's reading of Jason's own move after a reply. It is dispatch metadata: nothing a plugin receives changes, so it keeps the operation's version |
 | `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
 | `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
@@ -694,7 +701,8 @@ Seven details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to, and `anyOf` and `allOf` say
-  it in that branch's own words. Listing every road not taken buries the one thing a caller has to change. The
+  it in that branch's own words. A `not` has no branch that objected, so it says the value is one its schema excludes,
+  and, where that schema carries a `description`, says what it excludes in the description's words. Listing every road not taken buries the one thing a caller has to change. The
   exception is a branch no pattern could finish measuring: unless a measured branch has already decided the
   combinator, its `pattern_timed_out` is passed up as it stands, at its own pointer, because a branch nobody measured
   gives the combinator no verdict to report.
@@ -892,6 +900,8 @@ lists.
   how other fields are read, as `message.send`'s `compose` changes how the subject and the text are read, is additive
   only when every plugin published under the family before the field existed refuses the input it would misread — as
   the Reply package before 0.10.0 refused any `{{`; otherwise it is breaking.
+- **Metadata** — a field of the second group that only the runtime reads, as `route_channel_argument` and `touch` are,
+  keeps the version: nothing a plugin receives changes.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 - **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
@@ -901,6 +911,10 @@ lists.
   plugin does at the provider grows. The operation's page says in one sentence what the policy was before. A refusal
   that protects a person — `suppressed`, a channel conflict, a stop the register or the provider holds — never relaxes:
   taking such a refusal away is breaking.
+- **Tightening** — an input the schema newly refuses, as `conversation.reply` refuses markup in its `body` from 0.50.0,
+  keeps the version: every input a plugin is still handed is one it was handed before, the caller meets the refusal
+  when the work item is written, and work written before it is refused at its claim as `input_invalid`, final, before
+  anything is sent.
 
 A branch added to an output's `anyOf` keeps the version too, as a new kind of event under `events.read` does: a
 runtime that predates the branch refuses a page that carries it as `result_invalid`, stores nothing from it, keeps the

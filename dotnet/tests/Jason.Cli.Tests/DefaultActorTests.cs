@@ -196,7 +196,7 @@ public class DefaultActorTests
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
         Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
         Assert.Contains("lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, and setting a role's execution profile take no default.", description, StringComparison.Ordinal);
-        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, setting a campaign's send mode and starting a campaign are refused there, and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, since nothing inside a run changes Jason itself.", description, StringComparison.Ordinal);
+        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, setting a campaign's send mode, starting a campaign and asking its manager for a review are refused there, and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, since nothing inside a run changes Jason itself.", description, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -309,8 +309,10 @@ public class DefaultActorTests
         ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference", "unset", "outreach.tone"],
         ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
+        ["campaign", "reopen-contacts", "cmp_A", "--contact", "cnt_A"],
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
+        ["launches", "lift"],
         ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
@@ -345,9 +347,12 @@ public class DefaultActorTests
         ["campaign", "start", "cmp_A"],
         ["campaign", "pause", "cmp_A"],
         ["campaign", "archive", "cmp_A"],
+        ["campaign", "review", "cmp_A"],
         ["campaign", "update-context", "cmp_A", "--unset", "old_pitch"],
         ["campaign", "add-contacts", "cmp_A", "--file", "-"],
         ["campaign", "remove-contacts", "cmp_A", "--contact", "cnt_A"],
+        ["campaign", "finish-contacts", "cmp_A", "--contact", "cnt_A", "--reason", "no answer"],
+        ["campaign", "continue-contacts", "cmp_A", "--contact", "cnt_A"],
         ["campaign", "list-contacts", "cmp_A"],
         ["campaign", "summary", "cmp_A"],
         ["campaign", "activity", "cmp_A", "--since", "2026-10-12T00:00:00Z", "--until", "2026-10-13T00:00:00Z"],
@@ -394,6 +399,7 @@ public class DefaultActorTests
         ["approval", "list-standing", "cmp_A"],
         ["block", "list"],
         ["block", "get", "blk_A"],
+        ["launches", "list", "--campaign", "cmp_A"],
         ["decision", "list"],
         ["decision", "get", "dec_A"],
         ["decision", "raise", "wi_A", "--attempt", "att_A", "--question", "Which tone?"],

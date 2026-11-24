@@ -5,6 +5,7 @@ import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { act, define, menuPointer, systemMenuAfterKey } from './actions';
+import { openedHere, type Opened } from './box-focus';
 import { html, type Html } from './html';
 import { newAgent } from './new-agent';
 import { svg, type IconName } from './icons';
@@ -17,12 +18,13 @@ import { closeFilterMenu, closeRowMenu, drawnRow, recentView, rowElement, rowMen
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 import { updateMark } from '../screens/settings/update-state';
 
-// The console's sidebar, top to bottom: the brand, Search, Dashboard, Needs you with the number of what waits, the Feed,
-// People, Agents, Accounts, More (the screens with no row of their own), the two sections AGENTS and CHATS, each with a
-// plus that makes one (`recent.ts`), and Settings in the foot. The menu and the sections scroll between the brand and
-// the foot, so Settings stays at the foot of the window. Live draws the essentials alone, in the same order: the brand,
-// Search, Needs you, the Feed, Accounts, AGENTS, CHATS and Settings. The rows left out are only not drawn: each page
-// keeps its route and its code, and Search finds every page in both modes. Demo draws the whole list.
+// The console's sidebar, top to bottom: the brand (Jason's mark and wordmark, one button that shows Start), Search,
+// Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More (the screens with no row
+// of their own), the two sections AGENTS and CHATS, each with a plus that makes one (`recent.ts`), and Settings in the
+// foot. The menu and the sections scroll between the brand and the foot, so Settings stays at the foot of the window.
+// Live draws the essentials alone, in the same order: the brand, Search, Needs you, the Feed, Accounts, AGENTS, CHATS
+// and Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds every
+// page in both modes. Demo draws the whole list.
 
 /** Whether the sidebar's menu, More, is open. */
 const open = signal<'more' | null>(null);
@@ -105,29 +107,33 @@ define('side.search', () => {
     openPalette();
 });
 // The plus over AGENTS makes the agent at the click, and its place opens on its Chat, which asks Start's question
-// (`new-agent.ts`); the plus over CHATS makes a chat about no agent.
+// (`new-agent.ts`); the plus over CHATS makes a chat about no agent. Each row, each plus and the Feed's row open a chat
+// by the person's act, so the chat's box takes the focus once it is shown (`box-focus.ts`).
 define('side.start', () => {
+    const opened = openedHere();
     closeMenus();
-    void newAgent();
+    void newAgent(undefined, opened);
 });
 define('side.new', () => {
+    const opened = openedHere();
     closeMenus();
-    here().dock.chat();
+    here().dock.chat(undefined, opened);
 });
 define('side.feed', () => {
     const id = feedId.value;
     if (id === null) return;
+    const opened = openedHere();
     void openConversation(id).then((held) => {
         if (held === null) return;
         feedUnseen.value = false;
-        here().dock.showChat(held);
+        here().dock.showChat(held, opened);
     });
 });
-/** Shows a conversation of either section, as a click on its row does. */
-export function openRow(id: string): void {
+/** Shows a conversation of either section, as a click on its row does: its box takes the focus. */
+export function openRow(id: string, opened: Opened = openedHere()): void {
     supersede();
     void openConversation(id).then((held) => {
-        if (held !== null) here().dock.showChat(held);
+        if (held !== null) here().dock.showChat(held, opened);
     });
 }
 
@@ -135,11 +141,14 @@ define('side.chat', ([id]) => {
     if (typeof id === 'string') openRow(id);
 });
 
-/** Opens an agent with no conversation yet, as the Agents page does: its Chat makes the conversation at the first act. */
-export function openAgentRow(id: string): void {
+/**
+ * Opens an agent with no conversation yet, as the Agents page does: its Chat makes the conversation at the first act, and
+ * its box takes the focus.
+ */
+export function openAgentRow(id: string, opened: Opened = openedHere()): void {
     const row = drawnRow(id);
     supersede();
-    here().dock.chat({ id, name: row?.title ?? id });
+    here().dock.chat({ id, name: row?.title ?? id }, opened);
 }
 
 define('side.agent', ([id]) => {
@@ -185,16 +194,20 @@ define('side.allAgents', () => {
     closeMenus();
     here().dock.show('campaigns');
 });
+// Start too, from Jason's mark: by the dock's own road, as closing the chat shown leads there, so nothing is closed,
+// only chosen, and Back comes back to a page it left. Start's box takes the focus, as a chat's does when it is opened.
 define('side.show', ([panel]) => {
+    const opened = panel === 'start' ? openedHere() : undefined;
     closeMenus();
     if (
+        panel === 'start' ||
         panel === 'dashboard' ||
         panel === 'needs' ||
         panel === 'campaigns' ||
         panel === 'activity' ||
         panel === 'connect'
     )
-        here().dock.show(panel);
+        here().dock.show(panel, opened);
 });
 define('side.page', ([hash]) => {
     closeMenus();
@@ -237,9 +250,11 @@ export function sideView(): Html {
                   ></button>`
         }
         <div class="brand">
-            <img class="mark" src="${assets}favicon.svg" alt="" />
-            <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
-            <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            <button class="home" type="button" aria-label="${t('start.title')}" ${act('side.show', 'start')}>
+                <img class="mark" src="${assets}favicon.svg" alt="" />
+                <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
+                <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            </button>
             <span class="alpha">Alpha</span>
         </div>
         <div class="sscroll">
@@ -272,7 +287,7 @@ export function sideView(): Html {
                               ${feed === currentChat.value ? html`aria-current="true"` : null}
                               ${act('side.feed')}
                           >
-                              ${svg('pulse', 15)}<span>Feed</span>
+                              ${svg('pulse', 15)}<span>${t('side.feed')}</span>
                               ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                           </button>`
                 }

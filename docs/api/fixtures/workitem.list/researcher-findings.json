@@ -40,7 +40,8 @@
         "finished_at": "2026-10-14T01:00:00.000Z",
         "campaign_name": "Nordic pilot",
         "contact_name": "Ingrid Solberg",
-        "running_since": null
+        "running_since": null,
+        "entry": null
       }
     ],
     "next_cursor": null

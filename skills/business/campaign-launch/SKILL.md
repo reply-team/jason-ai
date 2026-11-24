@@ -1,6 +1,6 @@
 ---
 name: campaign-launch
-description: Prepare and launch an outreach campaign with every precondition checked and the user's explicit approval of what will actually be sent. Covers sending capability, step content, schedule, the test send, validation, enrolment and the go-live gate. Use when the user wants to create or start a campaign, add contacts to one, or begin sending — including when they call it a sequence, a cadence or a drip.
+description: Prepare and launch an outreach campaign with every precondition checked and the user's explicit approval of what will actually be sent. Covers sending capability, the content the user reads, timing, the checks before the first message and the go-live gate. Use when the user wants to create or start a campaign, add contacts to one, or begin sending — including when they call it a sequence, a cadence or a drip. `managed-campaign-work` leads the set-up and the start, and uses this skill as its method, so load that one first.
 metadata:
   status: draft
 ---
@@ -25,7 +25,10 @@ and an explicit go-ahead against a preview that names who will receive what.
 
 ## When to use / when NOT to use
 
-- Use to prepare or start a campaign, and to enrol contacts into one.
+- Use to decide what a campaign must have settled before anybody is written to, and whether it is
+  ready.
+- A request to link a campaign to a provider's sequence, or to create one, is answered as *A
+  provider's sequence* below says, and nothing more of this skill applies to it.
 - Do NOT use to turn a business goal into a plan — that is `campaign-planning`.
 - Do NOT use to build the audience first — that is `audience-building`.
 - Do NOT use to analyse a running campaign — that is `performance-analysis`.
@@ -34,25 +37,59 @@ and an explicit go-ahead against a preview that names who will receive what.
   gap; it is not one any more.** A one-person campaign built to work around an absence that has
   since been closed costs more and says less than the send it imitates.
 
+## Jason's set-up, and this skill as its method
+
+`managed-campaign-work` takes the person from their brief to the campaign's start, and this skill
+is the method of that set-up: what a launch must have settled before anybody is written to, and
+why. After the start, Jason's roles write each message for one person and send it as a
+`message.send` of its own, and how many touches one person gets, and how far apart, is the roles'
+under a ceiling the settings hold. Each message waits for the person's yes to exactly what it
+would send, unless they have let that kind of message go without it, so the go-live gate below is
+one decision per message here and never one over the population. `jason campaign start` starts
+Jason's own campaign and nothing at a provider. Which of this skill's operations this build
+performs is for the operations it publishes under `docs/contracts/operations/` to say: today
+`campaign.activate`, `campaign.create` (an empty draft at the provider), `campaign.enroll`,
+`campaign.get`, `campaign.pause`, `engagement.summarize`, `enrollment.list`, `enrollment.stop` and
+`message.send`, and no other. Where this skill's body says "the contract", it means the catalogue
+in `sdr-operations`; the box at its top means the documents under `docs/contracts/operations/`.
+
+### A provider's sequence
+
+A provider's sequence is never offered, also where the account holds some. A word for one is how a
+person names a campaign, not a request for a sequence, and nothing in this skill leads to one.
+Where a person asks directly to link a campaign to a provider's sequence, or to create one there,
+say three things before anything else:
+
+1. Jason's support of a provider's sequences is partial.
+2. In a campaign linked to a provider's sequence Jason sends no letters at all: whether the
+   sequence sends is the sequence's matter, and Jason adds no steps to it.
+3. It may be tried, on the person's yes.
+
+The rule is the campaign's, not one person's: a campaign linked to a sequence gets no letter of
+Jason's own. How it is tried is `managed-campaign-work`'s to say.
+
 ## Prerequisites
 
-- An audience that exists, is defined, and is **frozen as a list** — a segment is criteria, a
-  list is a frozen fact with a date on it, and outreach runs against frozen membership (D1).
-  See `audience-building`.
-- Sending capability that is healthy — read with `sender.health`, never assumed.
+- An audience that exists and is defined, held as a fact with a date on it: the campaign's own
+  members, recorded one by one as they are added, or a frozen list — a segment is criteria, and
+  outreach runs against membership somebody can read back (D1). See `audience-building`.
+- Sending capability that is healthy — read, never assumed (the catalogue's `sender.health`).
 - Deliverability sanity for meaningful volume or a fresh sender (`sending-guardrails`); the same
   for social steps (`linkedin-guardrails`).
-- The operations this skill composes: `campaign.create`, `campaign.clone`, `step.add`,
+- The catalogue's operations a launch touches, for what each reaches, can undo and needs approved:
+  `campaign.create`, `campaign.clone`, `step.add`,
   `variant.add`, `template.create`, `template.publish`, `schedule.set`, `pacing.set`,
   `sender_binding.set`, `reply_policy.set`, `message_element.set`, `sender.health`,
   `capacity.estimate`, `message.draft`, `content_policy.check`, `message_compliance.check`,
   `campaign.test`, `campaign.validate`, `outreach.precheck`, `audience.screen`,
   `operation.preview`, `campaign.enroll`, `stoprule.set`, `campaign.activate`, `campaign.get`,
-  `step.list`, `schedule.resolve`, `enrollment.list`, `engagement.summarize`.
+  `step.list`, `schedule.resolve`, `enrollment.list`, `engagement.summarize`. Which of them this
+  build performs is said above; a name here is not an instruction to call it, and a check nothing
+  performs is named to the user as not made, never improvised.
 
 ## Planning guidance
 
-Settle with the user before building anything:
+Settle with the user before anybody is written to:
 
 1. **Reuse or create.** A campaign that already performs is usually a better starting point than
    a new one. `campaign.clone` copies structure, steps, variants, schedule, pacing and reply
@@ -64,8 +101,10 @@ Settle with the user before building anything:
    time whatever the operator would prefer (A20).
 3. **Which contacts** — the frozen list, or the criteria plus the list they were drawn from. The
    count matters, but the count is not what the user approves; the preview names them.
-4. **The content, written with the user.** Never invent outreach copy silently and never send
-   copy the user has not read. Drafting together is part of the work, not a preliminary.
+4. **The content, read by the user before it goes.** Never invent outreach copy silently and never
+   send copy the user has not read. With Jason a writing role drafts it after the start, and each
+   of its messages comes to the user before it goes unless they let that kind go without them;
+   drafting is part of the work, not a preliminary.
    - **A first message is short, and built on what is known about the person**: something that
      happened to them or that they said, held in their record or stated by the user — not a title
      or a company's name alone, and never the criteria a search drew the list by: they say how
@@ -79,36 +118,42 @@ Settle with the user before building anything:
      where that claims what nothing known supports, say so first.
    - TODO(expert): which openers to avoid beyond one that claims to know the person; subject
      lines; what the one ask should be.
-5. **Cadence and channel mix.** A step is channel × execution mode × kind, and the three are
+5. **Cadence and channel mix.** With Jason a campaign runs one message at a time, each next one
+   decided when it is due. A touch is channel × execution mode × kind, and the three are
    independent (E9); every interval carries a unit, a stated basis — calendar days, working days
    or sending days — and whose calendar (E7).
    - TODO(expert): step count and intervals by segment and channel; when a channel should
      lead versus follow; how long to keep following up before stopping.
    - The contract answers none of that on purpose. Cadence length, touch count and days between
-     are inputs to `step.add`, per campaign, because no credible cross-vendor standard exists —
+     are set per campaign, as the next message when it is due, because no credible cross-vendor
+     standard exists —
      the contract ships the shape and no number. The marker above stays until an outbound expert
      supplies one; it is not a lookup that somebody forgot to do.
 
-**The user's word for it is an input, not the concept.** "Sequence", "cadence", "drip", "play" —
-`term.resolve` maps the word onto the concept and the plan is then written as `campaign`.
-`sequence` is retired rather than aliased: a plan step that names it names something that does
-not exist.
+**The user's word for it is an input, not the concept.** "Sequence", "cadence", "drip", "play"
+name a campaign, and the plan is written as `campaign` (the catalogue's `term.resolve` is that
+mapping); `sequence` is retired rather than aliased: a plan step that names it names something
+that does not exist. A word for a provider's programme is not a request for one: a direct request
+is answered as *A provider's sequence* above says.
 
 ## Execution guidance
 
 **The order is not in this skill, and must not be copied into it.** Chain 1 in the
 `sdr-operations` reference `references/chains.md` — *Launching outreach to two hundred people
-from a raw file* — is the launch chain, with the decision, the gate and the prevented failure at
-each of its 26 steps. Read it there and follow it there. An order written in two places drifts,
-and the copy that drifts is always the one further from the contract.
+from a raw file* — is the catalogue's launch chain, with the decision, the gate and the
+prevented failure at each of its 26 steps. Read it there. With Jason the order is the runtime's
+and its roles', and each check is made where the runtime makes it, so the chain is the list of
+what must have been checked, not steps to perform. An order written in two places drifts, and
+the copy that drifts is always the one further from the contract.
 
 What follows is only what this skill adds: the judgement the chain deliberately leaves out, and
 the steps a launch plan most often drops.
 
 ### Sending capability is a hard stop, not a warning
 
-`sender.health` first. No healthy sender is a **hard stop** — the user must connect one. Never
-attempt to send anyway, and never route around it. A capacity budget reporting `remaining:
+Sending capability is read first. No healthy sender is a **hard stop** — the user must connect one. Never
+attempt to send anyway, and never route around it. A start of Jason's campaign is no send; the set-up says it plainly
+and the person may still start. A capacity budget reporting `remaining:
 unknown` is a real answer and is not the same fact as ample remaining (A6). Where authentication
 fails, `authentication_requirement.list` names what has to be published — **publishing it is not
 ours to do.** It happens in a system this contract has no reach into, usually owned by another
@@ -118,7 +163,9 @@ not a failure of the skill.
 ### The steps a launch plan usually omits
 
 Each exists to prevent one specific failure. A step whose failure cannot be named is a step
-somebody added because it felt careful; these three are not that.
+somebody added because it felt careful; these three are not that. Each is a check, whoever makes
+it: an operation the runtime performs, a check the runtime makes at each send, or the user by
+hand. Where nothing makes it, the user is told so.
 
 | Step | The failure it prevents |
 |---|---|
@@ -149,7 +196,7 @@ experiments, and multi-channel work is expressed by the step's own channel and e
 their own interface — but check first, because the two gaps this skill used to declare are both
 closed.
 
-### Enrolment carries three decisions with no default
+### Enrolment into a provider's programme carries three decisions with no default
 
 `campaign.enroll` takes an explicit **collision policy**, an explicit **start position** and an
 explicit **first-touch timing**; none of the three may be defaulted (G7). Reconcile every
@@ -166,6 +213,11 @@ fresh `campaign.enroll`, which keeps the ended participation as history instead 
 that never happened.
 
 ### The go-live gate
+
+This gate is a provider's programme's: one decision over a population. Where messages go one at a
+time, as Jason's do, each is its own decision, approved as it goes or released by a standing
+choice the user made, and no single act releases the population; E2 still holds: no route may
+cost fewer approvals than the people it reaches.
 
 Read this before quoting any older description of it, because the previous version of this skill
 was wrong about it. `campaign.activate` is **`confirm_once` with a mandatory preview**. It is not
@@ -198,6 +250,10 @@ The derivation itself, what a valid confirmation looks like and the release-vers
 distinction are in `approval-boundaries`. Do not restate them here.
 
 ### Before walking away
+
+This section and the two after it, *Validation* and *Reporting*, are written for a provider's
+programme: at the start of Jason's own campaign, read back that it is `active`, and name a step, a
+count or a check that does not apply as not made, never as none.
 
 Confirm the state actually flipped by reading it back, and set what stops the work by itself:
 `stoprule.set` over bounce rate, complaint rate, negative-reply rate, opt-out rate, error rate,
@@ -252,7 +308,7 @@ used (M4), so "too early to say" is a reportable answer rather than a guess.
 
 ## Safety
 
-Activating a campaign, enrolling contacts into a live one, resuming a paused campaign and
+For a provider's programme: activating a campaign, enrolling contacts into a live one, resuming a paused campaign and
 lifting a freeze are all **releases of sending**, and each is approved against a preview that
 names its backlog (E3). Pausing is the cheap direction: `campaign.pause` and `enrollment.pause`
 are `auto` and never wait for permission, while `campaign.resume`, `campaign.unfreeze` and
@@ -261,13 +317,15 @@ up (L6).
 
 `campaign.archive` is refused while active enrolments remain unless those are first stopped with
 a reason — retiring a campaign is its own act with its own confirmation, never a tail-end step of
-a launch. A single message to one named person is `message.send` at `confirm_each`, which is a
+a launch. Jason's own campaign is resumed and archived on the person's word, as `managed-campaign-work` says. A
+single message to one named person is `message.send` at `confirm_each`, which is a
 different gate from anything on this page. Full rules: `approval-boundaries`.
 
 ## Related skills
 
+- `managed-campaign-work` — leads the set-up and the start, and uses this skill as its method.
 - `campaign-planning` — turns a business goal into the plan this skill executes.
-- `audience-building` — the audience must exist and be frozen first.
+- `audience-building` — the audience must exist and be defined first.
 - `sending-guardrails` · `linkedin-guardrails` — the limits that constrain volume and pacing.
 - `performance-analysis` — the follow-up once the campaign runs.
 - `approval-boundaries` — the derivation behind the go-live gate, and what a preview must
@@ -277,6 +335,14 @@ different gate from anything on this page. Full rules: `approval-boundaries`.
 
 ## Changelog
 
+- 3.2.0 (2026-11-22): the method of Jason's set-up: `managed-campaign-work` leads the set-up and
+  the start and uses this skill as its method, and the description sends a host there first. A
+  provider's programme of steps is not the campaign: with Jason a campaign runs one message at a
+  time, and how many touches one person gets, and how far apart, is the roles' under a ceiling the
+  settings hold. A provider's sequence is never offered; a direct request to link a campaign to one,
+  or to create one, is answered with three things: the support is partial, a linked campaign gets
+  no letters of Jason's own, and it may be tried on the person's yes. The catalogue's operations are
+  named for what they are, not as calls, and the section on Jason says which this build performs.
 - 3.1.0 (2026-11-15): a first message is short and built on what is known about the person, never
   on a search's criteria; the openers to avoid, subject lines and the ask stay marked for an expert.
 - 3.0.0 (2026-08-10): breaking, against the 325-operation contract. Every operation this skill

@@ -17,6 +17,28 @@ public static partial class JournalKinds
     public const string ContextUpdated = "context_updated";
     public const string ContactsAdded = "contacts_added";
     public const string ContactsRemoved = "contacts_removed";
+
+    /// <summary>
+    /// One request ended people's lines in a campaign, which cancels their open touches there: the counts of its items, the
+    /// people whose line it ended, and the reason, which is required.
+    /// </summary>
+    public const string ContactsFinished = "contacts_finished";
+
+    /// <summary>One request continued the paused lines of people in a campaign: the counts of its items and the people enrolled again.</summary>
+    public const string ContactsContinued = "contacts_continued";
+
+    /// <summary>
+    /// One request reopened people's ended lines in a campaign: the counts of its items, the people enrolled again, and the
+    /// question whose answer carried the person's decision where a run sent it.
+    /// </summary>
+    public const string ContactsReopened = "contacts_reopened";
+
+    /// <summary>
+    /// A reply line paused a person's line in a campaign: the person, enrolled until then, is <c>paused</c>, so the claim takes
+    /// none of their touches there until the line is continued or ended. Names the person and the reply line, by ids only,
+    /// written by the respond step as the dispatcher.
+    /// </summary>
+    public const string ContactsPaused = "contacts_paused";
     public const string ContactCreated = "contact_created";
     public const string ContactUpdated = "contact_updated";
     public const string ContactArchived = "contact_archived";
@@ -361,6 +383,22 @@ public static partial class JournalKinds
     /// </summary>
     public const string SubscriptionCursorRewound = "subscription_cursor_rewound";
 
+    /// <summary>
+    /// A person lifted the daily limits of launches for the rest of the installation's day: keyed by the local date it
+    /// covers, with the UTC instant of the next local midnight it lasts until, the zone, and how many held items it let go.
+    /// Written by <c>launches.lift</c> only, once a day, as the person who asked, with their reason; it names no campaign,
+    /// and no program may subscribe to it.
+    /// </summary>
+    public const string LaunchLimitLifted = "launch_limit_lifted";
+
+    /// <summary>
+    /// A person asked a campaign's manager for a review now: keyed by the depth asked for, <c>quick</c> or <c>deep</c>, with
+    /// the check-in it made and that check-in's entry. Written by <c>campaign.review</c> only, as the person who asked, with
+    /// their reason, in the same save as the check-in. It is no manager trigger, so it summons nothing, and no program may
+    /// subscribe to it.
+    /// </summary>
+    public const string ReviewRequested = "review_requested";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -371,6 +409,10 @@ public static partial class JournalKinds
         ContextUpdated,
         ContactsAdded,
         ContactsRemoved,
+        ContactsFinished,
+        ContactsContinued,
+        ContactsReopened,
+        ContactsPaused,
         ContactCreated,
         ContactUpdated,
         ContactArchived,
@@ -444,6 +486,8 @@ public static partial class JournalKinds
         PreferenceUnset,
         SubscriptionFailed,
         SubscriptionCursorRewound,
+        LaunchLimitLifted,
+        ReviewRequested,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

@@ -71,6 +71,10 @@ public sealed class JournalKindInventoryTests
         JournalKinds.CampaignArchived,
         JournalKinds.ContactsAdded,
         JournalKinds.ContactsRemoved,
+        JournalKinds.ContactsFinished,
+        JournalKinds.ContactsContinued,
+        JournalKinds.ContactsReopened,
+        JournalKinds.ContactsPaused,
         JournalKinds.ContactCreated,
         JournalKinds.ContactUpdated,
         JournalKinds.ContactArchived,
@@ -118,6 +122,8 @@ public sealed class JournalKindInventoryTests
         JournalKinds.PreferenceUnset,
         JournalKinds.SubscriptionFailed,
         JournalKinds.SubscriptionCursorRewound,
+        JournalKinds.LaunchLimitLifted,
+        JournalKinds.ReviewRequested,
     };
 
     /// <summary>

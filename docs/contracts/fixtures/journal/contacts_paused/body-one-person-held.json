@@ -1,0 +1,7 @@
+{
+  "kind": "contacts_paused",
+  "version": 1,
+  "case": "a reply holds the enrolled person who wrote it",
+  "body": { "key": null, "old": null, "new": { "contact_ids": ["cnt_01JC0000000000000000000003"], "line": "jrn_01JC0000000000000000000009" } },
+  "expect": "valid"
+}

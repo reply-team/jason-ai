@@ -152,13 +152,14 @@ public sealed class NotificationSender(
         var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
         var held = await HeldAsync(ct).ConfigureAwait(false);
         var bounces = await BouncesAsync(request, ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0 && bounces == 0)
+        var replies = await RepliesAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0 && bounces == 0 && replies == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held, bounces);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held, bounces, replies);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -185,7 +186,8 @@ public sealed class NotificationSender(
             gaps,
             blocks.Blocks,
             held,
-            bounces);
+            bounces,
+            replies);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -296,6 +298,32 @@ public sealed class NotificationSender(
     }
 
     /// <summary>
+    /// The replies a role judged a person's own in a run, in the same window as failed protective work: after the line the
+    /// last notification that reached anybody covered, through the line this one covers. Counted by reply — the key every
+    /// verdict on one reply carries, in each campaign that judged it — less the replies a verdict of the same marks said at or
+    /// before the window's start, so a reply judged again later is not said again. The database counts them. With
+    /// <c>Notifications:Replies</c> off, none is counted.
+    /// </summary>
+    private async Task<int> RepliesAsync(NotificationRequest request, CancellationToken ct)
+    {
+        if (request.CoveredThrough is null || !settings.Current.Replies)
+        {
+            return 0;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            return 0;
+        }
+
+        return await ReplyLines.Count(db, after.Value, upTo.Value).SingleAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// The provider blocks opened in the same window — said first after the line the last notification that reached
     /// anybody covered, through the line this one covers — and still open as this one is sent, counted by block, with the
     /// work items their open waits hold now. A block cleared before the send is not said: nothing waits on it any more.
@@ -353,21 +381,15 @@ public sealed class NotificationSender(
     }
 
     /// <summary>
-    /// The items that wait on a daily limit of launches as this one is sent, in every campaign: a wait with no attempt and
-    /// no block, on an item whose last error carries either word. Counted now, as approvals are, so a hold let go before
-    /// the send is not said and one still standing is said again beside whatever woke the next pointer. The error is a
-    /// converted column, so the word is read here rather than in the query.
+    /// The items that wait on a daily limit of launches as this one is sent, in every campaign, as <c>launches.list</c>
+    /// counts them (<see cref="Launches.LaunchHolds"/>). Counted now, as approvals are, so a hold let go before the send is
+    /// not said and one still standing is said again beside whatever woke the next pointer.
     /// </summary>
     private async Task<int> HeldAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
-        var errors = await db.WorkItemWaits.AsNoTracking()
-            .Where(wait => wait.Status == WaitStatus.Open && wait.AttemptId == null && wait.ProviderBlockId == null)
-            .Select(wait => wait.WorkItem!.LastError)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-        return errors.Count(error => AttemptErrors.IsDailyHold(error?.Code));
+        return await Launches.LaunchHolds.CountAsync(db, campaignId: null, ct).ConfigureAwait(false);
     }
 
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>

@@ -140,12 +140,13 @@ function readIfThere(file: string): string | null {
  * list's verbs are run: the host's own rule lets each through (`modeFence`), and the chat's instructions keep each to the
  * person's word. Below Claude Code's floor of Full access one principle draws the line: outside Full access, an act that
  * lets sends go without the person's approval is a card by whichever door, and an act that only narrows needs none. So
- * an approval approved or rejected, a standing approval taken back, a question answered and a campaign started run with
+ * an approval approved or rejected, a standing approval taken back, a question answered, a campaign started and a review
+ * asked of a campaign's manager run with
  * no card; a standing approval set, which releases sends nobody reads, does not. From the floor on, where the hook rides
  * an Ask first or Auto-edit turn, every jason verb runs with no card but the forms of `askingCardedForms`. They stay on
  * the deny list, which Plan only still reads.
  */
-export const personsWordVerbs: readonly string[] = ['approval approve', 'approval reject', 'approval unset-standing', 'decision answer', 'campaign start'];
+export const personsWordVerbs: readonly string[] = ['approval approve', 'approval reject', 'approval unset-standing', 'decision answer', 'campaign start', 'campaign review'];
 
 /**
  * The preferences a person's word sets or unsets with no card outside Plan only: the sender's identity and the tone of
@@ -227,12 +228,13 @@ export const askingCardedForms: readonly CardedForm[] = [
 export const cliCommandTree: readonly string[] = [
     'approval approve', 'approval get', 'approval list', 'approval list-standing', 'approval reject', 'approval set-standing',
     'approval unset-standing', 'audience availability', 'audience filter-values', 'audience preview', 'block clear', 'block get', 'block list',
-    'campaign activity', 'campaign activity-by-period', 'campaign add-contacts', 'campaign archive', 'campaign audience', 'campaign create',
-    'campaign get', 'campaign list', 'campaign list-contacts', 'campaign pause', 'campaign remove-contacts', 'campaign set-send-mode',
-    'campaign start', 'campaign summary', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
+    'campaign activity', 'campaign activity-by-period', 'campaign add-contacts', 'campaign archive', 'campaign audience',
+    'campaign continue-contacts', 'campaign create', 'campaign finish-contacts', 'campaign get', 'campaign list', 'campaign list-contacts',
+    'campaign pause', 'campaign remove-contacts', 'campaign reopen-contacts', 'campaign review', 'campaign set-send-mode', 'campaign start', 'campaign summary',
+    'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact get',
     'contact list', 'contact thread', 'contact threads', 'contact update', 'decision answer', 'decision get', 'decision list', 'decision raise',
     'doctor', 'events backfill', 'events signal', 'events sources', 'export', 'import', 'install', 'journal append', 'journal kinds', 'journal list',
-    'journal watch', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
+    'journal watch', 'launches lift', 'launches list', 'logs', 'notification disable', 'notification enable', 'operation describe', 'plugin grant', 'plugin install', 'plugin list',
     'plugin reload', 'plugin revoke', 'preference list', 'preference set', 'preference unset', 'profile create', 'profile disable', 'profile enable',
     'profile get', 'profile list', 'profile set-default', 'profile unset-default', 'profile update', 'project create', 'project get', 'project link',
     'project list', 'project update', 'reply count', 'reply record', 'report get', 'report list', 'report submit', 'role add', 'role list',
@@ -268,8 +270,8 @@ export function modeFence(fence: ChatFence, mode: ChatMode): ChatFence {
  * gains such an option is red there until it is named here.
  */
 export const requestFileVerbs: readonly string[] = [
-    'campaign add-contacts', 'campaign archive', 'campaign create', 'campaign pause', 'campaign remove-contacts', 'campaign start', 'campaign update',
-    'campaign update-context', 'contact archive', 'contact create', 'contact update', 'journal append', 'preference set', 'profile create',
+    'campaign add-contacts', 'campaign archive', 'campaign continue-contacts', 'campaign create', 'campaign finish-contacts', 'campaign pause',
+    'campaign remove-contacts', 'campaign reopen-contacts', 'campaign start', 'campaign update', 'campaign update-context', 'contact archive', 'contact create', 'contact update', 'journal append', 'preference set', 'profile create',
     'profile update', 'project create', 'project update', 'report submit', 'role add', 'rolenote set', 'workitem cancel', 'workitem complete',
     'workitem create', 'workitem resume', 'workitem set-result', 'workitem update',
 ];

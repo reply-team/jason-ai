@@ -36,7 +36,8 @@ public static class ConfinedVerbs
         /// Verbs the chat refuses beyond the CLI's no-default set: adding a role, linking a project's folder, starting a
         /// campaign or resuming one, which is what lets its queued work run, and archiving one, which no verb undoes: it
         /// cancels its open work but a search's stop, with each item's approval whether still asked or already given,
-        /// stops its running attempts once the archive is committed, and cancels its pending questions.
+        /// stops its running attempts once the archive is committed, and cancels its pending questions; and asking a
+        /// campaign's manager for a review, which launches a check-in on the person's word.
         /// </summary>
         ChatsOwn,
     }
@@ -52,8 +53,10 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "preference set"),
         (Kind.PersonsWord, "preference unset"),
         (Kind.PersonsWord, "campaign set-send-mode"),
+        (Kind.PersonsWord, "campaign reopen-contacts"),
         (Kind.PersonsWord, "block clear"),
         (Kind.PersonsWord, "workitem resume"),
+        (Kind.PersonsWord, "launches lift"),
         (Kind.PersonsWord, "workitem review"),
         (Kind.PersonsWord, "report submit"),
         (Kind.PersonsWord, "subscription rewind"),
@@ -82,6 +85,7 @@ public static class ConfinedVerbs
         (Kind.ChatsOwn, "project link"),
         (Kind.ChatsOwn, "campaign start"),
         (Kind.ChatsOwn, "campaign archive"),
+        (Kind.ChatsOwn, "campaign review"),
     ];
 
     /// <summary>The one sentence a refused command is answered with, on standard error.</summary>
@@ -100,9 +104,11 @@ public static class ConfinedVerbs
     /// <summary>
     /// The entries of a person's own word that a role runs itself, whose help therefore never says the act is the
     /// person's: <c>workitem review</c>, which the critic sends from its own run, <c>report submit</c>, whose reporter may
-    /// be a role, and <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not.
+    /// be a role, <c>workitem resume</c>, which ends a wait on the word of whoever is named, a person or not, and
+    /// <c>campaign reopen-contacts</c>, which a run sends carrying the question the person answered, and whose own help
+    /// says whose decision it is.
     /// </summary>
-    public static IReadOnlyList<string> RunByARole { get; } = ["workitem review", "report submit", "workitem resume"];
+    public static IReadOnlyList<string> RunByARole { get; } = ["workitem review", "report submit", "workitem resume", "campaign reopen-contacts"];
 
     /// <summary>
     /// What the help of a person's own word says before <see cref="Help"/>, on every entry of that kind but those a role

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.Skills;
 
@@ -12,6 +13,7 @@ public partial class InteractiveSkillTests
     /// chat of Jason Desktop links a project too, with the folder named, since its turns run in a folder of their own.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_moves_the_root_by_the_setting_and_then_a_link_per_project()
     {
         var skill = Flattened("operating-the-installation");
@@ -39,6 +41,7 @@ public partial class InteractiveSkillTests
     /// the request for the yes, judged a runtime with nothing in flight safe to restart, and went to run it without a word.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_once_that_a_stop_it_runs_is_asked_first()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -89,6 +92,7 @@ public partial class InteractiveSkillTests
     /// so the sentence's ten seconds is held to the setting's default.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_a_stop_does_in_one_sentence()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -123,6 +127,7 @@ public partial class InteractiveSkillTests
     /// paragraph is held whole, so a fifth use added to it is as red as one taken away.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_sends_a_person_to_the_provider_s_web_app_for_four_things_only()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -150,6 +155,7 @@ public partial class InteractiveSkillTests
     /// knows which of the two cases it is in.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_an_update_does_for_the_skills()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -222,16 +228,26 @@ public partial class InteractiveSkillTests
 
     /// <summary>
     /// When the pointer is sent: a person waited for, a protective action that failed, a span of an account's events Jason
-    /// will not read, and an open provider block. A skill that named fewer would have a session tell a person that a
+    /// will not read, an open provider block, and an item held at a daily limit of launches, whose pointer gives the
+    /// person's way out itself. A skill that named fewer would have a session tell a person that a
     /// notification about the others cannot have come from Jason.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_a_failed_protective_action_and_a_span_not_read_are_told_as_well()
     {
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once, with a pointer: how many, and where to look.",
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, when a provider block is open, when an item is held at a daily limit of launches, when an email bounces, or when a role has judged a reply a person's own, it tells them once, with a pointer: how many, and where to look.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "One that says items wait on a daily limit gives the person's way out itself, \"tell your agent: ignore the limit\"; read what is held (`jason launches list` for how many and the limits, then the waiting items whose `last_error` is `launches_spent` for which) and lift it only on their word, as `managed-campaign-work`'s \"Ignore the limit\" says.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "`jason launches list` says what the daily limits of launches are: each role's limit a day as the runtime reads it now, from the default or the settings, the installation's day they count in, a lift that stands, and how many items are held",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -239,6 +255,13 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("it tells them once, with a pointer: how many wait, and where to look.", skill, StringComparison.Ordinal);
+
+        // What a channel did last is when it last sent: a toast the switch kept off yesterday says nothing of a switch on
+        // today, and a session that read it as the present told the person nothing reaches them.
+        Assert.Contains(
+            "What a channel did last, which the `Notify:` line says, is history where it is older than the switches' present reading: a toast refused yesterday by a switch that is on now says nothing of today. Say what `jason status`'s `notifications` check says now, and the old outcome, if at all, as what happened then.",
+            skill,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -247,6 +270,7 @@ public partial class InteractiveSkillTests
     /// not do, so that a session neither promises a reply was sent nor runs it on its own judgement because a gap showed.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_reads_an_account_s_record_and_reads_a_span_again_only_on_a_yes()
     {
         var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -279,6 +303,7 @@ public partial class InteractiveSkillTests
     /// that stopped to ask, or took the walk for the job, would keep the person from the work they came for.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_hands_a_ready_installation_to_quick_start()
     {
         var skill = Flattened("operating-the-installation");
@@ -313,6 +338,7 @@ public partial class InteractiveSkillTests
     }
 
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_a_session_cannot_do_and_what_is_not_released_yet()
     {
         var skill = Flattened("operating-the-installation");
@@ -493,12 +519,28 @@ public partial class InteractiveSkillTests
 
     /// <summary>The list of what a notification says names a provider block, and where its pointer sends the person.</summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_a_notification_points_at_a_provider_block()
     {
         var skill = Flattened("operating-the-installation");
 
-        Assert.Contains("when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once", skill, StringComparison.Ordinal);
+        Assert.Contains("when it finds a span of an account's events it will not read, when a provider block is open, when an item is held at a daily limit of launches, when an email bounces, or when a role has judged a reply a person's own, it tells them once", skill, StringComparison.Ordinal);
         Assert.Contains("One that says provider blocks hold work items sends you to `jason block list`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A pointer that says replies came in names no command either, so the agent is the door again: the skill says which
+    /// verdicts it counts, where they are read beside the ones it does not, and the one line that turns replies off alone.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
+    public void The_operating_skill_says_where_an_agent_reads_the_replies_a_pointer_counts_and_how_they_are_turned_off()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("One that says replies came in names no command and leaves them to you as well: it counts each reply once, by the `reply_classified` verdicts a run recorded — the line names an attempt — whose `new.nature` is `person` and which carry no `confined` mark, however many campaigns judged it;", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason journal list --kind reply_classified` lists every verdict, of every nature and by whoever recorded it, so keep those and say who replied, where a line names a contact, and in which campaign.", skill, StringComparison.Ordinal);
+        Assert.Contains("`Notifications:Replies` set to `false` in the same file turns replies alone off, with no verb, and leaves every channel as it is.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -506,6 +548,7 @@ public partial class InteractiveSkillTests
     /// read and that the one list that shows them shows other events beside them.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_where_an_agent_reads_the_bounces_a_pointer_counts()
     {
         var skill = Flattened("operating-the-installation");
@@ -522,6 +565,7 @@ public partial class InteractiveSkillTests
     /// person for, and says what to do when npm refuses a global install.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_the_four_acts_that_connect_a_provider_and_the_refused_global_install()
     {
         var skill = Flattened("operating-the-installation");
@@ -552,6 +596,7 @@ public partial class InteractiveSkillTests
     /// registration records, and the repair, whose restart is a stop and asked first like every other.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill a person's session reads teaches what was not decided")]
     public void The_operating_skill_says_what_search_path_a_macos_logon_start_has_and_the_repair()
     {
         var skill = Flattened("operating-the-installation");

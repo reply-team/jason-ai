@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Contracts.Api;
 using Jason.Contracts.Notifications;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -9,6 +10,7 @@ using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Desktop;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Dispatch;
+using Jason.Runtime.Tests.Journal;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Integration;
@@ -102,6 +104,88 @@ public sealed class NotificationsAfterARestartTests
             Assert.Equal(
                 ("ok", "Notifications reach you by toast; none has reached you since this runtime started."),
                 ((string?)check["state"], (string?)check["fact"]));
+        }
+        finally
+        {
+            await later.StopAsync();
+        }
+    }
+
+    /// <summary>
+    /// A reply a run judged a person's own after the last notification an earlier runtime wrote, the run ended before that
+    /// runtime stopped: the later runtime folds it in at its first scan as a burst to say, the one line that woke it being the
+    /// run's end, and says it once its start grace has passed — which this test does not wait for, since saying it would be a
+    /// toast.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_judged_before_a_restart_waits_to_be_said_after_it()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff, Ct);
+
+        var earlier = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
+        try
+        {
+            await using var scope = earlier.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var writer = new JournalWriter(TimeProvider.System);
+            var line = new NotificationLine("ntf_earlier", 0, 0, null, [ChannelOutcome.Delivered("toast", ChannelKinds.Toast)], DateTime.UtcNow.AddHours(-2));
+            writer.Append(db, Actors.Runtime, JournalKinds.NotificationSent, campaign: null, key: "notification", updated: line.ToJson());
+            await db.SaveChangesAsync(Ct);
+
+            // The responder's run: its verdict on the reply, then its end, both after the earlier line.
+            var now = DateTime.UtcNow;
+            var campaign = WorkItemFactory.NewCampaign(now: now);
+            var item = WorkItemFactory.NewAiRole(campaign, "responder", now);
+            item.Status = WorkItemStatus.Succeeded;
+            item.FinishedAt = now;
+            var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, now);
+            db.Campaigns.Add(campaign);
+            db.WorkItems.Add(item);
+            await db.SaveChangesAsync(Ct);
+            writer.AppendDocumented(
+                db,
+                new Jason.Contracts.Api.ActorRef(Jason.Contracts.Api.ActorType.Attempt, attempt.PublicId),
+                JournalKinds.ReplyClassified,
+                campaign,
+                key: "sha256:a-reply",
+                with: new JsonObject { ["contact_id"] = null, ["decision_id"] = null, ["answered_by"] = null, ["nature"] = "person" },
+                workItem: item,
+                attempt: attempt);
+            writer.AppendDocumented(db, Actors.Dispatcher, JournalKinds.WorkItemSucceeded, campaign, workItem: item, attempt: attempt);
+            await db.SaveChangesAsync(Ct);
+        }
+        finally
+        {
+            await earlier.StopAsync();
+        }
+
+        File.Delete(dir.Paths.UserSettingsFile);
+        var later = await RuntimeHost.StartAsync(
+            dir.Paths,
+            TestRuntimeOptions.Quiet with
+            {
+                ConfigureServices = services =>
+                {
+                    TestRuntimeOptions.TurnTheOutsideOff(services);
+                    services.PostConfigure<NotificationsOptions>(notifications => notifications.Enabled = true);
+                    services.AddSingleton(Presence.Desktop);
+                    services.AddSingleton<IToastLauncher>(new NoLaunch());
+                },
+            },
+            Ct);
+        try
+        {
+            var state = later.Services.GetRequiredService<NotifierState>();
+            Assert.True(
+                await DispatchHarness.EventuallyAsync(() => state.Started, Ct),
+                "The later runtime's notifier never started, so nothing below is about a restart.");
+
+            var pending = state.Pending;
+            Assert.True(pending is not null, "The reply judged before the restart is not waiting to be said after it.");
+            Assert.Equal(1, pending.Lines);
+            Assert.False(state.InFlight);
         }
         finally
         {

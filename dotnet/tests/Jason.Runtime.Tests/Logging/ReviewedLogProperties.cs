@@ -67,8 +67,8 @@ internal static class ReviewedLogProperties
         // Codes and closed words, and the envelope's level. A code is the runtime's own constant or a plugin outcome's
         // code, which the outcome validator holds to a snake_case token of at most 64 characters before anything logs it
         // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker, SubscriptionRunner, which writes "none" for a
-        // handler that succeeded, and Responder and BounceStep, whose codes are their own skip codes and the code of a
-        // domain error that refused a line). Verdict is "succeeded", "unknown", or "failed" or "protocol_failure" followed
+        // handler that succeeded, and Responder, BounceStep and HeldSendCancels, whose codes are their own skip codes, the
+        // code of a domain error that refused a line or a take-back, and write_refused). Verdict is "succeeded", "unknown", or "failed" or "protocol_failure" followed
         // by a closed failure class and such a code (PluginInvoker).
         "Code", "Codes", "Class", "Verdict", "Source", "Console", "Section", "Channel", "Activated", "Operation",
         "EnvName", "SourceContext", "EventId", "@l",

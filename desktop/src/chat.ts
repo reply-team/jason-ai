@@ -1152,12 +1152,18 @@ export class Chat {
     }
 
     /**
-     * A conversation to start in: a new set-up chat when no campaign is named, else the campaign's conversation, the
-     * one it has or a new one named after it. A new conversation is in Full access, works in a folder of its own, and is
-     * kept once its first turn has started.
+     * A conversation to start in: a new chat about no campaign when no campaign is named, else the campaign's
+     * conversation, the one it has or a new one named after it. A chat about no campaign begun from Start's box, which
+     * `begun` names by the one word `start`, is marked so (`from_start`), and its header says it is where a campaign is set
+     * up; any other chat about no campaign, the Chats plus's, is a chat about no agent, and anything else in `begun` is no
+     * mark. A new conversation is in Full access, works in a folder of its own, and is kept once its first turn has started.
      */
-    async create(campaignId?: unknown): Promise<ConversationSummary> {
-        if (campaignId === undefined || campaignId === null) return this.#summaryOf(this.#made(null, 'New chat'));
+    async create(campaignId?: unknown, begun?: unknown): Promise<ConversationSummary> {
+        if (campaignId === undefined || campaignId === null) {
+            const made = this.#made(null, 'New chat');
+            if (begun === 'start') made.from_start = true;
+            return this.#summaryOf(made);
+        }
         if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const existing = this.#ofCampaign(campaignId);
         if (existing !== undefined) return this.#summaryOf(existing);
@@ -1950,7 +1956,7 @@ export class Chat {
         const replyTo = running.replyTo;
         const main = conversation.main === true;
         const setup = conversation.campaign_id === null && !main;
-        let about: About = main ? { main: true, campaign: null } : { campaign: null };
+        let about: About = main ? { main: true, campaign: null } : conversation.from_start === true ? { fromStart: true, campaign: null } : { campaign: null };
         let added: string[] = [];
         let places: MemoryPlace[] = [];
         let before: Listed | null = null;

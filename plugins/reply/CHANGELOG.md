@@ -3,6 +3,22 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.19.1
+
+- `conversation.reply` now sends an email reply's text as HTML that shows exactly that text, as `message.send` sends a
+  direct email's: every character HTML reads as markup escaped, and every line break a `<br>`. Reply takes an email
+  reply's body as HTML, and earlier versions passed the text as written: a line break in it is no line break in HTML,
+  and a tag a draft carried, a `<br>` written after a thread read with its markup, was read as markup on the way to the
+  person it reached, where the person approving it had read the tag itself. A LinkedIn reply's text still goes as
+  written.
+- An email reply whose text holds a `<` right before an ASCII letter, `/`, `!` or `?`, an address between angle brackets
+  for one, is now refused before anything is called, `message_invalid`, as a direct email is: Reply decodes an email's
+  body before it reads it and drops a tag it does not know with everything after it, so the reply would have arrived cut
+  there. The reason names the character without quoting the text. Write the address without its angle brackets.
+- From 0.50.0, Jason itself refuses a reply's text with a tag or an HTML entity in it, when the work item is written,
+  before anybody is asked, whatever package performs the reply; this package needs nothing of it. `jason update apply`
+  brings Jason 0.50.0 and this package together.
+
 ## 0.19.0
 
 - Needs reply-cli 0.22.0 or newer, the release that prints a mailbox's two limits on a direct email, its daily limit and

@@ -96,6 +96,7 @@ public partial class LaunchContractTests
     /// words as overruled by a client's, or a preference as overruled by a file.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_launch_contract_reads_the_persons_words_in_one_order_and_by_path()
     {
         var contract = Flattened(LaunchContract.Extract(SkillPack.All().First(skill => skill.IsRole).File) ?? string.Empty);
@@ -153,6 +154,7 @@ public partial class LaunchContractTests
     /// still said it names a campaign and a role would send a role to one level of three.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void No_skill_says_role_memory_names_a_campaign_and_a_role()
     {
         foreach (var skill in SkillPack.All())
@@ -171,6 +173,7 @@ public partial class LaunchContractTests
     /// enumeration rather than typed here, less the two a role's wait never has.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void The_launch_contract_teaches_a_run_to_end_by_waiting_and_to_read_why_it_woke()
     {
         var file = SkillPack.All().First(skill => skill.IsRole).File;
@@ -187,7 +190,7 @@ public partial class LaunchContractTests
         Assert.Contains("raise that work as work items, then end this attempt by waiting for them", contract, StringComparison.Ordinal);
         Assert.Contains("**Never poll, sleep or hold your attempt open** to watch the work you raised", contract, StringComparison.Ordinal);
         Assert.Contains("while your run is alive, nothing else in this campaign is claimed, so the work you are waiting for cannot start", contract, StringComparison.Ordinal);
-        Assert.Contains("A campaign review the runtime starts, on its cadence or because a line asked for one, never waits: its wait is refused with `wait_not_allowed`.", contract, StringComparison.Ordinal);
+        Assert.Contains("A campaign review — on its cadence, because a line asked for one, or because a person asked for one now — never waits: its wait is refused with `wait_not_allowed`.", contract, StringComparison.Ordinal);
         Assert.Contains("The moment printed above is an example: `--until` names a moment ahead of now, and one already past is refused.", contract, StringComparison.Ordinal);
         Assert.Contains("A wait the runtime refuses changes nothing, and you still hold the attempt", contract, StringComparison.Ordinal);
 
@@ -213,6 +216,7 @@ public partial class LaunchContractTests
     /// is the quiet way a correction lands in a file and changes nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.D4, "a skill pack teaches what was not decided")]
     public void A_role_carries_the_launch_contract_once()
     {
         foreach (var role in SkillPack.All().Where(skill => skill.IsRole))

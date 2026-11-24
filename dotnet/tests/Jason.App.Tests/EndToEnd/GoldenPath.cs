@@ -462,6 +462,13 @@ internal static class GoldenPath
         RunAsync(it, "dotnet", [Assembly, .. args], environment);
 
     /// <summary>
+    /// The same step with <paramref name="standardInput"/> written to the program's standard input before it is closed:
+    /// what a printed line's here-document hands the program, as UTF-8.
+    /// </summary>
+    public static Task<CliResult> JasonAsync(Installation it, IReadOnlyList<string> args, string standardInput) =>
+        RunAsync(it, "dotnet", [Assembly, .. args], standardInput: standardInput);
+
+    /// <summary>
     /// A step run by a stand-in built beside these tests in place of the shipped program — started the same way, through
     /// the muxer, in this installation's environment.
     /// </summary>
@@ -481,7 +488,8 @@ internal static class GoldenPath
         string program,
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string>? environment = null,
-        TimeSpan? within = null)
+        TimeSpan? within = null,
+        string? standardInput = null)
     {
         ArgumentNullException.ThrowIfNull(it);
         var args = arguments.SkipWhile(argument => argument == Assembly).ToArray();
@@ -495,6 +503,7 @@ internal static class GoldenPath
             CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
+            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
         };
 
         foreach (var argument in arguments)
@@ -522,6 +531,11 @@ internal static class GoldenPath
 
         using var process = Process.Start(start)
             ?? throw new InvalidOperationException("The jason executable could not be started.");
+        if (standardInput is not null)
+        {
+            await process.StandardInput.WriteAsync(standardInput.AsMemory(), Ct);
+        }
+
         process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync(Ct);
         var error = process.StandardError.ReadToEndAsync(Ct);

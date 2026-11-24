@@ -20,10 +20,10 @@ public static class SettingsVocabulary
     {
         // The sections.
         "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Launches", "Harness",
-        "Subscriptions", "Sending",
+        "Subscriptions", "Sending", "Lines",
 
         // Runtime and Logging.
-        "Port",
+        "Port", "TimeZone",
         "MinimumLevel", "RetainedFileCountLimit", "FileSizeLimitBytes",
 
         // Dispatcher, and the defaults of each kind of work it names.
@@ -37,7 +37,7 @@ public static class SettingsVocabulary
         "Blocks", "TrialSeconds",
 
         // Manager.
-        "Triggers", "ReviewSeconds", "Priority", "MaxEntriesPerScan",
+        "Triggers", "ReviewSeconds", "DeepReviewSeconds", "Priority", "MaxEntriesPerScan", "AudienceThreshold",
 
         // Roles.
         "DefaultExecutionProfile", "DefaultEntryCommand", "MaxStdoutBytes", "MaxSkillBytes",
@@ -56,7 +56,7 @@ public static class SettingsVocabulary
         "CheckEnabled", "FeedUrl", "InitialDelayMinutes", "IntervalHours",
 
         // Notifications; a named plugin's entry is Enabled and Binding, both above.
-        "Toast", "QuietSeconds", "MaxWaitSeconds", "MinIntervalMinutes",
+        "Toast", "Replies", "QuietSeconds", "MaxWaitSeconds", "MinIntervalMinutes",
 
         // Inbound; its switch is Enabled, above.
         "SyncSeconds", "LookbackSeconds",
@@ -69,6 +69,9 @@ public static class SettingsVocabulary
 
         // Sending: the daily ceiling of automatic sends.
         "AutomaticMaxPerDay",
+
+        // Lines: the ceiling of touches a person may have in one campaign.
+        "MaxTouches",
 
         // Harness.
         "Root",

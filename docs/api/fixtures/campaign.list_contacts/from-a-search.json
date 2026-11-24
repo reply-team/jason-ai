@@ -96,7 +96,9 @@
           },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
-        }
+        },
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -187,7 +189,9 @@
           },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
-        }
+        },
+        "touches": 0,
+        "last_touch_at": null
       },
       {
         "contact": {
@@ -278,7 +282,9 @@
           },
           "search": "wi_2",
           "landed_at": "2026-10-16T09:00:00.000Z"
-        }
+        },
+        "touches": 0,
+        "last_touch_at": null
       }
     ],
     "next_cursor": null

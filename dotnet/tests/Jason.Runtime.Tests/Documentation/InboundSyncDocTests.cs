@@ -15,6 +15,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class InboundSyncDocTests
 {
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_and_the_work_execution_contract_name_the_scan_s_thirteen_steps_in_the_order_the_scan_runs_them()
     {
         const string steps = "thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
@@ -32,6 +33,7 @@ public partial class InboundSyncDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_settings_the_page_publishes_are_the_ones_the_runtime_enforces()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -50,6 +52,7 @@ public partial class InboundSyncDocTests
 
     /// <summary>The respond step's settings, as the contract publishes them, are the ones its validator enforces.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_responder_settings_the_contract_publishes_are_the_ones_the_runtime_enforces()
     {
         var page = Flattened(Read("work-execution.md"));
@@ -64,8 +67,28 @@ public partial class InboundSyncDocTests
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"`Launches:MaxPerDay:<role>` | `responder: {new LaunchesOptions().MaxPerDay[Responder.Role]}` | {LaunchesOptions.MinimumPerDay}..{LaunchesOptions.MaximumPerDay} |",
+            $"`Launches:MaxPerDay:<role>` | `{string.Join(", ", new LaunchesOptions().MaxPerDay.Select(limit => $"{limit.Key}: {limit.Value}"))}` | {LaunchesOptions.MinimumPerDay}..{LaunchesOptions.MaximumPerDay} |",
             page,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The claim rule's passage says every shipped role is limited by default, and the manager's page names its own number, both
+    /// read off the options so a default that moved is a page that has to change.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_pages_say_every_shipped_role_has_a_default_limit()
+    {
+        var defaults = new LaunchesOptions();
+        var execution = Flattened(Read("work-execution.md"));
+
+        Assert.Contains("every role Jason ships is named by default", execution, StringComparison.Ordinal);
+        Assert.Contains("each of the nine roles Jason ships has a limit by default", execution, StringComparison.Ordinal);
+        Assert.Equal(9, defaults.MaxPerDay.Count);
+        Assert.Contains(
+            $"`Launches:MaxPerDay:manager`, `{defaults.MaxPerDay["manager"]}` by default,",
+            Flattened(Read("campaign-manager.md")),
             StringComparison.Ordinal);
     }
 
@@ -74,6 +97,7 @@ public partial class InboundSyncDocTests
     /// spells no count of its own: a count written out beside the setting would go stale when the default moved.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_cost_section_names_the_daily_limit_once_with_its_default()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -89,6 +113,7 @@ public partial class InboundSyncDocTests
     /// off the step's own source, so asking them in another order is a page that has to change.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_skip_reasons_are_the_step_s_codes_in_its_order()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -116,6 +141,7 @@ public partial class InboundSyncDocTests
     /// the step's own; and a paused campaign's bounces are said to wait.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_bounce_step_s_codes_and_numbers_are_the_step_s_own()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -137,6 +163,7 @@ public partial class InboundSyncDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_line_the_page_describes_is_the_line_the_step_writes()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -160,6 +187,7 @@ public partial class InboundSyncDocTests
 
     /// <summary>The sentences an operator will hold the read to: where a campaign that gains a route starts, and what a failure does.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_states_where_a_read_starts_and_what_a_failure_does()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -196,6 +224,7 @@ public partial class InboundSyncDocTests
 
     /// <summary>What a cadence costs, in reads and lines a day, computed from the defaults rather than written twice.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_prices_the_default_cadence()
     {
         var page = Flattened(Read("inbound-sync.md"));
@@ -212,6 +241,7 @@ public partial class InboundSyncDocTests
 
     /// <summary>The manager's page names the two settings that decide how soon a reply wakes a manager, at their defaults.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_campaign_manager_page_names_the_inbound_read_s_defaults()
     {
         var page = Flattened(Read("campaign-manager.md"));
@@ -234,6 +264,7 @@ public partial class InboundSyncDocTests
     /// provider and describes none. The link names a heading the plugin's README holds.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_page_says_a_provider_may_detect_later_replies_only_under_rules_of_its_own_and_points_at_the_plugin()
     {
         var page = Flattened(Read("inbound-sync.md"));

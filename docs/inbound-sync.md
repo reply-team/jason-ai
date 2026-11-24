@@ -19,7 +19,25 @@ starts can be claimed in the same scan. Events, before it, hands a read of an ac
 
 **Respond** reads each active campaign's `inbound_reply_observed` lines above a watermark of its own, whichever writer
 said them — this read or the events store, which say a move under one key — at most 100 a campaign a scan, each in one
-short transaction with the watermark's guarded move. For a line about a thread that is the campaign's own — every line
+short transaction with the watermark's guarded move.
+
+First, in that transaction and before anything else the step does with the line, a reply **holds the line**: when the
+line's contact column names a person who is an `enrolled` member of the campaign, the membership becomes `paused`, and
+one reserved line, `contacts_paused`, says so as `system:dispatcher`, with the person and the reply line by their ids.
+It holds whatever follows — `Responder:OnReply` off, and every skip below, included — since a person who wrote is not
+written to again before somebody has read what they wrote. While the line is paused the claim takes none of the person's
+touches in that campaign, and in the same transaction what the provider already holds for them there for a later moment
+is taken back, one `message.cancel` a letter ([work execution](work-execution.md), "A person's line in a campaign"). A
+member whose line is already paused, ended or removed, and a line that names no contact, hold nobody; nor does a line
+that may be Jason's own letter moving the thread (§4, "What a line does not know"). The hold is set again in the
+transaction that passes a line whose write was refused, so a responder that could not be made does not let the person's
+touches go on; a refusal of the hold itself there is logged once for the campaign, by its code, and the watermark still
+moves past the line, so one line never stops the campaign's respond step. A take-back the runtime refuses is logged once
+in the same way, under an event of its own, and costs neither the hold nor the line. The step reads active campaigns
+only, so a reply in a paused campaign holds the line, and takes back what the provider holds, when the campaign resumes.
+The reply wakes the manager as it always has, and the manager continues the line or ends it.
+
+For a line about a thread that is the campaign's own — every line
 this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
 and that says `campaign_own`, because the thread was already the campaign's own or, where no campaign the reply was
 found in held it yet and the reply named no provider campaign, the campaign was the only one, of those not archived,
@@ -86,7 +104,8 @@ never a second one for a send that already has an open
 read the runtime made. Each read decides alone, when it ends: a read that finds the send bounced says
 `message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
 do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
-itself writes no line and no register entry, and a bounce of a send Jason did not make — a sequence's own email at the
+itself writes no line and no register entry, and neither holds nor ends the person's line, which a reply alone holds and
+the manager alone ends; and a bounce of a send Jason did not make — a sequence's own email at the
 provider, a mail written by hand, a send older than the window — stops nothing: where the campaign has no send it could
 be of, it asks for no read, and a read of a send that did not bounce decides nothing; a campaign with no send the bounce
 could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each logged once per
@@ -203,7 +222,33 @@ vendor block are not read out of the page at all, and appear in no line and no l
 
 **What a line does not know.** A line says that a thread the other side wrote into moved, not that the other side moved
 it last: a follow-up sent into a thread that already has a reply moves it too, and says it again. The manager reads the
-thread to know.
+thread to know. The hold compares moments of the runtime's own record instead, and reads no meaning: a line whose
+`last_activity_at` is not later than the latest moment any succeeded letter of Jason's own went into the thread holds
+nobody and takes nothing back. That letter is a touch of the person in the campaign, at its `accepted_for` where its
+result names one and otherwise at the end of its succeeded attempt, or an answer the responder sent into the line's
+thread, a `conversation.reply` of the campaign into that thread, at the end of its succeeded attempt. A touch records no
+thread, so touches count for the person across the campaign and an answer only for its own thread. Only a moment that
+has come counts, so a letter the provider still holds for later is no reason to leave a reply alone, and a letter a
+cancel took back never went. A line later than every such moment holds the line as any reply does, whoever moved the
+thread.
+
+The rule has limits, and they run both ways:
+
+- It skips the hold and the take-back, and nothing else: the line is still written, and the responder is still woken
+  for it as for any line.
+- A follow-up the provider sends later than the moment the runtime holds for it — its `accepted_for`, or the end of
+  its attempt — moves the thread later than that moment, so the line is read as the other side's move and holds the
+  person. This is the safe side: nobody is written to again unread, and the manager reads the thread and continues the
+  line.
+- A reply that came before Jason's own latest letter went out, and is read only after it, has a moment that letter
+  reaches, so it does not hold at once. The role that judges the reply, woken for it as for any line, ends the line or
+  continues it.
+
+The rule is for a line that does not know who moved the thread, whichever writer said it: a line this read wrote, and a
+line the events store wrote from a `thread_moved` event that names no side, `moved_by` null
+([events](events.md)). A line the events store wrote from an event that names the other side always holds the line,
+whatever the moments: where the provider said who wrote, the moments do not overrule it. A move the account or the
+provider made is no reply line at all.
 
 ## 5. Where a read starts
 
@@ -271,7 +316,8 @@ linked active campaign, and about 384 lifecycle lines in the chronicle (each rea
 succeeded), besides the lines that say a reply. A read lists every thread that moved within the look-back, 100 to a
 page, so a busy campaign may take two or three read work items a cadence rather than one: as many pages as the threads
 that moved in the last four hours fill. A thread listed again says nothing: its key holds a move already said. A
-manager reading everything in the chronicle since its last review reads those too, about 80 in five hours; reading by
+manager reading everything in the chronicle since its last review reads those too, about 96 in the six hours between
+two quick looks; reading by
 kind (`jason journal list --kind inbound_reply_observed`) passes over them, and one person's replies are
 `jason journal list --contact cnt_… --kind inbound_reply_observed`.
 
@@ -282,11 +328,13 @@ does. And a reply, or a read that failed, can wake the campaign's manager: what 
 A reply about the campaign's own thread also costs a pair: one `conversation.get` (one plugin child, seconds) and one
 responder launch of up to `Responder:TimeoutSeconds`, with the lifecycle lines of both items in the chronicle; a further
 move into a thread whose responder is still open costs one patch and no launch. The claim paces them — one item per
-campaign at a time, and no more responder runs started in a campaign in a UTC day than `Launches:MaxPerDay:responder`
-(`25` by default) — so a burst of threads in one campaign is answered one after another, as many as that allows over a
-few hours and the rest from the next 00:00Z, and other campaigns are not held up; a responder over the day's limit
+campaign at a time, and no more responder runs started in a campaign in the installation's day than
+`Launches:MaxPerDay:responder` (`25` by default) — so a burst of threads in one campaign is answered one after another,
+as many as that allows over a few hours and the rest from the installation's next midnight, or sooner where a person
+lifts the day's limits, and other campaigns are not held up; a responder over the day's limit
 waits, with no attempt and its thread's further moves still recorded on it, as [work execution](work-execution.md) says
-under the claim rule.
+under the claim rule. The number is one entry of the table of defaults that every role Jason ships has, in the settings table of
+[work execution](work-execution.md).
 Meanwhile the campaign's own sends, at priority 0, wait behind its responders. The
 sends wait, detection does not: this read's `conversation.list` items sit ten above `Responder:Priority`, so the
 campaign's next read is claimed ahead of the responders still queued — those queued before an edit that lowered
@@ -307,7 +355,10 @@ line.
 
 - **Reading a reply for meaning.** A line names a thread; the respond step (§1) queues the `conversation.get` that reads
   it and the responder that decides what it calls for. Nothing in the runtime reads what it says.
-- **Telling a person.** A reply is not notified; the responder and the manager's check-in are what it wakes.
+- **Telling a person of a reply no role judged.** A thread that moved is not notified by its line here; the responder
+  and the manager's check-in are what it wakes. A person hears of a reply once a role, inside a run, judges it a
+  person's own, when that run ends ([notifications](notifications.md) §1); a reply no responder was made for and no
+  role judged is not said.
 - **A cadence per campaign,** and a read of any plugin but the one the campaign's route names.
 - **Telling a person that a source of events keeps failing.** Nothing notifies it; while it fails, its campaigns are
   read here.

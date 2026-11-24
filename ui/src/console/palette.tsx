@@ -5,6 +5,7 @@ import { t } from '../platform/i18n';
 import { registry } from '../platform/slots';
 import { parseRoute } from '../router';
 import { displayName, searchPeople } from '../pickers/search';
+import { openedHere } from './box-focus';
 import * as campaigns from './campaigns';
 import { openConversation } from './chat';
 import { newAgent } from './new-agent';
@@ -89,10 +90,11 @@ function pages(): Built {
     const feed = feedId.value;
     if (feed !== null)
         add('page:feed', 'page', t('palette.page.feed'), '', () => {
+            const opened = openedHere();
             void openConversation(feed).then((held) => {
                 if (held === null) return;
                 feedUnseen.value = false;
-                here().dock.showChat(held);
+                here().dock.showChat(held, opened);
             });
         });
     add('page:dashboard', 'page', t('dash.title'), '', () => here().dock.show('dashboard'));
@@ -116,8 +118,8 @@ function pages(): Built {
     );
     screen('system', 'page', t('nav.system'), t('palette.words.system'));
     screen('settings', 'settings', t('nav.settings'), '');
-    add('action:agent', 'action', t('palette.action.agent'), '', () => void newAgent());
-    add('action:chat', 'action', t('palette.action.chat'), '', () => here().dock.chat());
+    add('action:agent', 'action', t('palette.action.agent'), '', () => void newAgent(undefined, openedHere()));
+    add('action:chat', 'action', t('palette.action.chat'), '', () => here().dock.chat(undefined, openedHere()));
     return { entries, going };
 }
 
@@ -143,8 +145,9 @@ function held(): Built {
             words: campaign?.name ?? '',
         });
         going[key] = () => {
+            const opened = openedHere();
             void openConversation(conversation.id).then((chat) => {
-                if (chat !== null) here().dock.showChat(chat);
+                if (chat !== null) here().dock.showChat(chat, opened);
             });
         };
     }
@@ -152,7 +155,7 @@ function held(): Built {
         if (talked.has(campaign.id)) continue;
         const key = `agent:${campaign.id}`;
         entries.push({ key, kind: 'agent', label: campaign.name, words: '' });
-        going[key] = () => here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(campaign.id)}`));
+        going[key] = () => here().dock.page(parseRoute(`#/campaigns/${encodeURIComponent(campaign.id)}`), openedHere());
     }
     return { entries, going };
 }
