@@ -122,6 +122,10 @@ report a message sent as the account, by whoever sent it, as `message_sent` wher
 was sent, and otherwise leave it out; never as a move by the other side. You may leave out moves by the provider
 altogether.
 
+A plugin that takes `follows` and reports thread moves reports the account's own follow-up either as no move, the
+thread's moment unmoved, or as the account's move (`account`). A move reported with nobody named (`null`) after a
+follow-up pauses the person, because the runtime never takes a follow-up for the move.
+
 **Nothing else travels.** Each kind is a closed object: a member the table does not name — a subject, a preview, a
 person's name — is refused with the whole page, and so is a kind outside the five. A schema cannot prove that an
 identifier is not a name; returning only what the provider uses to identify things is what this contract asks of you.

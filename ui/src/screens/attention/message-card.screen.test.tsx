@@ -25,7 +25,9 @@ describe('the message card', () => {
             'Hi Ines, thanks for the talk at the meetup.',
         ]);
         expect(
-            screen.getByText(/the sender's signature kept at the provider, and the provider's tracking/i),
+            screen.getByText(
+                /the sender's signature kept at the provider, the provider's tracking and, under a reply, the quotation of the earlier email/i,
+            ),
         ).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/as the recipient/i);
     });
@@ -113,7 +115,7 @@ describe('the message card, where the letter follows one', () => {
         );
         await waitFor(() =>
             screen.getByText(
-                /A reply to "Notes from the meetup" of \d+ \w+( 2026)?, \d\d:\d\d, the letter this campaign's thread/,
+                /A reply to "Notes from the meetup" of \d+ \w+( 2026)?, \d\d:\d\d, the letter this campaign's latest thread/,
             ),
         );
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);

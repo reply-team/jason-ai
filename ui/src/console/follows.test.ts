@@ -29,7 +29,7 @@ describe('what an email send follows, in words', () => {
             { subject: 'Hello', moment: '3 Oct, 18:02' },
         );
         expect(words).toMatch(
-            /^A reply to "Hello" of 3 Oct, 18:02, the letter this campaign's thread with this person began with\./,
+            /^A reply to "Hello" of 3 Oct, 18:02, the letter this campaign's latest thread with this person began with\./,
         );
     });
 

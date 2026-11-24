@@ -426,7 +426,7 @@ export const en = {
     'follows.reply.named':
         'A reply to "{subject}" of {moment}, as asked. It goes under that subject; its own subject below is not sent.',
     'follows.reply.line_root':
-        'A reply to "{subject}" of {moment}, the letter this campaign\'s thread with this person began with. It goes under that subject; its own subject below is not sent.',
+        'A reply to "{subject}" of {moment}, the letter this campaign\'s latest thread with this person began with. It goes under that subject; its own subject below is not sent.',
     'follows.reply.unread':
         "A reply to an earlier letter of this campaign. It goes under that letter's subject; its own subject below is not sent.",
     'follows.new.asked_new_thread': 'A new letter, as asked.',
