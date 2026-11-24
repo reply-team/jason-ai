@@ -524,3 +524,40 @@ test('the update item says its step, and a press from the page asks first only w
     assert.deepEqual(acts, ['install', 'install'], 'a press with no ask installs at once, as Settings does');
     assert.equal(asked.length, 2);
 });
+
+test('a press that asks, at any step but downloaded, asks nothing and does what the press does today', async () => {
+    const run = async (state: UpdateState, label: string, options: unknown) => {
+        const acts: string[] = [];
+        const updater = {
+            current: state,
+            check: async () => {
+                acts.push('check');
+                return null;
+            },
+            download: async () => {
+                acts.push('download');
+            },
+            install: async () => {
+                acts.push('install');
+                return true;
+            },
+        };
+        const asked: string[] = [];
+        const item = menuItemOf(state, true, true);
+        const act = actShown(item, label);
+        assert.equal(pressAsks(act, options), false, `${state.step}: the press carries no ask to the updater`);
+        await pressItem(updater, act, pressAsks(act, options), async (question) => {
+            asked.push(question.message);
+            return 0;
+        });
+        return { acts, asked };
+    };
+    const offered: UpdateState = { step: 'offered', version: '0.48.6' };
+    const downloading: UpdateState = { step: 'downloading', version: '0.48.6' };
+    const withAsk = await run(offered, 'Download Jason 0.48.6', { ask: true });
+    assert.deepEqual(withAsk, await run(offered, 'Download Jason 0.48.6', undefined), 'offered: the same as a press with no ask');
+    assert.deepEqual(withAsk, { acts: ['download'], asked: [] });
+    const busy = await run(downloading, 'Downloading Jason 0.48.6…', { ask: true });
+    assert.deepEqual(busy, await run(downloading, 'Downloading Jason 0.48.6…', undefined), 'downloading: the same as a press with no ask');
+    assert.deepEqual(busy, { acts: [], asked: [] });
+});
