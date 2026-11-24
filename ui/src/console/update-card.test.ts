@@ -77,8 +77,14 @@ describe('the update card: the hide rule', () => {
         expect(cardOf(item('offered', '0.51.10'), { step: 'offered', version: '0.51.9' })?.version).toBe('0.51.10');
     });
 
-    it('keeps it hidden for an older or unreadable version of the same step', () => {
+    it('keeps it hidden for an older version of the same step', () => {
         expect(cardOf(item('offered', '0.50.9'), hidden)).toBeNull();
+    });
+
+    it('brings it back for a version it cannot read that differs from the hidden one', () => {
+        expect(cardOf(item('offered', '0.51.0-rc.2'), hidden)?.version).toBe('0.51.0-rc.2');
+        expect(cardOf(item('offered', 'next'), hidden)?.version).toBe('next');
+        expect(settledMark(hidden, item('offered', 'next'))).toBeNull();
     });
 
     it('comes back with the next start: the mark is the page memory alone, so a fresh page has none', () => {
