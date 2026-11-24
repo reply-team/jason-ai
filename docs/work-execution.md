@@ -240,10 +240,13 @@ to that person the bounce could be of, at most three; the read that finds the se
 a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
 `system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Deferred reads, at most once a minute, the sends a
 provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, no more than 30 days ago, and of which
-nothing yet says what became of them, and queues a `message.status` read of each where it ran, then again after the
-waits until a read ends `Dispatcher:DeferredReadOverdueSeconds` after the moment, nine at most, at most five open in a
-campaign; the read that finds a send failed or cancelled, or the last that still finds it waiting, says once that it
-did not go ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+nothing yet says what became of them, and queues a `message.status` read of each where it ran: the first once that grace
+has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each later one
+`Dispatcher:DeferredReadWaitSeconds` after the one before it ended, until a read ends
+`Dispatcher:DeferredReadOverdueSeconds` or more after the moment or nine have ended, with at most five open in a
+campaign. The read that finds a send `failed` or `cancelled`, or the last that still finds it `queued`, says once that
+it did not go: `message_unsent_observed`, its state `failed`, `cancelled` or `overdue`
+([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
