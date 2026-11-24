@@ -261,7 +261,9 @@ what is approved: what is approved is the composed input, not the summary. A tem
 preview adds one `example` of it ([the preview a person reads](../README.md#the-preview-a-person-reads)): the subject
 and the text rendered for this person from the composed input, with the names the input does not hold — a custom
 field, the sending account's names, and on LinkedIn the person's email address — left for the provider, shown as their
-fallback or as `[name]`, and listed under `unfilled`. The fixtures
+fallback or as `[name]`, and listed under `unfilled`. A template that follows a letter shows no subject of its own:
+in its place, the example says what the summary ends with, that the message goes as a reply under that letter's subject
+and its own subject is not sent. The fixtures
 [`fixtures/message.send/preview-*.json`](../fixtures/message.send) show each case.
 
 ## The properties
