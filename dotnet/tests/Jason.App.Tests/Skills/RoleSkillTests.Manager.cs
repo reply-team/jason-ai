@@ -373,6 +373,32 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A send that did not go wakes the manager by default, and its section follows the one of a send that went: an
+    /// overdue send is still held and may still go, so a second letter waits for a cancel of it that succeeded; a cancelled
+    /// one is read against the person's thread and standing first, since the provider may have stopped it on a reply.
+    /// </summary>
+    [Fact]
+    public void The_manager_woken_by_a_send_that_did_not_go_takes_an_overdue_one_back_before_writing_again()
+    {
+        var skill = Flattened("manager");
+
+        var went = skill.IndexOf("## When a send that went woke you", StringComparison.Ordinal);
+        var unsent = skill.IndexOf("## When a send that did not go woke you", StringComparison.Ordinal);
+        var block = skill.IndexOf("## When a provider block woke you", StringComparison.Ordinal);
+        Assert.True(
+            went >= 0 && unsent > went && block > unsent,
+            $"A send that went opens at {went}, one that did not at {unsent} and the block at {block}: it comes between them.");
+        Assert.Contains("`trigger` is `message_unsent_observed` when a send the provider took for a moment did not go, and it is a default one.", skill, StringComparison.Ordinal);
+        Assert.Contains("An `overdue` send is still held by the provider and may still go", skill, StringComparison.Ordinal);
+        Assert.Contains("write to the person again only once a `message.cancel` of it has succeeded", skill, StringComparison.Ordinal);
+        Assert.Contains("A `cancelled` send may be the provider's own stop on a reply", skill, StringComparison.Ordinal);
+        Assert.Contains("read the person's thread and where they stand in the campaign first", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unsent_observed --since 2026-09-18T09:00:00Z",
+            SkillPack.PrintedCommands(File.ReadAllLines(SkillPack.Find("manager").File)));
+    }
+
+    /// <summary>
     /// A send for a later moment that the provider cannot hold has a way around it: the same send without the moment,
     /// created to be claimed only once the moment has passed. The manager is told that the person still approves it then,
     /// and that a machine asleep at the moment claims nothing, so it never promises a send at an exact time. Where the

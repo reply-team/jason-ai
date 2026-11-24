@@ -419,6 +419,33 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_sent
 A send that went is the course the campaign planned, so by itself it calls for nothing; what it can change is when the
 next step is due, where the campaign's plan waits on that message having gone. Say in your note what you did with it.
 
+## When a send that did not go woke you
+
+`trigger` is `message_unsent_observed` when a send the provider took for a moment did not go, and it is a default one.
+The line names the work item that made the send, with the `plugin`, the provider's `reference`, the `channel`, the
+`state`, the provider's `failure_code` where it is one word, the `moment` it was due, `cancelled_at` and the read that
+found it under `read_work_item`, never the provider's sentence or the text. It is said once per send, and never of a
+send a `message.cancel` of this campaign took back. Read every line of the kind since your last review:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unsent_observed --since 2026-09-18T09:00:00Z
+```
+
+What it calls for depends on its `state`:
+
+- `failed`: the provider took the send and could not make it. The letter is missing; whether to send it again, reach the
+  person another way or tell somebody is yours to decide, after reading the person's thread.
+- `overdue`: its moment passed a week ago, or as long as this installation set, and every read still found it waiting.
+  An `overdue` send is still held by the provider and may still go, at a limit or a schedule of the provider's own, so
+  a second letter now could reach the person twice. Take it back first with a `message.cancel` item naming it, and
+  write to the person again only once a `message.cancel` of it has succeeded; one that ends `send_not_pending` says
+  the letter went or failed after all, so read it again before anything else.
+- `cancelled`: it was cancelled at the provider, not by this campaign. A `cancelled` send may be the provider's own stop
+  on a reply, or a person's act there, so read the person's thread and where they stand in the campaign first: a person
+  who replied is answered, never sent the letter that was stopped.
+
+Say in your note what you did with each.
+
 ## When a provider block woke you
 
 `trigger` is `provider_blocked` when the provider refused the account, or one sending account under it, for its own
