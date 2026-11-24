@@ -243,6 +243,70 @@ public class ReplyFollowUpTests
     }
 
     /// <summary>
+    /// A mailbox whose lookup of the email followed errors answers the follow-up as Reply answers a letter of its own it
+    /// could not send, 400 <c>contact.emailSendingFailed</c>, which reply-cli passes on as <c>reply.refused</c>: the
+    /// follow-up ends exactly as such a letter does, with nothing sent, and never goes as a letter of its own instead.
+    /// </summary>
+    [Fact]
+    public async Task A_follow_up_reply_could_not_send_ends_as_a_letter_of_its_own_reply_could_not_send_does()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync();
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+        await SendAsync(api, campaign, contact, Message(Body));
+        var own = Message("A new idea.", subject: "Another thought");
+        own["follows"] = "new_thread";
+
+        CouldNotSend(account);
+        var letter = await ApprovedAsync(api, campaign, contact, own);
+        CouldNotSend(account);
+        var followUp = await ApprovedAsync(api, campaign, contact, Message("Any news?"));
+
+        Assert.Equal(
+            (WorkItemStatus.Failed, "provider_call_failed", FailureClass.Permanent),
+            (letter.Status, letter.LastError?.Code, Assert.Single(letter.Attempts!).Error?.Class));
+        Assert.Equal(
+            (letter.Status, letter.LastError?.Code, FailureClass.Permanent),
+            (followUp.Status, followUp.LastError?.Code, Assert.Single(followUp.Attempts!).Error?.Class));
+        Assert.Equal("email-1001", LastSend(account).Option("--follows"));
+        Assert.Single(account.Sent);
+        Assert.Single(account.DirectSends);
+        Assert.Single(Assert.Single(account.Threads)!["messages"]!.AsArray());
+    }
+
+    /// <summary>
+    /// A follow-up held for its moment may end failed at Reply with no failure code at all — the email it follows could not
+    /// be read three times over, or a mailbox's lookup of it kept erroring — and the read of the send says just that:
+    /// <c>failed</c>, its code null, never a code of a follow-up's, and never a read that fails for want of a code.
+    /// </summary>
+    [Fact]
+    public async Task A_follow_up_that_ended_failed_with_no_code_reads_failed_with_none()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync();
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+        await SendAsync(api, campaign, contact, Message(Body));
+        var later = Message("Any news?");
+        later["send_after"] = "2099-11-03T09:00:00-05:00";
+        var held = await SendAsync(api, campaign, contact, later);
+        Assert.Equal(
+            ("accepted", "email-1001", "email-1002"),
+            ((string?)held.Result!["items"]![0]!["status"], LastSend(account).Option("--follows"), Assert.Single(held.Attempts!).Provenance!.ExternalIdsReturned!["send"]));
+        account.SendBecomes("email-1002", "failed");
+
+        var read = ReplyOperations.Succeeded(
+            "message.status",
+            await ReplyOperations.InvokeAsync(api, "message.status", ReplyMessageStatusTests.Input("email-1002"), Ct));
+
+        Assert.Equal(("failed", null), ((string?)read["state"], (string?)read["failure_code"]));
+        Assert.Single(Assert.Single(account.Threads)!["messages"]!.AsArray());
+    }
+
+    /// <summary>
     /// A follow-up whose answer was lost may have gone, so the runtime repeats it under the same key; the claim keeps its
     /// decision, so the repeat names the same letter, and Reply answers it with the send it took: one follow-up, in the
     /// thread once.
@@ -323,6 +387,12 @@ public class ReplyFollowUpTests
 
     private static ReplyAccount Planted() =>
         new ReplyAccount().WithContact(1001, Address, "Marta").WithSender(12, "email", "Ann Owner", Mailbox);
+
+    /// <summary>The next direct email is refused as Reply refuses one it could not send, and reply-cli passes it on.</summary>
+    private static void CouldNotSend(ReplyAccount account) =>
+        account.Refuses(
+            "contact send-email", "reply.refused", status: 400, replyCode: "contact.emailSendingFailed",
+            detail: "The email could not be sent.", ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
 
     private static async Task<RuntimeApiFixture> StartAsync() =>
         await ReplyPlugins.StartAsync(
