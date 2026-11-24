@@ -16,7 +16,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// with nothing sent. A message that follows none goes as a letter of its own, with its subject, as before.
 /// </summary>
 [Collection(ProcessEnvironmentCollection.Name)]
-public class ReplyFollowUpTests
+public partial class ReplyFollowUpTests
 {
     /// <summary>A real dispatcher that never ticks on its own, and repeats a retriable attempt at the next scan asked for.</summary>
     private const string Dispatcher = """{"TickSeconds":3600,"RetryDelaySeconds":0}""";

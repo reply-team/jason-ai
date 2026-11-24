@@ -452,6 +452,34 @@ public sealed class ReplyAccount : IDisposable
         return Replace(ThreadsFile, thread["id"]!.GetValue<int>(), thread);
     }
 
+    /// <summary>
+    /// The person writes back in a thread the account holds: their message is added at its end, inbound, dated now by this
+    /// machine's clock, which is the stand-in's, and the thread's last activity moves to it, as Reply's inbox then holds it.
+    /// </summary>
+    public ReplyAccount Answers(int thread, string body)
+    {
+        var threads = ReadArray(ThreadsFile);
+        var planted = threads.OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == thread);
+        var messages = planted["messages"]!.AsArray();
+        var now = DateTimeOffset.UtcNow;
+        var date = now.AddTicks(-(now.Ticks % (TimeSpan.TicksPerMillisecond * 10))).ToString("yyyy-MM-dd'T'HH:mm:ss.ff'Z'", CultureInfo.InvariantCulture);
+        var subject = (string?)messages.OfType<JsonObject>().First()["subject"];
+        messages.Add(new JsonObject
+        {
+            ["channel"] = "email",
+            ["messageId"] = $"<answer-{thread}-{messages.Count}@mail.example.com>",
+            ["date"] = date,
+            ["subject"] = subject is null ? null : "Re: " + subject,
+            ["body"] = body,
+            ["isOutbound"] = false,
+            ["status"] = null,
+        });
+        planted["lastActivityDate"] = date;
+        planted["isRead"] = false;
+        Write(ThreadsFile, threads);
+        return this;
+    }
+
     /// <summary>One of the inbox categories a thread can be filed under, as Reply lists them.</summary>
     public ReplyAccount WithCategory(int id, string name, bool reserved = false) =>
         Replace(CategoriesFile, id, new JsonObject
