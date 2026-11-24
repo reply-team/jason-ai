@@ -229,8 +229,8 @@ result names one and otherwise at the end of its succeeded attempt, or an answer
 thread, a `conversation.reply` of the campaign into that thread, at the end of its succeeded attempt. A touch records no
 thread, so touches count for the person across the campaign and an answer only for its own thread. Only a moment that
 has come counts, so a letter the provider still holds for later is no reason to leave a reply alone, and a letter a
-cancel took back never went. A line later than every such moment holds the line as any reply does, whoever moved the
-thread.
+cancel took back never went, nor did one the provider failed or cancelled, as a succeeded `message.status` of the
+campaign says. A line later than every such moment holds the line as any reply does, whoever moved the thread.
 
 The rule has limits, and they run both ways:
 

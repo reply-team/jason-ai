@@ -865,10 +865,11 @@ letter of Jason's own went into the thread — a touch of the person in the camp
 result names one, otherwise the end of its succeeded attempt, across the campaign since a touch records no thread, or an
 answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
 succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
-went. A line whose event names the other side always holds, whatever the moments. Moments of the runtime's own record
-are compared, and nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line
-does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
-step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
+went, nor did one the provider failed or cancelled, as a succeeded `message.status` of the campaign says. A line whose
+event names the other side always holds, whatever the moments. Moments of the runtime's own record are compared, and
+nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A
+hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce step's reads are all
+it asks for (the register takes the address); what the line becomes is the manager's.
 
 **Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`
 or `social_invitation.send` that succeeded with the provider's reference, whose result says `cancelable: true`, for a
@@ -932,11 +933,12 @@ an earlier letter of the line, and the claim decides which, once ([`message.send
 
 **The line's root** is one definition: the latest `message.send` of the same campaign about the same person on the same
 channel (`args.channel`) that is a touch that counts, as the ceiling counts one (so a letter a succeeded take-back
-names is none), whose latest succeeded attempt returned the provider's reference for the send, and that itself
-follows no work item: it opened a thread of its own, by its own wish or by the runtime's decision, or was claimed
-before the runtime decided this at all. Latest is by that attempt's claim, newest first. The work being claimed is
-never its own root. So the root moves to the latest letter that opened a thread of its own, and a letter taken back
-gives way to the one before it.
+names is none, and neither is one the provider failed or cancelled, as a succeeded `message.status` of the campaign
+says), whose latest succeeded attempt returned the provider's reference for the send, and that itself follows no work
+item: it opened a thread of its own, by its own wish or by the runtime's decision, or was claimed before the runtime
+decided this at all. Latest is by that attempt's claim, newest first. The work being claimed is never its own root. So
+the root moves to the latest letter that opened a thread of its own, and a letter taken back, or one the provider failed
+or cancelled, gives way to the one before it.
 
 The decision reaches the plugin at the root of the composed input, `follows`: the letter followed, by its work item,
 its operation and the provider's reference for it, and `because`, the reason above; for a letter of its own, `because`
@@ -990,9 +992,11 @@ the latest of what happened to them, its `text` naming the count it was. Each ro
 person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
 exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
 shows is the number the ceiling stops at. A send that a succeeded `message.cancel` of the campaign took back never
-went: it is no touch, and no row's last touch either. A touch's moment, where it succeeded, is the one the provider took
-it for, its result's `accepted_for`, read in UTC as the hold reads it, else the item's finish; where it did not, the end
-of the latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+went: it is no touch, and no row's last touch either. A send the provider failed or cancelled, as a succeeded
+`message.status` of the campaign says, whoever asked for the read, never went either, and is left out the same way. A
+touch's moment, where it succeeded, is the one the provider took it for, its result's `accepted_for`, read in UTC as the
+hold reads it, else the item's finish; where it did not, the end of the latest attempt of it that ended classed
+`ambiguous`. An enroll into a provider's sequence is one touch: the steps the
 sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
 (`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
@@ -1533,7 +1537,10 @@ about the person in this campaign, other than the item being claimed, and it suc
 `ambiguous`, since that attempt may have reached the person, whatever came after it and whatever became of the item —
 put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most, and a send that a
 succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended
-`ambiguous` leaves it counted, since the letter may still go — one definition, which the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+`ambiguous` leaves it counted, since the letter may still go, and a send the provider failed or cancelled, as a
+succeeded `message.status` of the campaign says, whoever asked for the read, counts for nothing too, while a read that
+answered `queued` or `unknown`, or that failed, leaves it counted — one definition, which the people list counts by
+too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
 dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
 cannot both pass the count: the claim takes one item of a campaign at a time and none while another of its items is
 `scheduled` or `processing`, so every touch claimed before is counted by its attempts once it has left

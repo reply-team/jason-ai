@@ -7,8 +7,9 @@ namespace Jason.Runtime.Tests.Documentation;
 /// The ceiling of touches a person may have in one campaign, as the work-execution contract publishes it: its setting's
 /// row holds the default and the range the validator enforces, says there is no zero and no unlimited, and that only the
 /// settings file writes it. The claim's row for it says what counts, a send a cancel took back left out, and that the
-/// repair is the manager's end of the line and never a raised ceiling; the contracts page names who reads the touch flag;
-/// and the reopen's paragraph says one answer reopens the end it is about.
+/// repair is the manager's end of the line and never a raised ceiling; a send the provider failed or cancelled, as a read
+/// says, is left out on every page that states the count; the contracts page names who reads the touch flag; and the
+/// reopen's paragraph says one answer reopens the end it is about.
 /// </summary>
 public sealed class TouchCeilingDocTests
 {
@@ -41,6 +42,28 @@ public sealed class TouchCeilingDocTests
             row,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Raise the setting", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Every_page_that_states_the_count_leaves_out_a_send_a_read_says_never_went()
+    {
+        var row = Assert.Single(
+            File.ReadAllLines(Path.Combine(RepositoryTree.Root(), "docs", "routing.md")),
+            line => line.StartsWith("| 30 | `touch_ceiling_reached` |", StringComparison.Ordinal));
+        var page = Regex.Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "work-execution.md")), @"\s+", " ");
+
+        Assert.Contains(
+            "took back never went, and counts for nothing, and so does a send the provider failed or cancelled, as a succeeded `message.status` of the campaign says, whoever asked for the read; a read that answered `queued` or `unknown`, or that failed, leaves the send counted, since it may still go or may have gone.",
+            row,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "since the letter may still go, and a send the provider failed or cancelled, as a succeeded `message.status` of the campaign says, whoever asked for the read, counts for nothing too, while a read that answered `queued` or `unknown`, or that failed, leaves it counted — one definition, which the people list counts by too.",
+            page,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "it is no touch, and no row's last touch either. A send the provider failed or cancelled, as a succeeded `message.status` of the campaign says, whoever asked for the read, never went either, and is left out the same way.",
+            page,
+            StringComparison.Ordinal);
     }
 
     [Fact]

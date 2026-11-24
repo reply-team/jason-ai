@@ -121,7 +121,7 @@ so that a follow-up lands in the person's mailbox under the first letter. It has
 
 - absent: the runtime decides at the claim, and follows the line's root — the latest earlier letter to this person in
   this campaign on the same channel that itself follows nothing, counted as a touch, holding the provider's reference,
-  and not taken back;
+  not taken back, and not failed or cancelled by the provider, as a succeeded `message.status` of the campaign says;
 - a work item's identifier, `wi_…`: that letter, named explicitly;
 - `new_thread`: a letter of its own.
 
