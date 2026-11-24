@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
+import { ApiProvider } from '../../api/context';
+import { FakeApi } from '../../test/fake-api';
 import { MessageCard } from './message-card';
 
 const card = (preview: Record<string, unknown>, reply = false) =>
@@ -83,5 +85,55 @@ describe('the message card', () => {
     it('shows nothing for an approval that is no message', () => {
         card(fixtures['approval.get/pending-with-preview'].response.preview as unknown as Record<string, unknown>);
         expect(document.querySelector('.message-card')).toBeNull();
+    });
+});
+
+describe('the message card, where the letter follows one', () => {
+    const withFollows = (follows: unknown) => ({
+        ...email,
+        highlights: { ...(email['highlights'] as Record<string, unknown>), '/follows': follows },
+    });
+
+    it('says a new letter and why, and marks no subject', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }));
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject', 'Body']);
+        expect(document.body.textContent).toMatch(/A new letter: this provider cannot place a reply/);
+    });
+
+    it('says a reply goes under the followed letter, read from its work item, and marks the subject as not sent', async () => {
+        const fake = new FakeApi();
+        const call = fake.call.bind(fake);
+        let reads = 0;
+        fake.call = async (operation, body, kind) =>
+            operation === 'workitem.get'
+                ? ((reads += 1),
+                  {
+                      context: { input: { args: { message: { subject: 'First note' } } } },
+                      finished_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+                      updated_at: new Date().toISOString(),
+                  } as never)
+                : call(operation, body, kind);
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard
+                    detail={toApprovalDetail(
+                        withFollows({
+                            work_item: 'wi_9',
+                            operation: 'message.send',
+                            reference: 'r9',
+                            because: 'line_root',
+                        }),
+                    )}
+                />
+            </ApiProvider>,
+        );
+        await waitFor(() => screen.getByText(/A reply to "First note", sent 2 d ago\./));
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
+        expect(reads).toBe(1);
+    });
+
+    it('shows nothing for a send that is not an email', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
+        expect(terms()).not.toContain('Follows');
     });
 });

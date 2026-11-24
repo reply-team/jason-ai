@@ -4,6 +4,7 @@ import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSumm
 import type { DesktopHost } from '../platform/desktop';
 import { en, type MessageKey } from '../locale/en';
 import { t } from '../platform/i18n';
+import { followsOf, type FollowsWords } from './follows';
 
 export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
 
@@ -130,6 +131,8 @@ export interface ApprovalDetail {
     example: { subject: string | null; body: string | null; unfilled: string[] } | null;
     /** What a search is for, where the preview highlights a definition; null for any other approval. */
     search: SearchWords | null;
+    /** Where an email send goes: under an earlier letter or as one of its own; null for any other send. */
+    follows: FollowsWords | null;
     facts: string[];
 }
 
@@ -277,6 +280,7 @@ export function toApprovalDetail(preview: Record<string, unknown>, operation: st
         compose: text(message?.['compose']) ?? text(highlights?.['/args/message/compose']),
         example: exampleOf(record(preview['example'])),
         search: searchOf(highlights),
+        follows: channel === 'email' ? followsOf(highlights?.['/follows']) : null,
         facts,
     };
 }

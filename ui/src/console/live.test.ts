@@ -165,6 +165,7 @@ describe('what the console draws from the runtime', () => {
             compose: null,
             example: null,
             search: null,
+            follows: null,
             facts: [
                 'Contacts the person: something is sent or shown to them (bookkeeping until the campaign is live)',
                 'Cannot be undone',
