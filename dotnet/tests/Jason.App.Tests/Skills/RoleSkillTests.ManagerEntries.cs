@@ -604,8 +604,13 @@ public partial class RoleSkillTests
         Assert.Contains("`follows_not_placed` (`contact.followUpNotPlaced`) and `follows_not_found`: it is never proposed again with `follows` absent", manager, StringComparison.Ordinal);
         Assert.Contains("THE PERSON is asked, as \"How to ask\" says, whether it goes as a letter of its own (`\"follows\": \"new_thread\"`)", manager, StringComparison.Ordinal);
         Assert.Contains("`follows_never_sent` (`contact.followedSendNeverSent`): the letter it followed never went. Read that letter's status", manager, StringComparison.Ordinal);
-        Assert.Contains("`follows_not_sent_yet` (`contact.followedSendNotSent`): the letter has not gone yet. Propose it again later, with a `send_after` later than that letter's moment", manager, StringComparison.Ordinal);
-        Assert.Contains("A deferred follow-up that failed with no code, or with the provider's daily-limit code of a direct send", manager, StringComparison.Ordinal);
+        Assert.Contains("`follows_not_sent_yet` (`contact.followedSendNotSent`): the letter has not gone yet, as a follow-up carried over with its letter meets the next day while that letter still waits for its sending schedule to open. Propose it again later, with a `send_after` later than that letter's moment", manager, StringComparison.Ordinal);
+        Assert.Contains("A deferred follow-up that failed with no code, or with `contact.dailyLimitReached`", manager, StringComparison.Ordinal);
+        Assert.Contains("A follow-up that ended `provider_call_failed` with Reply's code `contact.emailSendingFailed`", manager, StringComparison.Ordinal);
+        Assert.Contains("Propose it again as it was ONCE, under a new key, with `follows` as before", manager, StringComparison.Ordinal);
+        Assert.Contains("read in the person's chronicle, never from memory", manager, StringComparison.Ordinal);
+        Assert.Contains("it is not proposed a third time: THE PERSON is asked, as for `follows_not_placed`", manager, StringComparison.Ordinal);
+        Assert.Contains("A letter of its own that ends with that code is proposed again under a new key", manager, StringComparison.Ordinal);
         Assert.Contains("For a send that followed a letter, its `failure_code` and the rule \"A follow-up that could not go\" decide the way forward", manager, StringComparison.Ordinal);
         Assert.Contains("a letter that a succeeded read says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`)", Flattened("manager"), StringComparison.Ordinal);
         Assert.Contains("under which letter the email lands and that letter's subject, read from the item with `jason workitem get", Flattened("approvals-and-questions"), StringComparison.Ordinal);
