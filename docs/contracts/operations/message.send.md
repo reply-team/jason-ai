@@ -125,6 +125,9 @@ so that a follow-up lands in the person's mailbox under the first letter. It has
 - a work item's identifier, `wi_…`: that letter, named explicitly;
 - `new_thread`: a letter of its own.
 
+The default never takes as its root a letter a succeeded `message.status` of the campaign says failed or was
+cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`).
+
 It is never null, and any other value is refused when the work item is written. Like `send_after`, it is an argument a
 provider may offer on some channels and not on others (`channel_arguments`): a work item's identifier is taken only by a
 plugin whose manifest lists `follows` for the channel, and the claim refuses it, `argument_unsupported`, on any other,
@@ -132,6 +135,9 @@ while `new_thread` asks nothing of the plugin and is taken by every one. A lette
 plugin cannot place in a thread — no earlier letter, a plugin that does not take the argument, a root that went from
 another account — goes as a new letter, and the preview a person reads says so; only a letter named explicitly that
 cannot be followed is refused, at the claim.
+A letter named explicitly that a read says failed or was cancelled is not refused for that at the claim: it is passed
+to the provider, which refuses it at its moment where it holds that the letter never went, and
+nothing is sent.
 
 The decision is the runtime's, and it is composed at the root of the input, as `send` is for a read of a send; `args`
 stays as the caller wrote it:

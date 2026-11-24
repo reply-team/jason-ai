@@ -219,6 +219,26 @@ public class RouteKeepsSendsTests
     }
 
     /// <summary>
+    /// The states of a status read that say a send never went, which stop it counting as a touch, are final ones, and the
+    /// two the operation's document says did not go: cancelled before it went, and taken by the provider and not gone. The
+    /// one that may have gone, <c>unknown</c>, is not among them.
+    /// </summary>
+    [Fact]
+    public void The_states_that_say_a_send_never_went_are_the_ones_the_status_document_says_did_not_go()
+    {
+        var state = OperationCatalog.Find(HeldSends.Status)!.OutputSchema["properties"]!["state"]!;
+        var said = (string)state["description"]!;
+
+        Assert.All(HeldSends.UnsentStates, unsent => Assert.Contains(unsent, HeldSends.FinalStates));
+        Assert.Equal(["sent", "unknown"], HeldSends.MayHaveGoneStates.Order(StringComparer.Ordinal));
+        Assert.Equal(HeldSends.FinalStates.Order(StringComparer.Ordinal), HeldSends.UnsentStates.Concat(HeldSends.MayHaveGoneStates).Order(StringComparer.Ordinal));
+        Assert.Equal(["cancelled", "failed"], HeldSends.UnsentStates.Order(StringComparer.Ordinal));
+        Assert.Contains("`cancelled`: it was cancelled before it went.", said, StringComparison.Ordinal);
+        Assert.Contains("`failed`: the provider took it and it did not go.", said, StringComparison.Ordinal);
+        Assert.Contains("`unknown`: the provider attempted the send and lost track of it, so it may have gone.", said, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The guard lets go by itself: no cancel is made and nothing is written, and the same <c>route.set</c> that was refused
     /// while the send's moment was still to come goes through once the runtime's clock, the one the activator reads, has
     /// passed it.

@@ -260,6 +260,46 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A root that a succeeded read of the campaign, here the manager's, says the provider failed or cancelled never went, so
+    /// the follow-up never goes into its thread: the line's root is the letter before it, and with none the message is a letter
+    /// of its own, which says so. A read that says the letter went, that the provider still holds it, or that the provider lost
+    /// track of it, leaves it the root.
+    /// </summary>
+    [Theory]
+    // Critical: a follow-up that goes into the thread of a letter the provider never sent goes nowhere, or as a reply to nothing.
+    [InlineData("failed", true, "the letter before it", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.W3)])]
+    [InlineData("cancelled", true, "the letter before it")]
+    [InlineData("failed", false, FollowsDecision.NoEarlierLetter)]
+    [InlineData("cancelled", false, FollowsDecision.NoEarlierLetter)]
+    [InlineData("unknown", true, "the letter read")]
+    [InlineData("queued", true, "the letter read")]
+    [InlineData("sent", false, "the letter read")]
+    public async Task A_root_a_read_says_never_went_is_skipped_for_the_letter_before_it(string state, bool before, string followed)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LetterHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        var earlier = before ? Wrote(db, campaign, contact, hoursAgo: 7) : null;
+        var letter = Wrote(db, campaign, contact, hoursAgo: 5);
+        ReadSaid(db, campaign, letter, state, madeBy: ActorType.Role);
+        var send = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var composed = (await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItemId == send.Id, Ct)).Subject["input"]![FollowsDecision.Key]!;
+        var expected = followed switch
+        {
+            "the letter before it" => (earlier!.PublicId, "email-7", FollowsDecision.LineRoot),
+            "the letter read" => (letter.PublicId, "email-5", FollowsDecision.LineRoot),
+            _ => ((string?)null, (string?)null, FollowsDecision.NoEarlierLetter),
+        };
+        Assert.Equal(expected, ((string?)composed["work_item"], (string?)composed["reference"], (string?)composed["because"]));
+    }
+
+    /// <summary>
     /// A send whose answer was lost is repeated with what its first claim decided: the root it followed, though a later
     /// letter opened a thread of its own since and the root itself was taken back since. The input is the one that claim
     /// composed, by its digest, so the repeat runs under the person's decision, and nothing more is recorded or said.
