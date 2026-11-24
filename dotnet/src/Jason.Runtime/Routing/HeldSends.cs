@@ -24,6 +24,15 @@ namespace Jason.Runtime.Routing;
 /// so while the provider holds it a route naming that plugin and account is what keeps it cancellable. All of it is the
 /// runtime's own record: the send's work item, the latest succeeded attempt's provenance and the campaign's cancels and
 /// reads; nothing is asked of the provider.
+/// <para>
+/// The same definition, with its moment test turned round (<see cref="HeldMoment.Passed"/>), is the deferred send whose
+/// moment has passed, which the deferred read step reads to learn what became of it: no longer held, and not yet known to
+/// have gone. For it a send is settled only by what says what became of it: a succeeded cancel, an answer that the
+/// provider holds no such send, by a cancel or a read, or a final read. A cancel answered that there was nothing pending,
+/// and a read that says the send can no longer be cancelled, say only that it can no longer be taken back, so they settle
+/// nothing there. And the definition alone (<see cref="HeldMoment.Any"/>), at any moment, is the send whose read's answer
+/// that it failed or was cancelled is said, unless the campaign's own cancel of it succeeded.
+/// </para>
 /// </summary>
 internal static class HeldSends
 {
@@ -48,14 +57,17 @@ internal static class HeldSends
     public static IReadOnlyList<string> FinalStates { get; } = ["sent", "cancelled", "failed", "unknown"];
 
     /// <summary>
-    /// One read, bounded by the moment: only a send held for a moment after the caller's clock, which is passed in so the
-    /// clock stays the caller's and never the database's, reaches the question of what released it. The operations that
-    /// make a send are passed as a JSON array, the catalog's own answer, so no list of them is written here; so are the
-    /// answers that release one. SQLite's date functions read the contract's <c>Z</c> and <c>±hh:mm</c> forms and its
-    /// fraction, and a moment they cannot read is NULL and names no moment. A final state frees a send whichever read said
-    /// it, since a send that went or failed does not come back; that it can no longer be cancelled is read from the latest
-    /// read alone, since a provider may hold a send it was about to send again. The latest is the one that finished last. The moment comes back in UTC to the
-    /// millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends keep nothing.
+    /// One read, bounded by the moment: only a send whose moment stands where the mode asks, against a bound the caller
+    /// passes, so the clock stays the caller's and never the database's, reaches the question of what released it. The
+    /// operations that make a send are passed as a JSON array, the catalog's own answer, so no list of them is written here;
+    /// so are the answers that release one, and a cancel's answers are passed for the mode, since a send whose moment has
+    /// passed is not settled by a cancel answered that there was nothing pending. SQLite's date functions read the
+    /// contract's <c>Z</c> and <c>±hh:mm</c> forms and its fraction, and a moment they cannot read is NULL and names no
+    /// moment. A final state frees a send whichever read said it, since a send that went or failed does not come back; that
+    /// it can no longer be cancelled is read from the latest read alone, since a provider may hold a send it was about to
+    /// send again, and only while its moment is still to come. The latest is the one that finished last. The moment comes
+    /// back in UTC to the millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends
+    /// keep nothing.
     /// </summary>
     private const string Sql = """
         SELECT Campaign, WorkItem, Operation, strftime('%Y-%m-%dT%H:%M:%fZ', Moment) AS Moment, PluginId, BindingIdentity
@@ -71,11 +83,16 @@ internal static class HeldSends
             WHERE s.status = 'succeeded'
               AND ({7} IS NULL OR s.campaign_id = {7})
               AND ({8} IS NULL OR s.contact_id IN (SELECT value FROM json_each({8})))
+              AND ({11} IS NULL OR s.public_id = {11})
               AND s.operation IN (SELECT value FROM json_each({0}))
               AND json_type(s.result_json, '$.items[0].cancelable') = 'true'
               AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
         ) AS held
-        WHERE julianday(Moment) > julianday({1})
+        WHERE CASE {9}
+                WHEN 'to_come' THEN julianday(Moment) > julianday({1})
+                WHEN 'passed' THEN julianday(Moment) <= julianday({1}) AND ({10} IS NULL OR julianday(Moment) >= julianday({10}))
+                ELSE julianday(Moment) IS NOT NULL
+              END
           AND PluginId IS NOT NULL
           AND NOT EXISTS (
               SELECT 1 FROM work_items AS k
@@ -84,20 +101,21 @@ internal static class HeldSends
                 AND json_extract(k.context_json, '$.input.send') = held.WorkItem
                 AND (
                     (k.operation = {2} AND k.status = 'succeeded')
-                    OR (k.operation = {2} AND k.status = 'failed'
-                        AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({4})))
-                    OR (k.operation = {3} AND k.status = 'failed'
-                        AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({6})))
-                    OR (k.operation = {3} AND k.status = 'succeeded'
-                        AND json_extract(k.result_json, '$.state') IN (SELECT value FROM json_each({5})))
-                    OR (k.operation = {3} AND k.status = 'succeeded'
-                        AND json_type(k.result_json, '$.cancelable') = 'false'
-                        AND k.id = (
-                            SELECT r.id FROM work_items AS r
-                            WHERE r.campaign_id = held.CampaignRow AND r.operation = {3} AND r.status = 'succeeded'
-                              AND json_extract(r.context_json, '$.input.send') = held.WorkItem
-                            ORDER BY r.finished_at DESC, r.id DESC
-                            LIMIT 1))))
+                    OR ({9} <> 'any' AND (
+                        (k.operation = {2} AND k.status = 'failed'
+                            AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({4})))
+                        OR (k.operation = {3} AND k.status = 'failed'
+                            AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({6})))
+                        OR (k.operation = {3} AND k.status = 'succeeded'
+                            AND json_extract(k.result_json, '$.state') IN (SELECT value FROM json_each({5})))
+                        OR ({9} = 'to_come' AND k.operation = {3} AND k.status = 'succeeded'
+                            AND json_type(k.result_json, '$.cancelable') = 'false'
+                            AND k.id = (
+                                SELECT r.id FROM work_items AS r
+                                WHERE r.campaign_id = held.CampaignRow AND r.operation = {3} AND r.status = 'succeeded'
+                                  AND json_extract(r.context_json, '$.input.send') = held.WorkItem
+                                ORDER BY r.finished_at DESC, r.id DESC
+                                LIMIT 1))))))
         ORDER BY CampaignRow, Id
         """;
 
@@ -112,7 +130,7 @@ internal static class HeldSends
 
     /// <summary>Every send the provider still holds for a moment after <paramref name="now"/>, in campaign order.</summary>
     public static Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, CancellationToken ct) =>
-        ReadAsync(db, now, campaignId: null, contactIds: null, ct);
+        ReadAsync(db, HeldMoment.ToCome, now, since: null, campaignId: null, contactIds: null, send: null, ct);
 
     /// <summary>
     /// The same read, narrowed to one campaign's sends to the people named, by their rows: what the provider still holds
@@ -121,18 +139,61 @@ internal static class HeldSends
     public static Task<IReadOnlyList<HeldSend>> ReadForAsync(JasonDbContext db, int campaignId, IReadOnlyCollection<int> contactIds, DateTimeOffset now, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contactIds);
-        return ReadAsync(db, now, campaignId, contactIds, ct);
+        return ReadAsync(db, HeldMoment.ToCome, now, since: null, campaignId, contactIds, send: null, ct);
     }
 
-    private static async Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, int? campaignId, IReadOnlyCollection<int>? contactIds, CancellationToken ct)
+    /// <summary>
+    /// Every send the definition holds whose moment is no later than <paramref name="passedBy"/> and, where given, no
+    /// earlier than <paramref name="since"/>, and of which nothing yet says what became of it, in campaign order: the
+    /// deferred sends whose moment has passed. <paramref name="campaignId"/> and <paramref name="send"/>, where given,
+    /// narrow it to one campaign's row and one send.
+    /// </summary>
+    public static Task<IReadOnlyList<HeldSend>> ReadPassedAsync(
+        JasonDbContext db, DateTimeOffset passedBy, DateTimeOffset? since, CancellationToken ct, int? campaignId = null, string? send = null) =>
+        ReadAsync(db, HeldMoment.Passed, passedBy, since, campaignId, contactIds: null, send, ct);
+
+    /// <summary>
+    /// The send of the campaign's row named, where the definition covers it, at any moment, and no cancel of the campaign's
+    /// that succeeded names it; otherwise null.
+    /// </summary>
+    public static async Task<HeldSend?> CoveredAsync(JasonDbContext db, int campaignId, string send, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(send);
+        var found = await ReadAsync(db, HeldMoment.Any, DateTimeOffset.MinValue, since: null, campaignId, contactIds: null, send, ct).ConfigureAwait(false);
+        return found.Count == 0 ? null : found[0];
+    }
+
+    private static async Task<IReadOnlyList<HeldSend>> ReadAsync(
+        JasonDbContext db,
+        HeldMoment mode,
+        DateTimeOffset bound,
+        DateTimeOffset? since,
+        int? campaignId,
+        IReadOnlyCollection<int>? contactIds,
+        string? send,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
 
-        var at = now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
         object campaign = campaignId is { } row ? row : DBNull.Value;
         object people = contactIds is null ? DBNull.Value : JsonSerializer.Serialize(contactIds);
+        object from = since is { } earliest ? Moment(earliest) : DBNull.Value;
+        object one = send is null ? DBNull.Value : send;
         var rows = await db.Database
-            .SqlQueryRaw<HeldSendRow>(Sql, Makers, at, Cancel, Status, Gone, Final, Unread, campaign, people)
+            .SqlQueryRaw<HeldSendRow>(
+                Sql,
+                Makers,
+                Moment(bound),
+                Cancel,
+                Status,
+                mode == HeldMoment.ToCome ? Gone : Unread,
+                Final,
+                Unread,
+                campaign,
+                people,
+                Word(mode),
+                from,
+                one)
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return rows
@@ -145,6 +206,29 @@ internal static class HeldSends
                 row.BindingIdentity))
             .ToList();
     }
+
+    private static string Moment(DateTimeOffset moment) =>
+        moment.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
+
+    private static string Word(HeldMoment mode) => mode switch
+    {
+        HeldMoment.ToCome => "to_come",
+        HeldMoment.Passed => "passed",
+        _ => "any",
+    };
+}
+
+/// <summary>Which side of a send's moment the one definition of a held send is asked about.</summary>
+internal enum HeldMoment
+{
+    /// <summary>A moment still to come: what the provider holds now, which a route change and a take-back read.</summary>
+    ToCome,
+
+    /// <summary>A moment passed by the caller's bound: a deferred send the provider should have made by now.</summary>
+    Passed,
+
+    /// <summary>Any moment: the definition alone, released by nothing but the campaign's own cancel that succeeded.</summary>
+    Any,
 }
 
 /// <summary>

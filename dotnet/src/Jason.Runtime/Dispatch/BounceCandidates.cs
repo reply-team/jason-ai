@@ -1,10 +1,7 @@
 using System.Globalization;
-using System.Text.Json.Nodes;
-using Jason.Contracts.Api;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
-using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Dispatch;
@@ -87,43 +84,6 @@ internal static class BounceCandidates
     {
         var since = bouncedAt.ToUniversalTime().Subtract(Window).ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
         return db.Database.SqlQueryRaw<BounceCandidate>(Sql, campaignId, contactId, SendOperation, since, pluginId, JournalKinds.MessageBounceObserved, Most);
-    }
-
-    /// <summary>
-    /// Which of <paramref name="sends"/> already have an open read the runtime made: a <c>message.status</c> of the campaign,
-    /// created by the system and not finished, naming the send. A read a person or a role made is theirs, and does not
-    /// count: the runtime makes its own beside it.
-    /// </summary>
-    public static async Task<IReadOnlySet<string>> ReadOpenAsync(JasonDbContext db, int campaignId, IReadOnlyCollection<string> sends, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        ArgumentNullException.ThrowIfNull(sends);
-        if (sends.Count == 0)
-        {
-            return new HashSet<string>(StringComparer.Ordinal);
-        }
-
-        // The statuses that are not final, named rather than negated, so the query seeks the campaign's live items by the
-        // index on campaign and status.
-        var open = await db.WorkItems
-            .AsNoTracking()
-            .Where(item => item.CampaignId == campaignId
-                && (item.Status == WorkItemStatus.Created
-                    || item.Status == WorkItemStatus.AwaitingApproval
-                    || item.Status == WorkItemStatus.Scheduled
-                    || item.Status == WorkItemStatus.Processing
-                    || item.Status == WorkItemStatus.Waiting)
-                && item.Operation == StatusOperation
-                && item.CreatedByType == ActorType.System)
-            .Select(item => item.Context)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        var named = open
-            .Select(context => context[WorkItemService.InputKey]?["send"] is JsonValue send
-                && send.TryGetValue<string>(out var id) ? id : null)
-            .OfType<string>();
-        return named.Intersect(sends, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
     }
 }
 
