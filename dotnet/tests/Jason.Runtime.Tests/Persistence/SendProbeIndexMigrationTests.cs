@@ -13,8 +13,8 @@ namespace Jason.Runtime.Tests.Persistence;
 
 /// <summary>
 /// Which work items of a campaign name a send — its cancels and its reads — is asked by every touch that counts, the line's
-/// root, the hold and the people list, each time for one send. The migration adds one expression index over the campaign,
-/// the operation and the send an item's input names, and nothing else; the index is the probe's own wording
+/// root, the hold and the people list, each time for one send. The migration adds one expression index over the send an
+/// item's input names, the campaign and the operation, and nothing else; the index is the probe's own wording
 /// (<see cref="SendProbe"/>), so a query that probes in other words is a scan again, and the plans of the hot reads are held
 /// here to seek by all three of its columns.
 /// </summary>
@@ -25,7 +25,7 @@ public class SendProbeIndexMigrationTests
     private const string ThisMigration = "20261124072351_SendProbeIndex";
 
     /// <summary>The seek on all three of the index's columns, as SQLite's plan names it.</summary>
-    private static readonly string FullSeek = $"USING INDEX {SendProbe.Index} (campaign_id=? AND operation=? AND <expr>=?)";
+    private static readonly string FullSeek = $"USING INDEX {SendProbe.Index} (<expr>=? AND campaign_id=? AND operation=?)";
 
     [Fact]
     [Critical(Family.P2, BrokenUntouched.Migration)]
@@ -65,6 +65,52 @@ public class SendProbeIndexMigrationTests
     }
 
     /// <summary>
+    /// A context stored with the column's own check turned off, text that is not JSON, neither refuses the migration nor a
+    /// later write of its row: the index reads the context only where it is JSON, and such a context names no send.
+    /// </summary>
+    [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
+    public async Task A_context_that_is_not_json_neither_refuses_the_migration_nor_a_later_write()
+    {
+        using var dir = AtThePreviousMigration();
+        string item;
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            var campaign = WorkItemFactory.NewCampaign();
+            db.Campaigns.Add(campaign);
+            var send = WorkItemFactory.NewProviderOp(campaign, "message.cancel");
+            db.WorkItems.Add(send);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            item = send.PublicId;
+        }
+
+        SqliteConnection.ClearAllPools();
+        using (var connection = new SqliteConnection(JasonDbContext.ConnectionString(dir.Paths.DatabaseFile) + ";Pooling=False"))
+        {
+            connection.Open();
+            Execute(connection, "PRAGMA ignore_check_constraints = ON", item);
+            Execute(connection, "UPDATE work_items SET context_json = '{\"input\":{\"send\":\"wi_' WHERE public_id = $item", item);
+        }
+
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
+        }
+
+        SqliteConnection.ClearAllPools();
+        using (var connection = new SqliteConnection(JasonDbContext.ConnectionString(dir.Paths.DatabaseFile) + ";Pooling=False"))
+        {
+            connection.Open();
+            Execute(connection, "PRAGMA ignore_check_constraints = ON", item);
+            Execute(connection, "UPDATE work_items SET context_json = '{\"input\":' WHERE public_id = $item", item);
+            using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT count(*) FROM work_items AS k INDEXED BY {SendProbe.Index} WHERE k.public_id = $item AND {SendProbe.Of("k")} IS NULL";
+            command.Parameters.AddWithValue("$item", item);
+            Assert.Equal(1L, (long)command.ExecuteScalar()!);
+        }
+    }
+
+    /// <summary>
     /// A database migrated from nothing holds the index, over the campaign, the operation and the probe's expression in the
     /// probe's own words: an expression index is taken only by a query that writes the same expression, so the day the
     /// wording changes without a migration that indexes the new one, this goes red.
@@ -83,15 +129,15 @@ public class SendProbeIndexMigrationTests
 
         Assert.True(reader.Read(), $"A database migrated from nothing has no index {SendProbe.Index}.");
         Assert.Equal("work_items", reader.GetString(0));
-        Assert.Equal($"CREATE INDEX {SendProbe.Index} ON work_items (campaign_id, operation, {SendProbe.Indexed})", reader.GetString(1));
+        Assert.Equal($"CREATE INDEX {SendProbe.Index} ON work_items ({SendProbe.Indexed}, campaign_id, operation)", reader.GetString(1));
     }
 
     /// <summary>
-    /// The hot reads that ask which items name a send seek the index by the campaign, the operation and the send, for each
-    /// take-back and read they look for: the claim's count of touches, the line's root, the people page's touches, the
-    /// line root's question of a take-back, the hold's reading of Jason's own move and the read of the sends a provider holds. They seek all three columns only because the probe compares with the send's id
-    /// stripped of its column's affinity by the unary plus, which <see cref="Without_the_unary_plus_the_seek_stops_at_the_operation"/>
-    /// shows.
+    /// The hot reads that ask which items name a send seek the index by the send, the campaign and the operation, for each
+    /// take-back and read they look for: the claim's count of touches, the line's root, the people page's touches, the line
+    /// root's question of a take-back, the hold's reading of Jason's own move and the read of the sends a provider holds.
+    /// They take the index only because the probe compares with the send's id stripped of its column's affinity by the unary
+    /// plus, which <see cref="Without_the_unary_plus_the_index_is_not_taken"/> shows.
     /// </summary>
     [Theory]
     [Critical(Family.P2, BrokenUntouched.Migration)]
@@ -106,21 +152,21 @@ public class SendProbeIndexMigrationTests
     }
 
     /// <summary>
-    /// Why the probe writes <c>= +</c>: the send's id is a column of TEXT affinity and the index's third column an expression
+    /// Why the probe writes <c>= +</c>: the send's id is a column of TEXT affinity and the index's first column an expression
     /// with none, and SQLite does not seek an index column whose affinity the comparison does not match, so without the plus
-    /// the seek stops at the campaign and the operation and every take-back and read of the campaign is read.
+    /// the index is not taken and every take-back and read of the campaign is read.
     /// </summary>
     [Theory]
     [Critical(Family.P2, BrokenUntouched.Migration)]
     [MemberData(nameof(HotReads))]
-    public void Without_the_unary_plus_the_seek_stops_at_the_operation(string read, string sql)
+    public void Without_the_unary_plus_the_index_is_not_taken(string read, string sql)
     {
         Assert.Contains("= +", sql, StringComparison.Ordinal);
         var probes = ProbeSteps(sql.Replace("= +", "= ", StringComparison.Ordinal));
 
         Assert.True(
-            probes.Count > 0 && probes.All(step => !step.EndsWith(FullSeek, StringComparison.Ordinal)),
-            $"{read}: without the unary plus the plan still seeks all three columns, and the plus is no longer what makes it: {string.Join(" | ", probes)}");
+            probes.Count > 0 && probes.All(step => !step.Contains(SendProbe.Index, StringComparison.Ordinal)),
+            $"{read}: without the unary plus the plan still takes the index, and the plus is no longer what makes it: {string.Join(" | ", probes)}");
     }
 
     public static TheoryData<string, string> HotReads() => new()
@@ -179,6 +225,14 @@ public class SendProbeIndexMigrationTests
         }
 
         return steps;
+    }
+
+    private static void Execute(SqliteConnection connection, string sql, string item)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$item", item);
+        command.ExecuteNonQuery();
     }
 
     private static TempDataDir AtThePreviousMigration()

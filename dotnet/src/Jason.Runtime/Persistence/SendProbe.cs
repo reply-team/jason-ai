@@ -2,7 +2,7 @@ namespace Jason.Runtime.Persistence;
 
 /// <summary>
 /// Which work items name a send — its cancels and its reads, each naming it by <c>context.input.send</c> — in one wording,
-/// which every query that probes a send by it takes, and the index over the campaign, the operation and that expression.
+/// which every query that probes a send by it takes, and the index over that expression, the campaign and the operation.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,8 +14,18 @@ namespace Jason.Runtime.Persistence;
 /// <para>
 /// A send is named by its public id, a column of TEXT affinity, and the index's expression has none: SQLite seeks an index
 /// column only by a comparison whose affinity matches it, so <see cref="Names"/> compares with the id under a unary plus,
-/// which strips the affinity and lets the seek take all three columns. Without it the seek stops at the operation, and
-/// every cancel and read of the campaign is read for the send it names.
+/// which strips the affinity and lets the seek take all three columns. Without it the index is not taken at all, and every
+/// cancel and read of the campaign is read for the send it names.
+/// </para>
+/// <para>
+/// The send leads the index, so no query that does not name a send is planned by it: a read of a campaign's work by its
+/// operation keeps the index it had.
+/// </para>
+/// <para>
+/// The context is read only where it is valid JSON. An index's expression is evaluated at every write of its row, and
+/// <c>json_extract</c> over a text that is not JSON raises an error, so a context stored with the column's own check turned
+/// off would otherwise refuse every later write of its row, and the migration that makes the index on a database holding
+/// one; such a context names no send.
 /// </para>
 /// <para>
 /// The index is outside the model, as an expression is not a property: a later migration that rebuilds the work items'
@@ -24,11 +34,14 @@ namespace Jason.Runtime.Persistence;
 /// </remarks>
 internal static class SendProbe
 {
-    /// <summary>The index over the campaign, the operation and the send an item names.</summary>
-    internal const string Index = "ix_work_items_campaign_id_operation_send";
+    /// <summary>The index over the send an item names, its campaign and its operation.</summary>
+    internal const string Index = "ix_work_items_send_campaign_id_operation";
 
-    /// <summary>The expression, over the work item aliased <c>{0}</c> followed by its dot, or over the bare column.</summary>
-    private const string Expression = "json_extract({0}context_json, '$.input.send')";
+    /// <summary>
+    /// The expression, over the work item aliased <c>{0}</c> followed by its dot, or over the bare column: the send the context
+    /// names where the context is JSON, and NULL where it is not.
+    /// </summary>
+    private const string Expression = "json_extract(CASE WHEN json_valid({0}context_json) THEN {0}context_json END, '$.input.send')";
 
     /// <summary>The expression as the index holds it, over the bare column.</summary>
     internal static readonly string Indexed = Of(item: null);
