@@ -1,0 +1,197 @@
+{
+  "operation": "approval.get",
+  "case": "card-follow",
+  "request": {
+    "approval_id": "apr_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_2",
+    "work_item_id": "wi_2",
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-4",
+    "subject": {
+      "binding_identity": "sha256:recorded-1",
+      "input": {
+        "args": {
+          "channel": "email",
+          "sender": {
+            "external_id": "s_12",
+            "address": "owner@example.test"
+          },
+          "message": {
+            "format": "email",
+            "subject": "Notes from the meetup",
+            "body": "Hi Ines, did you get a chance to look at my note?"
+          }
+        },
+        "follows": {
+          "work_item": "wi_1",
+          "operation": "message.send",
+          "reference": "m_501",
+          "because": "line_root"
+        },
+        "contacts": [
+          {
+            "id": "cnt_1",
+            "first_name": "Ines",
+            "last_name": "Duarte",
+            "company": "Kavali",
+            "title": null,
+            "time_zone": null,
+            "channels": [
+              {
+                "channel": "email",
+                "value": "ines@example.test",
+                "primary": true
+              }
+            ],
+            "external_ids": {
+              "contact": "rc_77"
+            }
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {
+            "campaign": "c_7714"
+          }
+        },
+        "idempotency_key": "wi_2"
+      },
+      "operation": "message.send",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_2"
+    },
+    "preview": {
+      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, did you get a chance to look at my note?; send after: —; follows: wi_1 (line_root); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+      "highlights": {
+        "/contacts/0/channels/0/value": "ines@example.test",
+        "/args/channel": "email",
+        "/args/sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
+        },
+        "/args/message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Ines, did you get a chance to look at my note?"
+        },
+        "/args/message/compose": null,
+        "/args/send_after": null,
+        "/follows": {
+          "work_item": "wi_1",
+          "operation": "message.send",
+          "reference": "m_501",
+          "because": "line_root"
+        }
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Ines Duarte",
+        "channel": "email",
+        "value": "ines@example.test"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-1",
+      "subject": {
+        "binding_identity": "sha256:recorded-1",
+        "input": {
+          "args": {
+            "channel": "email",
+            "sender": {
+              "external_id": "s_12",
+              "address": "owner@example.test"
+            },
+            "message": {
+              "format": "email",
+              "subject": "Notes from the meetup",
+              "body": "Hi Ines, did you get a chance to look at my note?"
+            }
+          },
+          "follows": {
+            "work_item": "wi_1",
+            "operation": "message.send",
+            "reference": "m_501",
+            "because": "line_root"
+          },
+          "contacts": [
+            {
+              "id": "cnt_1",
+              "first_name": "Ines",
+              "last_name": "Duarte",
+              "company": "Kavali",
+              "title": null,
+              "time_zone": null,
+              "channels": [
+                {
+                  "channel": "email",
+                  "value": "ines@example.test",
+                  "primary": true
+                }
+              ],
+              "external_ids": {
+                "contact": "rc_77"
+              }
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {
+              "campaign": "c_7714"
+            }
+          },
+          "idempotency_key": "wi_2"
+        },
+        "operation": "message.send",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_2"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-1",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-16T09:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Ines Duarte",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

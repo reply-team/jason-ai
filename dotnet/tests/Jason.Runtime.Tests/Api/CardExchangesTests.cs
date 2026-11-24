@@ -8,6 +8,7 @@ using Jason.Runtime.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Contacts;
@@ -130,6 +131,45 @@ public partial class CardExchangesTests
         var decided = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-all-approved", new { work_item_id = item, statuses = AllApprovalStatuses }, Ct);
         Assert.Contains(decided.Items, a => a.Id == reasked.Id && a.Status == ApprovalStatus.Approved);
         Assert.Contains(decided.Items, a => a.Id == row.Id && a.Status == ApprovalStatus.Superseded);
+    }
+
+    /// <summary>
+    /// A letter that goes under an earlier one, as the card and the terminal read it: the first letter goes and is kept with
+    /// the provider's reference; the second, to the same person, is parked by the claim as a reply in the first one's thread.
+    /// The three exchanges are the second letter's approval, the second item, and the first item the card reads for its
+    /// subject and its moment.
+    /// </summary>
+    [Fact]
+    public async Task A_letter_that_follows_an_earlier_one_is_read_with_the_earlier_letter()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, RoleSettings),
+            clock: new FixedClock(Nine),
+            configureServices: services => services.AddSingleton<ICommand>(Provider(sendReference: true)));
+        var scene = await Scene.OpenAsync(api, "Spring launch", follows: true);
+        var ines = await scene.PersonAsync("Ines", "Duarte", "email", "ines@example.test");
+        await scene.StartAsync();
+        var made = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemCreate, new { campaign_id = scene.Campaign, kind = "provider_op", operation = "campaign.create", context = new { input = new { name = "Spring launch" } }, actor = Ada }, Ct);
+        Assert.Equal(made.Id, Assert.Single(await scene.ClaimAndRunAsync()).WorkItemPublicId);
+        var first = await scene.SendAsync(ines, "message.send", EmailArgs("Hi Ines, thanks for the talk at the meetup."));
+        await scene.ClaimAsync();
+        var toApprove = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
+        await api.PostOkAsync<ApprovalDto>(Operations.ApprovalApprove, new { approval_id = toApprove.Id, actor = Ada }, Ct);
+        Assert.Equal(first, Assert.Single(await scene.ClaimAndRunAsync()).WorkItemPublicId);
+
+        var letter = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-follow-letter", new { work_item_id = first }, Ct);
+        Assert.Equal((WorkItemStatus.Succeeded, "Notes from the meetup"), (letter.Status, (string?)letter.Context["input"]!["message"]!["subject"]));
+
+        var second = await scene.SendAsync(ines, "message.send", EmailArgs("Hi Ines, did you get a chance to look at my note?"));
+        await scene.ClaimAsync();
+        var row = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
+        Assert.Equal(second, row.WorkItemId);
+        var asked = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-follow", new { approval_id = row.Id }, Ct);
+        var decision = asked.Subject["input"]!["follows"]!;
+        Assert.Equal((first, "line_root"), ((string?)decision["work_item"], (string?)decision["because"]));
+        var parked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-follow-parked", new { work_item_id = second }, Ct);
+        Assert.Equal(first, (string?)parked.Context["follows"]!["work_item"]);
     }
 
     private static readonly string[] AllApprovalStatuses = ["pending", "approved", "rejected", "superseded", "cancelled"];
@@ -668,7 +708,7 @@ public partial class CardExchangesTests
     /// and the one thread that moved. The claim, the approval, the attempt, the pins and everything the runtime writes from
     /// an answer are the runtime's own.
     /// </summary>
-    private static FakeCommand Provider() => new(WorkItemKind.ProviderOp, context =>
+    private static FakeCommand Provider(bool sendReference = false) => new(WorkItemKind.ProviderOp, context =>
     {
         var input = context.Plan!.Input;
         var (result, pins) = context.Operation switch
@@ -690,7 +730,7 @@ public partial class CardExchangesTests
             "message.send" => (
                 new JsonObject
                 {
-                    ["items"] = new JsonArray(new JsonObject
+                    ["items"] = new JsonArray(WithReference(new JsonObject
                     {
                         ["contact_id"] = (string?)input["contacts"]![0]!["id"],
                         ["status"] = "sent",
@@ -699,9 +739,9 @@ public partial class CardExchangesTests
                         ["sender_external_id"] = (string?)input["args"]!["sender"]!["external_id"],
                         ["message"] = new JsonObject { ["external_id"] = "m_501", ["sent_at"] = Moment(Nine) },
                         ["external_ids"] = new JsonObject { ["contact"] = "rc_77" },
-                    }),
+                    }, sendReference)),
                 },
-                new JsonObject { ["contact"] = "rc_77" }),
+                sendReference ? new JsonObject { ["contact"] = "rc_77", ["send"] = "m_501" } : new JsonObject { ["contact"] = "rc_77" }),
             "conversation.list" => (
                 new JsonObject
                 {
@@ -772,6 +812,17 @@ public partial class CardExchangesTests
     /// <summary>A role's work claimed and started as the dispatcher does it; its attempt is live until the role is released.</summary>
     private sealed record RunningRole(string WorkItemPublicId, string AttemptPublicId, Task Ended);
 
+    /// <summary>The send's own reference, said in the item and under the pins both, as the operation's contract holds them equal.</summary>
+    private static JsonObject WithReference(JsonObject item, bool said)
+    {
+        if (said)
+        {
+            item["reference"] = "m_501";
+        }
+
+        return item;
+    }
+
     private static JsonObject EmailArgs(string body) => new()
     {
         ["channel"] = "email",
@@ -789,11 +840,11 @@ public partial class CardExchangesTests
 
         public string Campaign { get; private set; } = "";
 
-        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true, string[]? more = null)
+        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true, string[]? more = null, bool follows = false)
         {
             if (routed)
             {
-                Route(api, more ?? []);
+                Route(api, more ?? [], follows);
             }
 
             var scene = new Scene(api);
@@ -810,14 +861,30 @@ public partial class CardExchangesTests
         }
 
         /// <summary>The stand-in plugin routed for every campaign: the five operations the cards' stories use, and <paramref name="more"/>.</summary>
-        private static void Route(RuntimeApiFixture api, string[] more)
+        private static void Route(RuntimeApiFixture api, string[] more, bool follows)
         {
             var routed = new JsonObject { ["workspace"] = "a" };
             var schema = JsonNode.Parse("""{ "type": "object", "properties": { "workspace": { "type": "string" } } }""")!.AsObject();
             var plugins = api.Resolve<PluginRegistry>();
+            var loaded = TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list", .. more], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") };
+            if (follows)
+            {
+                // The plugin takes a follow-up on email, so the claim decides which earlier letter a message goes under.
+                loaded = loaded with
+                {
+                    Manifest = loaded.Manifest with
+                    {
+                        Arguments = new ManifestArguments(new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>>(StringComparer.Ordinal)
+                        {
+                            ["message.send"] = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { [FollowsDecision.Key] = ["email"] },
+                        }),
+                    },
+                };
+            }
+
             plugins.Replace(
                 new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Nine.UtcDateTime, SnapshotSource.Startup,
-                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list", .. more], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
+                    [loaded]),
                 new ReloadReport(Nine.UtcDateTime, SnapshotSource.Startup, Activated: true, [], []));
             api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
                 PublicId.New(RouteSnapshot.IdPrefix),

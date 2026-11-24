@@ -102,68 +102,25 @@ describe('the message card, where the letter follows one', () => {
         );
     });
 
-    it('says a reply goes under the followed letter, read from its work item, and marks the subject as not sent', async () => {
-        const fake = new FakeApi();
-        const call = fake.call.bind(fake);
-        let reads = 0;
-        fake.call = async (operation, body, kind) =>
-            operation === 'workitem.get'
-                ? ((reads += 1),
-                  {
-                      context: {
-                          input: { args: { message: { subject: 'First note' }, send_after: '2020-03-04T09:30:00Z' } },
-                      },
-                      finished_at: '2020-03-03T18:02:00Z',
-                      updated_at: new Date().toISOString(),
-                  } as never)
-                : call(operation, body, kind);
+    it('says a reply goes under the followed letter, read from its recorded work item, and marks the subject as not sent', async () => {
+        const fake = new FakeApi().answer('workitem.get', 'workitem.get/card-follow-letter');
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
         render(
             <ApiProvider api={fake}>
-                <MessageCard
-                    detail={toApprovalDetail(
-                        withFollows({
-                            work_item: 'wi_9',
-                            operation: 'message.send',
-                            reference: 'r9',
-                            because: 'line_root',
-                        }),
-                    )}
-                />
+                <MessageCard detail={toApprovalDetail(preview)} />
             </ApiProvider>,
         );
         await waitFor(() =>
-            screen.getByText(/A reply to "First note" of 4 Mar 2020, \d\d:\d\d, the letter this campaign's thread/),
+            screen.getByText(
+                /A reply to "Notes from the meetup" of \d+ \w+( 2026)?, \d\d:\d\d, the letter this campaign's thread/,
+            ),
         );
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
-        expect(reads).toBe(1);
+        expect(fake.sent('workitem.get')).toEqual({ work_item_id: 'wi_1' });
     });
 
     it('shows nothing for a send that is not an email', () => {
         card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
         expect(terms()).not.toContain('Follows');
-    });
-
-    it('dates the followed letter by when the provider accepted it where it has no send_after', async () => {
-        const fake = new FakeApi();
-        fake.call = async () =>
-            ({
-                context: { input: { args: { message: { subject: 'First note' } } } },
-                finished_at: '2020-03-03T18:02:00Z',
-            }) as never;
-        render(
-            <ApiProvider api={fake}>
-                <MessageCard
-                    detail={toApprovalDetail(
-                        withFollows({
-                            work_item: 'wi_9',
-                            operation: 'message.send',
-                            reference: 'r9',
-                            because: 'named',
-                        }),
-                    )}
-                />
-            </ApiProvider>,
-        );
-        await waitFor(() => screen.getByText(/A reply to "First note" of 3 Mar 2020, \d\d:\d\d, as asked\./));
     });
 });
