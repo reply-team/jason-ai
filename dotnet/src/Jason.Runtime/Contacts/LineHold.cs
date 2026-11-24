@@ -25,7 +25,12 @@ namespace Jason.Runtime.Contacts;
 /// in the campaign, at its result's <c>accepted_for</c> where it names one and otherwise at the end of its succeeded
 /// attempt, or an answer the responder sent, a <c>conversation.reply</c> of the campaign into the line's own thread, at
 /// the end of its succeeded attempt. A touch records no thread, so touches are compared for the person across the
-/// campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a cancel took back never
+/// campaign and an answer for its thread alone. A follow-up, a <c>message.send</c> whose <c>follows</c> names a work item,
+/// is never that letter: the plugin that places follow-ups, Reply's, does not move a thread's moment when one lands, so a
+/// line's moment is never a follow-up's there, and taking one for the move would let an answer the follow-up overtook
+/// before the read hold nobody. A <c>message.send</c> with no <c>follows</c>, or one that names no work item, is a letter
+/// of its own and counts, and so does a touch of any other operation, whatever its context says. Only a moment that has
+/// come counts, and a letter a cancel took back never
 /// went, nor did one a succeeded read of the campaign says failed or was cancelled while no read of it says it went or may
 /// have gone (<see cref="Campaigns.LineTouches.NeverWentSql"/>), the one definition a touch that counts reads too. Moments of the
 /// runtime's own record are compared and nothing else. A line whose stored event names the other side
@@ -43,9 +48,14 @@ internal static class LineHold
     /// <summary>The answer into a thread, compared for the thread it names.</summary>
     private const string Answer = "conversation.reply";
 
+    /// <summary>The one operation that carries <c>follows</c>, whose follow-up never explains a move.</summary>
+    private const string FollowingSend = "message.send";
+
     /// <summary>
     /// Whether a letter of Jason's went out to the person at or after the line's moment and by now: a succeeded touch of the
-    /// person in the campaign, at its result's <c>accepted_for</c> or else its succeeded attempt's end, or a succeeded answer
+    /// person in the campaign that is a letter of its own, at its result's <c>accepted_for</c> or else its succeeded attempt's
+    /// end, never a follow-up, a <c>message.send</c> whose <c>follows</c> names a work item (the test
+    /// <see cref="Campaigns.LineRoots.RootSql"/> makes), or a succeeded answer
     /// of the campaign into the line's thread, at its attempt's end; never one a succeeded cancel names, nor one a succeeded
     /// read says failed or was cancelled while no read of it says it went or may have gone. SQLite's date functions read the stored moment and the contract's forms
     /// alike, and one they cannot read is NULL and counts for nothing.
@@ -56,7 +66,8 @@ internal static class LineHold
         JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
         WHERE s.campaign_id = {0}
           AND s.status = 'succeeded'
-          AND ((s.contact_id = {1} AND s.operation IN (SELECT value FROM json_each({2})))
+          AND ((s.contact_id = {1} AND s.operation IN (SELECT value FROM json_each({2}))
+                AND NOT (s.operation = {7} AND coalesce(json_type(s.context_json, '$.follows.work_item'), 'null') = 'text'))
                OR ({3} IS NOT NULL AND s.operation = {4} AND json_extract(s.context_json, '$.input.thread.external_id') = {3}))
           AND NOT {{Campaigns.LineTouches.NeverWentSql("s")}}
           AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) >= julianday({5})
@@ -141,7 +152,7 @@ internal static class LineHold
         ArgumentNullException.ThrowIfNull(db);
         object named = thread is null ? DBNull.Value : thread;
         var went = await db.Database
-            .SqlQueryRaw<int>(OwnMoveSql, campaignId, contactId, Touches, named, Answer, Moment(moved), Moment(now))
+            .SqlQueryRaw<int>(OwnMoveSql, campaignId, contactId, Touches, named, Answer, Moment(moved), Moment(now), FollowingSend)
             .SingleAsync(ct)
             .ConfigureAwait(false);
         return went > 0;

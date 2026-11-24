@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -17,7 +18,9 @@ namespace Jason.Runtime.Tests.Routing;
 /// is not later than the latest moment Jason's own letter went out to the person in the campaign — a touch's
 /// <c>accepted_for</c> where its result names one, otherwise the end of its succeeded attempt, or a
 /// <c>conversation.reply</c> into that same thread — is Jason's own move: it holds nobody and takes nothing back. Only a
-/// moment that has come counts, and a letter whose cancel succeeded never went.
+/// moment that has come counts, and a letter whose cancel succeeded never went. A follow-up, a <c>message.send</c> whose
+/// <c>follows</c> names a work item, never explains a move: the plugin that places follow-ups does not move a thread's
+/// moment when one lands.
 /// </summary>
 public partial class HeldSendsCancelTests
 {
@@ -273,6 +276,52 @@ public partial class HeldSendsCancelTests
         var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, at.AddMinutes(-1));
         attempt.FinishedAt = at;
         db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>
+    /// The person answered, and Jason's touch went after the answer, before the line was read: the line is Jason's own move
+    /// only where that touch is a letter of its own. A <c>message.send</c> whose <c>follows</c> names a work item is a
+    /// follow-up, which never explains the move; one whose <c>follows</c> names none, or that has none, still does, and so
+    /// does a touch of another operation whose context a caller wrote with <c>follows</c>, which carries no follow-up.
+    /// </summary>
+    [Theory]
+    [InlineData("no follows", true)]
+    [InlineData("follows naming no work item", true)]
+    [InlineData("follows naming a work item", false)]
+    [InlineData("follows naming a work item on another touch", true)]
+    public async Task Only_a_letter_of_its_own_and_never_a_follow_up_explains_a_move(string follows, bool ownMove)
+    {
+        using var harness = Routed();
+        var (campaign, person) = await SceneAsync(harness);
+        var first = await SentAsync(harness, campaign, person, sendAfter: null, cancelable: false, wentAt: Noon.AddHours(-2));
+        var answered = Noon.AddMinutes(-10);
+        var touch = await SentAsync(harness, campaign, person, sendAfter: null, cancelable: false, acceptedFor: Moment(answered.AddMinutes(2)));
+        if (follows != "no follows")
+        {
+            await FollowsAsync(
+                harness,
+                touch,
+                follows.StartsWith("follows naming a work item", StringComparison.Ordinal) ? first : null,
+                follows == "follows naming a work item on another touch" ? "social_invitation.send" : null);
+        }
+
+        await using var db = harness.Open();
+        Assert.Equal(ownMove, await LineHold.OwnMoveAsync(db, campaign, person, "th-1", answered, Noon, Ct));
+    }
+
+    /// <summary>
+    /// Records on the touch the decision of what it follows, naming <paramref name="workItem"/> or no work item, and makes
+    /// it a touch of <paramref name="operation"/> where one is given.
+    /// </summary>
+    private static async Task FollowsAsync(DispatchHarness harness, string touch, string? workItem, string? operation)
+    {
+        await using var db = harness.Open();
+        var item = await db.WorkItems.SingleAsync(w => w.PublicId == touch, Ct);
+        item.Operation = operation ?? item.Operation;
+        var context = (JsonObject)item.Context.DeepClone();
+        context["follows"] = new JsonObject { ["work_item"] = workItem, ["operation"] = workItem is null ? null : "message.send" };
+        item.Context = context;
         await db.SaveChangesAsync(Ct);
     }
 

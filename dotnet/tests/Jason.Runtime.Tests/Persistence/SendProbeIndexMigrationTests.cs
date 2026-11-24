@@ -193,7 +193,7 @@ public class SendProbeIndexMigrationTests
         { "taken back", LineRoots.TakenBackCountSql.Replace("{0}", "1", StringComparison.Ordinal).Replace("{1}", "'wi_1'", StringComparison.Ordinal) },
         {
             "hold's own move",
-            Bind(LineHold.OwnMoveSql, "1", "1", "'[\"message.send\"]'", "'th-1'", "'conversation.reply'", "'2026-11-01T00:00:00Z'", "'2026-11-24T00:00:00Z'")
+            Bind(LineHold.OwnMoveSql, "1", "1", "'[\"message.send\"]'", "'th-1'", "'conversation.reply'", "'2026-11-01T00:00:00Z'", "'2026-11-24T00:00:00Z'", "'message.send'")
         },
         {
             "held sends",

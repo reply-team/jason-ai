@@ -7,7 +7,8 @@ using System.Text.RegularExpressions;
 
 /// <summary>
 /// <c>inbox changes [--cursor &lt;c&gt; | --since &lt;moment&gt;] [--top &lt;n&gt;]</c>, answered as reply-cli 0.17.0 documents it over
-/// Reply's change feed: the threads that moved, oldest first by their last activity and then by thread, read from a cursor,
+/// Reply's change feed: the threads that moved, oldest first by their last activity, or a later follow-up into them, and
+/// then by thread, read from a cursor,
 /// from a moment, or from the start of the last 30 days, which is all the feed holds. An item is Reply's own, passed
 /// through as the CLI passes it — identifiers, moments and flags, no subject, preview or name. The cursor is the position
 /// a page ended at, and an empty page hands back one at the moment it was read, ahead of the one it was given. A cursor or
@@ -24,6 +25,12 @@ internal static partial class Account
 
     /// <summary>What a test plants on a message that is a bounce notice: the feed flags it, and nothing else of it says so.</summary>
     private const string BounceMark = "_bounce";
+
+    /// <summary>
+    /// When a follow-up last went into a thread, which Reply's change feed reads and its thread does not show: a follow-up
+    /// moves no thread moment, the last activity stays where it was, yet the thread comes into the feed again.
+    /// </summary>
+    private const string ChangedMark = "_changed";
 
     /// <summary>What a test plants to have every page hand back an empty cursor, which reply-cli passes on unread.</summary>
     private const string FeedFile = "feed.json";
@@ -97,7 +104,7 @@ internal static partial class Account
 
         var moved = Records(root, ThreadsFile)
             .Where(thread => thread[DeletedMark] is not JsonValue deleted || !deleted.GetValue<bool>())
-            .Select(thread => (Thread: thread, At: LastActivity(thread), Id: thread["id"]!.GetValue<int>()))
+            .Select(thread => (Thread: thread, At: Changed(thread), Id: thread["id"]!.GetValue<int>()))
             .Where(entry => entry.At >= floor && (entry.At > after.At || (entry.At == after.At && entry.Id > after.Thread)))
             .OrderBy(entry => entry.At)
             .ThenBy(entry => entry.Id)
@@ -111,6 +118,15 @@ internal static partial class Account
             ["has_more"] = moved.Count > page.Count,
             ["cursor"] = EmptyCursors(root) ? string.Empty : CursorOf(end),
         });
+    }
+
+    /// <summary>Where a thread stands in the change feed: its last activity, or the last follow-up into it where that is later.</summary>
+    private static DateTimeOffset Changed(JsonObject thread)
+    {
+        var at = LastActivity(thread);
+        return DateTimeOffset.TryParse(Text(thread, ChangedMark), CultureInfo.InvariantCulture, DateTimeStyles.None, out var followed) && followed > at
+            ? followed
+            : at;
     }
 
     /// <summary>One thread as the feed gives it: Reply's own camelCase keys, its flags sticky, and its last message's direction.</summary>
