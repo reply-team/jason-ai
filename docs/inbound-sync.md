@@ -176,9 +176,9 @@ next. And an overdue span raised after a send's ninth read succeeded is never me
 A read that fails says nothing, and its failure is the manager's as every failed item is (`workitem_failed`). It counts
 for none of the nine, and the next read follows it after the same wait as after one that succeeded, never sooner, until
 something says what became of the send or the 30 days are out. So one send is read 31 times at the most with the shipped
-settings, when every read fails: the first a quarter of an hour after its moment, the second an hour after the first,
-then one a day; with the grace and every wait at their shortest, a minute, as many as 43200. The step runs whatever
-`Inbound:Enabled` says.
+settings, the reads that succeeded and the reads that failed together, as when every read fails: the first a quarter of
+an hour after its moment, the second an hour after the first, then one a day; with the grace and every wait at their
+shortest, a minute, as many as 43200. The step runs whatever `Inbound:Enabled` says.
 
 Sync runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
