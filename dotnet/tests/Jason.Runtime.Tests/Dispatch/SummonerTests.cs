@@ -267,6 +267,32 @@ public class SummonerTests
         Assert.Null(item.Entry);
     }
 
+    /// <summary>
+    /// A send that did not go ranks as every other kind does: read behind a failure in one pass, the failure is still the
+    /// cause, where the first line wins; read ahead of a reply, the reply is.
+    /// </summary>
+    [Fact]
+    public async Task A_send_that_did_not_go_ranks_with_a_failure_and_below_a_reply()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var failing = await SeedAsync(harness, live: true, name: "Failing");
+        await JournalAsync(harness, failing, JournalKinds.WorkItemFailed);
+        await JournalAsync(harness, failing, JournalKinds.MessageUnsentObserved);
+        var replied = await SeedAsync(harness, live: true, name: "Replied");
+        await JournalAsync(harness, replied, JournalKinds.MessageUnsentObserved);
+        await JournalAsync(harness, replied, JournalKinds.InboundReplyObserved);
+
+        Assert.Equal(2, await SummonAsync(harness));
+
+        await using var db = harness.Open();
+        var rows = await db.Campaigns.ToDictionaryAsync(c => c.Id, c => c.PublicId, Ct);
+        var checkIns = await db.WorkItems.Where(w => w.Role == ManagerCheckIn.Role).ToListAsync(Ct);
+        var trigger = checkIns.ToDictionary(w => rows[w.CampaignId], w => (string?)w.Context["trigger"], StringComparer.Ordinal);
+        Assert.Equal(JournalKinds.WorkItemFailed, trigger[failing]);
+        Assert.Equal(JournalKinds.InboundReplyObserved, trigger[replied]);
+        Assert.Equal(ManagerTriggers.Rank(JournalKinds.WorkItemFailed), ManagerTriggers.Rank(JournalKinds.MessageUnsentObserved));
+    }
+
     /// <summary>A list narrowed before the kind existed does not hold it, so a send that did not go wakes nobody there.</summary>
     [Fact]
     public async Task A_list_narrowed_without_it_is_not_woken_by_a_send_that_did_not_go()
