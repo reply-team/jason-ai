@@ -30,8 +30,8 @@ namespace Jason.Runtime.Campaigns;
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
 /// are SQL (<see cref="CampaignPeople"/>). <see cref="CountedSql"/> is a condition over one work item aliased <c>w</c>; its
-/// attempts are read by the attempts' index on the work item, and what names it by the work items' index on the campaign,
-/// the operation and the send an item names (<see cref="SendProbe"/>): each take-back and read of the send is found by a
+/// attempts are read by the attempts' index on the work item, and what names it by the work items' index on the send an
+/// item names, the campaign and the operation (<see cref="SendProbe"/>): each take-back and read of the send is found by a
 /// seek, so the cost grows with what names the send rather than with the campaign's work.
 /// </para>
 /// </remarks>

@@ -28,19 +28,21 @@ internal static class SendReads
     /// <summary>
     /// The finished reads of the sends named, one row a read: the send it names, when it ended, in UTC to the millisecond,
     /// and whether it succeeded. A read is matched to its send by the identifier its input names; nothing else of its
-    /// context is read. One read may be left out by its id, the read whose own end is being decided.
+    /// context is read. One read may be left out by its id, the read whose own end is being decided. The reads are found by
+    /// the index on the send, the campaign and the operation (<see cref="SendProbe"/>); their finish is asked under the unary
+    /// plus, so the index on the campaign and the finish is not walked through the campaign's finished work instead.
     /// </summary>
-    private static readonly string MadeSql = $$"""
-        SELECT {{SendProbe.Of("w")}} AS Send,
-               strftime('%Y-%m-%dT%H:%M:%fZ', w.finished_at) AS Ended,
-               CASE WHEN w.status = 'succeeded' THEN 1 ELSE 0 END AS Succeeded
-        FROM work_items AS w
-        WHERE w.campaign_id = {0}
-          AND w.operation = {1}
-          AND w.created_by_type = 'system'
-          AND w.finished_at IS NOT NULL
-          AND ({3} IS NULL OR w.public_id <> {3})
-          AND {{SendProbe.Of("w")}} IN (SELECT value FROM json_each({2}))
+    internal static readonly string MadeSql = $$"""
+        SELECT {{SendProbe.Of("r")}} AS Send,
+               strftime('%Y-%m-%dT%H:%M:%fZ', r.finished_at) AS Ended,
+               CASE WHEN r.status = 'succeeded' THEN 1 ELSE 0 END AS Succeeded
+        FROM work_items AS r
+        WHERE r.campaign_id = {0}
+          AND r.operation = {1}
+          AND r.created_by_type = 'system'
+          AND +r.finished_at IS NOT NULL
+          AND ({3} IS NULL OR r.public_id <> {3})
+          AND {{SendProbe.Of("r")}} IN (SELECT value FROM json_each({2}))
         """;
 
     /// <summary>An open read the runtime made in the campaign: created by the system and not finished.</summary>

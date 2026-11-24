@@ -135,13 +135,14 @@ public class SendProbeIndexMigrationTests
     /// <summary>
     /// The hot reads that ask which items name a send seek the index by the send, the campaign and the operation, for each
     /// take-back and read they look for: the claim's count of touches, the line's root, the people page's touches, the line
-    /// root's question of a take-back, the hold's reading of Jason's own move and the read of the sends a provider holds.
+    /// root's question of a take-back, the hold's reading of Jason's own move, the read of the sends a provider holds and
+    /// the reads of sends the runtime made.
     /// They take the index only because the probe compares with the send's id stripped of its column's affinity by the unary
     /// plus, which <see cref="Without_the_unary_plus_the_index_is_not_taken"/> shows.
     /// </summary>
     [Theory]
     [Critical(Family.P2, BrokenUntouched.Migration)]
-    [MemberData(nameof(HotReads))]
+    [MemberData(nameof(SendLedReads))]
     public void The_hot_reads_seek_the_send_probe_index_on_all_three_columns_by_the_unary_plus(string read, string sql)
     {
         var probes = ProbeSteps(sql);
@@ -167,6 +168,17 @@ public class SendProbeIndexMigrationTests
         Assert.True(
             probes.Count > 0 && probes.All(step => !step.Contains(SendProbe.Index, StringComparison.Ordinal)),
             $"{read}: without the unary plus the plan still takes the index, and the plus is no longer what makes it: {string.Join(" | ", probes)}");
+    }
+
+    /// <summary>
+    /// The hot reads, and the reads of the sends named that the runtime made, which compares the send with a list rather
+    /// than one id and so carries no plus.
+    /// </summary>
+    public static TheoryData<string, string> SendLedReads()
+    {
+        var reads = HotReads();
+        reads.Add("reads the runtime made", Bind(SendReads.MadeSql, "1", "'message.status'", "'[\"wi_1\",\"wi_2\"]'", "NULL"));
+        return reads;
     }
 
     public static TheoryData<string, string> HotReads() => new()

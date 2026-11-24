@@ -90,7 +90,7 @@ internal static class HeldSends
     /// send again, and only while its moment is still to come. The latest is the one that finished last. The moment comes
     /// back in UTC to the millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends
     /// keep nothing. Where a bound of the past is given, a send handed over before it is left out by its own column, before
-    /// any of its JSON is read. What names a held send is found by the index on the campaign, the operation and the send
+    /// any of its JSON is read. What names a held send is found by the index on the send, the campaign and the operation
     /// (<see cref="SendProbe"/>); the latest read's status is compared under the unary plus, so the index on the status and
     /// the finish, which would spare the sort, is not walked through the installation's finished work instead.
     /// </summary>
