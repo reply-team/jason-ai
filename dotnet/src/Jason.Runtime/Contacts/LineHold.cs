@@ -50,7 +50,7 @@ internal static class LineHold
     /// read says failed or was cancelled while no read of it says it went or may have gone. SQLite's date functions read the stored moment and the contract's forms
     /// alike, and one they cannot read is NULL and counts for nothing.
     /// </summary>
-    private static readonly string OwnMoveSql = $$"""
+    internal static readonly string OwnMoveSql = $$"""
         SELECT count(*) AS "Value"
         FROM work_items AS s
         JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
