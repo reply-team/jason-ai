@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
+import { ApiProvider } from '../../api/context';
+import { FakeApi } from '../../test/fake-api';
 import { MessageCard } from './message-card';
 
 const card = (preview: Record<string, unknown>, reply = false) =>
@@ -83,5 +85,85 @@ describe('the message card', () => {
     it('shows nothing for an approval that is no message', () => {
         card(fixtures['approval.get/pending-with-preview'].response.preview as unknown as Record<string, unknown>);
         expect(document.querySelector('.message-card')).toBeNull();
+    });
+});
+
+describe('the message card, where the letter follows one', () => {
+    const withFollows = (follows: unknown) => ({
+        ...email,
+        highlights: { ...(email['highlights'] as Record<string, unknown>), '/follows': follows },
+    });
+
+    it('says a new letter and why, and marks no subject', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }));
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject', 'Body']);
+        expect(document.body.textContent).toMatch(
+            /A new letter: this provider's plugin does not offer a reply in a thread/,
+        );
+    });
+
+    it('says a reply goes under the followed letter, read from its work item, and marks the subject as not sent', async () => {
+        const fake = new FakeApi();
+        const call = fake.call.bind(fake);
+        let reads = 0;
+        fake.call = async (operation, body, kind) =>
+            operation === 'workitem.get'
+                ? ((reads += 1),
+                  {
+                      context: {
+                          input: { args: { message: { subject: 'First note' }, send_after: '2020-03-04T09:30:00Z' } },
+                      },
+                      finished_at: '2020-03-03T18:02:00Z',
+                      updated_at: new Date().toISOString(),
+                  } as never)
+                : call(operation, body, kind);
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard
+                    detail={toApprovalDetail(
+                        withFollows({
+                            work_item: 'wi_9',
+                            operation: 'message.send',
+                            reference: 'r9',
+                            because: 'line_root',
+                        }),
+                    )}
+                />
+            </ApiProvider>,
+        );
+        await waitFor(() =>
+            screen.getByText(/A reply to "First note" of 4 Mar 2020, \d\d:\d\d, the letter this campaign's thread/),
+        );
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
+        expect(reads).toBe(1);
+    });
+
+    it('shows nothing for a send that is not an email', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
+        expect(terms()).not.toContain('Follows');
+    });
+
+    it('dates the followed letter by when the provider accepted it where it has no send_after', async () => {
+        const fake = new FakeApi();
+        fake.call = async () =>
+            ({
+                context: { input: { args: { message: { subject: 'First note' } } } },
+                finished_at: '2020-03-03T18:02:00Z',
+            }) as never;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard
+                    detail={toApprovalDetail(
+                        withFollows({
+                            work_item: 'wi_9',
+                            operation: 'message.send',
+                            reference: 'r9',
+                            because: 'named',
+                        }),
+                    )}
+                />
+            </ApiProvider>,
+        );
+        await waitFor(() => screen.getByText(/A reply to "First note" of 3 Mar 2020, \d\d:\d\d, as asked\./));
     });
 });

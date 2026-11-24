@@ -79,6 +79,11 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Cost:", Property(preview?["cost"])));
         text.AppendLine(Line("Campaign:", Named(preview?["campaign"])));
         text.AppendLine(Line("Contact:", Person(preview?["contact"])));
+        if (Follows(preview?["highlights"]) is { } follows)
+        {
+            text.AppendLine(Line("Follows:", follows));
+        }
+
         // A search's card lays out the definition it would run under and why the allowance did not let it go; every other
         // card says what it would do in the lines above, as it always did.
         if (string.Equals(approval.Operation, SearchOperation, StringComparison.Ordinal))
@@ -117,6 +122,36 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Content hash:", approval.SubjectHash));
         text.Append(Line("Id:", approval.Id));
         return text.ToString();
+    }
+
+    /// <summary>
+    /// Where an email send goes, from the preview's `/follows` highlight: under an earlier letter of the campaign, whose
+    /// subject it takes and whose own is therefore not sent, or as a letter of its own and why. Null for any send that
+    /// is not an email, and where the preview carries none. The earlier letter is named by its work item and read from nothing else: one verb, one operation.
+    /// </summary>
+    private static string? Follows(JsonNode? highlights) =>
+        highlights?["/follows"] is JsonObject follows
+        && string.Equals((string?)highlights["/args/channel"], "email", StringComparison.Ordinal)
+            ? FollowsWords(follows)
+            : null;
+
+    /// <summary>The words for a `follows` decision (`work_item` and `because`), shared by the verbs that show one.</summary>
+    internal static string FollowsWords(JsonObject follows)
+    {
+        if ((string?)follows["work_item"] is { Length: > 0 } workItem)
+        {
+            return $"{workItem}: a reply; it goes under that letter's subject, its own subject is not sent";
+        }
+
+        return (string?)follows["because"] switch
+        {
+            "asked_new_thread" => "A new letter, as asked.",
+            "not_offered" => "A new letter: this provider's plugin does not offer a reply in a thread on this channel.",
+            "no_earlier_letter" => "A new letter: no earlier letter of this campaign to this person can be followed.",
+            "other_account" => "A new letter: the earlier letter went through another account.",
+            "other_mailbox" => "A new letter: the earlier letter went from another mailbox.",
+            _ => "A new letter.",
+        };
     }
 
     /// <summary>

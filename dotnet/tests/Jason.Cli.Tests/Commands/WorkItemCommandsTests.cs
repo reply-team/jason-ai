@@ -796,6 +796,29 @@ public class WorkItemCommandsTests
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""{"input": {"args": {"channel": "email"}}, "follows": {"work_item": "wi_7", "because": "line_root"}}""", "Follows:", "wi_7: a reply; it goes under that letter's subject, its own subject is not sent")]
+    [InlineData("""{"input": {"args": {"channel": "email"}}, "follows": {"work_item": null, "because": "other_account"}}""", "Follows:", "A new letter: the earlier letter went through another account.")]
+    [InlineData("""{"input": {"args": {"channel": "email"}}}""", null, null)]
+    [InlineData("""{"input": {"args": {"channel": "linkedin"}}, "follows": {"work_item": null, "because": "not_offered"}}""", null, null)]
+    public async Task Human_mode_says_what_an_email_send_follows_where_the_claim_decided(string context, string? label, string? words)
+    {
+        var item = Item(null) with { Operation = "message.send", Context = (JsonObject)JsonNode.Parse(context)! };
+        using var cli = new CliRun(Serialize(item));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        if (label is null)
+        {
+            Assert.DoesNotContain("Follows:", cli.Text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches("(?m)^" + label + @"\s+" + System.Text.RegularExpressions.Regex.Escape(words!), cli.Text);
+        }
+    }
+
     [Fact]
     public async Task Human_mode_says_in_words_which_block_a_parked_item_waits_on()
     {

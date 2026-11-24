@@ -1,4 +1,9 @@
+import { useEffect, useState } from 'react';
+import { useApi } from '../../api/context';
+import type { WorkItem } from '../../api/types';
 import { channelWords, type ApprovalDetail } from '../../console/live';
+import { followsSentence, type Followed, type FollowsWords } from '../../console/follows';
+import { when } from '../../time/format';
 
 /** A person's text as a text node: the framework escapes it, and the line breaks it carries are drawn by the style. */
 function Text({ value }: { value: string }) {
@@ -12,6 +17,37 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
             <dd>{children}</dd>
         </>
     );
+}
+
+/** The Follows row of a letter that goes under an earlier one: that letter is read for its subject and its moment. */
+function Following({ follows }: { follows: FollowsWords }) {
+    const api = useApi();
+    const [followed, setFollowed] = useState<Followed | null>(null);
+    useEffect(() => {
+        let live = true;
+        api.call<WorkItem>('workitem.get', { work_item_id: follows.workItem! }).then(
+            (item) => {
+                if (!live) return;
+                const input = (item.context as { input?: { args?: { message?: { subject?: unknown } } } }).input;
+                const subject = input?.args?.message?.subject;
+                const sendAfter = (item.context as { input?: { args?: { send_after?: unknown } } }).input?.args
+                    ?.send_after;
+                // The letter's own moment: its send_after where it has one, else when the provider accepted it.
+                const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.finished_at;
+                setFollowed({
+                    subject: typeof subject === 'string' && subject ? subject : null,
+                    moment: at
+                        ? when(new Date(at), new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)
+                        : null,
+                });
+            },
+            () => undefined,
+        );
+        return () => {
+            live = false;
+        };
+    }, [api, follows.workItem]);
+    return <>{followsSentence(follows, followed)}</>;
 }
 
 /**
@@ -31,8 +67,17 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                 {(email || reply) && detail.from && <Row label="From">{detail.from}</Row>}
                 {(email || reply) && detail.to && <Row label="To">{detail.to}</Row>}
                 {reply && detail.channel && <Row label="Channel">{detail.channel}</Row>}
+                {email && detail.follows && (
+                    <Row label="Follows">
+                        {detail.follows.workItem === null ? (
+                            followsSentence(detail.follows, null)
+                        ) : (
+                            <Following follows={detail.follows} />
+                        )}
+                    </Row>
+                )}
                 {detail.subject && (
-                    <Row label="Subject">
+                    <Row label={email && detail.follows?.workItem ? 'Subject (not sent)' : 'Subject'}>
                         <Text value={detail.subject} />
                     </Row>
                 )}
