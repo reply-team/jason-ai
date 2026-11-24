@@ -185,7 +185,9 @@ arguments:
 
 The claim reads the list before anything runs. Work that carries such an argument on a channel the routed plugin
 does not list is refused, `argument_unsupported`, so your code never meets an argument it would have to drop or
-ignore; work that does not carry it reaches your code as it always has. It asks for nothing a person grants, so it is
+ignore; work that does not carry it reaches your code as it always has. An argument asks something of your code only
+where its value does: `follows` written `new_thread` asks for a letter of its own, which every plugin sends, so it is
+taken whatever the list says, and your code reads the runtime's decision at the root `follows`, never the argument. The list asks for nothing a person grants, so it is
 no capability, and like `binding` the key is optional and additive: `manifest_version` stays `1`, and a runtime too
 old to read the key rejects the reload, as every package problem does, rather than send it an argument it never checked.
 
