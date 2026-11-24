@@ -33,6 +33,10 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 
 ## What is new since 0.50.0
 
+**Jason Desktop**
+
+- **A new version shows above Settings in Jason Desktop.** While a version is offered, downloading or ready, a small card above Settings says so and carries the one act of that step: Download, or Restart to install, which asks before it restarts. Not now puts an offered card away until the next start of the application.
+
 **Follow-ups in the thread of the letter that opened it**
 
 - **A follow-up goes as a reply under the subject of the letter that opened the thread.** Where you do not say otherwise,

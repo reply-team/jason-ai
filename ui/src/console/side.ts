@@ -17,6 +17,8 @@ import { openPalette, paletteHint, paletteShortcut } from './palette';
 import { closeFilterMenu, closeRowMenu, drawnRow, recentView, rowElement, rowMenu } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 import { updateMark } from '../screens/settings/update-state';
+import { pressCard, putAway, updateCard } from './update-card-state';
+import type { Card } from './update-card';
 
 // The console's sidebar, top to bottom: the brand (Jason's mark and wordmark, one button that shows Start), Search,
 // Dashboard, Needs you with the number of what waits, the Feed, People, Agents, Accounts, More (the screens with no row
@@ -214,6 +216,12 @@ define('side.page', ([hash]) => {
     if (typeof hash === 'string') here().dock.page(parseRoute(hash));
 });
 
+// The update card above Settings: its one act is the step's own (`pressCard`), and Not now puts it away until the next start.
+define('side.update', ([what]) => {
+    if (what === 'press') pressCard();
+    else if (what === 'away') putAway();
+});
+
 /** Where the build's own files are served from: the runtime serves the build under /ui/. */
 const assets = import.meta.env.BASE_URL;
 
@@ -238,6 +246,7 @@ export function sideView(): Html {
     const settings = pageOf('settings');
     // One quiet mark on Settings while the desktop knows of a version it has not installed; no count.
     const newer = updateMark();
+    const card = updateCard();
     return html`${
             menu === null
                 ? null
@@ -346,10 +355,48 @@ export function sideView(): Html {
             settings === null
                 ? null
                 : html`<div class="sfoot">
+                      ${card === null ? null : updateCardView(card)}
                       <button class="item" type="button" ${marked('settings')} ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
                           ${newer === null ? null : html`<span class="dot w" role="img" aria-label="${t('settings.update.newer', { version: newer })}" title="${t('settings.update.newer', { version: newer })}"></span>`}
                       </button>
                   </div>`
         }`;
+}
+
+/**
+ * The card above Settings, one line of what the step is and its one act: Download and Not now when a version is offered,
+ * a thin line that says no figure while it downloads, Restart to install when it is ready (no Not now there). The
+ * buttons never wrap; a long title may.
+ */
+function updateCardView(card: Card): Html {
+    const words = t(`update.card.${card.step}`, { version: card.version });
+    const icon: IconName = card.step === 'offered' ? 'download' : card.step === 'downloading' ? 'spinner' : 'refresh';
+    return html`<div class="ucard" data-step="${card.step}" role="group" aria-label="${words}">
+        <div class="ut">${svg(icon, 15, card.step === 'downloading' ? 'spin' : undefined)}<span>${words}</span></div>
+        ${
+            card.step === 'downloading'
+                ? html`<div class="ubar" role="progressbar" aria-label="${t('update.card.progress')}">
+                          <span></span>
+                      </div>
+                      <div class="uhint">${t('update.card.working')}</div>`
+                : html`<div class="uact">
+                      <button
+                          class="ub"
+                          type="button"
+                          ${card.enabled ? null : html`disabled`}
+                          ${act('side.update', 'press')}
+                      >
+                          ${card.step === 'offered' ? t('update.card.download') : t('update.card.restart')}
+                      </button>
+                      ${
+                          card.step === 'offered'
+                              ? html`<button class="uq" type="button" ${act('side.update', 'away')}>
+                                    ${t('update.card.notNow')}
+                                </button>`
+                              : null
+                      }
+                  </div>`
+        }
+    </div>`;
 }

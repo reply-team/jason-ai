@@ -1786,6 +1786,110 @@ describe('the console', () => {
         await waitFor(() => expect(foot().querySelector('.dot')).toBeNull());
     });
 
+    // The card above Settings: the desktop's update item at its offered, downloading and downloaded steps, one act each.
+    describe('the update card above Settings', () => {
+        const at = (
+            step: 'offered' | 'downloading' | 'downloaded' | null,
+            version: string,
+            label: string,
+            newer: string | null = version,
+        ) => ({
+            version: '0.50.1',
+            item: { label, enabled: true },
+            said: null,
+            newer,
+            step,
+        });
+        afterEach(() => {
+            delete window.jasonDesktop;
+        });
+        const open = async (initial?: ReturnType<typeof at>) => {
+            const { desktop: shown } = renderConsole(pending(new FakeApi()), chatDesktop());
+            window.jasonDesktop = shown;
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+            if (initial !== undefined) flush(() => shown.updateMoved(initial));
+            const card = () => document.querySelector<HTMLElement>('.jc-console .side .sfoot .ucard');
+            const presses = () => shown.calls.filter((call) => call.name === 'updates.press').map((call) => call.args);
+            return { shown, card, presses };
+        };
+
+        it('offers the version with Download and Not now, and presses the item’s own label', async () => {
+            const { card, presses } = await open(at('offered', '0.60.0', 'Download Jason 0.60.0'));
+            await waitFor(() => expect(card()).not.toBeNull());
+            expect(card()!.getAttribute('data-step')).toBe('offered');
+            expect(words(card()!)).toContain('Jason 0.60.0 is available');
+            const buttons = [...card()!.querySelectorAll('button')].map((each) => each.textContent!.trim());
+            expect(buttons).toEqual(['Download', 'Not now']);
+            expect(card()!.nextElementSibling!.textContent).toContain('Settings');
+            fireEvent.click(within(card()!).getByRole('button', { name: 'Download' }));
+            await waitFor(() => expect(presses()).toEqual([['Download Jason 0.60.0']]));
+        });
+
+        it('says it is downloading with a line that states no figure and no button', async () => {
+            const { card } = await open(at('downloading', '0.61.0', 'Downloading Jason 0.61.0…'));
+            await waitFor(() => expect(card()).not.toBeNull());
+            expect(words(card()!)).toContain('Downloading Jason 0.61.0…');
+            expect(words(card()!)).toContain('You can keep working.');
+            expect(card()!.querySelector('button')).toBeNull();
+            const bar = card()!.querySelector('[role="progressbar"]')!;
+            expect(bar.getAttribute('aria-valuenow')).toBeNull();
+            expect(card()!.textContent).not.toMatch(/\d+\s*%/);
+        });
+
+        it('says it is ready with Restart to install alone, which asks the desktop to ask first', async () => {
+            const label = 'Restart Jason and Its Runtime to Install 0.62.0';
+            const { card, presses } = await open(at('downloaded', '0.62.0', label));
+            await waitFor(() => expect(card()).not.toBeNull());
+            expect(words(card()!)).toContain('Jason 0.62.0 is ready');
+            expect([...card()!.querySelectorAll('button')].map((each) => each.textContent!.trim())).toEqual([
+                'Restart to install',
+            ]);
+            fireEvent.click(within(card()!).getByRole('button', { name: 'Restart to install' }));
+            await waitFor(() => expect(presses()).toEqual([[label, { ask: true }]]));
+        });
+
+        it('puts the card away with Not now, leaves the mark, and brings it back at the next step and for a newer version', async () => {
+            const { shown, card, presses } = await open(at('offered', '0.63.0', 'Download Jason 0.63.0'));
+            await waitFor(() => expect(card()).not.toBeNull());
+            fireEvent.click(within(card()!).getByRole('button', { name: 'Not now' }));
+            await waitFor(() => expect(card()).toBeNull());
+            expect(presses()).toEqual([]);
+            const foot = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+            expect(foot.querySelector('.dot.w')).not.toBeNull();
+            // The same item drawn again stays away.
+            flush(() => shown.updateMoved(at('offered', '0.63.0', 'Download Jason 0.63.0')));
+            expect(card()).toBeNull();
+            // The download ran: the step changed.
+            flush(() => shown.updateMoved(at('downloading', '0.63.0', 'Downloading Jason 0.63.0…')));
+            await waitFor(() => expect(card()).not.toBeNull());
+            // A failed download offers the version again: the card is offered again, being a new step.
+            flush(() => shown.updateMoved(at('offered', '0.63.0', 'Download Jason 0.63.0')));
+            await waitFor(() => expect(card()!.getAttribute('data-step')).toBe('offered'));
+            fireEvent.click(within(card()!).getByRole('button', { name: 'Not now' }));
+            await waitFor(() => expect(card()).toBeNull());
+            // A newer version than the one put away.
+            flush(() => shown.updateMoved(at('offered', '0.63.1', 'Download Jason 0.63.1')));
+            await waitFor(() => expect(words(card()!)).toContain('Jason 0.63.1 is available'));
+        });
+
+        it('shows no card while the item is idle or checking, for a desktop that says no step, or for an unknown step', async () => {
+            const { shown, card } = await open();
+            await waitFor(() => expect(document.querySelector('.jc-console .side .sfoot')).not.toBeNull());
+            expect(card()).toBeNull();
+            flush(() => shown.updateMoved(at(null, '0.64.0', 'Checking for Updates…', null)));
+            expect(card()).toBeNull();
+            flush(() => shown.updateMoved(at(null, '0.64.0', 'Check for Updates…', '0.64.0')));
+            expect(card()).toBeNull();
+            // An earlier desktop answers no step: the label says a download is offered, and the card still does not read it.
+            const older = { ...at('offered', '0.64.0', 'Download Jason 0.64.0') } as Partial<ReturnType<typeof at>>;
+            delete older.step;
+            flush(() => shown.updateMoved(older as ReturnType<typeof at>));
+            expect(card()).toBeNull();
+            flush(() => shown.updateMoved(at('installing' as never, '0.64.0', 'Installing Jason 0.64.0…')));
+            expect(card()).toBeNull();
+        });
+    });
+
     it('opens Performance from the desktop command, drawn from the runtime', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
