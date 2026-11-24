@@ -243,8 +243,10 @@ provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago
 which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
 the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each
 later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
-became of the send, nine have succeeded or nine have failed, eighteen at most, making none in a campaign while five it
-made are open there. The read that
+became of the send or nine have failed, counting the reads of the send the runtime made, whichever step made them; until
+`Dispatcher:DeferredReadOverdueSeconds` after the moment has passed it makes none once eight have succeeded, so its last
+waits for that span, and after it none once nine have succeeded with one past it, eighteen of its own at most; and it
+makes none in a campaign while five reads the runtime made are open there, whichever step made them. The read that
 finds a send `failed` or `cancelled`, or the first that ends `Dispatcher:DeferredReadOverdueSeconds` or more after the
 moment and still finds it `queued`, says once that it did not go: `message_unsent_observed`, its state `failed`,
 `cancelled` or `overdue` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve

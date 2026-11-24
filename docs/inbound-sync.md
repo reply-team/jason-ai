@@ -138,9 +138,14 @@ priority 0, its reason "a deferred send to read". The first read is due once the
 carry a send it could not make to its next day. The reads end once something says what became of the send, as above, or
 once it is said to be `overdue`, which the first read that ends `Dispatcher:DeferredReadOverdueSeconds` (a week) or more
 after the moment and still finds it `queued` says, so an overdue span changed while a send's reads are under way is met
-by its next read; and at 9 at most that succeeded and 9 at most that failed, counting the reads the runtime made of the
-send that ended at or after its moment, whichever step made them, and a read cancelled before it answered as one that
-failed. Settings under which 9 reads could not reach the overdue span are refused. The step makes no read in a campaign
+by a later read, but for the one limit below; and at 9 at most that succeeded and 9 at most that failed of the step's
+own, counting the reads the runtime made of the send that ended at or after its moment, whichever step made them, and a
+read cancelled before it answered as one that failed. Until the overdue span after the moment has passed, the step makes
+a read only while fewer than 8 of them have succeeded, so its last read waits for the span; once the span has passed, a
+read is due after its wait until 9 have succeeded with one of them ended past the span, or 9 have failed. A read the
+bounce step made of the send after its moment is one of those counted, and any of its reads spaces the next: it can
+leave the step fewer reads before the span, never take its last one past it away. Settings under which 9 reads could not
+reach the overdue span are refused. The step makes no read in a campaign
 while 5 reads the runtime made are open there, whichever step made them: the cap is the step's own, and the bounce step's reads are not
 held to it. It takes the oldest sends first, and never makes a second read of a send that already has an open one; a
 read a person or a role made is theirs, and the runtime makes its own beside it. The step reads its candidates at most
@@ -164,16 +169,13 @@ logged once per campaign by id and code, and asks again at its next run:
 |---|---|
 | `deferred_read_not_routed` | No route active now takes a read of the send where it ran, its plugin and its account, so the claim would refuse one. |
 
-Six limits hold. A send that named no moment, one the provider makes as soon as it can or one a sending schedule of
+Five limits hold. A send that named no moment, one the provider makes as soon as it can or one a sending schedule of
 the provider's own holds, has no moment to have passed, and is not read. A send the provider took saying it cannot be
 cancelled is not held by the definition, and is not read either. A send taken for a moment more than a year after it
 was handed over may not be read: the contract names no latest `send_after`, and the step leaves out by their own column
-the sends handed over more than 395 days ago, a year before the 30 days it looks back. The reads of a send are counted
-whichever step of the runtime made them, since only a read's context tells one step's reads from another's: a read the
-bounce step made of a deferred send after its moment is one of its 9 that succeeded or its 9 that failed, as it ended,
-and any of its reads spaces the next. The bounce step's reads keep none of the step's waits, so even with the shipped
-settings they can spend the 9 that succeeded before the overdue span, and that send is then never said `overdue`. An
-overdue span raised after a send's ninth read succeeded is never met, so that send is not said `overdue`. And a send whose 9 failed reads are spent is read no more by the step and may end never said
+the sends handed over more than 395 days ago, a year before the 30 days it looks back. An overdue span lowered after 9
+reads of a send succeeded is not met where one of them already ended past the new span, judged under the old one, so
+that send is not said `overdue`. And a send whose 9 failed reads are spent is read no more by the step and may end never said
 by a line: each of those failures was a `workitem_failed` the manager was woken by, and a read a person or a role makes
 of the send still answers, as every read does, and spends nothing.
 
