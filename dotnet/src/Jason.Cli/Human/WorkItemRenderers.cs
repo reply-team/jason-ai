@@ -232,7 +232,7 @@ public static class WorkItemRenderers
     private static string? FollowsOf(WorkItemDto item) =>
         string.Equals(item.Operation, "message.send", StringComparison.Ordinal)
         && item.Context?["follows"] is JsonObject follows
-        && string.Equals((string?)item.Context["input"]?["args"]?["channel"], "email", StringComparison.Ordinal)
+        && string.Equals((string?)item.Context["input"]?["channel"], "email", StringComparison.Ordinal)
             ? ApprovalRenderers.FollowsWords(follows)
             : null;
 

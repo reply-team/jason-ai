@@ -1,0 +1,126 @@
+{
+  "operation": "workitem.get",
+  "case": "card-follow-letter",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_1",
+    "campaign_id": "cmp_1",
+    "contact_id": "cnt_1",
+    "kind": "provider_op",
+    "role": null,
+    "operation": "message.send",
+    "execution_profile": null,
+    "status": "succeeded",
+    "eligible": false,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "context": {
+      "input": {
+        "channel": "email",
+        "sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
+        },
+        "message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Ines, thanks for the talk at the meetup."
+        }
+      },
+      "follows": {
+        "work_item": null,
+        "operation": null,
+        "because": "no_earlier_letter"
+      }
+    },
+    "result_format": null,
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_1",
+          "status": "sent",
+          "channel": "email",
+          "format": "email",
+          "sender_external_id": "s_12",
+          "message": {
+            "external_id": "m_501",
+            "sent_at": "2026-10-16T09:00:00.000Z"
+          },
+          "external_ids": {
+            "contact": "rc_77"
+          },
+          "reference": "m_501"
+        }
+      ]
+    },
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [
+      {
+        "id": "att_1",
+        "number": 1,
+        "status": "succeeded",
+        "command": "provider_op",
+        "execution_profile": null,
+        "error": null,
+        "launch": null,
+        "claimed_at": "2026-10-16T09:00:00.000Z",
+        "started_at": "2026-10-16T09:00:00.000Z",
+        "finished_at": "2026-10-16T09:00:00.000Z",
+        "last_heartbeat_at": null,
+        "lock_until": "2026-10-16T09:10:00.000Z",
+        "provenance": {
+          "plugin_id": "reply",
+          "plugin_version": "1.0.0",
+          "plugin_digest": "sha256:0",
+          "protocol_version": 1,
+          "operation_contract_version": 1,
+          "operation": "message.send",
+          "operation_version": 1,
+          "plugin_snapshot_id": "snp_1",
+          "routing_snapshot_id": "rts_1",
+          "route_scope": "global_default",
+          "binding_identity": "sha256:recorded-1",
+          "invocation_id": "pin_1",
+          "correlation_id": "att_1",
+          "diagnostics": {
+            "duration_ms": 12,
+            "exec_calls": 1,
+            "http_calls": 0,
+            "log_lines": 1
+          },
+          "external_ids_returned": {
+            "contact": "rc_77",
+            "send": "m_501"
+          },
+          "approval_id": "apr_1",
+          "input_digest": "sha256:recorded-2"
+        }
+      }
+    ],
+    "external_reports": [],
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "finished_at": "2026-10-16T09:00:00.000Z",
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Spring launch",
+    "contact_name": "Ines Duarte",
+    "review_hash": "sha256:recorded-3",
+    "entry": null
+  }
+}

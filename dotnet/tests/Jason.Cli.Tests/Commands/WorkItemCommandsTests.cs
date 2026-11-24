@@ -796,17 +796,28 @@ public class WorkItemCommandsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// What an email send follows, read from the exchanges the runtime recorded: a letter that goes under the line's first
+    /// one, a letter of its own and why, a send the claim recorded nothing for, and a send on another channel. The terminal
+    /// names the followed item and makes no second call.
+    /// </summary>
     [Theory]
-    [InlineData("""{"input": {"args": {"channel": "email"}}, "follows": {"work_item": "wi_7", "because": "line_root"}}""", "Follows:", "wi_7: a reply; it goes under that letter's subject, its own subject is not sent")]
-    [InlineData("""{"input": {"args": {"channel": "email"}}, "follows": {"work_item": null, "because": "other_account"}}""", "Follows:", "A new letter: the earlier letter went through another account.")]
-    [InlineData("""{"input": {"args": {"channel": "email"}}}""", null, null)]
-    [InlineData("""{"input": {"args": {"channel": "linkedin"}}, "follows": {"work_item": null, "because": "not_offered"}}""", null, null)]
-    public async Task Human_mode_says_what_an_email_send_follows_where_the_claim_decided(string context, string? label, string? words)
+    [InlineData("card-follow-parked", "email", true, "Follows:", "wi_1: a reply; it goes under that letter's subject, its own subject is not sent")]
+    [InlineData("card-message-parked", "email", true, "Follows:", "A new letter: this provider's plugin does not offer a reply in a thread on this channel.")]
+    [InlineData("card-follow-parked", "email", false, null, null)]
+    [InlineData("card-follow-parked", "linkedin", true, null, null)]
+    public async Task Human_mode_says_what_an_email_send_follows_where_the_claim_decided(string recorded, string channel, bool decided, string? label, string? words)
     {
-        var item = Item(null) with { Operation = "message.send", Context = (JsonObject)JsonNode.Parse(context)! };
-        using var cli = new CliRun(Serialize(item));
+        var item = JsonNode.Parse(Jason.Cli.Tests.Human.CopyPromptTests.Fixture("workitem.get", recorded))!;
+        item["context"]!["input"]!["channel"] = channel;
+        if (!decided)
+        {
+            item["context"]!.AsObject().Remove("follows");
+        }
 
-        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+        using var cli = new CliRun(item.ToJsonString());
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_1", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         if (label is null)

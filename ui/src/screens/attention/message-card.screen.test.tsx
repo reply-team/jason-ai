@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
 import { ApiProvider } from '../../api/context';
 import { FakeApi } from '../../test/fake-api';
+import { t } from '../../platform/i18n';
 import { MessageCard } from './message-card';
 
 const card = (preview: Record<string, unknown>, reply = false) =>
@@ -102,68 +103,69 @@ describe('the message card, where the letter follows one', () => {
         );
     });
 
-    it('says a reply goes under the followed letter, read from its work item, and marks the subject as not sent', async () => {
-        const fake = new FakeApi();
-        const call = fake.call.bind(fake);
-        let reads = 0;
-        fake.call = async (operation, body, kind) =>
-            operation === 'workitem.get'
-                ? ((reads += 1),
-                  {
-                      context: {
-                          input: { args: { message: { subject: 'First note' }, send_after: '2020-03-04T09:30:00Z' } },
-                      },
-                      finished_at: '2020-03-03T18:02:00Z',
-                      updated_at: new Date().toISOString(),
-                  } as never)
-                : call(operation, body, kind);
+    it('says a reply goes under the followed letter, read from its recorded work item, and marks the subject as not sent', async () => {
+        const fake = new FakeApi().answer('workitem.get', 'workitem.get/card-follow-letter');
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
         render(
             <ApiProvider api={fake}>
-                <MessageCard
-                    detail={toApprovalDetail(
-                        withFollows({
-                            work_item: 'wi_9',
-                            operation: 'message.send',
-                            reference: 'r9',
-                            because: 'line_root',
-                        }),
-                    )}
-                />
+                <MessageCard detail={toApprovalDetail(preview)} />
             </ApiProvider>,
         );
         await waitFor(() =>
-            screen.getByText(/A reply to "First note" of 4 Mar 2020, \d\d:\d\d, the letter this campaign's thread/),
+            screen.getByText(
+                /A reply to "Notes from the meetup" of \d+ \w+( 2026)?, \d\d:\d\d, the letter this campaign's thread/,
+            ),
         );
         expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
-        expect(reads).toBe(1);
+        expect(fake.sent('workitem.get')).toEqual({ work_item_id: 'wi_1' });
+    });
+
+    it('dates the followed letter by its send_after where it has one', async () => {
+        const letter = fixtures['workitem.get/card-follow-letter'].response;
+        const fake = new FakeApi();
+        fake.call = async () =>
+            ({
+                ...letter,
+                context: { ...letter.context, input: { ...letter.context.input, send_after: '2020-03-04T09:30:00Z' } },
+            }) as never;
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        await waitFor(() =>
+            screen.getByText(/A reply to "Notes from the meetup" of 4 Mar 2020, \d\d:\d\d, the letter/),
+        );
+    });
+
+    it('says the reply as first written where the followed letter cannot be read', async () => {
+        const fake = new FakeApi();
+        const calls: { operation: string; body: unknown }[] = [];
+        const refusals: Promise<void>[] = [];
+        fake.call = (operation, body) => {
+            calls.push({ operation, body });
+            const refused = Promise.reject(new Error('unreachable'));
+            refusals.push(refused.then(undefined, () => undefined));
+            return refused;
+        };
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        // The words are the same before the read ends: hold them only once the followed item's read was made and refused.
+        await waitFor(() => expect(calls).toEqual([{ operation: 'workitem.get', body: { work_item_id: 'wi_1' } }]));
+        await act(async () => {
+            await refusals[0];
+        });
+        expect(document.body.textContent).toContain(t('follows.reply.unread'));
+        expect(document.body.textContent).not.toContain('Notes from the meetup" of');
     });
 
     it('shows nothing for a send that is not an email', () => {
         card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
         expect(terms()).not.toContain('Follows');
-    });
-
-    it('dates the followed letter by when the provider accepted it where it has no send_after', async () => {
-        const fake = new FakeApi();
-        fake.call = async () =>
-            ({
-                context: { input: { args: { message: { subject: 'First note' } } } },
-                finished_at: '2020-03-03T18:02:00Z',
-            }) as never;
-        render(
-            <ApiProvider api={fake}>
-                <MessageCard
-                    detail={toApprovalDetail(
-                        withFollows({
-                            work_item: 'wi_9',
-                            operation: 'message.send',
-                            reference: 'r9',
-                            because: 'named',
-                        }),
-                    )}
-                />
-            </ApiProvider>,
-        );
-        await waitFor(() => screen.getByText(/A reply to "First note" of 3 Mar 2020, \d\d:\d\d, as asked\./));
     });
 });
