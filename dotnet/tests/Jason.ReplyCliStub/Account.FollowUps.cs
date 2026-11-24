@@ -74,7 +74,10 @@ internal static partial class Account
 
     private static readonly Regex FollowsReference = new(@"^email-[1-9]\d{0,9}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
-    /// <summary>What <c>--follows</c> names, as the CLI takes it: an email direct send's reference, or its usage error.</summary>
+    /// <summary>
+    /// What <c>--follows</c> names: an email direct send's reference, or a usage error. Refusing a reference that is not
+    /// <c>email-&lt;n&gt;</c> as <c>usage.reference</c> is this stand-in's own choice, not confirmed by reply-cli.
+    /// </summary>
     private static (string? Reference, Ending? Refusal) FollowsOf(Parsed line)
     {
         if (line.Option("--follows") is not { } raw)
