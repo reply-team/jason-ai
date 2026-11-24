@@ -21,10 +21,11 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 public partial class ReplyFollowUpTests
 {
     /// <summary>
-    /// A follow-up left to the runtime, held by Reply for three days, goes into the first letter's thread, and Jason's own
+    /// A follow-up left to the runtime, held by Reply for five minutes, goes into the first letter's thread, and Jason's own
     /// letter there holds nobody: the events read says it as the account's send, which no line of the campaign carries.
     /// The person's answer in that thread is the other side's move, which holds the line, once; and the next touch of the
-    /// person waits, <c>created</c> and not eligible, with nothing tried and nothing parked for a person.
+    /// person waits, <c>created</c> and not eligible, with nothing tried and nothing parked for a person. The clock moves
+    /// less than the dispatcher's tick at every step, so the loop never scans in the middle of a move.
     /// </summary>
     [Fact]
     public async Task A_follow_up_goes_into_the_first_letter_s_thread_holds_nobody_and_the_person_s_answer_there_holds_the_next_touch()
@@ -41,8 +42,8 @@ public partial class ReplyFollowUpTests
         var first = await SendAsync(api, campaign, contact, Message(Body));
         Assert.Equal("email-1001", Assert.Single(first.Attempts!).Provenance!.ExternalIdsReturned!["send"]);
 
-        // 2. A follow-up for three days later, created with no follows: the claim composes the line's root, and Reply holds it.
-        var moment = clock.GetUtcNow().AddDays(3).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        // 2. A follow-up for five minutes later, created with no follows: the claim composes the line's root, and Reply holds it.
+        var moment = clock.GetUtcNow().AddMinutes(5).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         var later = Message("Any news?");
         later["send_after"] = moment;
         var second = await SendAsync(api, campaign, contact, later);
@@ -58,10 +59,11 @@ public partial class ReplyFollowUpTests
             followUp.Args);
         Assert.Equal("""{"body":"Any news?"}""", Stdin(followUp));
 
-        // 3. Three days pass at Reply and here. The follow-up lands in the first letter's thread, and the events read of
-        // the account says it as the account's own send.
+        // 3. Eleven minutes pass at Reply and here, past the follow-up's moment and the events cadence and short of the
+        // dispatcher's tick. The follow-up lands in the first letter's thread, and the events read of the account says it as
+        // the account's own send.
         account.SendBecomes("email-1002", "sent");
-        await PassAsync(api, clock, TimeSpan.FromDays(3));
+        await PassAsync(api, clock, TimeSpan.FromMinutes(11));
         var thread = Assert.Single(account.Threads)!["id"]!.GetValue<int>();
         await SettleAsync(api, async () => await EventsOfAsync(api, "message_sent", thread) == 1);
         Assert.Equal(
@@ -112,7 +114,9 @@ public partial class ReplyFollowUpTests
     /// The person answers in the first letter's thread, and Jason's follow-up, held by Reply for that moment, lands in the
     /// same thread before the next events read. Reply moves no thread moment for the follow-up, so the read finds the
     /// account's letter on top of a thread holding a reply, names nobody, and gives the answer's moment. A follow-up never
-    /// explains a move, so the line holds the person, once, and the letter Reply still holds for later is taken back.
+    /// explains a move, so the line holds the person, once, and the letter Reply still holds for later is taken back. The
+    /// follow-up's moment is minutes away, and the clock moves less than the dispatcher's tick, so the loop never scans in
+    /// the middle of the move: the read and the hold come after the follow-up's moment, where it reaches the own-move check.
     /// </summary>
     [Fact]
     public async Task An_answer_a_follow_up_overtakes_before_the_read_holds_the_line_and_takes_back_the_letter_held_for_later()
@@ -124,12 +128,13 @@ public partial class ReplyFollowUpTests
         var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
         var (campaign, contact) = await WorkAsync(api);
 
-        // 1. The first letter goes and opens its thread; two follow-ups left to the runtime are held by Reply, for three
-        // days and for six.
+        // 1. The first letter goes and opens its thread; two follow-ups left to the runtime are held by Reply, for five
+        // minutes and for six days.
         await SendAsync(api, campaign, contact, Message(Body));
         var thread = Assert.Single(account.Threads)!["id"]!.GetValue<int>();
         var soon = Message("Any news?");
-        soon["send_after"] = clock.GetUtcNow().AddDays(3).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        var due = clock.GetUtcNow().AddMinutes(5);
+        soon["send_after"] = due.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         var second = await SendAsync(api, campaign, contact, soon);
         var later = Message("One last note.");
         later["send_after"] = clock.GetUtcNow().AddDays(6).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
@@ -142,9 +147,10 @@ public partial class ReplyFollowUpTests
         account.Answers(thread, "Yes, Tuesday works.");
         account.SendBecomes("email-1002", "sent");
 
-        // 3. Three days pass here. The thread holds the answer under the follow-up, the read says it moved by nobody, at
-        // the answer's moment, and the line holds.
-        await PassAsync(api, clock, TimeSpan.FromDays(3).Add(TimeSpan.FromMinutes(1)));
+        // 3. Eleven minutes pass here, past the follow-up's moment and the events cadence and short of the dispatcher's
+        // tick. The thread holds the answer under the follow-up, the read says it moved by nobody, at the answer's moment,
+        // and the line holds.
+        await PassAsync(api, clock, TimeSpan.FromMinutes(11));
         await SettleAsync(api, async () => await EventsOfAsync(api, "thread_moved", thread) == 1);
         await SettleAsync(api, async () => (await LinesAsync(api, campaign, JournalKinds.InboundReplyObserved)).Count == 1);
         await SettleAsync(api, () => Task.FromResult(true));
@@ -156,6 +162,11 @@ public partial class ReplyFollowUpTests
         Assert.Equal(MembershipState.Paused, await StateAsync(api, campaign));
         var paused = Assert.Single(await LinesAsync(api, campaign, JournalKinds.ContactsPaused));
         Assert.Equal(ActorType.System, paused.Actor.Type);
+
+        // The walk took the path it is about: the answer was read, and the line held, after the follow-up's moment, so the
+        // follow-up reached the own-move check rather than being taken back as a letter still held.
+        var observed = Assert.Single(await LinesAsync(api, campaign, JournalKinds.InboundReplyObserved));
+        Assert.True(observed.Ts >= due && paused.Ts >= due, $"The answer was read at {observed.Ts:O} and held at {paused.Ts:O}, before the follow-up's moment {due:O}.");
 
         // The letter Reply holds for later is taken back by one cancel; the follow-up that went is not.
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
