@@ -313,6 +313,14 @@ definition the search is searched by, whichever way its arguments named the audi
 writes the key or removes it, as `validation_failed` at the field `context.audience`; on any other work the key is the
 caller's own.
 
+**A fourth, the runtime's own: `context.follows` on a message.** The claim of a `message.send` that it does not refuse
+records there which earlier letter the message follows, and why, as it composed it at the root of the input less the
+provider's reference: `{"work_item": "wi_…", "operation": "message.send", "because": "line_root"}`, or for a
+letter of its own `{"work_item": null, "operation": null, "because": "asked_new_thread"}`, and a repeat reads it back
+rather than decide again ([`docs/work-execution.md`](../work-execution.md), "A person's line in a campaign").
+`workitem.create` and `workitem.update` refuse a message that writes the key or removes it, as `validation_failed` at
+the field `context.follows`; on any other work the key is the caller's own.
+
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
 ([`docs/runtime-api.md`](../runtime-api.md)), which writes one reserved journal line,

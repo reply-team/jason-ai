@@ -10,6 +10,7 @@ using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Routing;
 
 namespace Jason.Runtime.WorkItems;
 
@@ -66,6 +67,7 @@ internal static partial class WorkItemValidation
                 AudienceReadService.RefuseAsWork(operation, errors);
                 ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], timing, errors);
                 CampaignAudiences.RefuseWritten(operation, request.Context?.ContainsKey(CampaignAudiences.ContextKey) == true, errors);
+                FollowsDecision.RefuseWritten(operation, request.Context?.ContainsKey(FollowsDecision.Key) == true, errors);
                 ValidateProviderTimeout(operation, request.TimeoutSeconds, killGraceMs, errors);
             }
 

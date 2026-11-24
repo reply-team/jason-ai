@@ -23,7 +23,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Nineteen of the thirty are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Nineteen of the thirty-five are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
 /// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead, and so is <c>provider_answer_lost</c>,
 /// which needs an earlier attempt that lost its answer and is met through the real claim in <c>ClaimerTests</c>. The five
@@ -35,7 +35,10 @@ namespace Jason.Runtime.Tests.Routing;
 /// and work a provider block holds waits on the block, which
 /// <c>ClaimerTests</c> is where to read about. <c>thread_route_mismatch</c> needs the campaign's own lines naming a thread,
 /// and is met through the real claim in <c>ClaimerTests</c> as well, and over a built snapshot in
-/// <see cref="ProviderOpPreflightTests"/>.
+/// <see cref="ProviderOpPreflightTests"/>. The five a letter named to follow adds — <c>follows_unknown</c>,
+/// <c>follows_reference_absent</c>, <c>follows_taken_back</c>, <c>follows_route_mismatch</c> and
+/// <c>follows_sender_mismatch</c> — need a plugin that takes <c>follows</c>, which no shipped manifest lists, and are proven
+/// over a built snapshot in <see cref="ProviderOpPreflightTests"/> and through the real claim in <c>ClaimerTests</c>.
 /// Routes are placed into the registry directly: which plugin an operation goes to is a decision this test takes
 /// rather than the subject of it.
 /// </remarks>

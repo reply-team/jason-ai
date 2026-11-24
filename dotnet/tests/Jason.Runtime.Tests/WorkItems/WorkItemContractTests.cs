@@ -96,6 +96,46 @@ public class WorkItemContractTests
     }
 
     /// <summary>
+    /// Which earlier letter a message follows is the runtime's to record, at the claim: a message written with the reserved
+    /// key, or patched to set it or take it away, is refused there, and the refusal says where the wish goes instead. The
+    /// wish itself, under the arguments, is the caller's, and the same key on work whose input carries no letter it follows
+    /// is the caller's own.
+    /// </summary>
+    [Fact]
+    public async Task Which_letter_a_message_follows_is_the_runtime_s_to_record()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var recorded = new JsonObject { ["work_item"] = null, ["operation"] = null, ["because"] = "asked_new_thread" };
+
+        var written = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = Message(), ["follows"] = recorded.DeepClone() } },
+                Ct));
+        var refused = Assert.Single(written.Details!);
+        Assert.Equal(("context.follows", "not_allowed"), (refused.Field, refused.Code));
+        Assert.Contains("new_thread", refused.Message, StringComparison.Ordinal);
+
+        var wish = Message();
+        wish["follows"] = "new_thread";
+        var item = await service.CreateAsync(ProviderOp(campaign.PublicId, "message.send") with { Context = new JsonObject { ["input"] = wish } }, Ct);
+        Assert.Equal("new_thread", (string?)item.Context["input"]!["follows"]);
+        (JsonObject? Set, string[]? Unset)[] patches = [(new JsonObject { ["follows"] = recorded.DeepClone() }, null), (null, ["follows"])];
+        foreach (var (set, unset) in patches)
+        {
+            var patched = await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(Patch(item.Id) with { Set = set, Unset = unset }, Ct));
+            Assert.Equal(("context.follows", "not_allowed"), (Assert.Single(patched.Details!).Field, patched.Details![0].Code));
+        }
+
+        var other = await service.CreateAsync(
+            ProviderOp(campaign.PublicId, "campaign.get") with { Context = new JsonObject { ["follows"] = "the spring launch" } },
+            Ct);
+        Assert.Equal("the spring launch", (string?)other.Context["follows"]);
+    }
+
+    /// <summary>
     /// A campaign's three reads on request — an audience's preview, a filter's values, whether the account may search — are
     /// asked of the runtime and answered there, recorded nowhere. Written as work, a preview's sample of people would be
     /// kept in the item's result for good, so each is refused at create, and its refusal names the verb to ask it with.

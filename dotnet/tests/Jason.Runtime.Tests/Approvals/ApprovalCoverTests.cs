@@ -49,6 +49,45 @@ public class ApprovalCoverTests
     }
 
     /// <summary>
+    /// An approval written by a runtime that composed no decision about the earlier letter a message follows was given about
+    /// a letter of its own, which is what that runtime sent: it covers the message as a letter of its own, whatever reason
+    /// the decision now gives and with a pin added beside it, and never as a reply in a thread the person did not see. Where
+    /// the approved subject carries a decision, a letter of its own approved covers a letter of its own whatever the reason
+    /// now, since the reason is no part of what reaches the person; any other change of it ends the cover, a letter of its
+    /// own turned reply or a reply turned letter of its own. The comparison reads the member at the root of the input,
+    /// whichever operation composed it.
+    /// </summary>
+    [Theory]
+    [InlineData("none decided, a letter of its own now", true)]
+    [InlineData("none decided, a letter of its own and a pin added now", true)]
+    [InlineData("none decided, a reply in a thread now", false)]
+    [InlineData("a letter of its own approved, the same now", true)]
+    [InlineData("a letter of its own approved, for another reason now", true)]
+    [InlineData("a letter of its own approved, for another reason and a pin added now", true)]
+    [InlineData("a letter of its own approved, a reply now", false)]
+    [InlineData("a reply approved, a letter of its own now", false)]
+    public void An_approval_written_before_the_letter_was_decided_covers_a_letter_of_its_own_and_not_a_reply(string history, bool covered)
+    {
+        var scene = new Scene();
+        var plain = scene.Subject(NoPins, NoPins);
+        var own = Followed(plain, null, "no_earlier_letter");
+        var reply = Followed(plain, "wi_01K9R000000000000000000001", "line_root");
+        var (then, now) = history switch
+        {
+            "none decided, a letter of its own now" => (plain, own),
+            "none decided, a letter of its own and a pin added now" => (plain, Followed(scene.Subject(Pins("contact", "p-48211"), NoPins), null, "not_offered")),
+            "none decided, a reply in a thread now" => (plain, reply),
+            "a letter of its own approved, the same now" => (own, own),
+            "a letter of its own approved, for another reason now" => (own, Followed(plain, null, "not_offered")),
+            "a letter of its own approved, for another reason and a pin added now" => (own, Followed(scene.Subject(Pins("contact", "p-48211"), NoPins), null, "not_offered")),
+            "a letter of its own approved, a reply now" => (own, reply),
+            _ => (reply, own),
+        };
+
+        Assert.Equal(covered, ApprovalGate.Authorizes(Row(then.Document), now));
+    }
+
+    /// <summary>
     /// "Added" is a kind the approved subject does not hold at that place. A kind it holds is held to its value: another
     /// value, or no value any more, is not what the person approved, whatever is added beside it.
     /// </summary>
@@ -399,6 +438,16 @@ public class ApprovalCoverTests
         change(document);
         return new ApprovalSubject(document, CanonicalJson.Hash(document));
     }
+
+    /// <summary>The subject with a decision about the letter the message follows composed at the root of its input.</summary>
+    private static ApprovalSubject Followed(ApprovalSubject subject, string? workItem, string because) =>
+        Rewritten(subject, document => document["input"]![FollowsDecision.Key] = new JsonObject
+        {
+            ["work_item"] = workItem,
+            ["operation"] = workItem is null ? null : "message.send",
+            ["reference"] = workItem is null ? null : "email-1001",
+            ["because"] = because,
+        });
 
     private static IReadOnlyDictionary<string, string> Pins(string kind, string value) =>
         new Dictionary<string, string>(StringComparer.Ordinal) { [kind] = value };

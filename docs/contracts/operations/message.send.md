@@ -119,14 +119,16 @@ now instead. A plugin whose provider turns out not to offer it, read before anyt
 `follows` is optional too: the earlier letter of this campaign the message follows, as a reply in that letter's thread,
 so that a follow-up lands in the person's mailbox under the first letter. It has three states:
 
-- absent: the runtime decides at the claim, and follows the line's root — the latest earlier email of this person in
-  this campaign that itself follows nothing, counted as a touch, holding the provider's reference, and not taken back;
+- absent: the runtime decides at the claim, and follows the line's root — the latest earlier letter to this person in
+  this campaign on the same channel that itself follows nothing, counted as a touch, holding the provider's reference,
+  and not taken back;
 - a work item's identifier, `wi_…`: that letter, named explicitly;
 - `new_thread`: a letter of its own.
 
 It is never null, and any other value is refused when the work item is written. Like `send_after`, it is an argument a
-provider may offer on some channels and not on others (`channel_arguments`): written, it is taken only by a plugin whose
-manifest lists it for the channel, and the claim refuses it, `argument_unsupported`, on any other. A letter the routed
+provider may offer on some channels and not on others (`channel_arguments`): a work item's identifier is taken only by a
+plugin whose manifest lists `follows` for the channel, and the claim refuses it, `argument_unsupported`, on any other,
+while `new_thread` asks nothing of the plugin and is taken by every one. A letter the routed
 plugin cannot place in a thread — no earlier letter, a plugin that does not take the argument, a root that went from
 another account — goes as a new letter, and the preview a person reads says so; only a letter named explicitly that
 cannot be followed is refused, at the claim.

@@ -175,6 +175,37 @@ public static class AttemptErrors
     public const string SendRouteMismatch = "send_route_mismatch";
 
     /// <summary>
+    /// The message names under <c>args.follows</c> a letter its campaign does not hold to follow: no work item of the
+    /// campaign under that id that is the same operation, about the same person, on the same channel.
+    /// </summary>
+    public const string FollowsUnknown = "follows_unknown";
+
+    /// <summary>
+    /// The letter the message names has not succeeded, or came back with no reference: the provider kept nothing to place
+    /// the message in its thread by.
+    /// </summary>
+    public const string FollowsReferenceAbsent = "follows_reference_absent";
+
+    /// <summary>
+    /// A succeeded <c>message.cancel</c> of the campaign names the letter the message names: the provider took it back, so
+    /// it never went and there is no thread to follow.
+    /// </summary>
+    public const string FollowsTakenBack = "follows_taken_back";
+
+    /// <summary>
+    /// The letter the message names went through another plugin, or under another binding, than the message is routed to:
+    /// its thread is that provider account's, so the message follows it there or not at all. The twin of
+    /// <see cref="SendRouteMismatch"/>, repaired by the route.
+    /// </summary>
+    public const string FollowsRouteMismatch = "follows_route_mismatch";
+
+    /// <summary>
+    /// The letter the message names went from another of the provider's accounts than the message's own
+    /// <c>args.sender</c>: a thread is the mailbox's that sent it. Repaired by the caller's own sender.
+    /// </summary>
+    public const string FollowsSenderMismatch = "follows_sender_mismatch";
+
+    /// <summary>
     /// The work names a search under <c>args.search</c> that its campaign does not hold: no work item of the campaign under
     /// that id, or one that makes no search.
     /// </summary>

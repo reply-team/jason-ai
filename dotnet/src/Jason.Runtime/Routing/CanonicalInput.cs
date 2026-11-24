@@ -86,8 +86,12 @@ public static class CanonicalInput
     /// <summary>Every contact field a contract may project. A published projection naming anything else is a defect.</summary>
     public static IReadOnlyCollection<string> ProjectedFields => (IReadOnlyCollection<string>)Fields.Keys;
 
-    /// <summary>The whole document, in the order the contract's schema describes it.</summary>
-    public static JsonObject Compose(OperationContract contract, PreflightFacts facts)
+    /// <summary>
+    /// The whole document, in the order the contract's schema describes it, with the letter the message follows as
+    /// <paramref name="follows"/> decided it where the operation's input carries one: the claim decides it before it
+    /// composes, and a document composed with no decision carries none.
+    /// </summary>
+    public static JsonObject Compose(OperationContract contract, PreflightFacts facts, FollowsDecision? follows = null)
     {
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(facts);
@@ -104,6 +108,13 @@ public static class CanonicalInput
                 ["operation"] = JsonValue.Create(send.Operation),
                 ["reference"] = JsonValue.Create(reference),
             };
+        }
+
+        // The letter a message follows is the runtime's decision, beside the arguments and never in them: the plugin places
+        // the message by it, and the person approves it as part of the input.
+        if (Follows(contract) && follows?.Composed() is { } followed)
+        {
+            input[FollowsDecision.Key] = followed;
         }
 
         // The search the same way, and where the place a status read starts belongs to the document, that too: the
@@ -298,6 +309,17 @@ public static class CanonicalInput
         ArgumentNullException.ThrowIfNull(contract);
 
         return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(SendKey);
+    }
+
+    /// <summary>
+    /// Whether the operation's message may follow an earlier letter of the campaign: its input carries, at the root, the
+    /// letter it follows as the runtime decides it at the claim.
+    /// </summary>
+    public static bool Follows(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return contract.InputSchema["properties"] is JsonObject properties && properties.ContainsKey(FollowsDecision.Key);
     }
 
     /// <summary>Whether the operation acts on a search by its reference: its input carries the search the runtime composes.</summary>

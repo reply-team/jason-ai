@@ -58,3 +58,28 @@ public sealed record NamedSearch(
 /// searched under, which the runtime composes for a top-up.
 /// </summary>
 public sealed record NamedAudience(int Number, JsonObject Definition);
+
+/// <summary>
+/// An earlier letter of the campaign a message may follow, as the claim read it in the work's own campaign: the one the
+/// arguments name under <c>args.follows</c>, the line's root where they name none (<see cref="Jason.Runtime.Campaigns.LineRoots"/>),
+/// or, on a repeat, the one the first claim recorded. What it kept of where it went is its latest succeeded attempt's.
+/// </summary>
+/// <param name="ContactId">The person it was about, by the contact's row, or null where it named nobody.</param>
+/// <param name="Channel">The channel its arguments named under <c>args.channel</c>.</param>
+/// <param name="Sender">
+/// The provider's account it went from, as its result says under <c>items[0].sender_external_id</c>, or null where it holds
+/// no result that says one.
+/// </param>
+/// <param name="TakenBack">Whether a succeeded <c>message.cancel</c> of the campaign names it: it never went.</param>
+public sealed record EarlierLetter(
+    string WorkItem,
+    string? Operation,
+    WorkItemStatus Status,
+    string? Reference,
+    string? PluginId,
+    string? BindingIdentity,
+    int? ContactId,
+    string? Channel,
+    string? Sender,
+    bool TakenBack)
+    : NamedReference(WorkItem, Operation, Status, Reference, PluginId, BindingIdentity);

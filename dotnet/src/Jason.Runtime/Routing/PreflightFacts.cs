@@ -62,6 +62,12 @@ namespace Jason.Runtime.Routing;
 /// Where the line with the item's person in the item's campaign stands, read only for a touch
 /// (<see cref="Jason.Contracts.Operations.OperationCatalog.Touches"/>) that names a contact, and null for every other work.
 /// </param>
+/// <param name="Followed">
+/// For an operation whose input carries the letter it follows (<see cref="CanonicalInput.Follows"/>), the earlier letter the
+/// decision reads (<see cref="FollowsDecision"/>): the one the arguments name under <c>args.follows</c>, the line's root where
+/// they name none, or, on a repeat, the one the first claim recorded; null where there is none, where the arguments ask
+/// for a letter of their own, and for every other work.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
@@ -78,7 +84,8 @@ public sealed record PreflightFacts(
     string? SearchInTheWay = null,
     IReadOnlyList<ThreadSeen>? Thread = null,
     string? OptedOut = null,
-    LineFacts? Line = null)
+    LineFacts? Line = null,
+    EarlierLetter? Followed = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

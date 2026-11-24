@@ -28,12 +28,12 @@ public partial class ProviderOpPreflightTests
         Assert.Equal(
             [AttemptErrors.OptedOut, AttemptErrors.LineFinished, AttemptErrors.TouchCeilingReached, AttemptErrors.ContactNotLinked],
             codes.Skip(codes.IndexOf(AttemptErrors.OptedOut)).Take(4));
-        Assert.Equal(30, codes.Count);
+        Assert.Equal(35, codes.Count);
     }
 
     /// <summary>
     /// They take the next two numbers free, 29 and 30, and no number published before them moves: a check's number is its
-    /// name, wherever it is asked.
+    /// name, wherever it is asked. The five of an earlier letter followed, added after them, take the five after.
     /// </summary>
     [Fact]
     public void The_line_s_checks_are_numbered_29_and_30_and_no_other_number_moves()
@@ -49,7 +49,9 @@ public partial class ProviderOpPreflightTests
         ];
 
         Assert.Equal(
-            [.. before.Select((code, index) => $"{index + 1} {code}"), "29 line_finished", "30 touch_ceiling_reached"],
+            [.. before.Select((code, index) => $"{index + 1} {code}"), "29 line_finished", "30 touch_ceiling_reached",
+             "31 follows_unknown", "32 follows_reference_absent", "33 follows_taken_back", "34 follows_route_mismatch",
+             "35 follows_sender_mismatch"],
             ProviderOpPreflight.Numbers.OrderBy(pair => pair.Value).Select(pair => $"{pair.Value} {pair.Key}"));
     }
 
