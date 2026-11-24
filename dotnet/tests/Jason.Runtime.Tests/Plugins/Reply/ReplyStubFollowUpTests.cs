@@ -317,6 +317,46 @@ public class ReplyStubFollowUpTests
         Assert.Equal(0, plain);
     }
 
+    /// <summary>
+    /// A send read back or cancelled names what it follows as reply-cli 0.23.0 prints it (src/operations/direct-sends.ts,
+    /// <c>follows_of</c>): last, the reference of the email a follow-up went in the thread of, and null for a send that follows
+    /// none, wherever Reply gives the member, which a Reply that offers follow-ups does on every send; against a Reply
+    /// without follow-ups it is not printed at all.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_send_read_back_or_cancelled_names_what_it_follows_last_wherever_reply_offers_follow_ups(bool offered)
+    {
+        using var account = Planted();
+        var first = await FirstAsync(account, "Tuesday");
+        var (exit, stdout, said) = await account.RunAsync([.. Follow(first), "--send-after", Moment(3)], """{"body":"Hi"}""", Ct);
+        Assert.True(exit == 0, said);
+        var followUp = (string)JsonNode.Parse(stdout)!["reference"]!;
+        if (!offered)
+        {
+            account.NotOffering("direct_send_follow_up");
+        }
+
+        async Task<JsonObject> Read(params string[] verb) =>
+            JsonNode.Parse((await account.RunAsync(["--json", "-q", "direct-send", .. verb], Ct)).Item2)!.AsObject();
+
+        var firstRead = await Read("get", first);
+        var followUpRead = await Read("get", followUp);
+        var cancelled = await Read("cancel", followUp);
+
+        if (!offered)
+        {
+            Assert.All([firstRead, followUpRead, cancelled], record => Assert.False(record.ContainsKey("follows"), record.ToJsonString()));
+            return;
+        }
+
+        Assert.All([firstRead, followUpRead, cancelled], record => Assert.Equal("follows", record.Last().Key));
+        Assert.Null(firstRead["follows"]);
+        Assert.Equal((first, first), ((string?)followUpRead["follows"], (string?)cancelled["follows"]));
+        Assert.Equal("cancelled", (string?)cancelled["state"]);
+    }
+
     private static ReplyAccount Planted() =>
         new ReplyAccount()
             .WithContact(1001, "marta@example.com", "Marta")
