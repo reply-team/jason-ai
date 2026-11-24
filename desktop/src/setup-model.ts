@@ -401,7 +401,7 @@ export function versionAtLeast(found: string, wanted: string): boolean {
  * The oldest Reply CLI the Reply card's acts use: the one Jason's Reply plugin needs, so the card never calls Reply
  * ready while the plugin is unavailable. The account verbs the acts run are from 0.21.0.
  */
-export const replyMinimumVersion = '0.22.0';
+export const replyMinimumVersion = '0.23.0';
 
 /** The channels `reply account list --channel` takes, read one at a time, in the order the card shows them. */
 export const replyChannels = ['email', 'linkedin'] as const;

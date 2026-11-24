@@ -61,7 +61,7 @@
       "work_item": "wi_1"
     },
     "preview": {
-      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, thanks for the talk at the meetup.; send after: —; follows: — (—)",
+      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, thanks for the talk at the meetup.; send after: —; follows: — (—); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
       "highlights": {
         "/contacts/0/channels/0/value": "ines@example.test",
         "/args/channel": "email",

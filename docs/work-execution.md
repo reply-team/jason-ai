@@ -953,7 +953,9 @@ follows no work
 item: it opened a thread of its own, by its own wish or by the runtime's decision, or was claimed before the runtime
 decided this at all. Latest is by that attempt's claim, newest first. The work being claimed is never its own root. So
 the root moves to the latest letter that opened a thread of its own, and a letter taken back, or one a read says
-failed or was cancelled and none says went or may have gone, gives way to the one before it.
+failed or was cancelled and none says went or may have gone, gives way to the one before it. A root the provider failed
+or cancelled after accepting it, which no read has recorded, stays the root until a read records it; a follow-up of it
+then ends `follows_never_sent`.
 
 The decision reaches the plugin at the root of the composed input, `follows`: the letter followed, by its work item,
 its operation and the provider's reference for it, and `because`, the reason above; for a letter of its own, `because`

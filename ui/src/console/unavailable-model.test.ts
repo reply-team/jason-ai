@@ -35,7 +35,7 @@ describe('An unavailable plugin a route names', () => {
                 id: 'reply',
                 label: 'Reply (reply)',
                 problem:
-                    "'reply' reports 0.21.0; the manifest asks for 0.22.0 or later. Install 'reply' 0.22.0 or later where the runtime can see it and run `jason plugin reload`.",
+                    "'reply' reports 0.22.0; the manifest asks for 0.23.0 or later. Install 'reply' 0.23.0 or later where the runtime can see it and run `jason plugin reload`.",
             },
         ]);
     });

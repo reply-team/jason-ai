@@ -168,31 +168,16 @@ internal static partial class Account
             return badFollows;
         }
 
-        // A follow-up may leave its mailbox out, and then goes from the one the send it names went from.
-        long accountId;
-        var mailboxGiven = line.Option(send.AccountOption) is not null;
-        var followed = follows is null ? null : DirectSendOf(root, follows);
-        if (line.Option(send.AccountOption) is { } accountRaw)
-        {
-            if (AccountIdOf(send, accountRaw) is not { } mailbox)
-            {
-                return BadId(send.AccountOption);
-            }
-
-            accountId = mailbox;
-        }
-        else if (follows is not null && followed is null)
-        {
-            // The refusal of a send that is not there comes with the contact, below.
-            accountId = 0;
-        }
-        else if (followed?["accountId"] is JsonValue sentFrom && sentFrom.TryGetValue<long>(out var from))
-        {
-            accountId = from;
-        }
-        else
+        // Every send names the account it goes from, a follow-up too, as reply-cli requires: Reply would send it from the
+        // default one.
+        if (line.Option(send.AccountOption) is not { } accountRaw)
         {
             return Refused("usage.id", $"No {send.AccountOption} was given.", exit: 2);
+        }
+
+        if (AccountIdOf(send, accountRaw) is not { } accountId)
+        {
+            return BadId(send.AccountOption);
         }
 
         var (sendAfter, badMoment) = SendAfterOf(line);
@@ -235,11 +220,7 @@ internal static partial class Account
             return notCreated;
         }
 
-        var ids = new JsonObject { ["contact_id"] = contactId };
-        if (accountId != 0)
-        {
-            ids[AccountKey(send)] = accountId;
-        }
+        var ids = new JsonObject { ["contact_id"] = contactId, [AccountKey(send)] = accountId };
 
         // The contact is held, or was just imported, by a route Reply offers; the send's own route may be one it does not.
         if (send.Channel == "email" && follows is null && !Offered(root, "send_direct_email"))
@@ -286,7 +267,7 @@ internal static partial class Account
             return answered;
         }
 
-        if (follows is not null && FollowRefusal(root, follows, contactId, mailboxGiven ? accountId : null, moment, timedBy, ids) is { } notFollowed)
+        if (follows is not null && FollowRefusal(root, follows, contactId, accountId, moment, timedBy, ids) is { } notFollowed)
         {
             return notFollowed;
         }

@@ -957,7 +957,7 @@ apply prints a line such as `plugins: journal-forwarder differs from every packa
 and the newer package stays in `~/.jason/plugins/<id>/`. A release before 0.32.0 names no `ntfy` at all, so the apply says
 nothing about it and the package simply stays. The older runtime then loads a package written for a newer one.
 
-Two packages make that matter. A runtime older than 0.31.0 does not know the manifest key
+Three packages make that matter. A runtime older than 0.31.0 does not know the manifest key
 `capabilities.http.any_granted_host`, which `ntfy` 1.0.3 and the journal forwarder 1.1.0 carry, and it refuses a manifest
 with a key it does not know. A package problem rejects the whole load, and at a start there is no earlier set to keep
 ([plugins](plugins.md), "Two kinds of problem"), so the runtime starts with **no plugin loaded at all**, Reply's included.
@@ -965,18 +965,20 @@ What you see is a runtime that answers, work that fails because no plugin is the
 naming the package and the manifest key it refused. The same holds for a copy of the forwarder 1.2.0 on a runtime older
 than 0.32.0, which refuses `capabilities.files` in the same way, for the forwarder 1.3.0 on a runtime older than 0.36.0,
 which refuses the reserve and search kinds it declares as kinds it does not write, for the forwarder 1.8.0 on a
-runtime older than 0.50.0, which refuses the four kinds of a person's line it subscribes to, and for the forwarder 1.9.0
-on a runtime older than 0.51.0, which refuses `message_unsent_observed` in the same way.
+runtime older than 0.50.0, which refuses the four kinds of a person's line it subscribes to, for the forwarder 1.9.0
+on a runtime older than 0.51.0, which refuses `message_unsent_observed` in the same way, and for Reply 0.20.0 on a
+runtime older than 0.51.0, which refuses `follows` among the arguments of `message.send` (`argument_invalid`).
 
 To go back cleanly, put the package the older release published in its place, which depends on whether that release
 published it. `jason plugin install` places the package of the release the running executable is, so it only works for a
 package that release publishes.
 
-Where the older release publishes the package, which for the journal forwarder is 0.30.0 and later, run this just after
-the apply, for each such package you had installed:
+Where the older release publishes the package, which for the journal forwarder is 0.30.0 and later and for Reply every
+release from 0.11.0 on, run this just after the apply, for each such package you had installed:
 
 ```sh
 jason plugin install journal-forwarder --replace
+jason plugin install reply --replace
 ```
 
 Where it does not, which for `ntfy` is anything older than 0.32.0, `jason plugin install` refuses, saying the release

@@ -12,8 +12,8 @@ internal sealed record FollowUpCode(string Code, string ReplyCode, int Status, s
 /// <summary>
 /// Every code a follow-up of a direct email can end in, in one table: the CLI's spelling of each, Reply's own beside it, the
 /// status Reply answers a refusal at the request with, and the CLI's sentence. reply-cli names each by its meaning, in the
-/// family of the flag (<c>follows.</c>), with Reply's own code beside it in <c>reply_code</c>; <c>not_placed</c>'s status, 409,
-/// is this stand-in's choice, unconfirmed. <c>direct-send get</c> reads a failed follow-up's code in Reply's spelling.
+/// family of the flag (<c>follows.</c>), with Reply's own code beside it in <c>reply_code</c>, <c>not_placed</c> at 409 as
+/// reply-cli 0.23.0 names it. <c>direct-send get</c> reads a failed follow-up's code in Reply's spelling.
 /// <c>follows.not_owned</c> is here for the package's error mapping only: this stand-in has no teammates, so it cannot produce it.
 /// </summary>
 internal static class FollowUpCodes
@@ -75,8 +75,8 @@ internal static partial class Account
     private static readonly Regex FollowsReference = new(@"^email-[1-9]\d{0,9}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
-    /// What <c>--follows</c> names: an email direct send's reference, or a usage error. Refusing a reference that is not
-    /// <c>email-&lt;n&gt;</c> as <c>usage.reference</c> is this stand-in's own choice, not confirmed by reply-cli.
+    /// What <c>--follows</c> names: an email direct send's reference, or a usage error: a reference that is not
+    /// <c>email-&lt;n&gt;</c> is <c>usage.reference</c>, exit 2, as reply-cli 0.23.0 refuses it.
     /// </summary>
     private static (string? Reference, Ending? Refusal) FollowsOf(Parsed line)
     {
@@ -95,7 +95,7 @@ internal static partial class Account
 
     /// <summary>
     /// Reply's refusals of a follow-up at the request, in the order it makes them, or null: no send of the account by that
-    /// reference, a send to another contact, one from another mailbox where the follow-up names one, one that was cancelled
+    /// reference, a send to another contact, one from another mailbox than the one the follow-up names, one that was cancelled
     /// or failed for good, a follow-up going at once when the send has not gone, and two exact moments where the
     /// follow-up's is not later. A send held for a schedule has no exact moment to compare.
     /// </summary>

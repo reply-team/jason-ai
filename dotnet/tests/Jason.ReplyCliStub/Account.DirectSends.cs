@@ -351,7 +351,7 @@ internal static partial class Account
             return Refused("direct_send.not_found", $"Reply holds no direct send {reference}.", status: 404, replyCode: "directSend.notFound");
         }
 
-        // The members in the order reply-cli 0.22.0 builds them (src/operations/direct-sends.ts, `direct_send_of`).
+        // The members in the order reply-cli 0.23.0 builds them (src/operations/direct-sends.ts, `direct_send_of`).
         var record = new JsonObject
         {
             ["reference"] = Text(held, "reference"),
@@ -360,12 +360,6 @@ internal static partial class Account
             ["state"] = Text(held, "state"),
             ["send_after"] = held["sendAfter"]?.DeepClone(),
         };
-
-        // What a follow-up follows, only where it follows one.
-        if (held["follows"] is JsonValue follows && follows.GetValueKind() == System.Text.Json.JsonValueKind.String)
-        {
-            record["follows"] = follows.DeepClone();
-        }
 
         // The moment Reply expects to send a send waiting for its schedule, only where it gave one, and null in every
         // other state, as reply-cli 0.18.0 passes it on (src/operations/direct-sends.ts:54).
@@ -412,6 +406,17 @@ internal static partial class Account
             {
                 record[to] = value?.DeepClone();
             }
+        }
+
+        // What a send follows, last, as reply-cli 0.23.0 passes Reply's `follows` on (src/operations/direct-sends.ts,
+        // `follows_of`): the reference of the email a follow-up went in the thread of, or null for a send that follows none.
+        // A Reply that offers follow-ups gives the member on every send, and an older one on none, so it is printed exactly
+        // where the route is offered.
+        if (Offered(root, "direct_send_follow_up"))
+        {
+            record["follows"] = held["follows"] is JsonValue follows && follows.GetValueKind() == System.Text.Json.JsonValueKind.String
+                ? follows.DeepClone()
+                : null;
         }
 
         return Done(record);
