@@ -873,10 +873,10 @@ Jason's own move holds nobody either: one whose `last_activity_at` is not later 
 letter of Jason's own went into the thread — a touch of the person in the campaign, at its `accepted_for` where its
 result names one, otherwise the end of its succeeded attempt, across the campaign since a touch records no thread, or an
 answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
-succeeded attempt. Of Jason's touches only a letter of its own explains a move, one whose `follows` names no work item or
-that has no `follows`; a follow-up, whose `follows` names a work item, never does, since the provider moves no thread
-moment when a follow-up lands in the thread, so an answer a follow-up overtakes before the next read still holds the
-line. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
+succeeded attempt. A follow-up, a `message.send` whose `follows` names a work item, never explains a move: the plugin
+that places follow-ups, Reply's, does not move a thread's moment when one lands, so an answer a follow-up overtakes
+before the next read still holds the line; a `message.send` with no `follows`, or one that names no work item, and a
+touch of any other operation explain a move as any letter of Jason's own does. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
 went, nor did one a succeeded `message.status` of the campaign says failed or was cancelled, unless a read of it says
 it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it
 Jason's own letter. A line whose
