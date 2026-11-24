@@ -234,8 +234,8 @@ moment. `follows_never_sent` is a letter cancelled or failed for good, so there 
 is a reference the provider holds no letter under that went from this sender to this person: the claim's own checks
 keep such a letter from the provider, so it says the provider's record of it and the runtime's no longer agree.
 `follows_not_placed` is a thread the provider's mailbox could not place the message in. `follows_too_early` is a moment
-in `send_after` that is not later than the one the letter is held for, so the message would go before that letter: the
-thread is not at fault, the moment the message was given is, and a `validation` failure says so. A provider that does
+in `send_after` that is not later than the one the letter is held for, or a schedule that is open now, so the message
+would go before that letter: the thread is not at fault, the moment the message was given is, and a `validation` failure says so. A provider that does
 not offer replies in a thread at all answers the reserved `capability_not_offered`, naming `follows`, with nothing sent
 ([a capability the provider does not offer yet](../README.md#a-capability-the-provider-does-not-offer-yet)).
 
@@ -262,8 +262,8 @@ preview adds one `example` of it ([the preview a person reads](../README.md#the-
 and the text rendered for this person from the composed input, with the names the input does not hold — a custom
 field, the sending account's names, and on LinkedIn the person's email address — left for the provider, shown as their
 fallback or as `[name]`, and listed under `unfilled`. A template that follows a letter shows no subject of its own:
-in its place, the example says what the summary ends with, that the message goes as a reply under that letter's subject
-and its own subject is not sent. The fixtures
+its example's `subject` is null, and the summary says that the message goes as a reply under that letter's subject and
+its own subject is not sent. The fixtures
 [`fixtures/message.send/preview-*.json`](../fixtures/message.send) show each case.
 
 ## The properties

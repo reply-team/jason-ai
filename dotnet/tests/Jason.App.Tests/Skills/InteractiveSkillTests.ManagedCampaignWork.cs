@@ -1584,7 +1584,8 @@ public partial class InteractiveSkillTests
 
         var planner = Flattened("planner-in-session");
         Assert.Contains("so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed", planner, StringComparison.Ordinal);
-        Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
-        Assert.Contains("`wait_on` naming the first letter's work item", planner, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups go under the line's root, as replies, where the provider can: the latest letter that went as one of its own", planner, StringComparison.Ordinal);
+        Assert.Contains("`wait_on` naming the work item of the letter it follows", planner, StringComparison.Ordinal);
+        Assert.DoesNotContain("never planned ahead", planner, StringComparison.Ordinal);
     }
 }

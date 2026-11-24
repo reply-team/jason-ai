@@ -111,8 +111,8 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                 </>
             )}
             <p className="hint">
-                Not shown: the sender's signature kept at the provider, and the provider's tracking, which are added
-                when it sends.
+                Not shown: the sender's signature kept at the provider, the provider's tracking and, under a reply, the
+                quotation of the earlier email the mailbox appends, which are added when it sends.
             </p>
         </div>
     );

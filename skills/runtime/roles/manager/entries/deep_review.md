@@ -131,16 +131,17 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --r
 Each touch's send has its own key, naming the person and the touch:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"ann@example.com"},"message":{"format":"email","subject":"Re: Price list for your team","body":"A short note after my letter last week: the price list is ready whenever it is useful to you."}}' --reason "touch 2 of 3: the first went five days ago and there is no reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-touch-2-cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"ann@example.com"},"message":{"format":"email","subject":"A question about your rollout","body":"A short note after my letter last week: the price list is ready whenever it is useful to you."}}' --reason "touch 2 of 3: the first went five days ago and there is no reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-touch-2-cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-**A follow-up goes under the first letter, as a reply.** Created with no `follows`, an email `message.send` lands in the
+**A follow-up goes under the line's root, as a reply.** Created with no `follows`, an email `message.send` lands in the
 thread of the line's root, as a reply: the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back. It lands there where the provider can place a letter in a thread and the mailbox and
 account are the same; the approval card says which, and why, and otherwise it goes as a letter of its own. Write it as a
-reply: the subject is `Re: ` and the subject of the letter it follows, so a first letter with the subject "Price list for your
-team" is followed by "Re: Price list for your team"; the body is short and stands on what the person already has.
-A follow-up that ended `follows_not_sent_yet` is proposed again with a `send_after` later than the followed letter's moment.
-A follow-up that ended `follows_never_sent`: read the followed letter's status, with a `message.status` item that names that send under `args.send`, as "Asking after one send" in the manager's head file says. A read that records the letter as failed or cancelled takes it off the line. Then propose the follow-up again, and the runtime follows the line's earlier root or sends it as a letter of its own.
+reply: the subject is the title it would carry as a letter of its own, with no `Re:` and no copy of the followed letter's
+subject. In a thread the thread's subject is used and this one is not sent; it is sent only where the message goes as a
+letter of its own. Where the first letter never went, the message is rewritten as a first letter, not sent as a
+follow-up's text under a new title. The body is short and stands on what the person already has.
+A follow-up that did not go, by an inline code or by a `failed` line, is mended by the one rule "A follow-up that could not go" in the manager's head file, which names each code, and by nothing written here. A read of the followed letter that records it as failed or cancelled takes it off the line, and the follow-up proposed again then follows the line's earlier root or goes as a letter of its own.
 Say `"follows": "new_thread"` only where the plan says this touch opens a thread of its own, and name a letter's
 work item in `follows` only to follow another letter than the runtime would. LinkedIn messages follow nothing. Never
 send a follow-up as a `conversation.reply`: that answers a person who wrote, in the thread they wrote in.

@@ -67,7 +67,7 @@ jason workitem review wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --review-hash sha256:3f9a0c 
   text since. A review sent with a hash the text has moved
   past is refused `review_stale`: read the send again and review what it now says.
 
-An email `message.send` that does not say `"follows": "new_thread"` goes as a reply under the line's root, by the runtime's rule, where the provider can place it: the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back. Before you pass a follow-up, read the `follows` the runtime composed, on the `Follows:` line of `jason workitem get <the send's wi_…> --human` or of the approval's preview: under which letter it lands, or why it goes as a new letter. The approval card names the letter it chose, which is the one to read. Judge the text as a reply to it:
+An email `message.send` that does not say `"follows": "new_thread"` goes as a reply under the line's root, by the runtime's rule, where the provider can place it: the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back. Before the send is claimed nothing is decided yet: the runtime composes its `follows` at the claim, which is after your run, so there is no decision for you to read. Derive the probable root yourself by that rule, from this list, and judge the text as a reply to it:
 
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --order finished

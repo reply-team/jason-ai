@@ -11,13 +11,10 @@ namespace Jason.Contracts.Operations;
 /// A name the input holds with no value and no fallback renders the same way and is listed, since the provider will
 /// not send the message. The rendering writes text and escapes nothing; a provider's own may differ. A message that
 /// follows a letter goes under that letter's subject, which the input does not carry, so its own subject is not
-/// rendered: the example says so in its place, in the words the summary ends with.
+/// rendered and the example holds none: the summary says why, and a sentence is never shown as a subject.
 /// </summary>
 internal static class TemplateExample
 {
-    /// <summary>What the example shows in place of a subject where the message follows a letter: the summary's last words.</summary>
-    internal const string FollowsLine = "a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent";
-
     private const string Compose = "/args/message/compose";
     private const string Channel = "/args/channel";
     private const string Subject = "/args/message/subject";
@@ -43,7 +40,7 @@ internal static class TemplateExample
         if (Text(input, FollowedItem) is { Length: > 0 })
         {
             // The subject the arguments carry does not go, so it is neither rendered nor read for names.
-            return Render(body, input, unfilled) is { } followUp ? Example(FollowsLine, followUp, unfilled) : null;
+            return Render(body, input, unfilled) is { } followUp ? Example(null, followUp, unfilled) : null;
         }
 
         var written = Text(input, Subject);

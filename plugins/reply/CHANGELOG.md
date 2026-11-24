@@ -16,14 +16,17 @@ absorbed by a release of this package alone.
   goes only where the message is a letter of its own. Reply may quote the email followed beneath the text. A message
   that follows none, the first to a person or one written `new_thread`, goes exactly as before, with its subject, and a
   repeat after a lost answer names the same email under the same key.
+- Reply's `contact.emailSendingFailed` (it could not send the email this time; for a follow-up, the mailbox could not look
+  up the earlier email) has a row of its own under `message.send`, `provider_call_failed`, permanent, as it ended before:
+  nothing went, and a new proposal goes under a new key.
 - A follow-up Reply refuses is never sent as a letter of its own in its place, and each refusal ends in a code of its
   own, with nothing sent: an email Reply does not hold under the reference for this account, this person and this
   mailbox, `follows_not_found`; one cancelled or failed for good, `follows_never_sent`; one not gone yet, while this
   message would go at once, `follows_not_sent_yet`, transient: attempted again within the runtime's retries, and where
   that email is held longer the item ends with this code and the message is proposed again with a `send_after` later
   than that email's moment; one Reply can no longer find to answer, `follows_not_placed`; one held for an exact moment
-  no earlier than the moment this message names, so that it would go before that email, `follows_too_early`,
-  validation, the moment being the message's to correct; and a Reply that does not offer follow-ups,
+  no earlier than the moment this message names, or while a schedule it names is open now, so that it would go before
+  that email, `follows_too_early`, validation, the moment being the message's to correct; and a Reply that does not offer follow-ups,
   `capability_not_offered`, naming `follows`, or, on a repeat after an attempt that may have sent, `send_not_settled`,
   as a plain send's repeat that meets a 404 with no code is. A LinkedIn message is handed no email to follow: the
   manifest takes `follows` on email alone.

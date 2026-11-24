@@ -638,8 +638,8 @@ the input it singles out.
   may take the first, and the name is listed. The example renders text and escapes nothing. It is the runtime's
   rendering, not the provider's, which may differ — in what it counts as no value, and in what it makes of markup in a
   field. Where the root `follows` names a letter, the message goes under that letter's subject, which the input does
-  not carry: `subject` then says so in the words `message.send`'s summary ends with, and the subject the arguments carry
-  is neither rendered nor read for names.
+  not carry: `subject` is then null, since the subject the arguments carry is not sent, and it is neither rendered nor read for
+  names.
 - Every pointer is checked when the document loads. The walk steps through plain `properties` by name and `items`
   by index, and refuses a name a closed object does not allow, an index past `maxItems` and a step into a value
   whose only type is a scalar; a value that may be a scalar or something else is not refused.

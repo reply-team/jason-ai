@@ -217,7 +217,7 @@ Five smaller rules, each of which somebody will meet:
 - **A set replaces the route, whole.** `--binding` left out is *not* "keep the one that is there": the
   route it writes has no binding, and whatever account the old one selected is gone. The change is
   journaled with the old binding beside the new, and the answer shows the route that was written — so
-  nothing is lost, but nothing warns you either.
+  nothing is lost, but nothing warns you either. An edit of a binding, even one that keeps the account, starts new threads for the default follow-ups of every line rooted before it: the earlier letter went through the binding as it was, and the follow-up is held to the one in force.
 - **An archived campaign is refused**, for `route set` and `route unset` alike, with the same
   `campaign_archived` it answers everywhere else: archived work never dispatches again, so it is never
   re-routed in either direction — including the direction that only takes something away.
