@@ -145,7 +145,7 @@ type ReplyLinkIsTheSeam = [
 type UpdateIsTheSeam = [
     Holds<Equal<UpdateItemAnswer, DesktopUpdateItem>>,
     Holds<Equal<Awaited<ReturnType<JasonDesktop['updates']['item']>>, DesktopUpdateItem>>,
-    Holds<Equal<Parameters<JasonDesktop['updates']['press']>, [label: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['updates']['press']>, [label: string, options?: { ask?: boolean }]>>,
 ];
 
 // A link reaches the page as the page the desktop parsed it to, never as the address.

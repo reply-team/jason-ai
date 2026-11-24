@@ -14,7 +14,7 @@ import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
 import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, itemKeys, keyWords, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
 import type { DesktopCommand as PageCommand } from '../../ui/src/platform/desktop.d.ts';
-import { actShown, updateAnswerOf } from '../src/update-item.ts';
+import { actShown, pressAsks, updateAnswerOf, updateStepOf } from '../src/update-item.ts';
 import { menuItemOf, pressItem, type UpdateState } from '../src/updates.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -367,13 +367,13 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
-    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer()), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer(), desk.updateStep()), refused);"));
     // The version the page marks: the one the updater knows of and has not installed, or the one the system installed
     // under the deb's window until its restart; none in a demo run, which has no update item.
     const newer = body('updateNewer');
     assert.ok(newer.includes('if (this.demo !== null) return null;'), newer);
     assert.ok(newer.includes('return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;'), newer);
-    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label, options) => {\n        const act = actShown(desk.updateItem(), label);\n        desk.pressUpdate(act, pressAsks(act, options), 'page');\n    }, refused);"));
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
     assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
@@ -421,14 +421,15 @@ test('a press from the page acts only on the item it drew: the same label, enabl
     await pressItem(updater, actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), false, ask);
     assert.deepEqual(acts, ['install'], 'the current label presses once, as a click');
     // The page is answered the label and whether it is enabled, never the act.
-    assert.deepEqual(updateAnswerOf('0.48.5', offered, null, '0.48.6'), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true }, said: null, newer: '0.48.6' });
-    assert.deepEqual(updateAnswerOf('0.48.5', null, null, null), { version: '0.48.5', item: null, said: null, newer: null });
+    assert.deepEqual(updateAnswerOf('0.48.5', offered, null, '0.48.6'), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true }, said: null, newer: '0.48.6', step: null });
+    assert.deepEqual(updateAnswerOf('0.48.5', null, null, null), { version: '0.48.5', item: null, said: null, newer: null, step: null });
     // What the person's last check found rides the same answer: no other member of the seam carries it.
     assert.deepEqual(updateAnswerOf('0.48.5', offered, 'Version 0.48.6 is available.', '0.48.6'), {
         version: '0.48.5',
         item: { label: 'Download Jason 0.48.6', enabled: true },
         said: 'Version 0.48.6 is available.',
         newer: '0.48.6',
+        step: null,
     });
 });
 
@@ -474,4 +475,52 @@ test('the desktop’s list of commands is the page’s DesktopCommand, member fo
     // The update notice's click opens Settings on its Update section: a command of its own, which no key sends.
     assert.ok(isDesktopCommand('navigate.update'));
     assert.equal(bindings.some((binding) => 'command' in binding.does && binding.does.command === 'navigate.update'), false);
+});
+
+test('the update item says its step, and a press from the page asks first only when it says so at the install', async () => {
+    const at = (state: UpdateState) => updateStepOf(state, menuItemOf(state, true, true));
+    assert.equal(at({ step: 'offered', version: '0.48.6' }), 'offered');
+    assert.equal(at({ step: 'downloading', version: '0.48.6' }), 'downloading');
+    assert.equal(at({ step: 'downloaded', version: '0.48.6' }), 'downloaded');
+    for (const state of [{ step: 'idle' }, { step: 'checking' }, { step: 'installing', version: '0.48.6' }] as UpdateState[]) assert.equal(at(state), null, state.step);
+    // The deb's restart, a build that is not installed and a demo run have no step of the updater's.
+    assert.equal(updateStepOf({ step: 'idle' }, menuItemOf({ step: 'idle' }, true, false, '0.48.6')), null);
+    assert.equal(updateStepOf({ step: 'offered', version: '0.48.6' }, null), null);
+    // The step rides the answer; an answer made without one says null.
+    const offered = menuItemOf({ step: 'offered', version: '0.48.6' }, true, true);
+    assert.equal(updateAnswerOf('0.48.5', offered, null, '0.48.6', 'offered').step, 'offered');
+    assert.equal(updateAnswerOf('0.48.5', offered, null, '0.48.6').step, null);
+    // Asking: only the install, and only when the press names it.
+    const downloaded = menuItemOf({ step: 'downloaded', version: '0.48.6' }, true, true);
+    const label = 'Restart Jason and Its Runtime to Install 0.48.6';
+    assert.equal(pressAsks(actShown(downloaded, label), { ask: true }), true);
+    assert.equal(pressAsks(actShown(downloaded, label), undefined), false);
+    assert.equal(pressAsks(actShown(downloaded, label), { ask: 'yes' }), false);
+    assert.equal(pressAsks(actShown(offered, 'Download Jason 0.48.6'), { ask: true }), false);
+    assert.equal(pressAsks(actShown(downloaded, 'Download Jason 0.48.6'), { ask: true }), false, 'a label the item no longer says presses nothing');
+    // The press that asks installs only after Restart and Install, and Not Now leaves the download waiting.
+    const acts: string[] = [];
+    const updater = {
+        current: { step: 'downloaded', version: '0.48.6' } as UpdateState,
+        check: async () => null,
+        download: async () => undefined,
+        install: async () => {
+            acts.push('install');
+            return true;
+        },
+    };
+    const asked: string[] = [];
+    const answer = (button: number) => async (question: { message: string; buttons: string[] }) => {
+        asked.push(question.message);
+        return button;
+    };
+    const act = actShown(downloaded, label);
+    await pressItem(updater, act, pressAsks(act, { ask: true }), answer(1));
+    assert.deepEqual(acts, [], 'Not Now installs nothing');
+    assert.deepEqual(asked, ['Restart Jason and its runtime to install Jason 0.48.6?']);
+    await pressItem(updater, act, pressAsks(act, { ask: true }), answer(0));
+    assert.deepEqual(acts, ['install']);
+    await pressItem(updater, act, pressAsks(act, undefined), answer(1));
+    assert.deepEqual(acts, ['install', 'install'], 'a press with no ask installs at once, as Settings does');
+    assert.equal(asked.length, 2);
 });
