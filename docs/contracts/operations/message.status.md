@@ -116,6 +116,20 @@ fails, decides nothing and stops nothing. The line is a trigger a campaign's man
 one, since the provider's own bounce event has already woken the manager. A person lifts a stop with
 `jason suppression remove`.
 
+## What the runtime does with a send that did not go
+
+A read that answers `failed` or `cancelled` says so in the journal, whoever made the read, for a send the provider took
+for a moment: one whose result says it can cancel it, for a moment its result or its arguments named, the sends a route
+change and a take-back hold ([routing](../../routing.md) §6). It is a reserved line, `message_unsent_observed`, about
+the work item that made the send, keyed by it and said once, carrying the plugin, the reference, the channel, the state,
+the provider's own `failure_code` where it is one word of its vocabulary, the send's moment, `cancelled_at` and the
+read, never `failure_reason`, an address or the text, and it is written in the change set that ends the read. Nothing is
+said of a send a succeeded `message.cancel` of the campaign took back: that cancel is the record. The runtime also reads such a send
+itself once its moment has passed, and where the last of those reads, a week after the moment by default, still finds it
+`queued`, the same line says it is `overdue` ([inbound sync](../../inbound-sync.md) §1). A read that answers `sent` says
+`message_sent_observed` as above; one that answers `unknown`, or `queued` before then, says nothing. The line is a
+default trigger of a campaign's manager: a letter the campaign counted on did not go.
+
 ## Repeating after a lost answer
 
 A read changes nothing, so `repeat_after_ambiguous` is `safe` and the item is simply handed out again. Nothing is

@@ -1,0 +1,11 @@
+{
+  "kind": "message_unsent_observed",
+  "version": 1,
+  "case": "the last read of a deferred send, a week after its moment, still found it waiting",
+  "body": {
+    "key": "wi_01JC0000000000000000000002",
+    "old": null,
+    "new": { "plugin": "example-mail", "reference": "snd-55102", "channel": "email", "state": "overdue", "failure_code": null, "moment": "2026-11-13T09:00:00.000Z", "cancelled_at": null, "read_work_item": "wi_01JC000000000000000000000F" }
+  },
+  "expect": "valid"
+}

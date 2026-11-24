@@ -56,7 +56,8 @@
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
-        "20261122075940_DeepReviewGrid"
+        "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -103,7 +104,8 @@
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
-        "20261122075940_DeepReviewGrid"
+        "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads"
       ],
       "backup_file": null
     },
