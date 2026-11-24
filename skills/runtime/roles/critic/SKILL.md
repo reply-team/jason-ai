@@ -67,6 +67,8 @@ jason workitem review wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --review-hash sha256:3f9a0c 
   text since. A review sent with a hash the text has moved
   past is refused `review_stale`: read the send again and review what it now says.
 
+An email `message.send` that does not say `"follows": "new_thread"` goes as a reply in the thread of the line's first letter, by the runtime's rule, where the provider can place it. Read that letter (`jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send`, or the house's own printed form) and judge the text as a reply to it. Since it may go as a letter of its own, where the provider cannot place it or the mailbox or account is another, it must also read whole. The runtime has nothing further to read for this.
+
 Then complete your item with your result, as the rest of this file says.
 
 ```

@@ -336,7 +336,7 @@ public partial class RoleSkillTests
         Assert.Contains("**A review has fifteen minutes and one attempt, so it works in an order and to a ceiling.**", deep, StringComparison.Ordinal);
         Assert.Contains("Handle at most twenty people at one review across steps 2 to 4.", deep, StringComparison.Ordinal);
         Assert.Contains("**The next touch is yours, one at a time, at a review.**", deep, StringComparison.Ordinal);
-        Assert.Contains("**A follow-up is a new letter.**", deep, StringComparison.Ordinal);
+        Assert.Contains("**A follow-up goes under the first letter, as a reply.**", deep, StringComparison.Ordinal);
         Assert.Contains("No line goes past `Lines:MaxTouches`, the ceiling the settings hold, and you never plan past it", deep, StringComparison.Ordinal);
         Assert.Contains("the roles may plan it: a fourth touch after something made the person newly relevant, or two where two are enough", deep, StringComparison.Ordinal);
 
@@ -557,5 +557,39 @@ public partial class RoleSkillTests
 
         Assert.Contains("To change how the manager does one kind of review, edit that entry's file", customising, StringComparison.Ordinal);
         Assert.Contains("an update keeps a file the person edited", customising, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A follow-up email lands under the line's first letter, as a reply, where the provider can place it: the roles that
+    /// write, review, plan and create it say so, and none says a follow-up is a letter outside any thread.
+    /// </summary>
+    [Fact]
+    public void The_roles_say_that_a_follow_up_goes_under_the_first_letter_as_a_reply()
+    {
+        var deep = FlattenedEntry("manager", "deep_review");
+        Assert.Contains("**A follow-up goes under the first letter, as a reply.**", deep, StringComparison.Ordinal);
+        Assert.Contains("the subject is `Re: ` and the first letter's subject", deep, StringComparison.Ordinal);
+        Assert.Contains("`\"follows\": \"new_thread\"` only where the plan says this touch opens a thread of its own", deep, StringComparison.Ordinal);
+        Assert.Contains("LinkedIn messages follow nothing", deep, StringComparison.Ordinal);
+        Assert.Contains("Never send a follow-up as a `conversation.reply`", deep, StringComparison.Ordinal);
+        Assert.DoesNotContain("A follow-up is a new letter", deep, StringComparison.Ordinal);
+        Assert.DoesNotContain("never as \"Re:\"", deep, StringComparison.Ordinal);
+
+        var printed = SkillPack.PrintedCommands(EntryFile("manager", "deep_review"));
+        var touch = Assert.Single(printed, line => line.Contains("--operation message.send", StringComparison.Ordinal));
+        Assert.Contains("\"subject\":\"Re: ", touch, StringComparison.Ordinal);
+        Assert.DoesNotContain("follows", touch, StringComparison.Ordinal);
+
+        var copywriter = Flattened("copywriter");
+        Assert.Contains("A follow-up's subject is `Re: ` and the subject of the letter it follows", copywriter, StringComparison.Ordinal);
+
+        var critic = Flattened("critic");
+        Assert.Contains("An email `message.send` that does not say `\"follows\": \"new_thread\"` goes as a reply in the thread of the line's first letter", critic, StringComparison.Ordinal);
+        Assert.Contains("judge the text as a reply to it", critic, StringComparison.Ordinal);
+        Assert.Contains("it must also read whole", critic, StringComparison.Ordinal);
+
+        var planner = Flattened("planner");
+        Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
+        Assert.Contains("`wait_on` naming the first letter's work item", planner, StringComparison.Ordinal);
     }
 }
