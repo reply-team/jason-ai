@@ -134,7 +134,7 @@ export const COMMANDS = {
   },
   "contact send-email": {
     "kind": "write",
-    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
+    "note": "Sends the contact one email from the mailbox named, outside any sequence, with the subject and the body on stdin — the text a person approved, written as HTML, or a template in Reply's syntax, which Reply fills in before it sends. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice. A message that follows an earlier email (`--follows`) sends the body alone: it goes into that email's thread and under that email's subject, and a subject given with it is not used."
   },
   "contact linkedin-message": {
     "kind": "write",
@@ -422,6 +422,7 @@ export const CODES = {
       "reply_code:contact.dailyLimitReached": "mailbox_daily_limit",
       "reply_code:contact.activeContactsLimitReached": "mailbox_active_contacts_limit",
       "reply_code:contact.emailAccountSendingDisabled": "mailbox_sending_disabled",
+      "reply_code:contact.emailSendingFailed": "email_could_not_be_sent",
       "email.sending_disabled": "mailbox_sending_disabled",
       "linkedin.not_connected": "not_a_connection",
       "linkedin.no_inmail_credits": "no_inmail_credits",
@@ -1643,6 +1644,12 @@ export const ROWS = {
         "class": "permanent",
         "note": "Reply's list of accounts did not end, so the sender could not be found in it and nothing was sent."
       },
+      "email_could_not_be_sent": {
+        "when": "The send answered Reply's code `contact.emailSendingFailed` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`reply.refused` at 400): Reply could not send the email this time. For a message that follows an earlier email, it is the mailbox that could not look that email up. Nothing is sent, and a follow-up does not go as a letter of its own instead.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply could not send this email this time (for a follow-up, the mailbox could not look up the earlier email), so nothing went. It is not repeated; a new proposal goes under a new key."
+      },
       "key_in_use": {
         "when": "The CLI answered `idempotency_key.in_use`: Reply is still finishing the send an earlier attempt of this work item made under the same key, and this one sent nothing.",
         "code": "provider_unavailable",
@@ -1719,10 +1726,10 @@ export const ROWS = {
         "note": "Reply could not place this message in the thread of the email it follows: that email went, and its mailbox could no longer find it to answer. Nothing was sent, and not as a letter of its own either. Whether to propose it again as one, with `follows` written `new_thread`, is a person's to decide."
       },
       "follow_up_before_its_email": {
-        "when": "The message follows an earlier email and names a moment, `--send-after`, and the send answered `follows.too_early`, Reply's code `contact.followUpBeforeFollowedSend` at 409: that email is held for an exact moment of its own, and this message's is not later, so it would go before that email or with it. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "when": "The message follows an earlier email and names a moment, `--send-after`, and the send answered `follows.too_early`, Reply's code `contact.followUpBeforeFollowedSend` at 409: that email is held for an exact moment of its own, and this message's is not later, or its schedule is open now, so it would go before that email or with it. Nothing is sent, and the message does not go as a letter of its own instead.",
         "code": "follows_too_early",
         "class": "validation",
-        "note": "The moment this message was given is not later than the one the email it follows is held for, so it would go before that email, and Reply sent nothing. Asking again meets the same answer: propose it again with a `send_after` later than that email's moment."
+        "note": "The moment this message was given is not later than the one the email it follows is held for, or a schedule it names is open now, so it would go before that email, and Reply sent nothing. Asking again meets the same answer: propose it again with a `send_after` later than that email's moment."
       },
       "follow_ups_not_offered": {
         "when": "The message follows an earlier email, and the send answered `follows.not_available` on an attempt that repeats none that may have sent: reply-cli's word for Reply's follow-up route answering 404 with no code of Reply's own, which is a Reply that does not offer follow-ups. reply-cli tries nothing else in its place, so nothing is sent, and the message does not go as a letter of its own instead.",
