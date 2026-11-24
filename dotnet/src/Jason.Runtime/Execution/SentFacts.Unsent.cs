@@ -35,7 +35,7 @@ public sealed partial class SentFacts
     public const string Overdue = "overdue";
 
     /// <summary>A provider's code the line carries: one word, as a bounce's is, never a server's text.</summary>
-    private static readonly Regex OneWord = new("^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex OneWord = new(@"^[A-Za-z0-9][A-Za-z0-9._-]*\z", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// Adds the line to the context's change set (not saved here) where <paramref name="result"/> says the send did not
