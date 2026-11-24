@@ -23,7 +23,7 @@ replaces the title and the body together.
 
 Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
 that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
-under which letter and subject it will land before you approve it. A letter a provider held for later and then failed or
+under which letter it will land before you approve it. A letter a provider held for later and then failed or
 cancelled no longer counts as a touch, and Jason now reads a letter held for later after its moment to learn whether it
 went, and tells the campaign's manager about one that did not.
 
@@ -44,8 +44,9 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   replies in a thread, where there is no earlier letter to follow, or where the earlier letter went through another
   account or another mailbox. A LinkedIn message follows nothing.
 - **The approval says where it lands.** The approval card has a "Follows" row, and `jason approval get --human` and
-  `jason workitem get --human` print a `Follows:` line: under which letter and subject the email goes, or that it goes
-  as a new letter and why. The Subject row says "(not sent)" for a reply.
+  `jason workitem get --human` print a `Follows:` line: under which letter the email goes, or that it goes
+  as a new letter and why. The card names that letter's subject; the terminal names the letter's work item. The Subject row
+  says "(not sent)" for a reply.
 - **A follow-up that cannot go says why.** A followed letter that has not gone yet is tried again, and one held longer
   ends the item `follows_not_sent_yet`, to be proposed again with a later `send_after`. One that will never go ends it
   `follows_never_sent`; after a read of that letter records it as failed or cancelled it leaves the line, and the message
@@ -54,7 +55,11 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   makes the plugin unavailable. reply-cli is a Node program installed with npm, and the
   plugin's README says how: [the Reply plugin](https://github.com/reply-team/jason-ai/blob/v{{version}}/plugins/reply/README.md).
 - **The skills say the same.** The manager, the copywriter, the critic and the planners write a follow-up as a reply,
-  read the letter it lands under, and know what to do with the two codes above.
+  the critic judges it against the letter it would land under, and they know what to do with the codes above. A
+  follow-up the provider could not place under its letter is never proposed again as it was: you are asked whether it
+  goes as a letter of its own.
+- **A follow-up never hides an answer.** Jason's own follow-up reaching a thread first does not stop a person's answer
+  there from being read: the answer is never missed because the follow-up got there first.
 
 **Letters held for later**
 
@@ -65,7 +70,8 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   told what each state means: a failed letter did not go; an overdue one may still go, so a second letter comes only
   after cancelling it succeeds; a cancelled one is read against the thread and the person's state first.
 - **A failed or cancelled letter is no touch.** A letter the provider's own read says failed or was cancelled stops
-  counting toward the ceiling of touches, the people list and the choice of the letter a follow-up lands under, unless another read says it went.
+  counting toward the ceiling of touches, the people list and the choice of the letter a follow-up lands under, unless another read says it went or may have
+  gone (`unknown`).
 
 **Speed**
 
@@ -86,7 +92,7 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 - **Update Jason itself, not the package alone.** A runtime older than 0.51.0 refuses the Reply plugin 0.20.0
   (`argument_invalid`, among the arguments of `message.send`); `jason plugin install reply --replace` puts a matching
   package back.
-- **The Reply plugin needs reply-cli 0.23.0 or later.** Update reply-cli with npm before the first follow-up. Against a
+- **The Reply plugin needs reply-cli 0.23.0 or later.** With an older reply-cli the whole Reply plugin is unavailable from the first reload, not only its follow-ups: update reply-cli with npm (`npm install -g reply-cli`) before or right after updating Jason. Against a
   Reply that does not offer follow-ups yet, a follow-up is refused with `capability_not_offered` and nothing is sent;
   propose it again with `"follows": "new_thread"` to reach the person now.
 - **A letter the history already holds as failed or cancelled, by a provider's read, stops counting as a touch from this
