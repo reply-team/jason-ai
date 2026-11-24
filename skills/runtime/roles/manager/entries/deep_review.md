@@ -135,10 +135,11 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 ```
 
 **A follow-up goes under the first letter, as a reply.** Created with no `follows`, an email `message.send` lands in the
-thread of the line's first letter (or of a later one that opened a thread of its own with `new_thread`), as a reply, where the provider can place a letter in a thread and the mailbox and
+thread of the line's root, as a reply: the latest letter to the person on the channel that went as a letter of its own, for whatever reason, those sent before this release included. It lands there where the provider can place a letter in a thread and the mailbox and
 account are the same; the approval card says which, and why, and otherwise it goes as a letter of its own. Write it as a
 reply: the subject is `Re: ` and the subject of the letter it follows, so a first letter with the subject "Price list for your
 team" is followed by "Re: Price list for your team"; the body is short and stands on what the person already has.
+A follow-up that ended `follows_not_sent_yet` is proposed again with a `send_after` later than the followed letter's moment. Before you follow a letter that may not have gone, read its status (`message.status` of it): a read that says it failed or was cancelled takes it off the line, and the follow-up is then proposed again, so that the runtime follows the line's earlier root or sends it as a letter of its own; a follow-up that ended `follows_never_sent` is handled the same way.
 Say `"follows": "new_thread"` only where the plan says this touch opens a thread of its own, and name a letter's
 work item in `follows` only to follow another letter than the runtime would. LinkedIn messages follow nothing. Never
 send a follow-up as a `conversation.reply`: that answers a person who wrote, in the thread they wrote in.

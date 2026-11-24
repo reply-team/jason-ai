@@ -95,6 +95,8 @@ campaign and numbers; the `intent` beside it is the operation's generic sentence
 Where the preview carries an `example`, present it as one reading of the template and say that what is approved is the
 template as written: the example is the runtime's rendering for one person, and the provider's rendering may differ.
 
+Where the preview names a followed letter (a `Follows:` line, or `follows` among its highlights), say under which letter the email lands and that letter's subject, read from the item with `jason workitem get <the named wi_…>`, and say that the message's own subject is not sent.
+
 Give the person all of it. The reach, the cost and what can be undone are the three lines a decision
 actually turns on, and a summary that drops them to be shorter has dropped the part worth reading.
 Where one of them is marked conditional, say so and give the detail beside it: that is the operation's
