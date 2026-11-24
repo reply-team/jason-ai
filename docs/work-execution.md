@@ -245,7 +245,8 @@ the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWa
 later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
 became of the send or nine have failed, counting the reads of the send the runtime made, whichever step made them; until
 `Dispatcher:DeferredReadOverdueSeconds` after the moment has passed it makes none once eight have succeeded, so its last
-waits for that span, and after it none once nine have succeeded with one past it, eighteen of its own at most; and it
+waits for that span, and after it none once nine have succeeded with one past it: under settings that stand, nine
+answered reads of its own and eighteen in all at most; and it
 makes none in a campaign while five reads the runtime made are open there, whichever step made them. The read that
 finds a send `failed` or `cancelled`, or the first that ends `Dispatcher:DeferredReadOverdueSeconds` or more after the
 moment and still finds it `queued`, says once that it did not go: `message_unsent_observed`, its state `failed`,
@@ -1847,7 +1848,7 @@ mistyped one.
 | `Dispatcher:DeferredReadGraceSeconds` | `900` | 60..86400 | how long after a deferred send's moment its first read is due ([docs/inbound-sync.md](inbound-sync.md) §1) |
 | `Dispatcher:DeferredReadFirstWaitSeconds` | `3600` | 60..86400 | how long after the first read of a deferred send ended, where it did not find what became of the send, the second is due |
 | `Dispatcher:DeferredReadWaitSeconds` | `86400` | 60..86400 | how long after each later read of a deferred send ended the next is due |
-| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..777600 | how long after its moment a deferred send no read found went, failed or was cancelled is said `overdue`: the first read that ends this long after it and still finds the send waiting says so, and is its last; refused beyond what nine reads reach, the grace, the first wait and seven waits |
+| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..777600 | how long after its moment a deferred send no read found went, failed or was cancelled is said `overdue`: the first read that ends this long after it and still finds the send waiting says so, and is its last; refused beyond the grace, the first wait and seven waits, a bound chosen on how far past its moment a send is read |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

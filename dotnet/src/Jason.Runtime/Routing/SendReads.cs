@@ -132,8 +132,9 @@ internal static class SendReads
 /// succeeded ended. The one place the most reads the deferred read step makes of a send is written
 /// (<see cref="Dispatch.DeferredReads"/>): before the send's overdue span has passed, none once <see cref="Most"/> less one
 /// have succeeded; after it, none once <see cref="Most"/> have succeeded and one of them ended past the span; and at any
-/// moment none once <see cref="Most"/> have not (<see cref="Spent"/>). So the step's own reads that succeed are never more
-/// than <see cref="Most"/>, nor those that do not, whatever the settings. A read that did not succeed spaces the next as
+/// moment none once <see cref="Most"/> have not (<see cref="Spent"/>). So, under settings that stand, the step's own reads
+/// that succeed are never more than <see cref="Most"/>, nor those that do not, eighteen in all; a span raised while the
+/// read past the old span is still open adds one read for each such raise. A read that did not succeed spaces the next as
 /// one that did.
 /// </summary>
 internal sealed record MadeReads(int Succeeded, int Failed, DateTimeOffset LastEnded, DateTimeOffset? LastAnswered = null)

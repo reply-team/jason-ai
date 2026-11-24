@@ -30,8 +30,10 @@ namespace Jason.Runtime.Dispatch;
 /// <c>Dispatcher:DeferredReadOverdueSeconds</c> after the moment have passed, none is made once <see cref="MostReads"/> less one have
 /// succeeded, so the last read waits for the span; after it, none once <see cref="MostReads"/> have succeeded and one of
 /// them ended past the span; and none once <see cref="MostReads"/> have failed (<see cref="MadeReads"/>):
-/// <see cref="MostInAll"/> at the most, whatever the settings. A read that ends that span or more after the moment and
-/// still finds the send waiting says it is overdue, so a read judged under a span since changed is followed by one more.
+/// <see cref="MostReads"/> that succeeded of the step's own and <see cref="MostInAll"/> in all at the most, under settings
+/// that stand. A read that ends that span or more after the moment and still finds the send waiting says it is overdue,
+/// so a read judged under a span since changed is followed by one more: a span raised while the read past the old span
+/// is still open adds one read for each such raise, never past the span's own cap.
 /// A send whose failed reads are spent is read no more and may never be said: each of those failures woke the manager, as
 /// a failed item does.
 /// <para>
@@ -64,8 +66,8 @@ public sealed class DeferredReads(
     public const int MostReads = MadeReads.Most;
 
     /// <summary>
-    /// The most reads the step makes of one send, whatever the settings: <see cref="MostReads"/> that succeeded and as
-    /// many that failed.
+    /// The most reads the step makes of one send, under settings that stand: <see cref="MostReads"/> that succeeded of its
+    /// own and as many that failed, eighteen in all.
     /// </summary>
     public const int MostInAll = 2 * MostReads;
 

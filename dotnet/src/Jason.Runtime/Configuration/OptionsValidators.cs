@@ -164,10 +164,11 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 
     /// <summary>
     /// The reads of a deferred send: a grace and two waits of a minute to a day, and the moment it is said overdue an hour
-    /// to nine days after its own, the furthest the nine reads reach with the grace and every wait at a day. A send is read at most <see cref="Dispatch.DeferredReads.MostReads"/> times, each due a
-    /// wait after the one before it ends, so the last of them ends no sooner than the grace, the first wait and the rest of
-    /// the waits after the send's moment; an overdue moment beyond that is refused, since the send's last read would end
-    /// before it could be said overdue, and nothing would say it.
+    /// to nine days after its own, the furthest the nine reads reach with the grace and every wait at a day. An overdue
+    /// moment beyond the grace, the first wait and seven waits after the send's moment is refused: a bound chosen on how
+    /// far past its moment a send is read, so the span stays within what <see cref="Dispatch.DeferredReads.MostReads"/>
+    /// reads at the waits set would reach. The step's last read waits for any span, so the refusal is that choice, not a
+    /// span the reads could not meet.
     /// </summary>
     private static void ValidateDeferredReads(List<string> failures, DispatcherOptions options)
     {
@@ -186,7 +187,7 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
         {
             failures.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"Dispatcher:DeferredReadOverdueSeconds ({options.DeferredReadOverdueSeconds}) is beyond what the {Dispatch.DeferredReads.MostReads} reads of a send reach, {reached} seconds after its moment at the soonest: its last read would end before it could be said overdue."));
+                $"Dispatcher:DeferredReadOverdueSeconds ({options.DeferredReadOverdueSeconds}) is beyond {reached} seconds, the grace, the first wait and seven waits: a send is read no further past its moment than {Dispatch.DeferredReads.MostReads} reads at these waits reach."));
         }
     }
 
