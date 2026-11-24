@@ -128,12 +128,16 @@ internal static class SendReads
 
 /// <summary>
 /// The finished reads the runtime made of one send since its moment, whichever step made them: how many succeeded, how
-/// many did not (failed, or were cancelled before they answered), and when the latest of them ended. The one place the
-/// most reads the deferred read step makes of a send is written (<see cref="Dispatch.DeferredReads"/>): none once
-/// <see cref="Most"/> have succeeded or as many have not, so never more than twice as many, whatever the settings. A read
-/// that did not succeed spaces the next as one that did.
+/// many did not (failed, or were cancelled before they answered), when the latest of them ended, and when the latest that
+/// succeeded ended. The one place the most reads the deferred read step makes of a send is written
+/// (<see cref="Dispatch.DeferredReads"/>): before the send's overdue span has passed, none once <see cref="Most"/> less one
+/// have succeeded; after it, none once <see cref="Most"/> have succeeded and one of them ended past the span; and at any
+/// moment none once <see cref="Most"/> have not (<see cref="Spent"/>). So, under settings that stand, the step's own reads
+/// that succeed are never more than <see cref="Most"/>, nor those that do not, eighteen in all; a span raised while the
+/// read past the old span is still open adds one read for each such raise. A read that did not succeed spaces the next as
+/// one that did.
 /// </summary>
-internal sealed record MadeReads(int Succeeded, int Failed, DateTimeOffset LastEnded)
+internal sealed record MadeReads(int Succeeded, int Failed, DateTimeOffset LastEnded, DateTimeOffset? LastAnswered = null)
 {
     /// <summary>The most reads of each kind the step makes of one send: nine that succeeded, and nine that did not.</summary>
     public const int Most = 9;
@@ -141,8 +145,12 @@ internal sealed record MadeReads(int Succeeded, int Failed, DateTimeOffset LastE
     /// <summary>How many ended, whatever they answered.</summary>
     public int Ended => Succeeded + Failed;
 
-    /// <summary>Whether the step makes no further read of the send: <see cref="Most"/> succeeded, or as many did not.</summary>
-    public bool Spent => Succeeded >= Most || Failed >= Most;
+    /// <summary>
+    /// Whether no read of the send is still to come, whatever the moment: <see cref="Most"/> did not succeed, or
+    /// <see cref="Most"/> succeeded and the latest of them ended at or after <paramref name="span"/>, the send's moment
+    /// and its overdue span.
+    /// </summary>
+    public bool Spent(DateTimeOffset span) => Failed >= Most || (Succeeded >= Most && LastAnswered >= span);
 
     /// <summary>
     /// <paramref name="made"/>, null where none has ended, with one more read, which ended at <paramref name="ended"/>
@@ -152,7 +160,11 @@ internal sealed record MadeReads(int Succeeded, int Failed, DateTimeOffset LastE
         new(
             (made?.Succeeded ?? 0) + (succeeded ? 1 : 0),
             (made?.Failed ?? 0) + (succeeded ? 0 : 1),
-            made is { } earlier && earlier.LastEnded > ended ? earlier.LastEnded : ended);
+            Latest(made?.LastEnded, ended),
+            succeeded ? Latest(made?.LastAnswered, ended) : made?.LastAnswered);
+
+    private static DateTimeOffset Latest(DateTimeOffset? earlier, DateTimeOffset ended) =>
+        earlier is { } before && before > ended ? before : ended;
 }
 
 /// <summary>One finished read: the send it names, its end as the database wrote it, and 1 where it succeeded.</summary>

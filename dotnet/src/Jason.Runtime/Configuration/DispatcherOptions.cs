@@ -160,8 +160,8 @@ public sealed class DispatcherOptions
     /// <summary>
     /// 3600..777600; how long after its moment a deferred send no read has found went, failed or was cancelled is said
     /// overdue: the first read that ends this long after it and still finds the send waiting says so, and is its last. A
-    /// week unless set: a letter waiting at a provider's limit for days is not yet lost. Refused beyond what the nine reads
-    /// of a send reach.
+    /// week unless set: a letter waiting at a provider's limit for days is not yet lost. Refused beyond the grace, the
+    /// first wait and seven waits: a bound chosen on how far past its moment a send is read.
     /// </summary>
     public int DeferredReadOverdueSeconds { get; set; } = 604_800;
 

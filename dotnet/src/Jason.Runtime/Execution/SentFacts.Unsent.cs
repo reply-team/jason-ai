@@ -18,9 +18,9 @@ namespace Jason.Runtime.Execution;
 /// whoever made the read. A read that finds the send <c>failed</c> or <c>cancelled</c> says so at any moment; a read that
 /// finds it still <c>queued</c> says it is <c>overdue</c> only where it is the last read the runtime makes of a deferred send
 /// whose moment has passed (<see cref="DeferredReads"/>): it ends <c>Dispatcher:DeferredReadOverdueSeconds</c> or more
-/// after the moment, no read the runtime made of the send is open, the reads it made since the moment have ended — the
-/// most it makes that succeed, or one at least that span after the moment — and nothing yet says what became of the
-/// send. Never earlier.
+/// after the moment, no read the runtime made of the send is open, no further read of the runtime's is to come — the most
+/// it makes that fail, or the most it makes that succeed with one of them past that span — or one of its reads ended that
+/// span after the moment, and nothing yet says what became of the send. Never earlier.
 /// </summary>
 /// <remarks>
 /// Nothing is said of a send the campaign's own cancel took back: a succeeded <c>message.cancel</c> of the campaign naming
@@ -115,7 +115,8 @@ public sealed partial class SentFacts
     /// <summary>
     /// The deferred send <paramref name="read"/> is the last read of, where its end says the send is overdue; otherwise
     /// null. The read's own row is not saved yet, so it is counted here, as one that succeeded, where the runtime made it:
-    /// the send is overdue where no read of the runtime's is still to come, its reads spent or the last past the span.
+    /// the send is overdue where no read of the runtime's is still to come (<see cref="MadeReads.Spent"/>) or the last of
+    /// them ended past the span.
     /// </summary>
     private async Task<HeldSend?> OverdueAsync(JasonDbContext db, WorkItem read, string sendId, CancellationToken ct)
     {
@@ -150,7 +151,7 @@ public sealed partial class SentFacts
             made = MadeReads.With(made, succeeded: true, ended);
         }
 
-        return made is { } reads && (reads.Spent || reads.LastEnded >= due) ? send : null;
+        return made is { } reads && (reads.Spent(due) || reads.LastEnded >= due) ? send : null;
     }
 
     /// <summary>The provider's code where it is one word, as the line may carry it; null otherwise.</summary>

@@ -194,7 +194,7 @@ public partial class InboundSyncDocTests
         Assert.Contains("`Dispatcher:DeferredReadOverdueSeconds` (a week)", section, StringComparison.Ordinal);
         Assert.Contains($"`{JournalKinds.MessageUnsentObserved}` with the state `overdue`", section, StringComparison.Ordinal);
         Assert.Equal((9, 18), (DeferredReads.MostReads, DeferredReads.MostInAll));
-        Assert.Contains("So the step reads one send eighteen times at most, under any settings", section, StringComparison.Ordinal);
+        Assert.Contains("So, under settings that stand, the step reads one send eighteen times at most", section, StringComparison.Ordinal);
         Assert.Contains($"a send whose {DeferredReads.MostReads} failed reads are spent is read no more by the step", section, StringComparison.Ordinal);
         Assert.Contains($"the sends handed over more than {(DeferredReads.LookBack + DeferredReads.Horizon).TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
 
