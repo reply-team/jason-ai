@@ -501,6 +501,9 @@ Then place the UI, the build Jason Desktop draws (Jason Desktop places it itself
 jason ui install
 ```
 
+Between the install script's end and Jason Desktop's first start, `jason status` may name this command for the UI; that start
+places the UI itself, and the check's fact then names Jason Desktop first and this command after it.
+
 It downloads `jason-ui.zip` from the release this build was published as, checks it against that release's
 `checksums.txt`, and places it in the data directory as the default UI. A runtime works without it. A build from
 source has no published UI, so it refuses and says where a build of `ui/` goes instead: `ui/custom/` in the data
@@ -572,7 +575,8 @@ Windows the `jason` Jason Desktop carries hands the update to the application's 
 AppImage's does the same. The deb's updates come with the system's, from Jason's apt repository: Software Updater offers
 them and installs them when you say so, as `sudo apt update && sudo apt upgrade` does, and Ubuntu's automatic updates
 leave them alone; there `jason update apply` refuses and names apt, and Jason Desktop's next start, or `jason update apply --finish`, takes these steps. A package
-manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
+manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. (Before Jason Desktop's
+first start, `jason status` names `jason ui install` after the application: that start places the UI itself.) Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
 `jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
@@ -688,7 +692,9 @@ of that id installed, by content digest, offline: the runtime carries its releas
 earlier release's package fails it: a package manager's upgrade replaces the executable and leaves
 `~/.jason/plugins/reply` as it was, and so does an update whose `plugins:` line says the package was not replaced. Its
 fact names the installed version, the version this release published, and the command that places it,
-`jason plugin install reply --replace`, which swaps the old package for the release's and asks the runtime to load it. A
+`jason plugin install reply --replace`, which swaps the old package for the release's and asks the runtime to load it; between
+the install script's end and Jason Desktop's first start, the fact names Jason Desktop first, since that start places the
+package too, and the command second. A
 package with the same version or a later one passes, and the fact says it is a later release's package or one built or
 edited on this machine; no package of that id is absent. A development build compares with its own tree, and the fact
 names the build it compared with.
