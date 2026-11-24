@@ -136,7 +136,7 @@ plugin cannot place in a thread — no earlier letter, a plugin that does not ta
 another account — goes as a new letter, and the preview a person reads says so; only a letter named explicitly that
 cannot be followed is refused, at the claim.
 A letter named explicitly that a read says failed or was cancelled is not refused for that at the claim: it is passed
-to the provider, which refuses it at its moment where it holds that the letter never went (`follows_never_sent`), and
+to the provider, which refuses it at its moment where it holds that the letter never went, and
 nothing is sent.
 
 The decision is the runtime's, and it is composed at the root of the input, as `send` is for a read of a send; `args`

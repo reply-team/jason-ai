@@ -24,7 +24,8 @@ namespace Jason.Runtime.Campaigns;
 /// succeeded <c>message.status</c> of the campaign (<see cref="HeldSends.Status"/>) says failed or was cancelled
 /// (<see cref="HeldSends.UnsentStates"/>) is not counted, whoever asked for the read, unless a read of it says it went or
 /// may have gone (<c>sent</c> or <c>unknown</c>, <see cref="HeldSends.MayHaveGoneStates"/>): reads that disagree leave it
-/// counted, the safe side of a ceiling. A <c>queued</c> read, a read that failed and an overdue line leave it counted.
+/// counted, the safe side of a ceiling. A <c>queued</c> read, a read that failed and a letter the provider still holds as
+/// <c>queued</c>, however long past its moment, leave it counted.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads

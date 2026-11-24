@@ -866,7 +866,7 @@ result names one, otherwise the end of its succeeded attempt, across the campaig
 answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
 succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
 went, nor did one a succeeded `message.status` of the campaign says failed or was cancelled, unless a read of it says
-it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it
+it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it
 Jason's own letter. A line whose
 event names the other side always holds, whatever the moments. Moments of the runtime's own record are compared, and
 nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A
@@ -931,14 +931,14 @@ an earlier letter of the line, and the claim decides which, once ([`message.send
   `message.cancel` took it back, it went through the plugin and account the message is routed to, and from the sending
   account the message names. Otherwise the message follows it (`named`). A letter named explicitly that a read says
   failed or was cancelled is not refused for that at the claim: it is passed to the provider, which refuses it at its
-  moment where it holds that the letter never went (`follows_never_sent`), and nothing is sent.
+  moment where it holds that the letter never went, and nothing is sent.
 - **`new_thread`**: a letter of its own (`asked_new_thread`). It asks nothing of the plugin, since every plugin sends a
   letter, so it is taken whatever the manifest lists.
 
 **The line's root** is one definition: the latest `message.send` of the same campaign about the same person on the same
 channel (`args.channel`) that is a touch that counts, as the ceiling counts one (so a letter a succeeded take-back
 names is none, and neither is one a succeeded `message.status` of the campaign says failed or was cancelled, unless a
-read of it says it went or may have gone, `sent` or `unknown`; a `queued` read, a read that failed and an overdue line
+read of it says it went or may have gone, `sent` or `unknown`; a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment,
 leave it counted), whose latest succeeded attempt returned the provider's reference for the send, and that itself
 follows no work
 item: it opened a thread of its own, by its own wish or by the runtime's decision, or was claimed before the runtime
@@ -1000,7 +1000,7 @@ exactly as the claim's ceiling of touches counts it (§Provider operations, `tou
 shows is the number the ceiling stops at. A send that a succeeded `message.cancel` of the campaign took back never
 went: it is no touch, and no row's last touch either. A send a succeeded `message.status` of the campaign says failed
 or was cancelled is left out the same way, whoever asked for the read, unless a read of it says it went or may have
-gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it counted. A
+gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted. A
 touch's moment, where it succeeded, is the one the provider took it for, its result's `accepted_for`, read in UTC as the
 hold reads it, else the item's finish; where it did not, the end of the latest attempt of it that ended classed
 `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
@@ -1546,7 +1546,7 @@ put back for a repeat, parked again, failed, cancelled or expired; one item is o
 succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended
 `ambiguous` leaves it counted, since the letter may still go; a send a succeeded `message.status` of the campaign says
 failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may
-have gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it counted — one
+have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted — one
 definition, which the people list counts by
 too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
 dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person

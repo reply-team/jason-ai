@@ -53,15 +53,15 @@ public sealed class TouchCeilingDocTests
         var page = Regex.Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "work-execution.md")), @"\s+", " ");
 
         Assert.Contains(
-            "took back never went, and counts for nothing; a send a succeeded `message.status` of the campaign says failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it counted.",
+            "took back never went, and counts for nothing; a send a succeeded `message.status` of the campaign says failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted.",
             row,
             StringComparison.Ordinal);
         Assert.Contains(
-            "since the letter may still go; a send a succeeded `message.status` of the campaign says failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it counted — one definition, which the people list counts by too.",
+            "since the letter may still go; a send a succeeded `message.status` of the campaign says failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted — one definition, which the people list counts by too.",
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            "it is no touch, and no row's last touch either. A send a succeeded `message.status` of the campaign says failed or was cancelled is left out the same way, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and an overdue line leave it counted.",
+            "it is no touch, and no row's last touch either. A send a succeeded `message.status` of the campaign says failed or was cancelled is left out the same way, whoever asked for the read, unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted.",
             page,
             StringComparison.Ordinal);
     }
