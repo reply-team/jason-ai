@@ -1738,6 +1738,12 @@ export const ROWS = {
         "quotes": "operation",
         "note": "Reply places a message in an earlier letter's thread on email alone, so this LinkedIn message that follows one (`follows`) was not sent. Asking again meets the same answer."
       },
+      "follows_without_a_reference": {
+        "when": "The root `follows` names a letter by its work item and carries no reference for it — none, null or empty — so the package cannot name that letter to Reply, and a message that follows a letter goes into its thread or not at all. The claim refuses such an input before a plugin runs; the package holds it here too. Decided before any call; nothing is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Jason named the letter this message follows without the reference Reply gave it, so the message could not be placed in that letter's thread, and it was not sent as a letter of its own either. Nothing was called. Whether to propose it again is a person's to decide."
+      },
       "schedule_not_taken_on_the_route": {
         "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose LinkedIn route does not take a schedule answers so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
         "code": "capability_not_offered",

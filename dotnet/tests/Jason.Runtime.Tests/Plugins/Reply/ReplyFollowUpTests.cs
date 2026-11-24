@@ -439,6 +439,59 @@ public class ReplyFollowUpTests
     }
 
     /// <summary>
+    /// A root <c>follows</c> that names a letter by its work item without the reference Reply gave that letter — empty,
+    /// null or left out — cannot be named to Reply: the package refuses it before anything is called,
+    /// <c>provider_call_failed</c>, permanent, and never sends the message as a letter of its own. The claim refuses such an
+    /// input first, at the pointer named; this is the package's own floor beneath it.
+    /// </summary>
+    [Theory]
+    [InlineData("\"\"", "/follows/reference")]
+    [InlineData("null", "/follows")]
+    [InlineData(null, "/follows/reference")]
+    public async Task A_letter_named_without_its_reference_is_refused_before_anything_is_called(string? reference, string refused)
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+        var follows = new JsonObject { ["work_item"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA", ["operation"] = "message.send", ["because"] = "named" };
+        if (reference is not null)
+        {
+            follows["reference"] = JsonNode.Parse(reference);
+        }
+
+        var input = new JsonObject
+        {
+            ["args"] = Message("Any news?"),
+            ["contacts"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["first_name"] = "Marta",
+                ["last_name"] = "Alvarez",
+                ["company"] = "Puerto Analytics",
+                ["title"] = "Head of Growth",
+                ["time_zone"] = null,
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
+                ["external_ids"] = new JsonObject { ["contact"] = "1001" },
+            }),
+            ["campaign"] = new JsonObject
+            {
+                ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+                ["name"] = "Q3 LatAm founders",
+                ["status"] = "active",
+                ["external_ids"] = new JsonObject(),
+            },
+            ["follows"] = follows,
+            ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK",
+        };
+
+        var error = ReplyOperations.Failed(
+            "message.send", await ReplyOperations.InvokeAsync(api, "message.send", input, Ct, claimRefuses: [refused]));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Empty(account.Calls);
+    }
+
+    /// <summary>
     /// The manifest takes <c>follows</c> on email alone, so the claim hands no letter to follow to a LinkedIn message; a
     /// LinkedIn message handed one all the same is refused before anything is called, never sent as a message of its own.
     /// </summary>

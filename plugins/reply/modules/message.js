@@ -74,7 +74,7 @@ export function messageSend(input, context) {
   // in an earlier one's thread and a LinkedIn message in none, and the manifest takes `follows` on email alone, so the
   // claim hands no letter to follow to a LinkedIn format; this holds it here too, before anything is called, since a
   // message that follows a letter goes into its thread or not at all.
-  const follows = followedReference(input);
+  const follows = followedReference(OPERATION, input);
   if (follows !== null && message.format !== "email") {
     fail(OPERATION, { call: null, row: "follows_on_linkedin" }, undefined);
   }

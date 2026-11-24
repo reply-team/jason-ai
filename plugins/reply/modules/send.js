@@ -237,7 +237,7 @@ function keyedFlags(operation, context, input) {
   const at = readableMoment(operation, input);
   const ahead = at !== null && at > Date.now();
   const schedule = operation === "message.send" ? scheduleOf(operation, input) : null;
-  const follows = operation === "message.send" ? followedReference(input) : null;
+  const follows = operation === "message.send" ? followedReference(operation, input) : null;
   if (isRepeat(context) && !repeatStillSettleable(context)) {
     fail(operation, { call: null, row: "send_not_settled_after_the_window" }, undefined);
   }
@@ -250,16 +250,28 @@ function keyedFlags(operation, context, input) {
 
 /**
  * The reference of the earlier letter a message follows, as the runtime composed it at the root of the input, or null
- * where it follows none: a root `follows` with no reference, or none at all, is a letter of its own. The runtime decides
- * it at the claim from the caller's `args.follows` and the campaign's own earlier sends, and keeps that decision on a
- * repeat, so the root is read and `args.follows` never is. The reference is the one Reply answered that letter's send
- * with, and goes on the send as it is; it never goes on stdin.
+ * where it follows none: a root `follows` that names no letter, or none at all, is a letter of its own. The runtime
+ * decides it at the claim from the caller's `args.follows` and the campaign's own earlier sends, and keeps that decision
+ * on a repeat, so the root is read and `args.follows` never is. The reference is the one Reply answered that letter's
+ * send with, and goes on the send as it is; it never goes on stdin. A letter named by its work item without that
+ * reference cannot be named to Reply, and a message that follows a letter goes into its thread or not at all: it is
+ * refused before anything is called, never sent as a letter of its own.
  */
-export function followedReference(input) {
+export function followedReference(operation, input) {
   const follows = input.follows;
-  return follows !== null && typeof follows === "object" && typeof follows.reference === "string" && follows.reference.length > 0
-    ? follows.reference
-    : null;
+  if (follows === null || typeof follows !== "object" || Array.isArray(follows)) {
+    return null;
+  }
+
+  if (typeof follows.reference === "string" && follows.reference.length > 0) {
+    return follows.reference;
+  }
+
+  if (typeof follows.work_item === "string" && follows.work_item.length > 0) {
+    fail(operation, { call: null, row: "follows_without_a_reference" }, undefined);
+  }
+
+  return null;
 }
 
 /** Whether this attempt repeats one that may have sent: the runtime names when the earliest such attempt was claimed. */
