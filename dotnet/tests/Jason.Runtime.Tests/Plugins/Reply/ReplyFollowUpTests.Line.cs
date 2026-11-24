@@ -109,6 +109,72 @@ public partial class ReplyFollowUpTests
     }
 
     /// <summary>
+    /// The person answers in the first letter's thread, and Jason's follow-up, held by Reply for that moment, lands in the
+    /// same thread before the next events read. Reply moves no thread moment for the follow-up, so the read finds the
+    /// account's letter on top of a thread holding a reply, names nobody, and gives the answer's moment. A follow-up never
+    /// explains a move, so the line holds the person, once, and the letter Reply still holds for later is taken back.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_a_follow_up_overtakes_before_the_read_holds_the_line_and_takes_back_the_letter_held_for_later()
+    {
+        var clock = new FixedClock(DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync(clock);
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+
+        // 1. The first letter goes and opens its thread; two follow-ups left to the runtime are held by Reply, for three
+        // days and for six.
+        await SendAsync(api, campaign, contact, Message(Body));
+        var thread = Assert.Single(account.Threads)!["id"]!.GetValue<int>();
+        var soon = Message("Any news?");
+        soon["send_after"] = clock.GetUtcNow().AddDays(3).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        var second = await SendAsync(api, campaign, contact, soon);
+        var later = Message("One last note.");
+        later["send_after"] = clock.GetUtcNow().AddDays(6).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        var third = await SendAsync(api, campaign, contact, later);
+        Assert.Equal(("line_root", "line_root"), (Because(second), Because(third)));
+        Assert.Equal(("email-1002", "email-1003"), (Sent(second), Sent(third)));
+
+        // 2. The person answers in the first letter's thread; then the first follow-up comes due at Reply, and the stand-in
+        // places it in that thread before it answers anything more, so before any read.
+        account.Answers(thread, "Yes, Tuesday works.");
+        account.SendBecomes("email-1002", "sent");
+
+        // 3. Three days pass here. The thread holds the answer under the follow-up, the read says it moved by nobody, at
+        // the answer's moment, and the line holds.
+        await PassAsync(api, clock, TimeSpan.FromDays(3).Add(TimeSpan.FromMinutes(1)));
+        await SettleAsync(api, async () => await EventsOfAsync(api, "thread_moved", thread) == 1);
+        await SettleAsync(api, async () => (await LinesAsync(api, campaign, JournalKinds.InboundReplyObserved)).Count == 1);
+        await SettleAsync(api, () => Task.FromResult(true));
+        var messages = Assert.Single(account.Threads.OfType<JsonObject>())["messages"]!.AsArray().OfType<JsonObject>().ToList();
+        Assert.Equal([true, false, true], messages.Select(message => (bool)message["isOutbound"]!));
+        Assert.Equal((string?)messages[1]["date"], (string?)Assert.Single(account.Threads.OfType<JsonObject>())["lastActivityDate"]);
+        Assert.Null(await MoverAsync(api, thread));
+
+        Assert.Equal(MembershipState.Paused, await StateAsync(api, campaign));
+        var paused = Assert.Single(await LinesAsync(api, campaign, JournalKinds.ContactsPaused));
+        Assert.Equal(ActorType.System, paused.Actor.Type);
+
+        // The letter Reply holds for later is taken back by one cancel; the follow-up that went is not.
+        await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
+        var cancel = Assert.Single(await db.WorkItems.AsNoTracking().Where(w => w.Operation == "message.cancel").ToListAsync(Ct));
+        Assert.Equal(third.Id, (string?)cancel.Context["input"]!["send"]);
+    }
+
+    /// <summary>The send reference the work item's succeeded attempt recorded.</summary>
+    private static string Sent(WorkItemDto item) => Assert.Single(item.Attempts!).Provenance!.ExternalIdsReturned!["send"];
+
+    /// <summary>Who the account's reads say moved the thread, as the one <c>thread_moved</c> event stored about it says.</summary>
+    private static async Task<string?> MoverAsync(RuntimeApiFixture api, int thread)
+    {
+        await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
+        var stored = await db.Events.AsNoTracking().Where(row => row.Kind == "thread_moved").ToListAsync(Ct);
+        return (string?)Assert.Single(stored, row => (string?)row.Data["thread"] == thread.ToString(CultureInfo.InvariantCulture)).Data["moved_by"];
+    }
+
+    /// <summary>
     /// A runtime as <see cref="StartAsync()"/> starts one, on a clock the test moves. Nothing is summoned by what is read
     /// or by time passing: the line is the point here, not a manager's review or the responder's answer, and the hold is
     /// made whether the responder is woken or not.

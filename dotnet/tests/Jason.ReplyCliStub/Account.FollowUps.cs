@@ -186,7 +186,8 @@ internal static partial class Account
 
     /// <summary>
     /// A direct email goes: it opens a thread of its own, or, for a follow-up, is added to the thread of the send it follows
-    /// under <c>Re: </c> and that send's subject, as a reply to its message. The records are changed in
+    /// under <c>Re: </c> and that send's subject, as a reply to its message, leaving the thread's last activity unmoved, as
+    /// Reply does, and putting the thread into the change feed. The records are changed in
     /// <paramref name="sends"/>, which the caller writes; the thread store is written here.
     /// </summary>
     private static void Gone(string root, JsonArray sends, JsonObject record)
@@ -213,7 +214,9 @@ internal static partial class Account
             var message = ThreadMessage(record, subject, Text(record, "body"));
             message["replyToMessageId"] = named["messageId"]?.DeepClone();
             (thread["messages"] as JsonArray)!.Add(message);
-            thread["lastActivityDate"] = message["date"]!.DeepClone();
+            // Reply moves no thread moment for a follow-up: the thread's last activity stays where it was, and the thread
+            // comes into the change feed as our outbound message on top (Account.Changes.cs).
+            thread[ChangedMark] = message["date"]!.DeepClone();
         }
         else
         {
