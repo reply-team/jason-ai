@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.19.1
+version: 0.20.0
 kind: provider
 name: Reply
 description: >-
@@ -40,9 +40,11 @@ capabilities:
         # the contact lists a search fills, `reply live-data preview|start|get|list|delete|filter-values` and `reply
         # contact-list create|get|delete|contacts`, from 0.20.0 — and a mailbox's two limits on a direct email printed
         # by a code of their own, `email.limit_reached`, a mailbox that cannot send as `email.sending_disabled`, and a
-        # send's bounce on `reply direct-send get`, from 0.22.0. This package makes no raw call. A reload runs the version
-        # command and refuses an older one.
-        min_version: 0.22.0
+        # send's bounce on `reply direct-send get`, from 0.22.0 — and a direct email sent as a follow-up in the thread of
+        # an earlier one (`--follows`), with a code of its own for each refusal of it and the email it follows printed on
+        # `reply direct-send get`, from 0.23.0. This package makes no raw call. A reload runs the version command and
+        # refuses an older one.
+        min_version: 0.23.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak
@@ -65,10 +67,12 @@ capabilities:
 limits:
   memory_mb: 256
 # The moment a send goes out after: Reply keeps a direct send for a later moment on email and on LinkedIn, and an
-# invitation goes only on LinkedIn.
+# invitation goes only on LinkedIn. The earlier letter a message follows: Reply places a direct email in the thread of an
+# earlier one, as a reply to it, and a LinkedIn message in no thread of an earlier send's.
 arguments:
   message.send:
     send_after: [email, linkedin]
+    follows: [email]
   social_invitation.send:
     send_after: [linkedin]
 # The channels a message goes on as a template Reply fills in for the person: an email, and on LinkedIn a message and an

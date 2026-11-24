@@ -21,7 +21,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The migrations the tree holds after <see cref="GoingBackToNewestMigration"/>, in order: each is newer than 0.49, and
-    /// a migration added in 0.50 is appended here. Where there is one, data a release after 0.49 opened is data the section's
+    /// a migration added in 0.50 or later is appended here. Where there is one, data a release after 0.49 opened is data the section's
     /// steps do not take back, and the section says so.
     /// </summary>
     private static readonly string[] MigrationsAfter049 =
@@ -29,6 +29,8 @@ public partial class PageClaimsTests
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
         "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads",
+        "20261124072351_SendProbeIndex",
     ];
 
     /// <summary>
@@ -49,15 +51,19 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The lines each package's digest list holds after the one 0.49 published, in order, each a version a release after
-    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes, and Reply's
-    /// 0.19.1, which 0.50 places for a reply's text written as the person it reaches reads it. A package a later release
-    /// placed is data in the data directory that no release after 0.49 has opened, as the section's steps say of every such
-    /// data, and a package that moves in 0.50 is appended here.
+    /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes, and its
+    /// 1.9.0, which the release after 0.50 places for a send that did not go, and Reply's 0.19.1, which 0.50 places for a
+    /// reply's text written as the person it reaches reads it, and its 0.20.0, which the release after 0.50 places for a
+    /// message sent into the thread of the email it follows. A package a later release placed is data in the data
+    /// directory that no release after 0.49 has opened, as the section's steps say of every such data, and a package that
+    /// moves in a later release is appended here.
     /// </summary>
     private static readonly (string Plugin, string Line)[] PackagesAfter049 =
     [
         ("journal-forwarder", "1.8.0 sha256:1af0e45e1a40781bc011a2968317a9bae1320cd4b6bb4a86d1567807bd86000e"),
+        ("journal-forwarder", "1.9.0 sha256:51db65380756347c600f018304c558c3b81152b415df51da10424cec46708a01"),
         ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
+        ("reply", "0.20.0 sha256:2179255c736fba3f62d772454d33dc0c5fdfbca922d7e325d9becbd6d835ef2e"),
     ];
 
     /// <summary>

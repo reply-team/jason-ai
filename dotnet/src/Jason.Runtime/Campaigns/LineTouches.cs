@@ -30,10 +30,9 @@ namespace Jason.Runtime.Campaigns;
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
 /// are SQL (<see cref="CampaignPeople"/>). <see cref="CountedSql"/> is a condition over one work item aliased <c>w</c>; its
-/// attempts are read by the attempts' index on the work item, and what names it by the work items' index on the campaign
-/// and the status: the campaign's succeeded work is passed over by its operation, and each take-back's and read's
-/// arguments are read for the send they name, the two in one subquery, so the cost grows with the campaign's succeeded
-/// work and is paid once for both.
+/// attempts are read by the attempts' index on the work item, and what names it by the work items' index on the send an
+/// item names, the campaign and the operation (<see cref="SendProbe"/>): each take-back and read of the send is found by a
+/// seek, so the cost grows with what names the send rather than with the campaign's work.
 /// </para>
 /// </remarks>
 internal static class LineTouches
@@ -44,9 +43,10 @@ internal static class LineTouches
 
     /// <summary>
     /// Whether the work item aliased <paramref name="item"/> names the send aliased <paramref name="send"/> under
-    /// <c>args.send</c>: one text for every probe here, so an index on what an item names is taken by each of them.
+    /// <c>args.send</c>: the one wording of every probe of a send (<see cref="SendProbe"/>), so the index on what an item
+    /// names is taken by each of them.
     /// </summary>
-    private static string NamesSql(string item, string send) => $"json_extract({item}.context_json, '$.input.send') = {send}.public_id";
+    private static string NamesSql(string item, string send) => SendProbe.Names(item, $"{send}.public_id");
 
     /// <summary>The states in <paramref name="states"/> as a SQL list of literals.</summary>
     private static string ListSql(IEnumerable<string> states) => string.Join(", ", states.Select(state => $"'{state}'"));
@@ -55,23 +55,32 @@ internal static class LineTouches
     /// Whether the send aliased <paramref name="send"/> never went: a succeeded <c>message.cancel</c> of the campaign names it,
     /// as <see cref="TakenBackSql"/> reads, or a succeeded <c>message.status</c> of the campaign names it and says it failed
     /// or was cancelled (<see cref="HeldSends.ReadSaidSql"/>), whoever asked for the read, while no succeeded read of it says
-    /// it went or may have gone. One subquery for both, its columns read before its documents and the arguments before the
-    /// answer, since a read's answer carries the letter; the reads that may outweigh it are looked for only behind a read
-    /// that says the send never went. The one definition, which a touch that counts and the hold's reading of Jason's own
-    /// move both read.
+    /// it went or may have gone. Each looks for one operation's items naming the send, so each seeks the index on the
+    /// campaign, the operation and the send (<see cref="SendProbe"/>); the reads that may outweigh a read are looked for only
+    /// behind a read that says the send never went. The one definition, which a touch that counts and the hold's reading of
+    /// Jason's own move both read.
     /// </summary>
     internal static string NeverWentSql(string send) => $$"""
+        ({{TakenBack(send)}}
+         OR EXISTS (SELECT 1 FROM work_items AS k
+                    WHERE k.campaign_id = {{send}}.campaign_id AND k.operation = '{{HeldSends.Status}}' AND k.status = 'succeeded'
+                      AND {{NamesSql("k", send)}}
+                      AND {{HeldSends.ReadSaidSql("k", ListSql(HeldSends.UnsentStates))}}
+                      AND NOT EXISTS (SELECT 1 FROM work_items AS g
+                                      WHERE g.campaign_id = {{send}}.campaign_id AND g.operation = '{{HeldSends.Status}}'
+                                        AND g.status = 'succeeded'
+                                        AND {{NamesSql("g", send)}}
+                                        AND {{HeldSends.ReadSaidSql("g", ListSql(HeldSends.MayHaveGoneStates))}})))
+        """;
+
+    /// <summary>
+    /// Whether a succeeded <c>message.cancel</c> of the campaign names the send aliased <paramref name="send"/>: the provider
+    /// held it and said it took it back, so it never went.
+    /// </summary>
+    private static string TakenBack(string send) => $$"""
         EXISTS (SELECT 1 FROM work_items AS k
-                WHERE k.campaign_id = {{send}}.campaign_id AND k.status = 'succeeded'
-                  AND k.operation IN ('{{HeldSends.Cancel}}', '{{HeldSends.Status}}')
-                  AND {{NamesSql("k", send)}}
-                  AND (k.operation = '{{HeldSends.Cancel}}'
-                       OR ({{HeldSends.ReadSaidSql("k", ListSql(HeldSends.UnsentStates))}}
-                           AND NOT EXISTS (SELECT 1 FROM work_items AS g
-                                           WHERE g.campaign_id = {{send}}.campaign_id AND g.status = 'succeeded'
-                                             AND g.operation = '{{HeldSends.Status}}'
-                                             AND {{NamesSql("g", send)}}
-                                             AND {{HeldSends.ReadSaidSql("g", ListSql(HeldSends.MayHaveGoneStates))}}))))
+                WHERE k.campaign_id = {{send}}.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
+                  AND {{NamesSql("k", send)}})
         """;
 
     /// <summary>
@@ -79,11 +88,7 @@ internal static class LineTouches
     /// send and said it took it back, so it never went. A letter a message is named to follow (<see cref="LineRoots"/>) is
     /// asked this alone; a touch that counts asks it with what a read said, in <see cref="NeverWentSql"/>.
     /// </summary>
-    internal static readonly string TakenBackSql = $$"""
-        EXISTS (SELECT 1 FROM work_items AS k
-                WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
-                  AND {{NamesSql("k", "w")}})
-        """;
+    internal static readonly string TakenBackSql = TakenBack("w");
 
     /// <summary>Whether the work item aliased <c>w</c> is a touch that counts: the one definition.</summary>
     internal static readonly string CountedSql = $$"""

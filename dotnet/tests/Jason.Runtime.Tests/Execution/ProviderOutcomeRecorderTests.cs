@@ -164,6 +164,46 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// A read the campaign's manager made that finds a send the provider held failed says so about the send, in the change
+    /// set that ends the read: the line and the read's success commit together, and no line says it went.
+    /// </summary>
+    [Fact]
+    public async Task A_read_the_manager_made_that_finds_a_held_send_failed_says_so_about_the_send_as_it_succeeds()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.status");
+        scene.Item.CreatedByType = ActorType.Role;
+        scene.Item.CreatedById = "manager";
+        var send = WorkItemFactory.NewProviderOp(scene.Campaign, "message.send", Noon.AddDays(-1));
+        send.Status = WorkItemStatus.Succeeded;
+        send.FinishedAt = Noon.AddDays(-1);
+        send.Result = new JsonObject
+        {
+            ["items"] = new JsonArray(new JsonObject { ["status"] = "accepted", ["reference"] = "email-1001", ["accepted_for"] = "2026-09-15T11:00:00Z", ["cancelable"] = true }),
+        };
+        var sent = WorkItemFactory.NewAttempt(send, 1, AttemptStatus.Succeeded, Noon.AddDays(-1));
+        sent.Provenance = new AttemptProvenanceDto(
+            TestPlugins.FakeProviderId, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
+            "message.send", 1, null, null, RouteScope.GlobalDefault, "sha256:1",
+            ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["send"] = "email-1001" });
+        db.WorkItems.Add(send);
+        db.Attempts.Add(sent);
+        await db.SaveChangesAsync(Ct);
+
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, Status, TestPlugins.FakeProviderId, false, Succeeded(Read("failed"), null), Ct, ReadOf(send));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        var line = await db.Journal.AsNoTracking().SingleAsync(entry => entry.Kind == JournalKinds.MessageUnsentObserved, Ct);
+        Assert.Equal((send.PublicId, send.PublicId), (line.WorkItemId, line.Key));
+        Assert.Equal(
+            (TestPlugins.FakeProviderId, "failed", "2026-09-15T11:00:00.000Z", scene.Item.PublicId),
+            ((string?)line.New!["plugin"], (string?)line.New["state"], (string?)line.New["moment"], (string?)line.New["read_work_item"]));
+        Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.MessageSentObserved, Ct));
+    }
+
+    /// <summary>
     /// Rules 2 and 3 at the read's end: a read that says the send bounced hard writes the bounce line about the send and
     /// stages the stop in the change set that ends the read, so the line, the register entry and the read's success commit
     /// together, whatever made the read.

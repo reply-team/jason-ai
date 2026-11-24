@@ -1335,7 +1335,7 @@ public class ReplyStubDirectSendTests
 
         Assert.Equal(0, exit);
         Assert.Equal(
-            """{"reference":"linkedin-scheduled-1001","channel":"linkedIn","contact_id":1001,"state":"queued","send_after":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"failure_reason":null,"cancelled_at":null}""",
+            """{"reference":"linkedin-scheduled-1001","channel":"linkedIn","contact_id":1001,"state":"queued","send_after":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"failure_reason":null,"cancelled_at":null,"follows":null}""",
             JsonNode.Parse(stdout)!.ToJsonString());
 
         var (missing, _, missingSaid) = await account.RunAsync(Line("direct-send", "get", "linkedin-9999"), Ct);
@@ -1366,7 +1366,8 @@ public class ReplyStubDirectSendTests
 
     /// <summary>
     /// A send's bounce is printed as reply-cli 0.22.0 prints it (src/operations/direct-sends.ts:42-48, :64): its members in
-    /// the order <c>direct_send_of</c> builds them, <c>bounced</c>, <c>bounce_type</c> and <c>bounced_at</c> last, each only
+    /// the order <c>direct_send_of</c> builds them, <c>bounced</c>, <c>bounce_type</c> and <c>bounced_at</c> last but for the
+    /// <c>follows</c> 0.23.0 puts after them, each only
     /// where Reply gave it in its shape — <c>bounced</c> as true or false, the kind and the moment as text or null — so a
     /// <c>bounced</c> of another shape is left out while the kind beside it is printed, and a send Reply gave no member
     /// for prints none.
@@ -1387,7 +1388,7 @@ public class ReplyStubDirectSendTests
 
         var printed = JsonNode.Parse(bouncedOut)!.AsObject();
         var expected = JsonNode.Parse(
-            """{"reference":"email-1001","channel":"email","contact_id":1001,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":true,"bounce_type":"mailboxFull","bounced_at":"2026-11-20T10:05:00Z"}""")!.AsObject();
+            """{"reference":"email-1001","channel":"email","contact_id":1001,"state":"sent","send_after":"2026-11-03T14:00:00Z","sent_at":"2026-11-20T10:00:00Z","message_id":"<m1@example.com>","failure_reason":null,"cancelled_at":null,"bounced":true,"bounce_type":"mailboxFull","bounced_at":"2026-11-20T10:05:00Z","follows":null}""")!.AsObject();
         Assert.Equal(expected.Select(member => member.Key), printed.Select(member => member.Key));
         Assert.True(JsonNode.DeepEquals(expected, printed), bouncedOut);
         var odd = JsonNode.Parse(oddOut)!.AsObject();

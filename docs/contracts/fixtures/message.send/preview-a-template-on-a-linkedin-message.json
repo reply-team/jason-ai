@@ -29,7 +29,7 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner) — subject: —; text: Hi {{contact.first_name}}, glad we connected. I wrote to {{contact.email | 'your inbox'}} as well. {{sender.name}}; send after: —; follows: — (—)",
+    "summary": "Send https://www.linkedin.com/in/marta-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/ann-owner) — subject: —; text: Hi {{contact.first_name}}, glad we connected. I wrote to {{contact.email | 'your inbox'}} as well. {{sender.name}}; send after: —; follows: — (—); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
     "highlights": {
       "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-example",
       "/args/channel": "linkedin",

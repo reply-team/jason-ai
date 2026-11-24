@@ -126,7 +126,9 @@ so that a follow-up lands in the person's mailbox under the first letter. It has
 - `new_thread`: a letter of its own.
 
 The default never takes as its root a letter a succeeded `message.status` of the campaign says failed or was
-cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`).
+cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`). A root the provider failed or
+cancelled after accepting it, which no read has recorded, stays the root until a read records it; a follow-up of it
+then ends `follows_never_sent`.
 
 It is never null, and any other value is refused when the work item is written. Like `send_after`, it is an argument a
 provider may offer on some channels and not on others (`channel_arguments`): a work item's identifier is taken only by a
@@ -162,6 +164,11 @@ The plugin reads the root `follows`, never `args.follows`, which is the caller's
 on. Handed one with a reference, it places the message in the thread of the send it names, as a reply to it, or fails
 before anything is sent, and never sends it as a new letter. A `follows` with no reference, or none, is a new letter,
 as before.
+
+A message placed in a thread goes under the subject of the letter it follows, as a reply in a thread does, so the
+`subject` its arguments carry goes only where the message is a letter of its own. An email still requires one: which of
+the two it is, the claim decides, not the caller. The provider may append a quotation of the letter followed beneath
+the text, as a mail program's reply does; the text above it is exactly the text approved.
 
 ## What to return
 
@@ -219,6 +226,19 @@ or send an InMail.
 allowance spent, which one in the details; the message is proposed again once it renews. `limit_reached` is the
 provider's account full: it will hold no further contact, and the person had to be created.
 
+Five codes are a message handed a root `follows` with a reference that the provider would not place in that letter's
+thread, and none of them sends it as a letter of its own instead. `follows_not_sent_yet` is a letter that has not gone
+yet while this message would go before it: the message is attempted again within the runtime's retries; a letter held
+longer ends the item with this code, and the message is proposed again with a `send_after` later than that letter's
+moment. `follows_never_sent` is a letter cancelled or failed for good, so there will be no thread. `follows_not_found`
+is a reference the provider holds no letter under that went from this sender to this person: the claim's own checks
+keep such a letter from the provider, so it says the provider's record of it and the runtime's no longer agree.
+`follows_not_placed` is a thread the provider's mailbox could not place the message in. `follows_too_early` is a moment
+in `send_after` that is not later than the one the letter is held for, so the message would go before that letter: the
+thread is not at fault, the moment the message was given is, and a `validation` failure says so. A provider that does
+not offer replies in a thread at all answers the reserved `capability_not_offered`, naming `follows`, with nothing sent
+([a capability the provider does not offer yet](../README.md#a-capability-the-provider-does-not-offer-yet)).
+
 `sender_unavailable`, `sender_limit_reached`, `insufficient_credits` and `unauthorized` stand for an answer the plugin
 cannot read as a provider block. Where it can — the provider refused for a block and did nothing — the code is
 `provider_blocked`, with the block that says what is blocked, why and where a person clears it
@@ -228,17 +248,22 @@ cannot read as a provider block. Where it can — the provider refused for a blo
 
 > Send marta@example.com a message by email, from the provider's account 12 (ann@example.com) —
 > subject: The Lisbon meetup; text: Hi Marta, thanks for the chat at the meetup.; send after: 2026-11-03T09:00:00-05:00;
-> follows: — (no_earlier_letter)
+> follows: — (no_earlier_letter); a message that follows a letter goes as a reply under that letter's subject, and its
+> own subject is not sent
 
 The summary names the person by the value the message consumes, the format, and the account by its identifier and
 address, and carries the subject, the whole text and the moment as the arguments name it, and the letter it follows
 with why, as the root `follows` says; a format without a subject, a message without a moment, and a new letter show a
-dash there, and a message composed with no `follows` at all shows two. It is not part of
+dash there, and a message composed with no `follows` at all shows two. It ends saying that a message that follows a
+letter goes under that letter's subject and not its own, since the summary has no conditions and the subject it
+carries goes only where the message is a letter of its own. It is not part of
 what is approved: what is approved is the composed input, not the summary. A template is carried as written, and the
 preview adds one `example` of it ([the preview a person reads](../README.md#the-preview-a-person-reads)): the subject
 and the text rendered for this person from the composed input, with the names the input does not hold — a custom
 field, the sending account's names, and on LinkedIn the person's email address — left for the provider, shown as their
-fallback or as `[name]`, and listed under `unfilled`. The fixtures
+fallback or as `[name]`, and listed under `unfilled`. A template that follows a letter shows no subject of its own:
+in its place, the example says what the summary ends with, that the message goes as a reply under that letter's subject
+and its own subject is not sent. The fixtures
 [`fixtures/message.send/preview-*.json`](../fixtures/message.send) show each case.
 
 ## The properties
@@ -267,7 +292,7 @@ fallback or as `[name]`, and listed under `unfilled`. The fixtures
 | under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | The person's contact at the provider is reached at the consumed value — on LinkedIn, it carries no other profile than the one consumed — and the provider does not hold them as opted out; a contact that carries no LinkedIn profile is given the consumed one before a LinkedIn message is sent. |
-| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}; follows: {/follows/work_item} ({/follows/because})`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message`, `/args/message/compose`, `/args/send_after`, `/follows` |
+| preview a person reads | `Send {/contacts/0/channels/0/value} a message by {/args/message/format}, from the provider's account {/args/sender/external_id} ({/args/sender/address}) — subject: {/args/message/subject}; text: {/args/message/body}; send after: {/args/send_after}; follows: {/follows/work_item} ({/follows/because}); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/sender`, `/args/message`, `/args/message/compose`, `/args/send_after`, `/follows` |
 | pinned identifiers | `contact` names a contact; `send` names a work_item |
 | recovery read | The provider's record of the send under this work item's idempotency key, read by making the same send again under the same key: the provider answers a send it already took with what it answered then — the same reference — and sends nothing twice, and a send the provider answered with a failure is never repeated, since the provider keeps no key for it and a repeat would be a new send. The plugin repeats only where it knows the provider keeps such keys, by what it knows of the provider or by a read before the repeat; where it does not, the repeat fails `send_not_settled` and nothing is sent. |
 | after an ambiguous end | `after_recovery_read`, by the work item's key — a later attempt performs the recovery read above and answers from it when the effect already happened, and only under a plugin whose manifest lists the operation under `settles_by_key` |
