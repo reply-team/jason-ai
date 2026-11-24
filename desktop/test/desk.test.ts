@@ -373,6 +373,10 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     const newer = body('updateNewer');
     assert.ok(newer.includes('if (this.demo !== null) return null;'), newer);
     assert.ok(newer.includes('return this.deps.updates?.known ?? this.deps.packageMoved?.() ?? null;'), newer);
+    // The step the page's card shows: the updater's own, none in a demo run or where the updater is not active.
+    const step = body('updateStep');
+    assert.ok(step.includes('if (updates === null || !updates.active) return null;'), step);
+    assert.ok(step.includes('return updateStepOf(updates.current, this.updateItem());'), step);
     assert.ok(main.includes("handle(seam, 'updates.press', origin, (label, options) => {\n        const act = actShown(desk.updateItem(), label);\n        desk.pressUpdate(act, pressAsks(act, options), 'page');\n    }, refused);"));
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
@@ -560,4 +564,37 @@ test('a press that asks, at any step but downloaded, asks nothing and does what 
     const busy = await run(downloading, 'Downloading Jason 0.48.6…', { ask: true });
     assert.deepEqual(busy, await run(downloading, 'Downloading Jason 0.48.6…', undefined), 'downloading: the same as a press with no ask');
     assert.deepEqual(busy, { acts: [], asked: [] });
+});
+
+test('the asking install installs only if the updater is still at the step and version it asked about', async () => {
+    const downloaded: UpdateState = { step: 'downloaded', version: '0.48.6' };
+    const acts: string[] = [];
+    const updater = {
+        current: downloaded as UpdateState,
+        check: async () => null,
+        download: async () => undefined,
+        install: async () => {
+            acts.push('install');
+            return true;
+        },
+    };
+    const label = 'Restart Jason and Its Runtime to Install 0.48.6';
+    const act = actShown(menuItemOf(downloaded, true, true), label);
+    // A newer version came down while the box was open: the question named 0.48.6, so nothing is installed.
+    await pressItem(updater, act, true, async () => {
+        updater.current = { step: 'downloaded', version: '0.48.7' };
+        return 0;
+    });
+    assert.deepEqual(acts, [], 'another version');
+    // The step moved on while the box was open.
+    updater.current = downloaded;
+    await pressItem(updater, act, true, async () => {
+        updater.current = { step: 'installing', version: '0.48.6' };
+        return 0;
+    });
+    assert.deepEqual(acts, [], 'another step');
+    // Nothing moved: Restart and Install installs.
+    updater.current = downloaded;
+    await pressItem(updater, act, true, async () => 0);
+    assert.deepEqual(acts, ['install']);
 });

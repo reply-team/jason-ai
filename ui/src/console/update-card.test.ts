@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DesktopUpdateItem } from '../platform/desktop';
+import { readFileSync } from 'node:fs';
 import { cardOf, settledMark } from './update-card';
 
 const item = (
@@ -86,10 +87,6 @@ describe('the update card: the hide rule', () => {
         expect(cardOf(item('offered', 'next'), hidden)?.version).toBe('next');
         expect(settledMark(hidden, item('offered', 'next'))).toBeNull();
     });
-
-    it('comes back with the next start: the mark is the page memory alone, so a fresh page has none', () => {
-        expect(cardOf(item('offered'), null)).not.toBeNull();
-    });
 });
 
 describe('the update card: what the page keeps of a hidden card', () => {
@@ -102,7 +99,19 @@ describe('the update card: what the page keeps of a hidden card', () => {
 
     it('forgets the mark when the step changes, so a download that failed offers the card again', () => {
         expect(settledMark(hidden, item('downloading', '0.51.0', 'x'))).toBeNull();
-        expect(settledMark(hidden, item(null))).toBeNull();
+        expect(settledMark(hidden, item('downloaded', '0.51.0', 'x'))).toBeNull();
+    });
+
+    it('keeps the mark while an answer says no step: the updater looking again, offered, checking, offered', () => {
+        expect(settledMark(hidden, item(null))).toEqual(hidden);
+        expect(settledMark(hidden, item('anything' as never))).toEqual(hidden);
+        const older = { version: '0.50.1', item: { label: 'x', enabled: true }, newer: '0.51.0' };
+        expect(settledMark(hidden, older)).toEqual(hidden);
+        const checking = settledMark(hidden, item(null, '0.51.0', 'Checking for Updates…'));
+        expect(cardOf(item(null, '0.51.0', 'Checking for Updates…'), checking)).toBeNull();
+        const again = settledMark(checking, item('offered'));
+        expect(again).toEqual(hidden);
+        expect(cardOf(item('offered'), again)).toBeNull();
     });
 
     it('forgets the mark when a newer version is offered', () => {
@@ -111,5 +120,28 @@ describe('the update card: what the page keeps of a hidden card', () => {
 
     it('keeps no mark that was never made', () => {
         expect(settledMark(null, item('offered'))).toBeNull();
+    });
+});
+
+describe('the update card: in the page’s memory only', () => {
+    const sources = ['update-card.ts', 'update-card-state.ts'].map((name) => ({
+        name,
+        text: readFileSync(`src/console/${name}`, 'utf8'),
+    }));
+
+    it('touches no storage of the browser, so a new start of the application brings a hidden card back', () => {
+        for (const { name, text } of sources)
+            expect(text, name).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie|caches\b/);
+    });
+
+    it('writes nothing to the runtime and nothing to the desktop but the item’s own press', () => {
+        for (const { name, text } of sources) {
+            expect(text, name).not.toMatch(/from '\.\.\/api|\bapi\.|\bfetch\(|\bsend\(/);
+            const members = [...text.matchAll(/desktop\.([A-Za-z]+\.[A-Za-z]+)/g)].map((each) => each[1]);
+            expect(
+                members.every((member) => member === 'updates.press'),
+                `${name}: ${members.join(', ')}`,
+            ).toBe(true);
+        }
     });
 });

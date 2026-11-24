@@ -151,7 +151,10 @@ export async function pressItem(
     else if (act === 'install') {
         const state = updates.current;
         if (state.step !== 'downloaded') return null;
-        if ((await askOnce(updates, installQuestion(state.version), ask)) === 0) await updates.install();
+        if ((await askOnce(updates, installQuestion(state.version), ask)) !== 0) return null;
+        // The box stayed open while the updater went on: install only the version the question named, as the download's does.
+        const still = updates.current;
+        if (still.step === 'downloaded' && still.version === state.version) await updates.install();
     }
     return null;
 }

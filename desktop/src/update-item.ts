@@ -20,7 +20,11 @@ export interface UpdateItemAnswer {
     step?: UpdateStep | null;
 }
 
-/** The three steps of an update the page's card has words for; every other step of the updater is sent as null. */
+/**
+ * The three steps of an update the page's card has words for; every other step of the updater is sent as null. A step may come
+ * with `newer` null (a terminal's request for an older version moves the updater without a newer version known), and the
+ * page then shows no card.
+ */
 export type UpdateStep = 'offered' | 'downloading' | 'downloaded';
 
 /**

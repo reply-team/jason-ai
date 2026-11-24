@@ -228,7 +228,10 @@ out and is not offered here because you went back from it, or why it could not c
 the key, the same sentence comes as a notification too, whose click opens the window on Settings' Update section. The
 line goes when the item moves on, and the checks Jason makes by itself say nothing; once one of them, or yours, finds a
 version, one quiet mark, a dot with no count, stands on the sidebar's Settings row and on the Update section's row and
-its item, from then until that version is installed. While a version is offered, downloading or downloaded, a card above Settings in the console's side column says so, with Download or Restart to install (which asks first, as the key does) and, while the version is only offered, Not now, which puts the card away until the application starts again and keeps nothing; the mark beside Settings stays. A download you asked for asks once, as it ends, whether to install
+its item, from then until that version is installed. While a version is offered, downloading or downloaded, a card above
+Settings in the console's side column says so, with Download or Restart to install (which asks first, as the key does)
+and, while the version is only offered, Not now, which puts the card away until the application starts again and keeps
+nothing; the mark beside Settings stays. A download you asked for asks once, as it ends, whether to install
 now, Restart and Install or Not Now; Not Now leaves it waiting under Restart Jason and Its Runtime to Install, and nothing
 installs when you quit. The finished download is held by the running application alone: quitting Jason Desktop, or
 restarting it, forgets it, and the item starts again at Check for Updates…. At the install the key asks

@@ -54,13 +54,16 @@ export function cardOf(answer: DesktopUpdateItem | null, hidden: Hidden | null):
 }
 
 /**
- * The mark to keep after the item moved: the same while the step and the version stand, and while nothing has been read;
- * none once the step has changed or a newer version is offered, so a card put away comes back by itself and, if the
+ * The mark to keep after the item moved: the same while the step and the version stand, while nothing has been read, and
+ * while the answer says no step (the updater looking again between two offers); none once another of the three steps is
+ * said or a newer version is offered, so a card put away comes back by itself and, if the
  * step then returns to the one it was put away at, is offered again.
  */
 export function settledMark(hidden: Hidden | null, answer: DesktopUpdateItem | null): Hidden | null {
     if (hidden === null) return null;
     if (answer === null) return hidden;
+    // An answer with no step is the updater looking again (offered, checking, offered at one version): nothing changed.
+    if (answer.step === undefined || answer.step === null || !steps.includes(answer.step)) return hidden;
     if (answer.step !== hidden.step) return null;
     if (typeof answer.newer === 'string' && answer.newer !== '' && newerThan(answer.newer, hidden.version)) return null;
     return hidden;
