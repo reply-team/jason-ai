@@ -54,13 +54,20 @@ internal static class HeldSends
     public static IReadOnlyList<string> UnsentStates { get; } = ["cancelled", "failed"];
 
     /// <summary>
-    /// Whether the work item aliased <c>k</c> is a succeeded <see cref="Status"/> read whose answer's <c>state</c> is in
-    /// <paramref name="states"/>, a SQL list or a subquery: the one spelling of what a read said became of a send, which the
-    /// release of a held send reads with <see cref="FinalStates"/> and a touch that counts with <see cref="UnsentStates"/>
-    /// (<see cref="Campaigns.LineTouches"/>). Whoever asked for the read, it says what the provider answered.
+    /// The final states of <see cref="Status"/>'s answer that say the send went, or may have gone: <c>sent</c> and
+    /// <c>unknown</c>. A read that says either outweighs one that says the send never went (<see cref="UnsentStates"/>).
     /// </summary>
-    internal static string ReadSaidSql(string states) =>
-        $"(k.operation = '{Status}' AND k.status = 'succeeded' AND json_extract(k.result_json, '$.state') IN ({states}))";
+    public static IReadOnlyList<string> MayHaveGoneStates { get; } = ["sent", "unknown"];
+
+    /// <summary>
+    /// Whether the work item aliased <paramref name="read"/> is a succeeded <see cref="Status"/> read whose answer's
+    /// <c>state</c> is in <paramref name="states"/>, a SQL list or a subquery: the one spelling of what a read said became of
+    /// a send, which the release of a held send reads with <see cref="FinalStates"/> and a touch that counts with
+    /// <see cref="UnsentStates"/> and <see cref="MayHaveGoneStates"/> (<see cref="Campaigns.LineTouches"/>). Whoever asked
+    /// for the read, it says what the provider answered.
+    /// </summary>
+    internal static string ReadSaidSql(string read, string states) =>
+        $"({read}.operation = '{Status}' AND {read}.status = 'succeeded' AND json_extract({read}.result_json, '$.state') IN ({states}))";
 
     /// <summary>
     /// One read, bounded by the moment: only a send held for a moment after the caller's clock, which is passed in so the
@@ -103,7 +110,7 @@ internal static class HeldSends
                         AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({4})))
                     OR (k.operation = {3} AND k.status = 'failed'
                         AND json_extract(k.last_error_json, '$.code') IN (SELECT value FROM json_each({6})))
-                    OR {{ReadSaidSql("SELECT value FROM json_each({5})")}}
+                    OR {{ReadSaidSql("k", "SELECT value FROM json_each({5})")}}
                     OR (k.operation = {3} AND k.status = 'succeeded'
                         AND json_type(k.result_json, '$.cancelable') = 'false'
                         AND k.id = (

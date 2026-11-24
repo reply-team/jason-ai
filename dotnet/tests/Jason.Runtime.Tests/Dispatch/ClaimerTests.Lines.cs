@@ -280,17 +280,51 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// Reads of one send that disagree: a send a read says failed or was cancelled is no touch only while no succeeded read
+    /// of it says it went or may have gone (<c>sent</c> or <c>unknown</c>), whichever came first; a read that says the
+    /// provider still holds it takes nothing back from the one that says it never went.
+    /// </summary>
+    [Theory]
+    [InlineData("failed", "sent", true)]
+    [InlineData("sent", "failed", true)]
+    [InlineData("unknown", "failed", true)]
+    [InlineData("queued", "failed", false)]
+    [InlineData("cancelled", "queued", false)]
+    public async Task A_send_reads_disagree_about_counts_while_any_read_says_it_went_or_may_have_gone(string first, string then, bool counted)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LineHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var held = await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        ReadSaid(db, campaign, held, first, madeBy: ActorType.Role).FinishedAt = Noon.AddMinutes(-40);
+        ReadSaid(db, campaign, held, then);
+        var next = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(counted ? 2 : 1, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, next.Id, Ct));
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == next.Id, Ct);
+        Assert.Equal(
+            counted ? AttemptErrors.TouchCeilingReached : null,
+            row.Status == WorkItemStatus.AwaitingApproval ? null : await RefusalAsync(fresh, next));
+    }
+
+    /// <summary>
     /// The ceiling end to end, through a whole dispatcher and reads the provider answers: a person held at the ceiling of two
     /// by a letter the provider took is refused the touch after it. A read of that letter, made by the manager and recorded as
-    /// every read is, that answers the provider lost track of it leaves it counted, since it may have gone, and the next touch
+    /// every read is, that answers the provider still holds it leaves it counted, since it may still go, and the next touch
     /// is refused too; a second read that answers the provider failed it takes it out of the count, and the touch after that
     /// goes on to the person's approval: a letter that never went no longer holds the person at the ceiling.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the ceiling of touches leaves out a letter a read says never went, and keeps one that may have gone")]
+    [Critical(Family.W3, "the ceiling of touches leaves out a letter a read says never went, and keeps one that may still go")]
     public async Task A_person_at_the_ceiling_by_a_letter_a_read_says_failed_may_be_written_to_again()
     {
-        var answers = new Queue<string>(["unknown", "failed"]);
+        var answers = new Queue<string>(["queued", "failed"]);
         var command = new FakeCommand(
             WorkItemKind.ProviderOp,
             _ => Task.FromResult<CommandOutcome>(new CommandOutcome.Provider(StatusAnswer(answers.Dequeue()), null)));
@@ -305,7 +339,7 @@ public partial class ClaimerTests
 
         Assert.Equal(AttemptErrors.TouchCeilingReached, await TouchAsync(harness, db, campaign, contact));
 
-        Assert.Equal("unknown", await ReadThroughAsync(harness, db, campaign, letter));
+        Assert.Equal("queued", await ReadThroughAsync(harness, db, campaign, letter));
         Assert.Equal(AttemptErrors.TouchCeilingReached, await TouchAsync(harness, db, campaign, contact));
 
         Assert.Equal("failed", await ReadThroughAsync(harness, db, campaign, letter));

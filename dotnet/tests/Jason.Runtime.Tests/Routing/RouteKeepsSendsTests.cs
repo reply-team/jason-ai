@@ -230,6 +230,8 @@ public class RouteKeepsSendsTests
         var said = (string)state["description"]!;
 
         Assert.All(HeldSends.UnsentStates, unsent => Assert.Contains(unsent, HeldSends.FinalStates));
+        Assert.Equal(["sent", "unknown"], HeldSends.MayHaveGoneStates.Order(StringComparer.Ordinal));
+        Assert.Equal(HeldSends.FinalStates.Order(StringComparer.Ordinal), HeldSends.UnsentStates.Concat(HeldSends.MayHaveGoneStates).Order(StringComparer.Ordinal));
         Assert.Equal(["cancelled", "failed"], HeldSends.UnsentStates.Order(StringComparer.Ordinal));
         Assert.Contains("`cancelled`: it was cancelled before it went.", said, StringComparison.Ordinal);
         Assert.Contains("`failed`: the provider took it and it did not go.", said, StringComparison.Ordinal);

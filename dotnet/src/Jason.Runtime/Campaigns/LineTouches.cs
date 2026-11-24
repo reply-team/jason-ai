@@ -20,11 +20,11 @@ namespace Jason.Runtime.Campaigns;
 /// side of a ceiling; nothing the store keeps proves an earlier attempt did not act. Work none of whose attempts ended
 /// ambiguous, and that did not succeed, reached nobody, and counts for nothing. Nor does a send a succeeded
 /// <c>message.cancel</c> of the campaign names (<see cref="HeldSends.Cancel"/>): the provider held it, and said it took it
-/// back, so it never went, as the hold reads it too; a cancel that failed, or is still to run, takes nothing back. Nor does
-/// a send a succeeded <c>message.status</c> of the campaign names (<see cref="HeldSends.Status"/>) and answered the provider
-/// failed or cancelled (<see cref="HeldSends.UnsentStates"/>), whoever asked for the read: the provider says it never went,
-/// and it never will. A read that answered <c>queued</c> or <c>unknown</c>, or <c>sent</c>, or that failed, leaves the
-/// send counted, since such a letter may still go, may have gone, or went.
+/// back, so it never went, as the hold reads it too; a cancel that failed, or is still to run, takes nothing back. A send a
+/// succeeded <c>message.status</c> of the campaign (<see cref="HeldSends.Status"/>) says failed or was cancelled
+/// (<see cref="HeldSends.UnsentStates"/>) is not counted, whoever asked for the read, unless a read of it says it went or
+/// may have gone (<c>sent</c> or <c>unknown</c>, <see cref="HeldSends.MayHaveGoneStates"/>): reads that disagree leave it
+/// counted, the safe side of a ceiling. A <c>queued</c> read, a read that failed and an overdue line leave it counted.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
@@ -41,22 +41,30 @@ internal static class LineTouches
     private static readonly string TouchesSql =
         string.Join(", ", OperationCatalog.Touches.Order(StringComparer.Ordinal).Select(operation => $"'{operation}'"));
 
-    /// <summary>The states of a read that say a send never went (<see cref="HeldSends.UnsentStates"/>), as a SQL list of literals.</summary>
-    private static string UnsentStatesSql => string.Join(", ", HeldSends.UnsentStates.Select(state => $"'{state}'"));
+    /// <summary>The states in <paramref name="states"/> as a SQL list of literals.</summary>
+    private static string ListSql(IEnumerable<string> states) => string.Join(", ", states.Select(state => $"'{state}'"));
 
     /// <summary>
     /// Whether the send aliased <paramref name="send"/> never went: a succeeded <c>message.cancel</c> of the campaign names it,
-    /// as <see cref="TakenBackSql"/> reads, or a succeeded <c>message.status</c> of the campaign names it and answered that
-    /// the provider failed or cancelled it (<see cref="HeldSends.ReadSaidSql"/>), whoever asked for the read. One subquery
-    /// for both, its columns read before its documents and the arguments before the answer, since a read's answer carries
-    /// the letter. The one definition, which a touch that counts and the hold's reading of Jason's own move both read.
+    /// as <see cref="TakenBackSql"/> reads, or a succeeded <c>message.status</c> of the campaign names it and says it failed
+    /// or was cancelled (<see cref="HeldSends.ReadSaidSql"/>), whoever asked for the read, while no succeeded read of it says
+    /// it went or may have gone. One subquery for both, its columns read before its documents and the arguments before the
+    /// answer, since a read's answer carries the letter; the reads that may outweigh it are looked for only behind a read
+    /// that says the send never went. The one definition, which a touch that counts and the hold's reading of Jason's own
+    /// move both read.
     /// </summary>
     internal static string NeverWentSql(string send) => $$"""
         EXISTS (SELECT 1 FROM work_items AS k
                 WHERE k.campaign_id = {{send}}.campaign_id AND k.status = 'succeeded'
                   AND k.operation IN ('{{HeldSends.Cancel}}', '{{HeldSends.Status}}')
                   AND json_extract(k.context_json, '$.input.send') = {{send}}.public_id
-                  AND (k.operation = '{{HeldSends.Cancel}}' OR {{HeldSends.ReadSaidSql(UnsentStatesSql)}}))
+                  AND (k.operation = '{{HeldSends.Cancel}}'
+                       OR ({{HeldSends.ReadSaidSql("k", ListSql(HeldSends.UnsentStates))}}
+                           AND NOT EXISTS (SELECT 1 FROM work_items AS g
+                                           WHERE g.campaign_id = {{send}}.campaign_id AND g.status = 'succeeded'
+                                             AND g.operation = '{{HeldSends.Status}}'
+                                             AND json_extract(g.context_json, '$.input.send') = {{send}}.public_id
+                                             AND {{HeldSends.ReadSaidSql("g", ListSql(HeldSends.MayHaveGoneStates))}}))))
         """;
 
     /// <summary>

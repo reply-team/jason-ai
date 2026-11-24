@@ -26,8 +26,8 @@ namespace Jason.Runtime.Contacts;
 /// attempt, or an answer the responder sent, a <c>conversation.reply</c> of the campaign into the line's own thread, at
 /// the end of its succeeded attempt. A touch records no thread, so touches are compared for the person across the
 /// campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a cancel took back never
-/// went, nor did one the provider failed or cancelled, as a succeeded read of the campaign says
-/// (<see cref="Campaigns.LineTouches.NeverWentSql"/>), the one definition a touch that counts reads too. Moments of the
+/// went, nor did one a succeeded read of the campaign says failed or was cancelled while no read of it says it went or may
+/// have gone (<see cref="Campaigns.LineTouches.NeverWentSql"/>), the one definition a touch that counts reads too. Moments of the
 /// runtime's own record are compared and nothing else. A line whose stored event names the other side
 /// always holds, whatever the moments (<see cref="OtherSideNamedAsync"/>): where the provider said who wrote, the moments
 /// do not overrule it.
@@ -47,7 +47,7 @@ internal static class LineHold
     /// Whether a letter of Jason's went out to the person at or after the line's moment and by now: a succeeded touch of the
     /// person in the campaign, at its result's <c>accepted_for</c> or else its succeeded attempt's end, or a succeeded answer
     /// of the campaign into the line's thread, at its attempt's end; never one a succeeded cancel names, nor one a succeeded
-    /// read says the provider failed or cancelled. SQLite's date functions read the stored moment and the contract's forms
+    /// read says failed or was cancelled while no read of it says it went or may have gone. SQLite's date functions read the stored moment and the contract's forms
     /// alike, and one they cannot read is NULL and counts for nothing.
     /// </summary>
     private static readonly string OwnMoveSql = $$"""
