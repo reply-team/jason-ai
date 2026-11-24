@@ -152,11 +152,15 @@ public static class StandingApprovals
             """);
     }
 
-    /// <summary>A change to a work item's context after it was created, read from the item's own lines.</summary>
+    /// <summary>
+    /// A change to a work item's context after it was created, read from the item's own lines: by anybody but the runtime,
+    /// whose own records on the item — which earlier letter a message follows, the audience a search runs under — change
+    /// nothing anybody wrote. Nobody else writes as the runtime.
+    /// </summary>
     internal static IQueryable<int> ContextChanges(JasonDbContext db, string workItemId) =>
         db.Database.SqlQuery<int>($"""
             SELECT id AS "Value" FROM journal INDEXED BY ix_journal_work_item_id_public_id
-            WHERE work_item_id = {workItemId} AND kind = 'workitem_context_updated'
+            WHERE work_item_id = {workItemId} AND kind = 'workitem_context_updated' AND actor_type <> 'system'
             LIMIT 1
             """);
 

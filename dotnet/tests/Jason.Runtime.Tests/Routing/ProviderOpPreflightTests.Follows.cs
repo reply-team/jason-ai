@@ -124,8 +124,10 @@ public partial class ProviderOpPreflightTests
     /// on a plugin that lists follows there, one that lists it on another channel only and one that lists nothing; at a first
     /// claim, at a repeat under the same package, and at a repeat after the package changed: a package is known by the
     /// digest of its content, its manifest included, so a manifest that no longer lists follows is another digest, and a
-    /// repeat is handed only to the digest that lost the answer. Nowhere does a plugin learn a thread it never said it can
-    /// place a message in.
+    /// repeat is handed only to the digest that lost the answer. And a repeat holds it by itself, whatever check 23
+    /// compares: one whose attempt kept no digest of its input, under the very package it ran under, carrying a record its
+    /// first claim never wrote, and one routed to a package that settles nothing by the key. Nowhere does a plugin learn a
+    /// thread it never said it can place a message in.
     /// </summary>
     [Fact]
     [Critical(Family.W3, "the provider's reference of a thread reaches only a plugin that takes follows")]
@@ -191,6 +193,29 @@ public partial class ProviderOpPreflightTests
                     }
                 }
             }
+        }
+
+        // A repeat whose recorded decision follows a letter, routed to a package that takes no follows: one of an attempt that
+        // kept no digest of the input it went with, claimed before attempts named their input, under the very package it ran
+        // under, of an item carrying a record a caller wrote before the runtime kept the key, so check 23 compares only the
+        // arguments; and one routed to a package that settles nothing by the key, which check 23 would refuse after it. The
+        // repeat is refused where the routed plugin is asked for follows, recorded ambiguous, and nothing reaches the plugin.
+        var kept = FollowsDecision.Recorded(new FollowsDecision.Follow(LetterItem, Send, "email-1001", FollowsDecision.LineRoot).Composed()!);
+        foreach (var unkeyed in new[] { false, true })
+        {
+            var scenario = Scenario.Sending("snd-1");
+            scenario.Plugin = unkeyed ? Scenario.Package(operations: [Send]) : Keyed(Scenario.Package(operations: [Send]));
+            scenario.Unsettled = true;
+            scenario.RecordedFollows = kept;
+            scenario.Followed = Went();
+
+            var repeat = scenario.Check();
+
+            Hold(repeat, takes: false);
+            Assert.Equal((AttemptErrors.ArgumentUnsupported, FailureClass.Ambiguous), (repeat.Code, repeat.Class));
+            Assert.Null(repeat.Plan);
+            Assert.Contains($"This repeat follows the letter '{LetterItem}', as its first claim decided", repeat.Message, StringComparison.Ordinal);
+            Assert.Contains("may have reached the person", repeat.Message, StringComparison.Ordinal);
         }
 
         // Neither half is empty: plans went out, and some of them followed a letter by its reference.

@@ -920,7 +920,8 @@ an earlier letter of the line, and the claim decides which, once ([`message.send
   routed plugin does not list `follows` for the channel under its manifest's `arguments` (`not_offered`); the line
   holds no root (`no_earlier_letter`); the root went through another plugin or binding than the message is routed to
   (`other_account`); the root went from another sending account than the message names under `args.sender`, or either
-  says none (`other_mailbox`). Otherwise the message follows the root (`line_root`).
+  says none (`other_mailbox`). Otherwise the message follows the root (`line_root`). Where the routed plugin does not
+  list `follows` for the channel, the claim reads no root at all.
 - **a work item's identifier**: that letter, named. The claim asks rows 31 to 35 of [routing](routing.md) §7 and
   refuses the work with the first that fails, before anybody is asked to approve it: the letter is a `message.send` of
   this campaign to the same person on the same channel, it went with the provider's reference, no succeeded
@@ -954,14 +955,20 @@ input, and the repeat would no longer be the request the provider may already ha
 a letter that went into a thread would go again as a new one. A repeat of an attempt claimed before the runtime
 decided this, which recorded nothing, composes nothing, as that attempt did not. A recorded letter whose reference
 can no longer be read composes none, and the operation's schema refuses the repeat, `input_invalid`, recorded
-`ambiguous`: a reply is never sent as a new letter.
+`ambiguous`: a reply is never sent as a new letter. A repeat that follows a letter asks `follows` of the plugin it is
+routed to now, as a letter named does: where that plugin does not list `follows` for the channel, row 21 refuses it,
+`argument_unsupported`, recorded `ambiguous`, whatever check 23 compares, so a thread's reference never reaches a
+plugin that does not take one. The repeat reads the recorded letter and nothing else.
 
 **An approval and the letter.** A person approves the composed input, the letter it follows included (§Approvals), so
 a decision that changes between the park and the claim — the root moved, or the root's account or mailbox is no
-longer the message's — asks the person again, as any change of the input does. An approval whose subject carries no
-root `follows`, written before the runtime decided this, saw a letter of its own: it still covers a message the claim
-decides is a letter of its own, whatever the reason, and asks the person again for one that follows a letter, named
-or the line's root.
+longer the message's — asks the person again, as any change of the input does. Only the reason a letter of its own
+gives is no part of what they decided, since it reaches nobody: an approval of a letter of its own covers a letter of
+its own whatever the reason now, so a package that comes to take `follows`, which turns `not_offered` into
+`no_earlier_letter`, or a root taken back, asks nobody again. A letter of its own turned reply, or a reply turned
+letter of its own, asks the person again. An approval whose subject carries no root `follows`, written before the
+runtime decided this, saw a letter of its own: it still covers a message the claim decides is a letter of its own,
+whatever the reason, and asks the person again for one that follows a letter, named or the line's root.
 
 ## A campaign's people, counted
 

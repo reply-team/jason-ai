@@ -73,16 +73,18 @@ public sealed class FollowsDecisionTests
     }
 
     /// <summary>
-    /// Only a letter of its own asks nothing of the routed plugin: every plugin sends one, so the twenty-first check passes
-    /// over <c>new_thread</c>, while a letter named, and every other argument, asks the plugin to take it.
+    /// Only a letter followed asks follows of the routed plugin, whichever way it was decided — named, or the runtime's
+    /// default — so the twenty-first check asks the manifest for it; a letter of its own asks nothing, since every plugin
+    /// sends one, <c>new_thread</c> written included. Every other argument the decision leaves to what the work writes.
     /// </summary>
     [Fact]
-    public void Only_a_letter_of_its_own_asks_nothing_of_the_plugin()
+    public void Only_a_letter_followed_asks_follows_of_the_plugin()
     {
-        Assert.Equal(["follows"], new Scene(FollowsDecision.NewThread, Offered: false, Letter: null, Expected: string.Empty).Decide()!.AsksNothing);
-        Assert.Empty(new Scene(Letter, Offered: false, Letter: Earlier(), Expected: string.Empty).Decide()!.AsksNothing);
-        Assert.Empty(new Scene(Written: null, Offered: true, Letter: Earlier(), Expected: string.Empty).Decide()!.AsksNothing);
-        Assert.Empty(new Scene(Written: null, Offered: false, Letter: null, Expected: string.Empty).Decide()!.AsksNothing);
+        Assert.False(new Scene(FollowsDecision.NewThread, Offered: false, Letter: null, Expected: string.Empty).Decide()!.Asks(FollowsDecision.Key));
+        Assert.True(new Scene(Letter, Offered: false, Letter: Earlier(), Expected: string.Empty).Decide()!.Asks(FollowsDecision.Key));
+        Assert.True(new Scene(Written: null, Offered: true, Letter: Earlier(), Expected: string.Empty).Decide()!.Asks(FollowsDecision.Key));
+        Assert.False(new Scene(Written: null, Offered: false, Letter: null, Expected: string.Empty).Decide()!.Asks(FollowsDecision.Key));
+        Assert.Null(new Scene(Written: null, Offered: true, Letter: Earlier(), Expected: string.Empty).Decide()!.Asks("send_after"));
     }
 
     /// <summary>

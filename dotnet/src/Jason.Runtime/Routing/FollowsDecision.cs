@@ -32,7 +32,9 @@ namespace Jason.Runtime.Routing;
 /// from the letter it names, whose attempts no longer change. A decision taken again could change the composed input, so
 /// the repeat would no longer be the request the provider may already have taken, or send a letter that went into a
 /// thread a second time as a new one. A repeat of an attempt claimed before the runtime decided this at all, which
-/// recorded nothing, composes nothing either, as that attempt's claim did not.
+/// recorded nothing, composes nothing either, as that attempt's claim did not. A letter a repeat keeps asks of the routed
+/// plugin what every letter followed asks (<see cref="Asks"/>), so a plugin that takes no follows on the channel is never
+/// handed its reference, whatever else the claim compares.
 /// </para>
 /// <para>
 /// Plugin and binding are compared by the plugin's id and the binding's identity, never the package's digest, as for a
@@ -74,10 +76,6 @@ public abstract record FollowsDecision
     /// <summary>The member of the composed decision the recorded one leaves out: the provider's reference is provenance.</summary>
     private const string ReferenceMember = "reference";
 
-    private static readonly IReadOnlySet<string> OnlyTheArgument = new HashSet<string>([Key], StringComparer.Ordinal);
-
-    private static readonly IReadOnlySet<string> NoArgument = new HashSet<string>(StringComparer.Ordinal);
-
     /// <summary>
     /// The message follows the letter <paramref name="WorkItem"/> made by <paramref name="Operation"/>, as a reply in its
     /// thread, by the provider's <paramref name="Reference"/> for that send: null only on a repeat whose recorded letter holds
@@ -92,11 +90,21 @@ public abstract record FollowsDecision
     public sealed record Refused(string Code, string Message) : FollowsDecision;
 
     /// <summary>
-    /// The arguments the work carries that ask nothing of the routed plugin, as this decision reads them: <see cref="Key"/>
-    /// where the caller asked for a letter of its own, which every plugin sends, and none otherwise. The twenty-first check
-    /// passes over them, so it asks the decision rather than knowing any value of any argument itself.
+    /// Whether the decision asks <paramref name="argument"/> of the routed plugin, which the twenty-first check then holds to
+    /// its manifest whatever the arguments carry: for <see cref="Key"/>, whether the message follows a letter — named, the
+    /// line's root, or the one a repeat keeps — and never where it is a letter of its own, which every plugin sends,
+    /// <c>new_thread</c> written included. Null for every other argument, which the decision does not read, so the check
+    /// asks the decision rather than knowing any value of any argument itself.
     /// </summary>
-    public IReadOnlySet<string> AsksNothing => this is NewLetter { Because: AskedNewThread } ? OnlyTheArgument : NoArgument;
+    public bool? Asks(string argument) => string.Equals(argument, Key, StringComparison.Ordinal) ? this is Follow : null;
+
+    /// <summary>
+    /// Whether <paramref name="plugin"/> takes <see cref="Key"/> for <paramref name="operation"/> on
+    /// <paramref name="channel"/>. Where it does not, the runtime's default is a letter of its own whatever the line holds,
+    /// so the claim reads no root for it.
+    /// </summary>
+    public static bool Offered(LoadedPlugin? plugin, string operation, string? channel) =>
+        plugin is not null && channel is not null && plugin.Manifest.Arguments.Takes(operation, Key, channel);
 
     /// <summary>
     /// The member composed at the root of the input: the letter followed, by its work item, its operation and the provider's
@@ -194,7 +202,7 @@ public abstract record FollowsDecision
     /// <summary>The runtime's default, in its published order: it makes a new letter wherever it cannot follow the root.</summary>
     private static FollowsDecision Default(string operation, PreflightFacts facts, Route route, LoadedPlugin plugin, string? channel)
     {
-        if (channel is null || !plugin.Manifest.Arguments.Takes(operation, Key, channel))
+        if (!Offered(plugin, operation, channel))
         {
             return new NewLetter(NotOffered);
         }

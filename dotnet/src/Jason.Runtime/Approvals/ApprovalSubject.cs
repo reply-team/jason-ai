@@ -59,11 +59,13 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
     /// added.
     /// </summary>
     /// <remarks>
-    /// One member more is left out the same way: the earlier letter a message follows (<see cref="FollowsDecision"/>),
-    /// where <paramref name="approved"/> was written by a runtime that composed none and this subject's says the message is
-    /// a letter of its own, which is what such a runtime sent. Where it says the message follows a letter it stays, so the
-    /// person is asked again about a reply in a thread they never saw; and where both carry one, any change of it is
-    /// another document.
+    /// One member more is compared the same way: the earlier letter a message follows (<see cref="FollowsDecision"/>). It is
+    /// left out where <paramref name="approved"/> was written by a runtime that composed none and this subject's says the
+    /// message is a letter of its own, which is what such a runtime sent; and where both say it is a letter of its own, the
+    /// approved one stands in for this one, since the two can differ only in why, and the reason reaches nobody: a package
+    /// that came to take follows, or a root taken back, changes nothing the person decided about. Where this subject's says
+    /// the message follows a letter it stays, so the person is asked again about a reply in a thread they never saw, and so
+    /// does any change where the approved one follows a letter: a reply turned letter of its own is another letter too.
     /// </remarks>
     public ApprovalSubject Less(JsonObject? approved)
     {
@@ -75,7 +77,8 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
         var earlier = approved?["input"] as JsonObject;
         var added = CanonicalInput.Added(input, earlier);
         var letter = NewLetterAdded(input, earlier);
-        if (added.Contact.Count == 0 && added.Campaign.Count == 0 && !letter)
+        var reason = AnotherReason(input, earlier);
+        if (added.Contact.Count == 0 && added.Campaign.Count == 0 && !letter && reason is null)
         {
             return this;
         }
@@ -84,6 +87,10 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
         if (letter)
         {
             less.Remove(FollowsDecision.Key);
+        }
+        else if (reason is not null)
+        {
+            less[FollowsDecision.Key] = reason;
         }
 
         var document = Document.DeepClone().AsObject();
@@ -96,7 +103,20 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
     /// <paramref name="earlier"/> carries no decision at all: written by a runtime that composed none.
     /// </summary>
     private static bool NewLetterAdded(JsonObject input, JsonObject? earlier) =>
-        input[FollowsDecision.Key] is JsonObject follows
-        && follows["work_item"] is null
-        && earlier?.ContainsKey(FollowsDecision.Key) != true;
+        OwnLetter(input[FollowsDecision.Key]) && earlier?.ContainsKey(FollowsDecision.Key) != true;
+
+    /// <summary>
+    /// The decision <paramref name="earlier"/> carries, where it and <paramref name="input"/> both say the message is a
+    /// letter of its own and say it differently, which can only be why; null otherwise.
+    /// </summary>
+    private static JsonObject? AnotherReason(JsonObject input, JsonObject? earlier) =>
+        OwnLetter(input[FollowsDecision.Key])
+        && earlier?[FollowsDecision.Key] is JsonObject approved
+        && OwnLetter(approved)
+        && !JsonNode.DeepEquals(input[FollowsDecision.Key], approved)
+            ? approved.DeepClone().AsObject()
+            : null;
+
+    /// <summary>Whether a composed decision says the message is a letter of its own: it names no work item it follows.</summary>
+    private static bool OwnLetter(JsonNode? decided) => decided is JsonObject follows && follows["work_item"] is null;
 }

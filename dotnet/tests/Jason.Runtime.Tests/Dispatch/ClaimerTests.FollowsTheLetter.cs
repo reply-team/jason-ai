@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
@@ -12,6 +13,7 @@ using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -385,6 +387,115 @@ public partial class ClaimerTests
         Assert.Equal((approved.PublicId, ApprovalStatus.Superseded), (approvals[0].PublicId, approvals[0].Status));
         Assert.Equal((ApprovalStatus.Pending, ApprovalGate.InputChanged), (approvals[1].Status, approvals[1].Reason));
         Assert.Equal(FollowsDecision.LineRoot, (string?)approvals[1].Subject["input"]![FollowsDecision.Key]!["because"]);
+    }
+
+    /// <summary>
+    /// A letter of its own approved still runs under that approval where its reason changes and nothing else does: a package
+    /// that gains follows for email between the park and the claim turns the first letter's not_offered into
+    /// no_earlier_letter, which reaches the person exactly as the letter approved would have. The claim records the new
+    /// reason, and the person is not asked again.
+    /// </summary>
+    [Fact]
+    public async Task A_letter_of_its_own_approved_runs_under_the_approval_when_the_package_gains_follows()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var before = LetterHarness(offered: false);
+        using var after = LetterHarness(offered: true);
+        var (campaign, contact) = await LineSceneAsync(db);
+        var send = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await before.Claimer.ClaimAsync(db, 4, Ct));
+        var approved = await Decide(db, ApprovalStatus.Approved);
+        Assert.Equal(FollowsDecision.NotOffered, (string?)approved.Subject["input"]![FollowsDecision.Key]!["because"]);
+
+        var work = Assert.Single(await after.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(FollowsDecision.NoEarlierLetter, (string?)work.Plan!.Input[FollowsDecision.Key]!["because"]);
+        await using var fresh = database.Open();
+        var approvals = await fresh.Approvals.AsNoTracking().ToListAsync(Ct);
+        Assert.Equal((approved.PublicId, ApprovalStatus.Approved), (Assert.Single(approvals).PublicId, approvals[0].Status));
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.WorkItemId == send.Id, Ct);
+        Assert.Equal(approved.PublicId, attempt.Provenance!.ApprovalId);
+        var item = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == send.Id, Ct);
+        Assert.Equal(FollowsDecision.NoEarlierLetter, (string?)item.Context[FollowsDecision.Key]!["because"]);
+    }
+
+    /// <summary>
+    /// The claim reads an earlier letter only where its decision can use what it reads. Nothing where the arguments leave the
+    /// letter to the runtime and the routed plugin takes no follows on the channel, which is not_offered before anything is
+    /// read, nor where they ask for a letter of its own; the line's root where the default can follow it, and never whether
+    /// it was taken back, which the root's own definition already asks; a letter named, and whether it was taken back, which
+    /// the five checks ask; and on a repeat, the letter its first claim recorded and nothing else.
+    /// </summary>
+    [Theory]
+    [InlineData("left out, on a plugin that takes no follows", FollowsDecision.NotOffered, false, false)]
+    [InlineData("left out, on a plugin that takes follows", FollowsDecision.LineRoot, true, false)]
+    [InlineData("a letter named", FollowsDecision.Named, false, true)]
+    [InlineData("new_thread", FollowsDecision.AskedNewThread, false, false)]
+    [InlineData("a repeat", FollowsDecision.LineRoot, false, false)]
+    public async Task The_claim_reads_a_letter_only_where_its_decision_uses_it(string wish, string because, bool root, bool takenBack)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LetterHarness(offered: wish != "left out, on a plugin that takes no follows");
+        var (campaign, contact) = await LineSceneAsync(db);
+        var letter = Wrote(db, campaign, contact, hoursAgo: 5);
+        var send = Sending(db, campaign, contact);
+        if (wish is "a letter named" or "new_thread")
+        {
+            send.Context[WorkItemService.InputKey]![FollowsDecision.Key] = wish == "new_thread" ? FollowsDecision.NewThread : letter.PublicId;
+        }
+
+        await db.SaveChangesAsync(Ct);
+        if (wish == "a repeat")
+        {
+            // The first claim followed the root and ran; its answer never came back.
+            Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            await Decide(db, ApprovalStatus.Approved);
+            Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            var lost = await db.Attempts.SingleAsync(a => a.WorkItemId == send.Id, Ct);
+            WorkItemTransitions.Apply(send, WorkItemStatus.Processing, Noon);
+            lost.StartedAt = Noon;
+            lost.Status = AttemptStatus.Failed;
+            lost.FinishedAt = Noon;
+            lost.Error = new AttemptErrorDto("provider_answer_lost", "No answer came back.", Retriable: true, Class: FailureClass.Ambiguous);
+            WorkItemTransitions.Apply(send, WorkItemStatus.Created, Noon);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var reads = new LetterReads();
+        var options = new DbContextOptionsBuilder<JasonDbContext>();
+        JasonDbContext.Configure(options, database.File, JournalLines.Strict);
+        options.AddInterceptors(reads);
+        await using (var watched = new JasonDbContext(options.Options))
+        {
+            await harness.Claimer.ClaimAsync(watched, 4, Ct);
+        }
+
+        await using var fresh = database.Open();
+        var item = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == send.Id, Ct);
+        Assert.Equal(because, (string?)item.Context[FollowsDecision.Key]!["because"]);
+        Assert.Equal(
+            (root, takenBack),
+            (reads.Texts.Any(text => text.Contains("'$.follows.work_item'", StringComparison.Ordinal)),
+             reads.Texts.Any(text => text.Contains("AND w.public_id = ", StringComparison.Ordinal))));
+    }
+
+    /// <summary>The text of every query a context sends, as it is sent.</summary>
+    private sealed class LetterReads : DbCommandInterceptor
+    {
+        public List<string> Texts { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Texts.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     /// <summary>

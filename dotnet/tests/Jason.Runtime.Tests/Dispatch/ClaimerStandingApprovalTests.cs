@@ -181,6 +181,43 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// What the runtime records on a work item itself is no edit of it: the dispatcher's record of which earlier letter a
+    /// message follows, written on the item before this claim, leaves a message the standing approval covers covered, and
+    /// it is released in the same claim; an edit by anybody else parks it, as <see cref="StandingApprovals.Why.Edited"/>
+    /// says.
+    /// </summary>
+    [Fact]
+    public async Task Standing_TheDispatchersOwnRecordOfTheLetterFollowed_IsNoEdit_ReleasedInSameClaim()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await VerdictAsync(db, reading, RunOf(reading));
+        await StandAsync(db, reading.Campaign, operations: ["message.send"]);
+        var item = Drafted(db, reading, verdict, operation: "message.send");
+        var recorded = new JsonObject { ["work_item"] = null, ["operation"] = null, ["because"] = FollowsDecision.NotOffered };
+        item.Context[FollowsDecision.Key] = recorded.DeepClone();
+        new JournalWriter(new FixedClock(new DateTimeOffset(Noon))).Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.WorkItemContextUpdated,
+            campaign: null,
+            key: FollowsDecision.Key,
+            old: null,
+            updated: recorded,
+            workItem: item);
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await ClaimSettledAsync(harness, db));
+
+        Assert.Equal((item.PublicId, "message.send"), (work.WorkItemPublicId, work.Plan!.Contract.Id));
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((ApprovalStatus.Approved, ApprovalGate.StandingApproval), (approval.Status, approval.Reason));
+    }
+
+    /// <summary>
     /// A category is the verdict's word exactly: a standing approval for <c>interested</c> covers neither a refinement of
     /// it nor the same word in another case, and nothing is folded to make them meet.
     /// </summary>

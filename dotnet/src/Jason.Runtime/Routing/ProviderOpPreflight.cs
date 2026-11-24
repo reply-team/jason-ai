@@ -416,14 +416,19 @@ public static class ProviderOpPreflight
         // Twenty-first: an argument the document names per channel goes only where the routed plugin's manifest lists it
         // for the channel the arguments name. It is asked once the input satisfies its schema, so a moment that is no
         // moment is the planner's to fix first, and before a person is asked to approve work that could not go out as
-        // written. An argument the work does not carry asks nothing of the manifest, and neither does one whose value, as
-        // the decision about it reads it, asks nothing of the plugin: a letter of its own, which every plugin sends.
-        if (UntakenArgument(contract, plugin, input, CanonicalInput.ConsumedChannel(contract, facts.Item), follows?.AsksNothing ?? NoArgument) is { } untaken)
+        // written. An argument the work does not carry asks nothing of the manifest, unless the decision about it says
+        // what it asks: follows asks wherever the message follows a letter, written or not — a repeat keeps the letter its
+        // first claim followed, and is held to the plugin it is routed to now, whatever the twenty-third compares — and
+        // nowhere it is a letter of its own, which every plugin sends.
+        if (UntakenArgument(contract, plugin, input, CanonicalInput.ConsumedChannel(contract, facts.Item), follows) is { } untaken)
         {
+            var advice = facts.Unsettled is not null && follows is FollowsDecision.Follow kept && untaken.Argument == FollowsDecision.Key
+                ? $"This repeat follows the letter '{kept.WorkItem}', as its first claim decided: route the operation, or its channel, to a plugin that takes it."
+                : $"Leave the argument out{Instead(untaken.Argument)}, or route the operation to a plugin that takes it.";
             return Refused(
                 resolution,
                 AttemptErrors.ArgumentUnsupported,
-                $"'{route.PluginId}' takes no '{untaken.Argument}' for '{operation}' on the '{untaken.Channel}' channel: its manifest does not list it there. Leave the argument out{Instead(untaken.Argument)}, or route the operation to a plugin that takes it.");
+                $"'{route.PluginId}' takes no '{untaken.Argument}' for '{operation}' on the '{untaken.Channel}' channel: its manifest does not list it there. {advice}");
         }
 
         // Twenty-second: a message written as a template goes only to a plugin whose manifest lists the operation's channel
@@ -753,17 +758,17 @@ public static class ProviderOpPreflight
             : null;
 
     /// <summary>
-    /// The first argument the document names per channel that the input carries, asking something of the plugin, and the
-    /// plugin does not take on the channel the arguments name, in the document's order; null when there is none. An argument
-    /// in <paramref name="asksNothing"/> is carried with a value that asks nothing of the plugin, as the decision about it
-    /// says, so the manifest is not asked about it.
+    /// The first argument the document names per channel that asks something of the plugin and that the plugin does not take
+    /// on the channel the arguments name, in the document's order; null when there is none. An argument asks something
+    /// where the input carries it, unless the decision about it says what it asks (<see cref="FollowsDecision.Asks"/>):
+    /// then what the decision says, carried or not.
     /// </summary>
     private static (string Argument, string Channel)? UntakenArgument(
         OperationContract contract,
         LoadedPlugin plugin,
         JsonObject input,
         string? channel,
-        IReadOnlySet<string> asksNothing)
+        FollowsDecision? decided)
     {
         if (contract.ChannelArguments is not { } names || channel is null || input["args"] is not JsonObject args)
         {
@@ -772,7 +777,7 @@ public static class ProviderOpPreflight
 
         foreach (var name in names)
         {
-            if (args.ContainsKey(name) && !asksNothing.Contains(name) && !plugin.Manifest.Arguments.Takes(contract.Id, name, channel))
+            if ((decided?.Asks(name) ?? args.ContainsKey(name)) && !plugin.Manifest.Arguments.Takes(contract.Id, name, channel))
             {
                 return (name, channel);
             }
@@ -780,9 +785,6 @@ public static class ProviderOpPreflight
 
         return null;
     }
-
-    /// <summary>No argument the work carries asks nothing of the plugin.</summary>
-    private static readonly IReadOnlySet<string> NoArgument = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
     /// What an argument the twenty-first check refuses can be replaced with, where something can: a moment the provider does

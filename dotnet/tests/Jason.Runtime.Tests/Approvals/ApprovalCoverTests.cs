@@ -52,15 +52,18 @@ public class ApprovalCoverTests
     /// An approval written by a runtime that composed no decision about the earlier letter a message follows was given about
     /// a letter of its own, which is what that runtime sent: it covers the message as a letter of its own, whatever reason
     /// the decision now gives and with a pin added beside it, and never as a reply in a thread the person did not see. Where
-    /// the approved subject carries a decision, any change of it ends the cover. The comparison reads the member at the root
-    /// of the input, whichever operation composed it.
+    /// the approved subject carries a decision, a letter of its own approved covers a letter of its own whatever the reason
+    /// now, since the reason is no part of what reaches the person; any other change of it ends the cover, a letter of its
+    /// own turned reply or a reply turned letter of its own. The comparison reads the member at the root of the input,
+    /// whichever operation composed it.
     /// </summary>
     [Theory]
     [InlineData("none decided, a letter of its own now", true)]
     [InlineData("none decided, a letter of its own and a pin added now", true)]
     [InlineData("none decided, a reply in a thread now", false)]
     [InlineData("a letter of its own approved, the same now", true)]
-    [InlineData("a letter of its own approved, for another reason now", false)]
+    [InlineData("a letter of its own approved, for another reason now", true)]
+    [InlineData("a letter of its own approved, for another reason and a pin added now", true)]
     [InlineData("a letter of its own approved, a reply now", false)]
     [InlineData("a reply approved, a letter of its own now", false)]
     public void An_approval_written_before_the_letter_was_decided_covers_a_letter_of_its_own_and_not_a_reply(string history, bool covered)
@@ -76,6 +79,7 @@ public class ApprovalCoverTests
             "none decided, a reply in a thread now" => (plain, reply),
             "a letter of its own approved, the same now" => (own, own),
             "a letter of its own approved, for another reason now" => (own, Followed(plain, null, "not_offered")),
+            "a letter of its own approved, for another reason and a pin added now" => (own, Followed(scene.Subject(Pins("contact", "p-48211"), NoPins), null, "not_offered")),
             "a letter of its own approved, a reply now" => (own, reply),
             _ => (reply, own),
         };
