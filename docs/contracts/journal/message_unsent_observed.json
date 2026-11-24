@@ -2,7 +2,7 @@
   "kind": "message_unsent_observed",
   "version": 1,
   "since": "0.51.0",
-  "summary": "A send the provider took for a moment did not go: a read found it failed or cancelled, or the last read of it after its moment had passed still found it waiting, and it is overdue; said once per send, and never of a send the campaign's own cancel took back.",
+  "summary": "A send the provider took for a moment did not go: a read found it failed or cancelled, or the last read of it after its moment had passed still found it waiting, and it is overdue; said once per send, and never of a send a succeeded message.cancel of the campaign took back.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -26,7 +26,7 @@
           "plugin": { "type": "string", "minLength": 1, "description": "The plugin that answered the read." },
           "reference": { "type": "string", "minLength": 1, "description": "The provider's reference for the send, as the send returned it." },
           "channel": { "type": "string", "enum": ["email", "linkedin"] },
-          "state": { "type": "string", "enum": ["failed", "cancelled", "overdue"], "description": "`failed`: the provider took the send and it did not go. `cancelled`: it was cancelled before it went, not by a cancel of the campaign's. `overdue`: the last read the runtime made of it, `Dispatcher:DeferredReadOverdueSeconds` or more after its moment, still found it waiting, and no read found what became of it." },
+          "state": { "type": "string", "enum": ["failed", "cancelled", "overdue"], "description": "`failed`: the provider took the send and it did not go. `cancelled`: it was cancelled before it went, not by a succeeded `message.cancel` of the campaign. `overdue`: the last read the runtime made of it, `Dispatcher:DeferredReadOverdueSeconds` or more after its moment, still found it waiting, and no read found what became of it." },
           "failure_code": { "type": ["null", "string"], "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "The provider's own code for the failure where it is one word of its vocabulary, uninterpreted, never a server's text or the provider's sentence; null where it gives none or gives something else, and for a send that is overdue." },
           "moment": { "type": "string", "format": "date-time", "description": "The moment the provider took the send for, as the send's own result or arguments named it." },
           "cancelled_at": { "type": ["null", "string"], "format": "date-time", "description": "When the send was cancelled, or null where it was not or the provider gives no moment." },

@@ -124,7 +124,7 @@ change and a take-back hold ([routing](../../routing.md) §6). It is a reserved 
 the work item that made the send, keyed by it and said once, carrying the plugin, the reference, the channel, the state,
 the provider's own `failure_code` where it is one word of its vocabulary, the send's moment, `cancelled_at` and the
 read, never `failure_reason`, an address or the text, and it is written in the change set that ends the read. Nothing is
-said of a send a cancel of the campaign's took back: that cancel is the record. The runtime also reads such a send
+said of a send a succeeded `message.cancel` of the campaign took back: that cancel is the record. The runtime also reads such a send
 itself once its moment has passed, and where the last of those reads, a week after the moment by default, still finds it
 `queued`, the same line says it is `overdue` ([inbound sync](../../inbound-sync.md) §1). A read that answers `sent` says
 `message_sent_observed` as above; one that answers `unknown`, or `queued` before then, says nothing. The line is a

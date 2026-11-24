@@ -274,8 +274,8 @@ public static partial class JournalKinds
     /// it, and the send is <c>overdue</c>. Keyed by the work item that made the send, with the plugin, the provider's
     /// reference, the channel, the state, the provider's own code where it is one word, the moment, when it was cancelled
     /// and the read. Never the provider's sentence, a subject, a body, an address or a name. Said once per send, and never
-    /// for a send a cancel of the campaign's took back. A default manager trigger: a letter the campaign counted on did not
-    /// go.
+    /// for a send a succeeded <c>message.cancel</c> of the campaign took back. A default manager trigger: a letter the
+    /// campaign counted on did not go.
     /// </summary>
     public const string MessageUnsentObserved = "message_unsent_observed";
 
