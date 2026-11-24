@@ -929,9 +929,9 @@ an earlier letter of the line, and the claim decides which, once ([`message.send
   refuses the work with the first that fails, before anybody is asked to approve it: the letter is a `message.send` of
   this campaign to the same person on the same channel, it went with the provider's reference, no succeeded
   `message.cancel` took it back, it went through the plugin and account the message is routed to, and from the sending
-  account the message names. Otherwise the message follows it (`named`). A letter a succeeded `message.status` of the
-  campaign says failed or was cancelled is not refused for that at the claim but passed to the provider, which
-  refuses it at its moment where it holds the letter never went (`follows_never_sent`), and nothing is sent.
+  account the message names. Otherwise the message follows it (`named`). A letter named explicitly that a read says
+  failed or was cancelled is not refused for that at the claim: it is passed to the provider, which refuses it at its
+  moment where it holds that the letter never went (`follows_never_sent`), and nothing is sent.
 - **`new_thread`**: a letter of its own (`asked_new_thread`). It asks nothing of the plugin, since every plugin sends a
   letter, so it is taken whatever the manifest lists.
 
