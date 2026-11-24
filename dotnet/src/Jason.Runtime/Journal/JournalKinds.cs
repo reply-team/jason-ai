@@ -268,6 +268,18 @@ public static partial class JournalKinds
     public const string MessageBounceObserved = "message_bounce_observed";
 
     /// <summary>
+    /// A send the definition of a held send covers that did not go: a read of it, whoever made it, found it
+    /// <c>failed</c> or <c>cancelled</c>, or the last read the runtime made of a deferred send whose moment had passed
+    /// ended <c>Dispatcher:DeferredReadOverdueSeconds</c> or more after the moment with none having found what became of
+    /// it, and the send is <c>overdue</c>. Keyed by the work item that made the send, with the plugin, the provider's
+    /// reference, the channel, the state, the provider's own code where it is one word, the moment, when it was cancelled
+    /// and the read. Never the provider's sentence, a subject, a body, an address or a name. Said once per send, and never
+    /// for a send a cancel of the campaign's took back. A default manager trigger: a letter the campaign counted on did not
+    /// go.
+    /// </summary>
+    public const string MessageUnsentObserved = "message_unsent_observed";
+
+    /// <summary>
     /// A read of an account's events that stored something, failed, or read by date: the source, the plugin, how it read,
     /// how many pages and events, how it ended, and which package and snapshots it ran under. Never a cursor, a binding or
     /// anything an event holds. It names no campaign, so it never wakes a manager; a read of a cursor that found nothing
@@ -469,6 +481,7 @@ public static partial class JournalKinds
         ReplyClassified,
         MessageSentObserved,
         MessageBounceObserved,
+        MessageUnsentObserved,
         EventsRead,
         EventsGapObserved,
         EventsBackfillRequested,

@@ -16,16 +16,16 @@ public partial class InboundSyncDocTests
 {
     [Fact]
     [Critical(Family.D3, "a page says what the tree has outgrown")]
-    public void The_page_and_the_work_execution_contract_name_the_scan_s_thirteen_steps_in_the_order_the_scan_runs_them()
+    public void The_page_and_the_work_execution_contract_name_the_scan_s_fourteen_steps_in_the_order_the_scan_runs_them()
     {
-        const string steps = "thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
+        const string steps = "fourteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **bounce**, **deferred**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
 
         Assert.Contains(steps, Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
         Assert.Contains(steps, Flattened(Read("work-execution.md")), StringComparison.Ordinal);
 
         // And the order the page states is the order the scan runs them in.
         var scan = File.ReadAllText(Path.Combine(SourceDirectory(), "Dispatch", "ScanRunner.cs"));
-        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<SearchPoll,", "<Responder,", "<BounceStep,", "<ReserveCounter,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
+        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<SearchPoll,", "<Responder,", "<BounceStep,", "<DeferredReads,", "<ReserveCounter,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
             .Select(step => scan.IndexOf(step, StringComparison.Ordinal))
             .ToList();
         Assert.All(order, at => Assert.True(at >= 0));
@@ -148,7 +148,7 @@ public partial class InboundSyncDocTests
         var codes = typeof(BounceSkipCodes).GetFields().Select(field => (string)field.GetRawConstantValue()!).ToList();
         var start = page.IndexOf("**Bounce**", StringComparison.Ordinal);
         Assert.True(start >= 0, "The page has no paragraph on the bounce step.");
-        var section = page[start..page.IndexOf("## 2.", start, StringComparison.Ordinal)];
+        var section = page[start..page.IndexOf("**Deferred**", start, StringComparison.Ordinal)];
 
         Assert.Equal(2, codes.Count);
         Assert.All(codes, code => Assert.Contains($"| `{code}` |", section, StringComparison.Ordinal));
@@ -160,6 +160,49 @@ public partial class InboundSyncDocTests
         Assert.Equal(1, BounceStep.BelowResponders);
         Assert.Contains("one below `Responder:Priority`", section, StringComparison.Ordinal);
         Assert.Contains("A paused campaign's bounces wait, and so do the reads they ask for", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The deferred read step's paragraph: every reason it logs is a row of its table, and only those; the numbers it runs
+    /// by are the step's own; and the settings it reads are published with the defaults and ranges the validator holds.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_deferred_read_step_s_codes_numbers_and_settings_are_the_step_s_own()
+    {
+        var page = Flattened(Read("inbound-sync.md"));
+        var codes = typeof(DeferredReadSkipCodes).GetFields().Select(field => (string)field.GetRawConstantValue()!).ToList();
+        var start = page.IndexOf("**Deferred**", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The page has no paragraph on the deferred read step.");
+        var section = page[start..page.IndexOf("## 2.", start, StringComparison.Ordinal)];
+        var defaults = new DispatcherOptions();
+
+        Assert.Equal([DeferredReadSkipCodes.NotRouted], codes);
+        Assert.All(codes, code => Assert.Contains($"| `{code}` |", section, StringComparison.Ordinal));
+        Assert.Equal(codes.Count, Regex.Matches(section, @"\| `[a-z_]+` \|").Count);
+        Assert.Contains($"`Dispatcher:DeferredReadGraceSeconds` ago ({defaults.DeferredReadGraceSeconds}, a quarter of an hour, by default)", section, StringComparison.Ordinal);
+        Assert.Contains($"no more than {DeferredReads.LookBack.TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
+        Assert.Contains($"and at {DeferredReads.MostReads} at most", section, StringComparison.Ordinal);
+        Assert.Contains($"At most {DeferredReads.OpenPerCampaign} reads the runtime made are open in a campaign at once", section, StringComparison.Ordinal);
+        Assert.Contains($"its reason \"{DeferredReads.Reason}\"", section, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromMinutes(1), DeferredReads.Cadence);
+        Assert.Contains("at most once a minute", section, StringComparison.Ordinal);
+        Assert.Contains("a paused campaign's reads would wait, so none is made there until it is live again", section, StringComparison.Ordinal);
+        Assert.Equal((3_600, 86_400, 604_800), (defaults.DeferredReadFirstWaitSeconds, defaults.DeferredReadWaitSeconds, defaults.DeferredReadOverdueSeconds));
+        Assert.Contains("`Dispatcher:DeferredReadFirstWaitSeconds` (an hour)", section, StringComparison.Ordinal);
+        Assert.Contains("`Dispatcher:DeferredReadWaitSeconds` (a day)", section, StringComparison.Ordinal);
+        Assert.Contains("`Dispatcher:DeferredReadOverdueSeconds` (a week)", section, StringComparison.Ordinal);
+        Assert.Contains($"`{JournalKinds.MessageUnsentObserved}` with the state `overdue`", section, StringComparison.Ordinal);
+
+        var contract = Flattened(Read("work-execution.md"));
+        var seconds = $"{DispatcherOptions.MinimumDeferredReadSeconds}..{DispatcherOptions.MaximumDeferredReadSeconds}";
+        Assert.Contains($"| `Dispatcher:DeferredReadGraceSeconds` | `{defaults.DeferredReadGraceSeconds}` | {seconds} |", contract, StringComparison.Ordinal);
+        Assert.Contains($"| `Dispatcher:DeferredReadFirstWaitSeconds` | `{defaults.DeferredReadFirstWaitSeconds}` | {seconds} |", contract, StringComparison.Ordinal);
+        Assert.Contains($"| `Dispatcher:DeferredReadWaitSeconds` | `{defaults.DeferredReadWaitSeconds}` | {seconds} |", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            $"| `Dispatcher:DeferredReadOverdueSeconds` | `{defaults.DeferredReadOverdueSeconds}` | {DispatcherOptions.MinimumDeferredReadOverdueSeconds}..{DispatcherOptions.MaximumDeferredReadOverdueSeconds} |",
+            contract,
+            StringComparison.Ordinal);
     }
 
     [Fact]

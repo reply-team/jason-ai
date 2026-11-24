@@ -40,6 +40,7 @@ public static class DispatcherModule
             .AddScoped<SearchPoll>()
             .AddScoped<Responder>()
             .AddScoped<BounceStep>()
+            .AddScoped<DeferredReads>()
             .AddScoped<ReserveCounter>()
             .AddScoped<Summoner>()
             .AddScoped<Resumer>()
@@ -143,6 +144,7 @@ public static class DispatcherModule
         services.AddSingleton<InboundSkips>();
         services.AddSingleton<ResponderSkips>();
         services.AddSingleton<BounceSkips>();
+        services.AddSingleton<DeferredReadSkips>();
         services.AddSingleton<ScanRunner>();
         return services.AddHostedService<DispatcherService>();
     }

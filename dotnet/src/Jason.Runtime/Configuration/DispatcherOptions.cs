@@ -124,6 +124,46 @@ public sealed class DispatcherOptions
     /// </summary>
     public int SearchHeldStallSeconds { get; set; } = 604_800;
 
+    /// <summary>The shortest grace and wait of a deferred send's reads: a minute, as the other cadences.</summary>
+    public const int MinimumDeferredReadSeconds = 60;
+
+    /// <summary>The longest grace and wait of a deferred send's reads: a day.</summary>
+    public const int MaximumDeferredReadSeconds = 86_400;
+
+    /// <summary>The soonest a deferred send may be said overdue after its moment: an hour.</summary>
+    public const int MinimumDeferredReadOverdueSeconds = 3_600;
+
+    /// <summary>
+    /// The latest a deferred send may be said overdue after its moment: two weeks, so its last read, a wait after the read
+    /// before it, comes well inside the thirty days a moment is read back to.
+    /// </summary>
+    public const int MaximumDeferredReadOverdueSeconds = 1_209_600;
+
+    /// <summary>
+    /// 60..86400; how long after a deferred send's moment its first read is due: a provider sends at the moment and needs a
+    /// few minutes for it. Fifteen minutes unless set.
+    /// </summary>
+    public int DeferredReadGraceSeconds { get; set; } = 900;
+
+    /// <summary>
+    /// 60..86400; how long after the first read of a deferred send ends, where it did not say the send went, failed or was
+    /// cancelled, the second is due. An hour unless set.
+    /// </summary>
+    public int DeferredReadFirstWaitSeconds { get; set; } = 3_600;
+
+    /// <summary>
+    /// 60..86400; how long after each later read of a deferred send ends, where it did not say what became of the send, the
+    /// next is due: a provider may carry a send it could not make to its next day. A day unless set.
+    /// </summary>
+    public int DeferredReadWaitSeconds { get; set; } = 86_400;
+
+    /// <summary>
+    /// 3600..1209600; how long after its moment a deferred send is read: the first read that ends after it is the last, and
+    /// where no read has said the send went, failed or was cancelled, the send is said overdue. A week unless set: a letter
+    /// waiting at a provider's limit for days is not yet lost. Refused beyond what the nine reads of a send reach.
+    /// </summary>
+    public int DeferredReadOverdueSeconds { get; set; } = 604_800;
+
     public AiRoleDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 
     /// <summary>

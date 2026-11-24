@@ -1,0 +1,11 @@
+{
+  "kind": "message_unsent_observed",
+  "version": 1,
+  "case": "a read of a deferred send found it was cancelled at the provider before it went",
+  "body": {
+    "key": "wi_01JC0000000000000000000002",
+    "old": null,
+    "new": { "plugin": "example-mail", "reference": "snd-55102", "channel": "linkedin", "state": "cancelled", "failure_code": null, "moment": "2026-11-20T09:00:00.000Z", "cancelled_at": "2026-11-19T17:30:00.000Z", "read_work_item": "wi_01JC000000000000000000000E" }
+  },
+  "expect": "valid"
+}

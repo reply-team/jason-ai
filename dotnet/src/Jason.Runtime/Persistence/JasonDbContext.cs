@@ -794,6 +794,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("kind = 'message_bounce_observed'");
 
+            // A send seen not to have gone is said once, under the key of the work item that made it, in an index of its own:
+            // the read that sees it looks the key up first, and a second line, two reads of one send deciding it at once, is
+            // refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_unsent")
+                .IsUnique()
+                .HasFilter("kind = 'message_unsent_observed'");
+
             // A search ends once, under the key of its work item. The search's row is marked in the same change set, and a
             // second line — two writers deciding the same ending at once — is refused here.
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_searches_ended")

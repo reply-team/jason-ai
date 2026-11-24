@@ -287,6 +287,45 @@ public class OptionsValidationTests
             null, new DispatcherOptions { SearchCadenceSeconds = 86_400, SearchStallSeconds = 86_400, SearchHeldCadenceSeconds = 86_400, SearchHeldStallSeconds = 86_400 }).Succeeded);
     }
 
+    /// <summary>
+    /// A deferred send is first read fifteen minutes after its moment, again an hour after that read ends where it did not
+    /// say what became of the send, then a day after each later one, and said overdue a week after its moment, unless set:
+    /// the grace and each wait are a minute to a day, the week an hour to two weeks. A week the nine reads of a send would
+    /// not reach is refused, since its last read would end before the send could be said overdue. Nothing is clamped.
+    /// </summary>
+    [Theory]
+    [InlineData(59, 3_600, 86_400, 604_800, "Dispatcher:DeferredReadGraceSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(86_401, 3_600, 86_400, 604_800, "Dispatcher:DeferredReadGraceSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(900, 59, 86_400, 604_800, "Dispatcher:DeferredReadFirstWaitSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(900, 86_401, 86_400, 604_800, "Dispatcher:DeferredReadFirstWaitSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(900, 3_600, 59, 604_800, "Dispatcher:DeferredReadWaitSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(900, 3_600, 86_401, 604_800, "Dispatcher:DeferredReadWaitSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(900, 3_600, 86_400, 3_599, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 1209600; got 3599.")]
+    [InlineData(900, 3_600, 86_400, 1_209_601, "Dispatcher:DeferredReadOverdueSeconds must be between 3600 and 1209600; got 1209601.")]
+    [InlineData(900, 3_600, 43_200, 604_800, "Dispatcher:DeferredReadOverdueSeconds (604800) is beyond what the 9 reads of a send reach, 306900 seconds after its moment at the soonest: its last read would end before it could be said overdue.")]
+    public void A_deferred_send_is_read_after_a_grace_then_after_waits_until_it_is_overdue(int grace, int firstWait, int wait, int overdue, string refusal)
+    {
+        var defaults = new DispatcherOptions();
+        Assert.Equal((900, 3_600, 86_400, 604_800), (defaults.DeferredReadGraceSeconds, defaults.DeferredReadFirstWaitSeconds, defaults.DeferredReadWaitSeconds, defaults.DeferredReadOverdueSeconds));
+        Assert.True(new DispatcherOptionsValidator().Validate(null, defaults).Succeeded);
+
+        var result = new DispatcherOptionsValidator().Validate(
+            null,
+            new DispatcherOptions { DeferredReadGraceSeconds = grace, DeferredReadFirstWaitSeconds = firstWait, DeferredReadWaitSeconds = wait, DeferredReadOverdueSeconds = overdue });
+
+        Assert.True(result.Failed);
+        Assert.Equal([refusal], result.Failures!);
+
+        // The edges: the shortest of each, whose nine reads reach no hour, and the same with a wait they reach it by; the
+        // longest of each with the furthest week they reach.
+        Assert.True(new DispatcherOptionsValidator().Validate(
+            null, new DispatcherOptions { DeferredReadGraceSeconds = 60, DeferredReadFirstWaitSeconds = 60, DeferredReadWaitSeconds = 60, DeferredReadOverdueSeconds = 3_600 }).Failed);
+        Assert.True(new DispatcherOptionsValidator().Validate(
+            null, new DispatcherOptions { DeferredReadGraceSeconds = 60, DeferredReadFirstWaitSeconds = 60, DeferredReadWaitSeconds = 500, DeferredReadOverdueSeconds = 3_600 }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(
+            null, new DispatcherOptions { DeferredReadGraceSeconds = 86_400, DeferredReadFirstWaitSeconds = 86_400, DeferredReadWaitSeconds = 86_400, DeferredReadOverdueSeconds = 777_600 }).Succeeded);
+    }
+
     /// <summary>A block is tried again every fifteen minutes unless set, and a cadence is a minute to a day; nothing outside is clamped.</summary>
     [Theory]
     [InlineData(59)]

@@ -1,0 +1,11 @@
+{
+  "kind": "message_unsent_observed",
+  "version": 1,
+  "case": "a read of a deferred send found the provider took it and it did not go, with the provider's one word for why",
+  "body": {
+    "key": "wi_01JC0000000000000000000002",
+    "old": null,
+    "new": { "plugin": "example-mail", "reference": "snd-55102", "channel": "email", "state": "failed", "failure_code": "mailbox_disconnected", "moment": "2026-11-20T09:00:00.000Z", "cancelled_at": null, "read_work_item": "wi_01JC000000000000000000000E" }
+  },
+  "expect": "valid"
+}

@@ -21,7 +21,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The migrations the tree holds after <see cref="GoingBackToNewestMigration"/>, in order: each is newer than 0.49, and
-    /// a migration added in 0.50 is appended here. Where there is one, data a release after 0.49 opened is data the section's
+    /// a migration added in 0.50 or later is appended here. Where there is one, data a release after 0.49 opened is data the section's
     /// steps do not take back, and the section says so.
     /// </summary>
     private static readonly string[] MigrationsAfter049 =
@@ -29,6 +29,7 @@ public partial class PageClaimsTests
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
         "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads",
     ];
 
     /// <summary>
