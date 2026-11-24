@@ -1577,12 +1577,13 @@ public partial class InteractiveSkillTests
     public void The_session_skills_say_that_a_letter_to_a_person_who_has_one_goes_into_its_thread()
     {
         var session = Flattened("managed-campaign-work");
-        Assert.Contains("a letter to a person who already has one in the campaign goes into that letter's thread unless it says `\"follows\": \"new_thread\"`", session, StringComparison.Ordinal);
+        Assert.Contains("an email to a person who already has one in the campaign goes into that letter's thread, where the provider can place it there, unless it says `\"follows\": \"new_thread\"`; otherwise it goes as a letter of its own", session, StringComparison.Ordinal);
 
         var approvals = Flattened("approvals-and-questions");
         Assert.Contains("a message to the same person that is no answer in the thread they wrote in, a follow-up or a letter of its own, is covered too", approvals, StringComparison.Ordinal);
 
         var planner = Flattened("planner-in-session");
+        Assert.Contains("so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed", planner, StringComparison.Ordinal);
         Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
         Assert.Contains("`wait_on` naming the first letter's work item", planner, StringComparison.Ordinal);
     }

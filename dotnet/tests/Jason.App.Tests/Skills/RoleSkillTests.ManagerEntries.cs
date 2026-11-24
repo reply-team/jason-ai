@@ -568,7 +568,7 @@ public partial class RoleSkillTests
     {
         var deep = FlattenedEntry("manager", "deep_review");
         Assert.Contains("**A follow-up goes under the first letter, as a reply.**", deep, StringComparison.Ordinal);
-        Assert.Contains("the subject is `Re: ` and the first letter's subject", deep, StringComparison.Ordinal);
+        Assert.Contains("the subject is `Re: ` and the subject of the letter it follows", deep, StringComparison.Ordinal);
         Assert.Contains("`\"follows\": \"new_thread\"` only where the plan says this touch opens a thread of its own", deep, StringComparison.Ordinal);
         Assert.Contains("LinkedIn messages follow nothing", deep, StringComparison.Ordinal);
         Assert.Contains("Never send a follow-up as a `conversation.reply`", deep, StringComparison.Ordinal);
@@ -585,7 +585,7 @@ public partial class RoleSkillTests
 
         var critic = Flattened("critic");
         Assert.Contains("An email `message.send` that does not say `\"follows\": \"new_thread\"` goes as a reply in the thread of the line's first letter", critic, StringComparison.Ordinal);
-        Assert.Contains("judge the text as a reply to it", critic, StringComparison.Ordinal);
+        Assert.Contains("Judge the text as a reply to it", critic, StringComparison.Ordinal);
         Assert.Contains("it must also read whole", critic, StringComparison.Ordinal);
 
         Assert.Contains("the thread of the line's first letter (or of a later one that opened a thread of its own with `new_thread`)", critic, StringComparison.Ordinal);
@@ -593,6 +593,9 @@ public partial class RoleSkillTests
         var read = Assert.Single(SkillPack.PrintedCommands(SkillPack.Find("critic").File), line => line.StartsWith("jason workitem list ", StringComparison.Ordinal));
         Assert.Contains("--contact cnt_", read, StringComparison.Ordinal);
         Assert.DoesNotContain("--operation", read, StringComparison.Ordinal);
+
+        Assert.Contains("that succeeded, follows nothing and was not taken back; the approval card names the letter the runtime chose, which is the one to read", critic, StringComparison.Ordinal);
+        Assert.Contains("so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed; where it has not, the follow-up goes as a letter of its own", Flattened("planner"), StringComparison.Ordinal);
 
         var planner = Flattened("planner");
         Assert.Contains("The follow-ups go under the first letter, as replies", planner, StringComparison.Ordinal);
