@@ -67,9 +67,9 @@ public class DeferredReadsTests
     }
 
     /// <summary>
-    /// A send whose moment is inside the grace waits for it; one whose moment passed more than thirty days ago, one handed
-    /// to the provider more than thirty days ago whatever its moment, one whose moment is still to come, one with no moment
-    /// known and one the provider cannot cancel are not read at all. Once the grace has passed, the first is read.
+    /// A send whose moment is inside the grace waits for it; one whose moment passed more than thirty days ago, one whose
+    /// moment is still to come, one with no moment known and one the provider cannot cancel are not read at all. Once the
+    /// grace has passed, the first is read.
     /// </summary>
     [Fact]
     public async Task A_send_inside_its_grace_waits_and_one_beyond_thirty_days_or_not_held_is_never_read()
@@ -78,7 +78,6 @@ public class DeferredReadsTests
         var (campaign, ines) = await SceneAsync(harness);
         var inside = await SendAsync(harness, campaign, ines, Noon.AddMinutes(-10));
         await SendAsync(harness, campaign, ines, Noon.AddDays(-30).AddMinutes(-1));
-        await SendAsync(harness, campaign, ines, Noon.AddDays(-29));
         await SendAsync(harness, campaign, ines, Noon.AddHours(1));
         await SendAsync(harness, campaign, ines, moment: null);
         await SendAsync(harness, campaign, ines, Noon.AddHours(-2), cancelable: false);
@@ -91,6 +90,25 @@ public class DeferredReadsTests
         harness.Clock.Advance(TimeSpan.FromMinutes(1));
         Assert.Equal(1, await harness.DeferredReadAsync(Ct));
         Assert.Equal([inside], await ReadSendsAsync(harness));
+    }
+
+    /// <summary>
+    /// The look-back is on the moment: a send handed over 35 days ago for a moment 5 days ago is read, and so is one handed
+    /// over a minute inside the horizon before the look-back's start; one handed over a minute before that is left out by
+    /// its own column, whatever its moment.
+    /// </summary>
+    [Fact]
+    public async Task A_send_handed_over_long_before_a_moment_inside_the_look_back_is_read_within_the_horizon()
+    {
+        using var harness = Routed();
+        var (campaign, ines) = await SceneAsync(harness);
+        var edge = Noon - DeferredReads.LookBack - DeferredReads.Horizon;
+        var month = await SendAsync(harness, campaign, ines, Noon.AddDays(-5), taken: Noon.AddDays(-35));
+        var year = await SendAsync(harness, campaign, ines, Noon.AddDays(-5), taken: edge.AddMinutes(1));
+        await SendAsync(harness, campaign, ines, Noon.AddDays(-5), taken: edge.AddMinutes(-1));
+
+        Assert.Equal(2, await harness.DeferredReadAsync(Ct));
+        Assert.Equal([month, year], await ReadSendsAsync(harness));
     }
 
     /// <summary>
@@ -356,7 +374,7 @@ public class DeferredReadsTests
 
         Assert.Equal(0, await harness.DeferredReadAsync(Ct));
         Assert.Empty(await ReadSendsAsync(harness));
-        Assert.Contains(harness.Logs.Warnings, line => line.StartsWith("The deferred read step could not read the deferred sends", StringComparison.Ordinal));
+        Assert.Contains("The scan's deferred step skipped its run, 1 in a row: it could not read the deferred sends, and reads them again at its next run; the rest of the scan continues without it", harness.Logs.Warnings);
         Assert.False(harness.Logs.Mentions("stored text"));
 
         await using (var db = harness.Open())
@@ -400,6 +418,29 @@ public class DeferredReadsTests
         Assert.False(DeferredReads.Due(send, new MadeReads(3, 3, span), said: true, options, far));
     }
 
+    /// <summary>
+    /// A read that failed never brings the next one sooner than its wait: after a first read that failed, the second is due
+    /// the first wait after it ended, and after a later one the daily wait, exactly as after a read that succeeded.
+    /// </summary>
+    [Fact]
+    public void A_read_that_failed_never_brings_the_next_sooner_than_its_wait()
+    {
+        var options = new DispatcherOptions();
+        var moment = new DateTimeOffset(Noon);
+        var send = new HeldSend("cmp_x", "wi_x", "message.send", moment, Mailer, null);
+        var ended = moment.AddDays(2);
+        var pairs = new[] { (Failed: new MadeReads(0, 1, ended), Succeeded: new MadeReads(1, 1, ended)), (Failed: new MadeReads(2, 5, ended), Succeeded: new MadeReads(3, 5, ended)) };
+        foreach (var (failed, succeeded) in pairs)
+        {
+            var wait = failed.Ended == 1 ? options.DeferredReadFirstWaitSeconds : options.DeferredReadWaitSeconds;
+            foreach (var at in new[] { ended, ended.AddSeconds(wait - 1), ended.AddSeconds(wait), ended.AddSeconds(wait + 1) })
+            {
+                Assert.Equal(at >= ended.AddSeconds(wait), DeferredReads.Due(send, failed, said: false, options, at));
+                Assert.Equal(DeferredReads.Due(send, succeeded, said: false, options, at), DeferredReads.Due(send, failed, said: false, options, at));
+            }
+        }
+    }
+
     /// <summary>A whole dispatcher's composition with a plugin that sends, cancels and reads sends, routed by default under one account.</summary>
     private static DispatchHarness Routed(Action<DispatcherOptions>? dispatcher = null)
     {
@@ -437,15 +478,16 @@ public class DeferredReadsTests
     /// <summary>
     /// A send of the campaign to the person that the provider took with its reference, three days before its moment, for
     /// <paramref name="moment"/> — named by its result, or by its arguments' <c>send_after</c> where
-    /// <paramref name="named"/> — or for none, saying it can cancel it unless <paramref name="cancelable"/> is false.
+    /// <paramref name="named"/> — or for none, saying it can cancel it unless <paramref name="cancelable"/> is false; handed
+    /// over at <paramref name="taken"/> where given.
     /// </summary>
     internal static async Task<string> SendAsync(
-        DispatchHarness harness, Campaign campaign, Contact contact, DateTime? moment, string? follows = null, bool named = false, bool cancelable = true)
+        DispatchHarness harness, Campaign campaign, Contact contact, DateTime? moment, string? follows = null, bool named = false, bool cancelable = true, DateTime? taken = null)
     {
         await using var db = harness.Open();
         db.Attach(campaign);
         db.Attach(contact);
-        var taken = (moment ?? Noon).AddDays(-3);
+        var handed = taken ?? (moment ?? Noon).AddDays(-3);
         var arguments = new JsonObject { ["channel"] = "email" };
         if (named && moment is { } after)
         {
@@ -458,10 +500,10 @@ public class DeferredReadsTests
         }
 
         var reference = "send-" + PublicId.New("ref")[^8..];
-        var send = WorkItemFactory.NewProviderOp(campaign, "message.send", taken);
+        var send = WorkItemFactory.NewProviderOp(campaign, "message.send", handed);
         send.Contact = contact;
         send.Status = WorkItemStatus.Succeeded;
-        send.FinishedAt = taken;
+        send.FinishedAt = handed;
         send.Context = new JsonObject { [WorkItemService.InputKey] = arguments };
         send.Result = new JsonObject
         {
@@ -473,8 +515,8 @@ public class DeferredReadsTests
                 ["cancelable"] = cancelable,
             }),
         };
-        var attempt = WorkItemFactory.NewAttempt(send, 1, AttemptStatus.Succeeded, taken);
-        attempt.FinishedAt = taken;
+        var attempt = WorkItemFactory.NewAttempt(send, 1, AttemptStatus.Succeeded, handed);
+        attempt.FinishedAt = handed;
         attempt.Provenance = new AttemptProvenanceDto(
             Mailer, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion, "message.send", 1, null, null,
             RouteScope.GlobalDefault, InboundSyncHarvestTests.RoutedIdentity,

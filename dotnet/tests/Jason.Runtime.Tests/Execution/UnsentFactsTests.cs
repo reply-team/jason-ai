@@ -32,10 +32,12 @@ public class UnsentFactsTests
     /// <summary>
     /// A read that finds the send failed, or cancelled at the provider, says so once about the send, keyed by it, with the
     /// plugin, the reference, the channel, the state, the provider's one word, the moment, when it was cancelled and the
-    /// read: the line its document publishes. A second read that finds the same says nothing more.
+    /// read: the line its document publishes. A send that failed with no code of the provider's is said with none. A second
+    /// read that finds the same says nothing more.
     /// </summary>
     [Theory]
     [InlineData("failed", "mailbox_disconnected", null)]
+    [InlineData("failed", null, null)]
     [InlineData("cancelled", null, "2026-11-20T08:30:00Z")]
     public async Task A_read_that_finds_the_send_did_not_go_says_it_once_about_the_send(string state, string? code, string? cancelledAt)
     {

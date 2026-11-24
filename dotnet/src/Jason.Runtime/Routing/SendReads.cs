@@ -43,6 +43,13 @@ internal static class SendReads
           AND json_extract(w.context_json, '$.input.send') IN (SELECT value FROM json_each({2}))
         """;
 
+    /// <summary>
+    /// Whether a finished read the runtime made of a send counts toward the most it makes of it
+    /// (<see cref="Dispatch.DeferredReads.MostReads"/>): one that succeeded does, whichever step made it; one that failed
+    /// spaces the next all the same and counts for none. The one place the rule is written.
+    /// </summary>
+    private static bool Counts(bool succeeded) => succeeded;
+
     /// <summary>An open read the runtime made in the campaign: created by the system and not finished.</summary>
     private static Expression<Func<WorkItem, bool>> OpenIn(int campaignId) =>
         item => item.CampaignId == campaignId
@@ -93,7 +100,8 @@ internal static class SendReads
 
     /// <summary>
     /// The finished reads the runtime made of each send named that ended at or after the moment given for it: how many of
-    /// them succeeded, how many ended, whatever they answered, and when the latest ended. A read that ended before the
+    /// them count toward the most it makes (<see cref="Counts"/>), how many ended, whatever they answered, and when the
+    /// latest ended. A read that ended before the
     /// send's moment could only find it held, so it is not one of the reads of a send whose moment has passed. A send no
     /// such read has finished for is absent. <paramref name="except"/>, where given, is a read left out, the one whose own
     /// end is being decided.
@@ -119,16 +127,16 @@ internal static class SendReads
             .GroupBy(row => row.Send, StringComparer.Ordinal)
             .ToDictionary(
                 reads => reads.Key,
-                reads => new MadeReads(reads.Count(read => read.Succeeded), reads.Count(), reads.Max(read => read.Ended)),
+                reads => new MadeReads(reads.Count(read => Counts(read.Succeeded)), reads.Count(), reads.Max(read => read.Ended)),
                 StringComparer.Ordinal);
     }
 }
 
 /// <summary>
-/// The finished reads the runtime made of one send: how many succeeded, how many ended whatever they answered, and when
-/// the latest of them ended.
+/// The finished reads the runtime made of one send: how many count toward the most it makes of it, how many ended
+/// whatever they answered, and when the latest of them ended.
 /// </summary>
-internal sealed record MadeReads(int Succeeded, int Ended, DateTimeOffset LastEnded);
+internal sealed record MadeReads(int Counted, int Ended, DateTimeOffset LastEnded);
 
 /// <summary>One finished read: the send it names, its end as the database wrote it, and 1 where it succeeded.</summary>
 internal sealed record MadeReadRow(string Send, string Ended, int Succeeded);

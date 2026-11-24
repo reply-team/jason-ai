@@ -145,14 +145,20 @@ internal static class HeldSends
     }
 
     /// <summary>
-    /// Every send the definition holds whose moment is no later than <paramref name="passedBy"/> and, where given, which
-    /// was handed over, and whose moment is, no earlier than <paramref name="since"/>, and of which nothing yet says what
-    /// became of it, in campaign order: the deferred sends whose moment has passed. <paramref name="campaignId"/> and
-    /// <paramref name="send"/>, where given, narrow it to one campaign's row and one send.
+    /// Every send the definition holds whose moment is no later than <paramref name="passedBy"/> and, where given, no
+    /// earlier than <paramref name="since"/>, handed over, where given, no earlier than <paramref name="handedSince"/>, and
+    /// of which nothing yet says what became of it, in campaign order: the deferred sends whose moment has passed.
+    /// <paramref name="campaignId"/> and <paramref name="send"/>, where given, narrow it to one campaign's row and one send.
     /// </summary>
     public static Task<IReadOnlyList<HeldSend>> ReadPassedAsync(
-        JasonDbContext db, DateTimeOffset passedBy, DateTimeOffset? since, CancellationToken ct, int? campaignId = null, string? send = null) =>
-        ReadAsync(db, HeldMoment.Passed, passedBy, since, campaignId, contactIds: null, send, ct);
+        JasonDbContext db,
+        DateTimeOffset passedBy,
+        DateTimeOffset? since,
+        CancellationToken ct,
+        int? campaignId = null,
+        string? send = null,
+        DateTimeOffset? handedSince = null) =>
+        ReadAsync(db, HeldMoment.Passed, passedBy, since, campaignId, contactIds: null, send, ct, handedSince);
 
     /// <summary>
     /// The send of the campaign's row named, where the definition covers it, at any moment, and no cancel of the campaign's
@@ -173,14 +179,15 @@ internal static class HeldSends
         int? campaignId,
         IReadOnlyCollection<int>? contactIds,
         string? send,
-        CancellationToken ct)
+        CancellationToken ct,
+        DateTimeOffset? handedSince = null)
     {
         ArgumentNullException.ThrowIfNull(db);
 
         object campaign = campaignId is { } row ? row : DBNull.Value;
         object people = contactIds is null ? DBNull.Value : JsonSerializer.Serialize(contactIds);
         object from = since is { } earliest ? Moment(earliest) : DBNull.Value;
-        object handed = since is { } handedSince ? handedSince.UtcDateTime : DBNull.Value;
+        object handed = handedSince is { } earliestHanded ? earliestHanded.UtcDateTime : DBNull.Value;
         object one = send is null ? DBNull.Value : send;
         var rows = await db.Database
             .SqlQueryRaw<HeldSendRow>(

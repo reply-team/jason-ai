@@ -327,6 +327,30 @@ public class OptionsValidationTests
             null, new DispatcherOptions { DeferredReadGraceSeconds = 86_400, DeferredReadFirstWaitSeconds = 86_400, DeferredReadWaitSeconds = 86_400, DeferredReadOverdueSeconds = 777_600 }).Succeeded);
     }
 
+    /// <summary>
+    /// The overdue span's range, the nine reads and the validator's cross-check agree: the longest span the range admits is
+    /// exactly what nine reads reach with the grace and every wait at their longest, the validator takes it there and
+    /// refuses a second more, and the shipped span is inside what the shipped waits reach.
+    /// </summary>
+    [Fact]
+    public void The_overdue_span_s_range_the_nine_reads_and_the_cross_check_agree()
+    {
+        var longest = new DispatcherOptions
+        {
+            DeferredReadGraceSeconds = DispatcherOptions.MaximumDeferredReadSeconds,
+            DeferredReadFirstWaitSeconds = DispatcherOptions.MaximumDeferredReadSeconds,
+            DeferredReadWaitSeconds = DispatcherOptions.MaximumDeferredReadSeconds,
+            DeferredReadOverdueSeconds = DispatcherOptions.MaximumDeferredReadOverdueSeconds,
+        };
+
+        Assert.Equal((long)DispatcherOptions.MaximumDeferredReadOverdueSeconds, Jason.Runtime.Dispatch.DeferredReads.Reached(longest));
+        Assert.True(new DispatcherOptionsValidator().Validate(null, longest).Succeeded);
+        longest.DeferredReadOverdueSeconds++;
+        Assert.True(new DispatcherOptionsValidator().Validate(null, longest).Failed);
+        var shipped = new DispatcherOptions();
+        Assert.True(Jason.Runtime.Dispatch.DeferredReads.Reached(shipped) >= shipped.DeferredReadOverdueSeconds);
+    }
+
     /// <summary>A block is tried again every fifteen minutes unless set, and a cadence is a minute to a day; nothing outside is clamped.</summary>
     [Theory]
     [InlineData(59)]

@@ -193,6 +193,16 @@ public partial class InboundSyncDocTests
         Assert.Contains("`Dispatcher:DeferredReadWaitSeconds` (a day)", section, StringComparison.Ordinal);
         Assert.Contains("`Dispatcher:DeferredReadOverdueSeconds` (a week)", section, StringComparison.Ordinal);
         Assert.Contains($"`{JournalKinds.MessageUnsentObserved}` with the state `overdue`", section, StringComparison.Ordinal);
+        var shortest = new DispatcherOptions
+        {
+            DeferredReadGraceSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
+            DeferredReadFirstWaitSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
+            DeferredReadWaitSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
+        };
+        Assert.Equal((31, 43_200), (DeferredReads.MostInAll(defaults), DeferredReads.MostInAll(shortest)));
+        Assert.Contains($"one send is read {DeferredReads.MostInAll(defaults)} times at the most with the shipped settings", section, StringComparison.Ordinal);
+        Assert.Contains($"as many as {DeferredReads.MostInAll(shortest).ToString(CultureInfo.InvariantCulture)}", section, StringComparison.Ordinal);
+        Assert.Contains($"the sends handed over more than {(DeferredReads.LookBack + DeferredReads.Horizon).TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
 
         var contract = Flattened(Read("work-execution.md"));
         var seconds = $"{DispatcherOptions.MinimumDeferredReadSeconds}..{DispatcherOptions.MaximumDeferredReadSeconds}";

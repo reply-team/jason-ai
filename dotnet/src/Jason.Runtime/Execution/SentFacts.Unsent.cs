@@ -144,7 +144,7 @@ public sealed partial class SentFacts
 
         var made = (await SendReads.MadeAsync(db, read.CampaignId, new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal) { [sendId] = send.Moment }, ct, except: read.PublicId)
             .ConfigureAwait(false)).GetValueOrDefault(sendId);
-        var count = made?.Succeeded ?? 0;
+        var count = made?.Counted ?? 0;
         var last = made?.LastEnded;
         if (read.CreatedByType == ActorType.System)
         {

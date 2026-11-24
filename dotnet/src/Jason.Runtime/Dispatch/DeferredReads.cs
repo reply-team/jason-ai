@@ -19,7 +19,8 @@ namespace Jason.Runtime.Dispatch;
 /// The step of a scan right after the bounce step: a deferred send whose moment has passed is read, to learn what became
 /// of it. Its candidates are the one definition of a send the provider holds (<see cref="HeldSends"/>) with the moment
 /// test turned round: a send the definition covers whose moment passed at least <c>Dispatcher:DeferredReadGraceSeconds</c>
-/// ago, handed over and due no more than <see cref="LookBack"/> ago, of which nothing yet says what became of it — no
+/// ago and no more than <see cref="LookBack"/> ago, handed over no more than <see cref="Horizon"/> before that, of which
+/// nothing yet says what became of it — no
 /// succeeded cancel, no answer that the provider holds no such send, no final read, whoever made it. For each it queues a
 /// read (<c>message.status</c>) where the send ran, as the dispatcher, unless one the runtime made is open already; the
 /// first once the grace has passed, the second <c>Dispatcher:DeferredReadFirstWaitSeconds</c> after the first ended, and
@@ -39,7 +40,8 @@ namespace Jason.Runtime.Dispatch;
 /// campaign while <see cref="OpenPerCampaign"/> reads the runtime made are open there, whichever step made them, the
 /// oldest sends first. A read no route takes where the send ran is not made, said once per campaign, and asked again at
 /// the next scan. The candidates are read at most once every <see cref="Cadence"/>: no wait of the reads is shorter. A
-/// read of them that fails, a stored value it cannot parse among them, skips the step's run and never the scan.
+/// read of them that fails, a stored value it cannot parse among them, skips the step's run and never the scan, said by the
+/// step's name and how many runs in a row it skipped.
 /// </para>
 /// </summary>
 public sealed class DeferredReads(
@@ -62,6 +64,17 @@ public sealed class DeferredReads(
 
     /// <summary>How far back a moment is read: a send whose moment passed longer ago than this is never read.</summary>
     public static TimeSpan LookBack { get; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How long before the look-back's start a send may have been handed over and still be read: a year. The look-back is
+    /// on the moment; this bound lets the read leave the oldest sends out by their own column before any of their JSON is
+    /// read. The contract names no latest <c>send_after</c>, so the horizon is the runtime's own, and a send taken for a
+    /// moment more than a year after it was handed over may not be read.
+    /// </summary>
+    public static TimeSpan Horizon { get; } = TimeSpan.FromDays(365);
+
+    /// <summary>The scan's name for this step, as the pages list the steps.</summary>
+    private const string Step = "deferred";
 
     /// <summary>How often the candidates are read at most: a minute, the shortest grace or wait a setting may name.</summary>
     public static TimeSpan Cadence { get; } = TimeSpan.FromSeconds(DispatcherOptions.MinimumDeferredReadSeconds);
@@ -88,15 +101,10 @@ public sealed class DeferredReads(
         new EventId(3, nameof(Failed)),
         "The deferred read step for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
 
-    private static readonly Action<ILogger, Exception?> Unread = LoggerMessage.Define(
+    private static readonly Action<ILogger, string, int, Exception?> Unread = LoggerMessage.Define<string, int>(
         LogLevel.Warning,
         new EventId(4, nameof(Unread)),
-        "The deferred read step could not read the deferred sends; it reads them again at its next run, and the rest of the scan continues without it");
-
-    private static readonly Action<ILogger, string, Exception?> UnreadToParse = LoggerMessage.Define<string>(
-        LogLevel.Warning,
-        new EventId(4, nameof(Unread)),
-        "The deferred read step could not read the deferred sends; it reads them again at its next run, and the rest of the scan continues without it: {Failure}");
+        "The scan's {Step} step skipped its run, {Count} in a row: it could not read the deferred sends, and reads them again at its next run; the rest of the scan continues without it");
 
     /// <summary>
     /// How long after its moment the last of <see cref="MostReads"/> reads of a send ends at the soonest: the grace, the
@@ -107,6 +115,18 @@ public sealed class DeferredReads(
     {
         ArgumentNullException.ThrowIfNull(options);
         return (long)options.DeferredReadGraceSeconds + options.DeferredReadFirstWaitSeconds + ((long)(MostReads - 2) * options.DeferredReadWaitSeconds);
+    }
+
+    /// <summary>
+    /// The most reads the step makes of one send, where every read fails and none says what became of it: the first once
+    /// the grace has passed, the second a first wait after it, then one a wait, each ending at once, until the look-back
+    /// is out. With the shipped settings, 31.
+    /// </summary>
+    public static long MostInAll(DispatcherOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var rest = (long)LookBack.TotalSeconds - options.DeferredReadGraceSeconds - options.DeferredReadFirstWaitSeconds;
+        return rest < 0 ? 1 : 2 + (rest / options.DeferredReadWaitSeconds);
     }
 
     /// <summary>Queues the reads of deferred sends that are due, and answers how many it queued.</summary>
@@ -124,7 +144,9 @@ public sealed class DeferredReads(
         Dictionary<string, int> active;
         try
         {
-            passed = await HeldSends.ReadPassedAsync(db, now.AddSeconds(-options.DeferredReadGraceSeconds), now - LookBack, ct).ConfigureAwait(false);
+            passed = await HeldSends.ReadPassedAsync(db, now.AddSeconds(-options.DeferredReadGraceSeconds), now - LookBack, ct, handedSince: now - LookBack - Horizon)
+                .ConfigureAwait(false);
+            skips.Read();
             if (passed.Count == 0)
             {
                 return 0;
@@ -140,16 +162,9 @@ public sealed class DeferredReads(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The candidates are every campaign's, read in one query: a value it cannot parse in any of them, or a failure of
-            // the database, would otherwise end the scan. The run is skipped, said by what failed and never by what was read.
-            if (ParseFailure.Is(ex))
-            {
-                UnreadToParse(logger, ParseFailure.Describe(ex), null);
-            }
-            else
-            {
-                Unread(logger, ex);
-            }
-
+            // the database, would otherwise end the scan. The run is skipped, said by the step's name and how many runs in a
+            // row it skipped, never by what was read or by the failure's own words, which can quote a stored value.
+            Unread(logger, Step, skips.Unread(), null);
             db.ChangeTracker.Clear();
             return 0;
         }
@@ -201,7 +216,7 @@ public sealed class DeferredReads(
             return now >= send.Moment.AddSeconds(options.DeferredReadGraceSeconds);
         }
 
-        if (made.Succeeded >= MostReads)
+        if (made.Counted >= MostReads)
         {
             return false;
         }
@@ -327,6 +342,14 @@ public sealed class DeferredReadSkips
     private readonly Lock _gate = new();
 
     private DateTimeOffset? _read;
+
+    private int _unread;
+
+    /// <summary>A run that could not read the candidates: how many in a row, this one counted.</summary>
+    public int Unread() => Interlocked.Increment(ref _unread);
+
+    /// <summary>A run that read the candidates: the next that cannot is the first in a row again.</summary>
+    public void Read() => Interlocked.Exchange(ref _unread, 0);
 
     /// <summary>True the first time this campaign is passed over for this reason, and never again.</summary>
     public bool FirstTime(int campaign, string code) => _said.TryAdd((campaign, code), true);

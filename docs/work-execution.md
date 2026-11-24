@@ -239,8 +239,8 @@ was told of and, for a bounce of one of its people, queues a `message.status` re
 to that person the bounce could be of, at most three; the read that finds the send bounced is what records it and, for
 a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
 `system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Deferred reads, at most once a minute, the sends a
-provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, handed over and due no more than 30
-days ago, and of which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
+provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, no more than 30 days ago, and of
+which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
 the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each
 later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
 became of the send or nine have succeeded, making none in a campaign while five it made are open there. The read that
