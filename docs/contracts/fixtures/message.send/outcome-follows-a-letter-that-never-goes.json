@@ -1,0 +1,21 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a follow-up of a letter the provider cancelled or failed for good: it will never go, so there is no thread to place the message in, and nothing was sent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "follows_never_sent",
+      "message": "The letter this message follows was cancelled or failed, and will never go. Nothing was sent.",
+      "details": null,
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 4, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

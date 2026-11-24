@@ -157,6 +157,11 @@ on. Handed one with a reference, it places the message in the thread of the send
 before anything is sent, and never sends it as a new letter. A `follows` with no reference, or none, is a new letter,
 as before.
 
+A message placed in a thread goes under the subject of the letter it follows, as a reply in a thread does, so the
+`subject` its arguments carry goes only where the message is a letter of its own. An email still requires one: which of
+the two it is, the claim decides, not the caller. The provider may append a quotation of the letter followed beneath
+the text, as a mail program's reply does; the text above it is exactly the text approved.
+
 ## What to return
 
 ```json
@@ -212,6 +217,16 @@ or send an InMail.
 `insufficient_credits` is an InMail with no credits left. `sender_limit_reached` is the account's daily or weekly
 allowance spent, which one in the details; the message is proposed again once it renews. `limit_reached` is the
 provider's account full: it will hold no further contact, and the person had to be created.
+
+Four codes are a message handed a root `follows` with a reference that the provider would not place in that letter's
+thread, and none of them sends it as a letter of its own instead. `follows_not_sent_yet` is a letter that has not gone
+yet while this message would go before it: the message is attempted again, and goes into the thread once that letter
+has gone. `follows_never_sent` is a letter cancelled or failed for good, so there will be no thread. `follows_not_found`
+is a reference the provider holds no letter under that went from this sender to this person: the claim's own checks
+keep such a letter from the provider, so it says the provider's record of it and the runtime's no longer agree.
+`follows_not_placed` is a thread the provider's mailbox could not place the message in. A provider that does not offer
+replies in a thread at all answers the reserved `capability_not_offered`, naming `follows`, with nothing sent
+([a capability the provider does not offer yet](../README.md#a-capability-the-provider-does-not-offer-yet)).
 
 `sender_unavailable`, `sender_limit_reached`, `insufficient_credits` and `unauthorized` stand for an answer the plugin
 cannot read as a provider block. Where it can — the provider refused for a block and did nothing — the code is

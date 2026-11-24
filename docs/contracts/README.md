@@ -240,6 +240,10 @@ instead where it is not offered.
   create the item with `not_before` at the moment instead; it is claimed once the moment has passed and, being
   `confirm_each`, waits for a person's approval then. A refusal recorded `ambiguous` says an earlier attempt of the
   item may have reached the person: the new item is created only once the provider has said that attempt did not act.
+- `message.send` with a root `follows` that names a letter: where the provider does not offer replies in a thread, the
+  message is not sent as a letter of its own in its place. Create it again with `follows` written `new_thread` only where
+  a letter of its own is what the person wants, and say that it reaches them as a new letter, not under the one it
+  followed.
 - `message.status` and `message.cancel`: where the provider does not offer them, a send that ended `accepted` is known
   only as accepted. Say so rather than guess whether it went, and read the conversation for what the person received;
   a send that cannot be cancelled is stopped, if at all, at the provider by a person.
