@@ -79,6 +79,11 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Cost:", Property(preview?["cost"])));
         text.AppendLine(Line("Campaign:", Named(preview?["campaign"])));
         text.AppendLine(Line("Contact:", Person(preview?["contact"])));
+        if (Follows(preview?["highlights"]) is { } follows)
+        {
+            text.AppendLine(Line("Follows:", follows));
+        }
+
         // A search's card lays out the definition it would run under and why the allowance did not let it go; every other
         // card says what it would do in the lines above, as it always did.
         if (string.Equals(approval.Operation, SearchOperation, StringComparison.Ordinal))
@@ -117,6 +122,36 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Content hash:", approval.SubjectHash));
         text.Append(Line("Id:", approval.Id));
         return text.ToString();
+    }
+
+    /// <summary>
+    /// Where an email send goes, from the preview's `/follows` highlight: under an earlier letter of the campaign, whose
+    /// subject it takes and whose own is therefore not sent, or as a letter of its own and why. Null for any send that
+    /// is not an email, and where the preview carries none. The earlier letter is named by its work item, which is all
+    /// this verb's one answer says of it.
+    /// </summary>
+    private static string? Follows(JsonNode? highlights)
+    {
+        if (highlights?["/follows"] is not JsonObject follows
+            || !string.Equals((string?)highlights["/args/channel"], "email", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if ((string?)follows["work_item"] is { Length: > 0 } workItem)
+        {
+            return $"a reply under the subject of the letter of work item {workItem}; this letter's own subject is not sent";
+        }
+
+        return (string?)follows["because"] switch
+        {
+            "asked_new_thread" => "a new letter: it was asked to go as one of its own",
+            "not_offered" => "a new letter: this provider cannot place a reply in a thread on this channel",
+            "no_earlier_letter" => "a new letter: no earlier letter of this campaign to this person can be followed",
+            "other_account" => "a new letter: the earlier letter went through another account of the provider",
+            "other_mailbox" => "a new letter: the earlier letter went from another of the provider's mailboxes",
+            _ => "a new letter",
+        };
     }
 
     /// <summary>
