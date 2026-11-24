@@ -131,7 +131,7 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --r
 Each touch's send has its own key, naming the person and the touch:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"ann@example.com"},"message":{"format":"email","subject":"The price list for your team","body":"A short note after my letter last week: the price list is ready whenever it is useful to you."}}' --reason "touch 2 of 3: the first went five days ago and there is no reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-touch-2-cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"ann@example.com"},"message":{"format":"email","subject":"A question about your rollout","body":"A short note after my letter last week: the price list is ready whenever it is useful to you."}}' --reason "touch 2 of 3: the first went five days ago and there is no reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-touch-2-cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 **A follow-up goes under the line's root, as a reply.** Created with no `follows`, an email `message.send` lands in the

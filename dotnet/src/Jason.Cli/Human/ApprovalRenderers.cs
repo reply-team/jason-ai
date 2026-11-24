@@ -172,7 +172,11 @@ public static class ApprovalRenderers
 
         var subject = (string?)example["subject"];
         text.AppendLine(Line("Example:", "one reading of the template, as the runtime renders it"));
-        text.AppendLine(Indented("Subject:", subject is { Length: 0 } ? "(empty)" : RenderText.Shown(subject)));
+        if (subject is not null)
+        {
+            text.AppendLine(Indented("Subject:", subject.Length == 0 ? "(empty)" : RenderText.Shown(subject)));
+        }
+
         text.AppendLine("  Body:");
         foreach (var line in RenderText.ShownLines((string?)example["body"] ?? string.Empty))
         {

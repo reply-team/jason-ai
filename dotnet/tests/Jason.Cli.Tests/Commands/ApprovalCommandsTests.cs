@@ -347,6 +347,18 @@ public class ApprovalCommandsTests
     }
 
     [Fact]
+    public async Task Get_prints_no_subject_row_for_an_example_that_holds_none()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": null, "body": "Hi Ada", "unfilled": []}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        var text = cli.Text.ReplaceLineEndings("\n");
+        Assert.Contains("Example:       one reading of the template, as the runtime renders it\n  Body:\n    Hi Ada\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("  Subject:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Get_of_an_example_with_nothing_unfilled_prints_no_unfilled_line()
     {
         using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada", "unfilled": []}"""));

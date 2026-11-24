@@ -484,7 +484,8 @@ public partial class RoleSkillTests
     public void The_default_line_is_three_touches_written_one_at_a_time_when_due()
     {
         var head = Flattened("manager");
-        Assert.Contains("Three touches, the first message and two follow-ups, is the line where nothing better was thought out for the person. Each is written when it is due, one at a time, and the line is never planned ahead as a whole.", head, StringComparison.Ordinal);
+        Assert.Contains("Three touches, the first message and two follow-ups, is the line where nothing better was thought out for the person. Each is written when it is due, one at a time. Where a line is laid ahead, each follow-up is created with `wait_on` naming the work item of the letter it follows", head, StringComparison.Ordinal);
+        Assert.DoesNotContain("never planned ahead", head, StringComparison.Ordinal);
 
         var start = FlattenedEntry("manager", "start");
         Assert.Contains("only the first touch is the pilot's: the follow-ups are created one at a time, when due, at the deep review", start, StringComparison.Ordinal);

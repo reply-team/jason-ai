@@ -96,7 +96,7 @@ jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --summary failed
 `social_invitation.send` or a `campaign.enroll` about them that succeeded, or that ended not knowing whether it went
 (an `ambiguous` attempt) — and nothing else; an answer to their reply is no touch, and nor is a letter the provider held
 that a `message.cancel` which succeeded took back, and nor is a letter that a succeeded read says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`). Three touches, the first message and two follow-ups, is the line where nothing better was thought out for
-the person. Each is written when it is due, one at a time, and the line is never planned ahead as a whole. The roles
+the person. Each is written when it is due, one at a time. Where a line is laid ahead, each follow-up is created with `wait_on` naming the work item of the letter it follows, so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed; where it has not, the follow-up goes as a letter of its own. The roles
 may plan another number, or other channels, or other days between them, where the campaign's plan or what is known of
 the person says why, and never more than `Lines:MaxTouches`, the ceiling the settings hold: at it the claim refuses the
 next touch, `touch_ceiling_reached`, and the touch's item fails, which wakes you as any failure does. **At the ceiling,
