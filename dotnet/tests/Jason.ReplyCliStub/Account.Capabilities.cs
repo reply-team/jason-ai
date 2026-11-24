@@ -18,12 +18,14 @@ internal static partial class Account
     /// Each capability a switch can turn off, and the route of Reply's that offers it. <c>direct_send</c> is Reply's record
     /// of a direct send — its reference, its moment and its key — read by <c>direct-send get</c> and cancelled by
     /// <c>direct-send cancel</c> (Account.DirectSends.cs);
+    /// <c>direct_send_follow_up</c> is the route a direct email that follows another is sent by, called by <c>contact send-email --follows</c> (Account.FollowUps.cs);
     /// <c>inbox_changes</c> is Reply's change feed, read by <c>inbox changes</c>.
     /// </summary>
     private static readonly Dictionary<string, string> Capabilities = new(StringComparer.Ordinal)
     {
         ["send_direct_email"] = "POST /v3/contacts/{0}/send-direct-email",
         ["direct_send"] = "GET /v3/direct-sends/{0}",
+        ["direct_send_follow_up"] = "POST /v3/contacts/{0}/send-direct-email-follow-up",
         ["inbox_changes"] = "GET /v3/inbox/threads/changes",
     };
 

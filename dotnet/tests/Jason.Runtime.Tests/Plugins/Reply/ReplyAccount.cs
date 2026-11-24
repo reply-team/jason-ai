@@ -82,6 +82,7 @@ public sealed class ReplyAccount : IDisposable
     public const string SchedulesFile = "schedules.json";
     public const string KeysFile = "keys.json";
     public const string DirectSendsFile = "direct-sends.json";
+    public const string TimeMovesFile = "time-moves.json";
     public const string FeedFile = "feed.json";
     public const string SearchesFile = "searches.json";
     public const string PreviewFile = "preview.json";
@@ -933,6 +934,28 @@ public sealed class ReplyAccount : IDisposable
 
         sends.Add(record);
         Write(DirectSendsFile, sends);
+        return this;
+    }
+
+    /// <summary>
+    /// Time passing for a direct send Reply holds, which the stand-in never advances by itself: <paramref name="reference"/>
+    /// becomes <c>sent</c>, <c>failed</c> or <c>cancelled</c>. The stand-in applies it, with what a send that goes does
+    /// (opening its thread, or placing a follow-up in the thread it follows), before it answers its next command.
+    /// </summary>
+    public ReplyAccount SendBecomes(string reference, string state) => TimeMoves(reference, state);
+
+    /// <summary>
+    /// The moment a follow-up was held for comes: the stand-in reads the send it follows, as Reply does when it comes due,
+    /// and the follow-up goes into the thread or fails final, before it answers its next command.
+    /// </summary>
+    public ReplyAccount FollowUpComesDue(string reference) => TimeMoves(reference, "due");
+
+    private ReplyAccount TimeMoves(string reference, string to)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var moves = ReadArray(TimeMovesFile);
+        moves.Add(new JsonObject { ["reference"] = reference, ["to"] = to });
+        Write(TimeMovesFile, moves);
         return this;
     }
 

@@ -234,7 +234,8 @@ internal static partial class Account
 
     /// <summary>Reply's record of a send it kept: its reference, the moment it holds it for and its state; and the key, kept with its answer.</summary>
     private static JsonObject Kept(
-        string root, DirectSend send, int contactId, DateTimeOffset? sendAfter, int? schedule, string? key, string request, JsonObject answer)
+        string root, DirectSend send, int contactId, long accountId, DateTimeOffset? sendAfter, int? schedule, string? key, string request,
+        JsonObject answer, JsonObject? written, string? follows)
     {
         var sends = Read(root, DirectSendsFile);
 
@@ -268,7 +269,25 @@ internal static partial class Account
             record["estimatedSendAt"] = waiting["_estimate"]?.DeepClone();
         }
 
+        // What a follow-up and its refusals are answered from, and what goes into the thread when the send goes: the mailbox
+        // and the text as Reply rendered it, and what a follow-up follows (Account.FollowUps.cs).
+        if (send.Channel == "email")
+        {
+            record["accountId"] = accountId;
+            record["subject"] = written?["subject"]?.DeepClone();
+            record["body"] = written?["body"]?.DeepClone();
+            if (follows is not null)
+            {
+                record["follows"] = follows;
+            }
+        }
+
         sends.Add(record);
+        if (send.Channel == "email" && Text(record, "state") == "sent")
+        {
+            Gone(root, sends, record);
+        }
+
         Write(root, DirectSendsFile, sends);
 
         answer["reference"] = reference;
@@ -336,6 +355,12 @@ internal static partial class Account
             ["state"] = Text(held, "state"),
             ["send_after"] = held["sendAfter"]?.DeepClone(),
         };
+
+        // What a follow-up follows, only where it follows one.
+        if (held["follows"] is JsonValue follows && follows.GetValueKind() == System.Text.Json.JsonValueKind.String)
+        {
+            record["follows"] = follows.DeepClone();
+        }
 
         // The moment Reply expects to send a send waiting for its schedule, only where it gave one, and null in every
         // other state, as reply-cli 0.18.0 passes it on (src/operations/direct-sends.ts:54).
