@@ -118,6 +118,18 @@
           "maxLength": 64,
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-][0-9]{2}:[0-9]{2})$",
           "description": "The moment the provider sends it at, with its offset, written as `YYYY-MM-DDTHH:mm:ss` with a fraction of one to three digits where it names one and `Z` or `+hh:mm` or `-hh:mm`, `T` and `Z` in capitals. Absent, or a moment already past, means as soon as the provider can. Only a plugin whose manifest lists it for the channel takes it, and the claim refuses it on any other (`argument_unsupported`)."
+        },
+        "follows": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            {
+              "const": "new_thread"
+            }
+          ],
+          "description": "The earlier letter of this campaign the message follows, as a reply in that letter's thread. Absent: the runtime decides at the claim, and follows the line's root, the latest earlier email of this person in this campaign that itself follows nothing, counted as a touch, holding the provider's reference and not taken back. A work item's identifier: that letter, named explicitly. `new_thread`: a letter of its own. Never null. A letter the routed plugin cannot place in a thread goes as a new letter, and the preview a person reads says so; only a letter named explicitly that cannot be followed is refused, at the claim. Written, it is taken only by a plugin whose manifest lists it for the channel, and the claim refuses it on any other (`argument_unsupported`). The runtime's decision is the root `follows`; the arguments stay as the caller wrote them."
         }
       },
       "anyOf": [
@@ -396,6 +408,101 @@
               "description": "Only this plugin's own pins reach it. The message names no campaign: it goes outside any of the provider's."
             }
           }
+        },
+        "follows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "work_item",
+            "operation",
+            "reference",
+            "because"
+          ],
+          "description": "Which earlier letter the message follows, composed by the runtime at the claim from `args.follows` and the campaign's own earlier sends: never written by a caller. It says the whole decision: a letter followed, by its work item, its operation and the provider's reference for that send, or, with all three null, a new letter; `because` says why either way. A plugin places the message by this member and by nothing in `args`.",
+          "properties": {
+            "work_item": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+              "description": "The work item that sent the letter followed, or null for a new letter."
+            },
+            "operation": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The operation that sent it, `message.send`, or null for a new letter."
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's reference for the send followed, as that work item's succeeded attempt returned it under `external_ids.send`, or null for a new letter."
+            },
+            "because": {
+              "type": "string",
+              "enum": [
+                "named",
+                "line_root",
+                "asked_new_thread",
+                "no_earlier_letter",
+                "not_offered",
+                "other_account",
+                "other_mailbox"
+              ],
+              "description": "Why: `named`, the caller named the letter followed in `args.follows`; `line_root`, the runtime followed the line's root; `asked_new_thread`, the caller asked for a letter of its own; `no_earlier_letter`, the line holds no earlier letter that can be followed; `not_offered`, the routed plugin does not take `follows` on this channel; `other_account`, the line's root went through another plugin or binding than this message is routed to; `other_mailbox`, the line's root went from another of the provider's accounts than `args.sender`."
+            }
+          },
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "work_item": {
+                  "type": "string"
+                },
+                "operation": {
+                  "const": "message.send"
+                },
+                "reference": {
+                  "type": "string"
+                },
+                "because": {
+                  "enum": [
+                    "named",
+                    "line_root"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "work_item": {
+                  "const": null
+                },
+                "operation": {
+                  "const": null
+                },
+                "reference": {
+                  "const": null
+                },
+                "because": {
+                  "enum": [
+                    "asked_new_thread",
+                    "no_earlier_letter",
+                    "not_offered",
+                    "other_account",
+                    "other_mailbox"
+                  ]
+                }
+              }
+            }
+          ]
         }
       }
     },
