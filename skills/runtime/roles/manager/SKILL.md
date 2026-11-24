@@ -433,8 +433,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unse
 
 What it calls for depends on its `state`:
 
-- `failed`: the provider took the send and could not make it. The letter is missing; whether to send it again, reach the
-  person another way or tell somebody is yours to decide, after reading the person's thread.
+- `failed`: the provider took the send and could not make it. A `failed` send is final: the letter did not go, and it
+  will not. Whether to send it again, reach the person another way or tell somebody is yours to decide, after reading
+  the person's thread.
 - `overdue`: its moment passed a week ago, or as long as this installation set, and every read still found it waiting.
   An `overdue` send is still held by the provider and may still go, at a limit or a schedule of the provider's own, so
   a second letter now could reach the person twice. Take it back first with a `message.cancel` item naming it, and

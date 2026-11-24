@@ -391,7 +391,8 @@ public partial class RoleSkillTests
         Assert.Contains("`trigger` is `message_unsent_observed` when a send the provider took for a moment did not go, and it is a default one.", skill, StringComparison.Ordinal);
         Assert.Contains("An `overdue` send is still held by the provider and may still go", skill, StringComparison.Ordinal);
         Assert.Contains("write to the person again only once a `message.cancel` of it has succeeded", skill, StringComparison.Ordinal);
-        Assert.Contains("A `cancelled` send may be the provider's own stop on a reply", skill, StringComparison.Ordinal);
+        Assert.Contains("A `cancelled` send may be the provider's own stop on a reply, or a person's act there", skill, StringComparison.Ordinal);
+        Assert.Contains("A `failed` send is final: the letter did not go", skill, StringComparison.Ordinal);
         Assert.Contains("read the person's thread and where they stand in the campaign first", skill, StringComparison.Ordinal);
         Assert.Contains(
             "jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind message_unsent_observed --since 2026-09-18T09:00:00Z",
