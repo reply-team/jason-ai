@@ -57,6 +57,11 @@
           "subject": "Notes from the meetup",
           "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?"
         }
+      },
+      "follows": {
+        "work_item": null,
+        "operation": null,
+        "because": "not_offered"
       }
     },
     "result_format": null,
