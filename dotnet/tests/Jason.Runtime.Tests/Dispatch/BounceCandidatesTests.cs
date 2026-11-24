@@ -5,6 +5,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Approvals;
 using Microsoft.EntityFrameworkCore;
 
@@ -196,7 +197,7 @@ public class BounceCandidatesTests
         Read(db, scene.Campaign, persons, WorkItemStatus.Created, ActorType.Human);
         await db.SaveChangesAsync(Ct);
 
-        var held = await BounceCandidates.ReadOpenAsync(db, scene.Campaign.Id, [open.PublicId, ended.PublicId, persons.PublicId], Ct);
+        var held = await SendReads.OpenAsync(db, scene.Campaign.Id, [open.PublicId, ended.PublicId, persons.PublicId], Ct);
 
         Assert.Equal([open.PublicId], held);
     }

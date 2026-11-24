@@ -221,8 +221,8 @@ provider then takes for a later moment.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in thirteen short steps: **expire**, **enforce**, **events**,
-**sync**, **poll**, **respond**, **bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**. Events hands one read of an account's events to a
+Each tick, the dispatcher runs one scan in fourteen short steps: **expire**, **enforce**, **events**,
+**sync**, **poll**, **respond**, **bounce**, **deferred**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**. Events hands one read of an account's events to a
 reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
 ([docs/inbound-sync.md](inbound-sync.md) is the contract). Poll follows each search a live campaign's audience is filled
@@ -238,7 +238,16 @@ the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Bounc
 was told of and, for a bounce of one of its people, queues a `message.status` read of each of the campaign's own sends
 to that person the bounce could be of, at most three; the read that finds the send bounced is what records it and, for
 a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
-`system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+`system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Deferred reads, at most once a minute, the sends a
+provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, no more than 30 days ago, and of
+which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
+the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each
+later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
+became of the send, nine have succeeded or nine have failed, eighteen at most, making none in a campaign while five it
+made are open there. The read that
+finds a send `failed` or `cancelled`, or the first that ends `Dispatcher:DeferredReadOverdueSeconds` or more after the
+moment and still finds it `queued`, says once that it did not go: `message_unsent_observed`, its state `failed`,
+`cancelled` or `overdue` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -1647,7 +1656,9 @@ it before it repeats anything, since a read never makes a send twice ([docs/plug
 
 **A send ends when the provider has taken it.** Its item succeeds `sent`, where the provider sent it inside the call,
 or `accepted`, where it took it for now or for the moment `send_after` names; the fact that an accepted send went is
-learned later, never from this item.
+learned later, never from this item. A send the provider took for a moment is read by the runtime itself once the
+moment has passed, and a read that finds it did not go says so once, as `message_unsent_observed`
+([docs/inbound-sync.md](inbound-sync.md) §1).
 
 ## Provider blocks
 
@@ -1826,6 +1837,10 @@ mistyped one.
 | `Dispatcher:SearchStallSeconds` | `3600` | 60..604800 | how long the reads of a search the provider does not hold may land nobody before the dispatcher calls it stalled and stops reading it; refused below `Dispatcher:SearchCadenceSeconds`, since every search whose first read lands nobody would be stalled at once ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:SearchHeldCadenceSeconds` | `3600` | 60..86400 | how long after the dispatcher's last read of a search the provider holds — `paused`, `paused_for_credits`, `paused_for_limit` — the next is due: it spends nothing until a person acts at the provider, and the ordinary cadence comes back once it moves ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:SearchHeldStallSeconds` | `604800` | 60..604800 | how long a search may stay held at the provider before the dispatcher calls it stalled, its state named, and stops reading it, so no search is read for ever; refused below `Dispatcher:SearchHeldCadenceSeconds` ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:DeferredReadGraceSeconds` | `900` | 60..86400 | how long after a deferred send's moment its first read is due ([docs/inbound-sync.md](inbound-sync.md) §1) |
+| `Dispatcher:DeferredReadFirstWaitSeconds` | `3600` | 60..86400 | how long after the first read of a deferred send ended, where it did not find what became of the send, the second is due |
+| `Dispatcher:DeferredReadWaitSeconds` | `86400` | 60..86400 | how long after each later read of a deferred send ended the next is due |
+| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..777600 | how long after its moment a deferred send no read found went, failed or was cancelled is said `overdue`: the first read that ends this long after it and still finds the send waiting says so, and is its last; refused beyond what nine reads reach, the grace, the first wait and seven waits |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

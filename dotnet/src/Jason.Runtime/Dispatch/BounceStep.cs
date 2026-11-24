@@ -231,7 +231,7 @@ public sealed class BounceStep(
             return Acted.Nothing;
         }
 
-        var open = await BounceCandidates.ReadOpenAsync(db, campaign.Id, [.. candidates.Select(send => send.WorkItem)], ct).ConfigureAwait(false);
+        var open = await SendReads.OpenAsync(db, campaign.Id, [.. candidates.Select(send => send.WorkItem)], ct).ConfigureAwait(false);
         var queued = 0;
         var skipped = new List<string>();
         foreach (var send in candidates.Where(send => !open.Contains(send.WorkItem)))

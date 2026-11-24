@@ -56,6 +56,7 @@ line. These kinds summon a review:
 | `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it, or a read or a stop found it gone (`search_not_found`). Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
 | `audience_search_held` | The provider holds one of the campaign's searches — paused there, out of credits or at the plan's contact limit — so it spends nothing and finds nobody until a person acts at the provider. The runtime tells nobody directly; telling the person, by one question, is the manager's (§10). Said once per hold. |
 | `campaign_started` | The campaign went live, at its first start or after a pause. What it needs now is the manager's — work for its people, or a look at what changed while it stood — rather than a cadence later. At most one review per going live: two starts within one scan, or a start while a check-in is open, give one. Nothing reads what the line says, so a start after a pause summons one as the first start does. |
+| `message_unsent_observed` | A send the provider took for a moment did not go: a read of it found it failed or cancelled at the provider, or the last read the runtime made of it, a week after its moment, still found it waiting, `overdue` ([inbound sync](inbound-sync.md) §1). An `overdue` send is still held by the provider and may still go, so a second letter comes only after a `message.cancel` of it succeeds; a `cancelled` one may be the provider's own stop on a reply, or a person's act there, so it is read against the person's thread and where they stand first; a `failed` one is final, and the letter did not go. Said once per send, and never of a send a succeeded `message.cancel` of the campaign took back. |
 
 **Which line is the cause.** One read summons at most one review, and its brief names one line as the cause. That
 line is the first of the highest-ranked kind the read holds: `campaign_started` ranks first, then
@@ -475,7 +476,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held`, `campaign_started` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held`, `campaign_started`, `message_unsent_observed` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `21600` | 300..604800 | the quick look's pace, counted from the last review of any kind, unless a campaign names its own |
 | `Manager:DeepReviewSeconds` | `86400` | 300..604800 | the deep review's grid: its first moment that long after a campaign goes live, and each deep review moves it on by whole intervals; the installation's only |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
@@ -501,8 +502,9 @@ kinds." It used to read as the defaults, the opposite of what whoever wrote it m
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
 the kind is added; the same holds for `provider_event_observed`, `provider_blocked`, `audience_reserve_low`,
-`audience_search_ended` and `audience_search_held`; and a list narrowed before `campaign_started` was a default
-does not hold it, so that installation is not woken by a start until the kind is added.
+`audience_search_ended` and `audience_search_held`; a list narrowed before `campaign_started` was a default
+does not hold it, so that installation is not woken by a start until the kind is added; and a list narrowed before
+`message_unsent_observed` existed is not woken by a send that did not go until the kind is added.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what

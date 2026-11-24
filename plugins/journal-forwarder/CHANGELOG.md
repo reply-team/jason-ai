@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.9.0
+
+The manifest declares `message_unsent_observed`, which Jason 0.51.0 writes when a read of a send the provider took for a
+moment finds it failed or cancelled, or the last read of it after its moment still finds it waiting, so a person can
+grant it. Nothing else changes.
+
+Jason 0.51.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
+
 ## 1.8.0
 
 The manifest declares `contacts_finished`, `contacts_continued`, `contacts_reopened` and `contacts_paused`, which Jason
