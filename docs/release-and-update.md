@@ -966,7 +966,7 @@ naming the package and the manifest key it refused. The same holds for a copy of
 than 0.32.0, which refuses `capabilities.files` in the same way, for the forwarder 1.3.0 on a runtime older than 0.36.0,
 which refuses the reserve and search kinds it declares as kinds it does not write, for the forwarder 1.8.0 on a
 runtime older than 0.50.0, which refuses the four kinds of a person's line it subscribes to, and for the forwarder 1.9.0
-on a runtime older than 0.50.1, which refuses `message_unsent_observed` in the same way.
+on a runtime older than 0.51.0, which refuses `message_unsent_observed` in the same way.
 
 To go back cleanly, put the package the older release published in its place, which depends on whether that release
 published it. `jason plugin install` places the package of the release the running executable is, so it only works for a

@@ -1,7 +1,7 @@
 {
   "kind": "message_unsent_observed",
   "version": 1,
-  "since": "0.50.1",
+  "since": "0.51.0",
   "summary": "A send the provider took for a moment did not go: a read found it failed or cancelled, or the last read of it after its moment had passed still found it waiting, and it is overdue; said once per send, and never of a send the campaign's own cancel took back.",
   "subscribable": true,
   "entities": {

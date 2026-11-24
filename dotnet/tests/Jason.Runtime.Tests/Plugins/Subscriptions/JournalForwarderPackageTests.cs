@@ -914,7 +914,7 @@ public sealed class JournalForwarderPackageTests
         Assert.Contains("\"url\": \"https://receiver.example.com/jason\", \"token\": \"a-token-of-yours\"", elsewhere, StringComparison.Ordinal);
         Assert.Contains("`jason plugin reload`", elsewhere, StringComparison.Ordinal);
         Assert.DoesNotContain("From then on the copy is yours.", elsewhere, StringComparison.Ordinal);
-        Assert.Contains("**Jason 0.50.1 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
+        Assert.Contains("**Jason 0.51.0 or newer**", Section(readme, "What you need"), StringComparison.Ordinal);
         Assert.DoesNotContain("no way to write a file", readme, StringComparison.Ordinal);
         Assert.Contains("`forwarder_receiver_missing`", readme, StringComparison.Ordinal);
         Assert.Contains("\"Files\": [\"", Section(readme, "A file instead of a receiver, or beside one"), StringComparison.Ordinal);
