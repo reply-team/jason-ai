@@ -25,7 +25,12 @@ export interface Followed {
     moment: string | null;
 }
 
-/** The Follows row's words. `followed` is null while the letter is unread or could not be read. */
+/**
+ * The Follows row's words. `followed` is null while the letter is unread or could not be read; a read that succeeded but
+ * found an empty subject or no moment shows the read-failed sentence too, since a reply to "" says nothing. A followed
+ * work item whose `because` is neither `named` nor `line_root` is worded as `line_root`: the runtime says only those
+ * two for a letter it follows.
+ */
 export function followsSentence(follows: FollowsWords, followed: Followed | null): string {
     if (follows.workItem === null) {
         const key = `follows.new.${follows.because ?? ''}`;

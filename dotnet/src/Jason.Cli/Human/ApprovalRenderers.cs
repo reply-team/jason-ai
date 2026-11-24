@@ -149,7 +149,7 @@ public static class ApprovalRenderers
             "not_offered" => "A new letter: this provider's plugin does not offer a reply in a thread on this channel.",
             "no_earlier_letter" => "A new letter: no earlier letter of this campaign to this person can be followed.",
             "other_account" => "A new letter: the earlier letter went through another account.",
-            "other_mailbox" => "A new letter: the earlier letter went from another of the provider's mailboxes.",
+            "other_mailbox" => "A new letter: the earlier letter went from another mailbox.",
             _ => "A new letter.",
         };
     }

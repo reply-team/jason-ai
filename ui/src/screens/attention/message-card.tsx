@@ -32,7 +32,8 @@ function Following({ follows }: { follows: FollowsWords }) {
                 const subject = input?.args?.message?.subject;
                 const sendAfter = (item.context as { input?: { args?: { send_after?: unknown } } }).input?.args
                     ?.send_after;
-                const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.created_at;
+                // The letter's own moment: its send_after where it has one, else when the provider accepted it.
+                const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.finished_at;
                 setFollowed({
                     subject: typeof subject === 'string' && subject ? subject : null,
                     moment: at

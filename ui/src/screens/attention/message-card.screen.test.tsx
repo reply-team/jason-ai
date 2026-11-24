@@ -113,7 +113,7 @@ describe('the message card, where the letter follows one', () => {
                       context: {
                           input: { args: { message: { subject: 'First note' }, send_after: '2020-03-04T09:30:00Z' } },
                       },
-                      created_at: '2020-03-03T18:02:00Z',
+                      finished_at: '2020-03-03T18:02:00Z',
                       updated_at: new Date().toISOString(),
                   } as never)
                 : call(operation, body, kind);
@@ -141,5 +141,29 @@ describe('the message card, where the letter follows one', () => {
     it('shows nothing for a send that is not an email', () => {
         card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
         expect(terms()).not.toContain('Follows');
+    });
+
+    it('dates the followed letter by when the provider accepted it where it has no send_after', async () => {
+        const fake = new FakeApi();
+        fake.call = async () =>
+            ({
+                context: { input: { args: { message: { subject: 'First note' } } } },
+                finished_at: '2020-03-03T18:02:00Z',
+            }) as never;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard
+                    detail={toApprovalDetail(
+                        withFollows({
+                            work_item: 'wi_9',
+                            operation: 'message.send',
+                            reference: 'r9',
+                            because: 'named',
+                        }),
+                    )}
+                />
+            </ApiProvider>,
+        );
+        await waitFor(() => screen.getByText(/A reply to "First note" of 3 Mar 2020, \d\d:\d\d, as asked\./));
     });
 });

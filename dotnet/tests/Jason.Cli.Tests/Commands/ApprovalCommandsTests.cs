@@ -559,7 +559,7 @@ public class ApprovalCommandsTests
 
     [Theory]
     [InlineData("""{"work_item": "wi_7", "operation": "message.send", "reference": "r", "because": "line_root"}""", "Follows:       wi_7: a reply; it goes under that letter's subject, its own subject is not sent")]
-    [InlineData("""{"work_item": null, "operation": null, "reference": null, "because": "other_mailbox"}""", "Follows:       A new letter: the earlier letter went from another of the provider's mailboxes.")]
+    [InlineData("""{"work_item": null, "operation": null, "reference": null, "because": "other_mailbox"}""", "Follows:       A new letter: the earlier letter went from another mailbox.")]
     [InlineData("""{"work_item": null, "operation": null, "reference": null, "because": "not_offered"}""", "Follows:       A new letter: this provider's plugin does not offer a reply in a thread on this channel.")]
     public async Task Get_says_what_an_email_send_follows(string follows, string line)
     {

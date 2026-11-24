@@ -434,7 +434,7 @@ export const en = {
         "A new letter: this provider's plugin does not offer a reply in a thread on this channel.",
     'follows.new.no_earlier_letter': 'A new letter: no earlier letter of this campaign to this person can be followed.',
     'follows.new.other_account': 'A new letter: the earlier letter went through another account.',
-    'follows.new.other_mailbox': "A new letter: the earlier letter went from another of the provider's mailboxes.",
+    'follows.new.other_mailbox': 'A new letter: the earlier letter went from another mailbox.',
     'follows.new.other': 'A new letter.',
     'approval.from.conversation': 'the account this conversation is in',
     'approval.fact.reach': 'Reach',
