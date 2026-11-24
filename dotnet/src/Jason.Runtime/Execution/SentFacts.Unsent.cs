@@ -114,7 +114,8 @@ public sealed partial class SentFacts
 
     /// <summary>
     /// The deferred send <paramref name="read"/> is the last read of, where its end says the send is overdue; otherwise
-    /// null. The read's own row is not saved yet, so it is counted here, as one the runtime made where it did.
+    /// null. The read's own row is not saved yet, so it is counted here, as one that succeeded, where the runtime made it:
+    /// the send is overdue where no read of the runtime's is still to come, its reads spent or the last past the span.
     /// </summary>
     private async Task<HeldSend?> OverdueAsync(JasonDbContext db, WorkItem read, string sendId, CancellationToken ct)
     {
@@ -144,15 +145,12 @@ public sealed partial class SentFacts
 
         var made = (await SendReads.MadeAsync(db, read.CampaignId, new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal) { [sendId] = send.Moment }, ct, except: read.PublicId)
             .ConfigureAwait(false)).GetValueOrDefault(sendId);
-        var count = made?.Counted ?? 0;
-        var last = made?.LastEnded;
         if (read.CreatedByType == ActorType.System)
         {
-            count++;
-            last = last is { } earlier && earlier > ended ? earlier : ended;
+            made = MadeReads.With(made, succeeded: true, ended);
         }
 
-        return count >= DeferredReads.MostReads || last >= due ? send : null;
+        return made is { } reads && (reads.Spent || reads.LastEnded >= due) ? send : null;
     }
 
     /// <summary>The provider's code where it is one word, as the line may carry it; null otherwise.</summary>

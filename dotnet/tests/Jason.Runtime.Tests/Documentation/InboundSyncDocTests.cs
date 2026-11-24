@@ -182,7 +182,7 @@ public partial class InboundSyncDocTests
         Assert.Equal(codes.Count, Regex.Matches(section, @"\| `[a-z_]+` \|").Count);
         Assert.Contains($"`Dispatcher:DeferredReadGraceSeconds` ago ({defaults.DeferredReadGraceSeconds}, a quarter of an hour, by default)", section, StringComparison.Ordinal);
         Assert.Contains($"no more than {DeferredReads.LookBack.TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
-        Assert.Contains($"and at {DeferredReads.MostReads} at most", section, StringComparison.Ordinal);
+        Assert.Contains($"and at {DeferredReads.MostReads} at most that succeeded and {DeferredReads.MostReads} at most that failed", section, StringComparison.Ordinal);
         Assert.Contains($"The step makes no read in a campaign while {DeferredReads.OpenPerCampaign} reads the runtime made are open there, whichever step made them: the cap is the step's own", section, StringComparison.Ordinal);
         Assert.Contains($"its reason \"{DeferredReads.Reason}\"", section, StringComparison.Ordinal);
         Assert.Equal(TimeSpan.FromMinutes(1), DeferredReads.Cadence);
@@ -193,15 +193,9 @@ public partial class InboundSyncDocTests
         Assert.Contains("`Dispatcher:DeferredReadWaitSeconds` (a day)", section, StringComparison.Ordinal);
         Assert.Contains("`Dispatcher:DeferredReadOverdueSeconds` (a week)", section, StringComparison.Ordinal);
         Assert.Contains($"`{JournalKinds.MessageUnsentObserved}` with the state `overdue`", section, StringComparison.Ordinal);
-        var shortest = new DispatcherOptions
-        {
-            DeferredReadGraceSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
-            DeferredReadFirstWaitSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
-            DeferredReadWaitSeconds = DispatcherOptions.MinimumDeferredReadSeconds,
-        };
-        Assert.Equal((31, 43_200), (DeferredReads.MostInAll(defaults), DeferredReads.MostInAll(shortest)));
-        Assert.Contains($"one send is read {DeferredReads.MostInAll(defaults)} times at the most with the shipped settings", section, StringComparison.Ordinal);
-        Assert.Contains($"as many as {DeferredReads.MostInAll(shortest).ToString(CultureInfo.InvariantCulture)}", section, StringComparison.Ordinal);
+        Assert.Equal((9, 18), (DeferredReads.MostReads, DeferredReads.MostInAll));
+        Assert.Contains("So the step reads one send eighteen times at most, under any settings", section, StringComparison.Ordinal);
+        Assert.Contains($"a send whose {DeferredReads.MostReads} failed reads are spent is read no more by the step", section, StringComparison.Ordinal);
         Assert.Contains($"the sends handed over more than {(DeferredReads.LookBack + DeferredReads.Horizon).TotalDays.ToString(CultureInfo.InvariantCulture)} days ago", section, StringComparison.Ordinal);
 
         var contract = Flattened(Read("work-execution.md"));

@@ -226,8 +226,9 @@ public class UnsentFactsTests
     /// Only a read with nothing after it is the last: while a read the runtime made of the send is open, or the reads it
     /// made since the moment have not reached the span or the nine, a read that still finds the send waiting says nothing;
     /// a read of anybody's that comes after the runtime's last read ended past the span, which failed and said nothing,
-    /// says it. Nine reads of the runtime's are the most only where nine succeeded: one that failed among them leaves a read
-    /// still to come. A send a read already found final, by anybody, is never overdue.
+    /// says it. Nine reads of the runtime's are the most where nine succeeded or nine failed: one that failed among nine
+    /// leaves a read still to come, and a person's read after nine that failed is the last. A send a read already found
+    /// final, by anybody, is never overdue.
     /// </summary>
     [Theory]
     [InlineData("another read open", false)]
@@ -235,6 +236,7 @@ public class UnsentFactsTests
     [InlineData("a person's read after the last", true)]
     [InlineData("a person's read after nine, one failed", false)]
     [InlineData("a person's read after nine", true)]
+    [InlineData("a person's read after nine that failed", true)]
     [InlineData("found sent before", false)]
     public async Task A_send_is_overdue_only_where_no_read_of_it_is_still_to_come(string scene, bool said)
     {
@@ -256,10 +258,11 @@ public class UnsentFactsTests
                 await EarlierAsync(db, send, Noon, ActorType.System, code: "provider_unavailable");
                 break;
             case "a person's read after nine, one failed":
+            case "a person's read after nine that failed":
             case "a person's read after nine":
                 for (var earlier = 0; earlier < DeferredReads.MostReads; earlier++)
                 {
-                    var failed = earlier == 0 && scene.EndsWith("one failed", StringComparison.Ordinal);
+                    var failed = scene.EndsWith("that failed", StringComparison.Ordinal) || (earlier == 0 && scene.EndsWith("one failed", StringComparison.Ordinal));
                     await EarlierAsync(db, send, Noon.AddDays(-1).AddMinutes(earlier), ActorType.System, code: failed ? "provider_unavailable" : null);
                 }
 

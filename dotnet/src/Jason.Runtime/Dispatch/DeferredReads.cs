@@ -25,11 +25,12 @@ namespace Jason.Runtime.Dispatch;
 /// read (<c>message.status</c>) where the send ran, as the dispatcher, unless one the runtime made is open already; the
 /// first once the grace has passed, the second <c>Dispatcher:DeferredReadFirstWaitSeconds</c> after the first ended, and
 /// each later one <c>Dispatcher:DeferredReadWaitSeconds</c> after the one before it ended, whatever it answered, until the
-/// send is said not to have gone (<see cref="JournalKinds.MessageUnsentObserved"/>) or <see cref="MostReads"/> have
-/// succeeded: the reads it counts are the reads the runtime made of the send that succeeded and ended at or after its
-/// moment. A read that ends <c>Dispatcher:DeferredReadOverdueSeconds</c> or more after the moment and still finds the
-/// send waiting says it is overdue, so a read judged under a span since changed is followed by one more; a read that
-/// failed counts for none of the nine.
+/// send is said not to have gone (<see cref="JournalKinds.MessageUnsentObserved"/>), or <see cref="MostReads"/> of the
+/// reads the runtime made of the send that ended at or after its moment have succeeded, or as many have failed
+/// (<see cref="MadeReads"/>): <see cref="MostInAll"/> at the most, whatever the settings. A read that ends
+/// <c>Dispatcher:DeferredReadOverdueSeconds</c> or more after the moment and still finds the send waiting says it is
+/// overdue, so a read judged under a span since changed is followed by one more. A send whose failed reads are spent is
+/// read no more and may never be said: each of those failures woke the manager, as a failed item does.
 /// <para>
 /// It writes no line: each read decides alone, at its own end (<see cref="Execution.SentFacts"/>), whoever made it. A
 /// read that finds the send went says so as it always has; one that finds it failed or was cancelled, and the last read
@@ -53,8 +54,17 @@ public sealed class DeferredReads(
     TimeProvider clock,
     ILogger<DeferredReads> logger)
 {
-    /// <summary>The most reads the runtime makes of one send after its moment.</summary>
-    public const int MostReads = 9;
+    /// <summary>
+    /// The most reads of each kind the step makes of one send after its moment: nine that succeeded, and nine that
+    /// failed (<see cref="MadeReads.Most"/>).
+    /// </summary>
+    public const int MostReads = MadeReads.Most;
+
+    /// <summary>
+    /// The most reads the step makes of one send, whatever the settings: <see cref="MostReads"/> that succeeded and as
+    /// many that failed.
+    /// </summary>
+    public const int MostInAll = 2 * MostReads;
 
     /// <summary>The most reads the runtime made that may be open in one campaign at once.</summary>
     public const int OpenPerCampaign = 5;
@@ -115,18 +125,6 @@ public sealed class DeferredReads(
     {
         ArgumentNullException.ThrowIfNull(options);
         return (long)options.DeferredReadGraceSeconds + options.DeferredReadFirstWaitSeconds + ((long)(MostReads - 2) * options.DeferredReadWaitSeconds);
-    }
-
-    /// <summary>
-    /// The most reads the step makes of one send, where every read fails and none says what became of it: the first once
-    /// the grace has passed, the second a first wait after it, then one a wait, each ending at once, until the look-back
-    /// is out. With the shipped settings, 31.
-    /// </summary>
-    public static long MostInAll(DispatcherOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        var rest = (long)LookBack.TotalSeconds - options.DeferredReadGraceSeconds - options.DeferredReadFirstWaitSeconds;
-        return rest < 0 ? 1 : 2 + (rest / options.DeferredReadWaitSeconds);
     }
 
     /// <summary>Queues the reads of deferred sends that are due, and answers how many it queued.</summary>
@@ -199,8 +197,8 @@ public sealed class DeferredReads(
     /// since its moment (<paramref name="made"/>, null where none has ended) and whether it was said not to have gone
     /// (<paramref name="said"/>): the first once the grace has passed, then a wait after the last one ended, whatever it
     /// answered, the first wait after the first read and the later wait after each other; never once the send was said not
-    /// to have gone, which a read past the overdue span that still finds it waiting says, or once
-    /// <see cref="MostReads"/> have succeeded. A read that failed spaces the next and counts for none of the nine.
+    /// to have gone, which a read past the overdue span that still finds it waiting says, or once its reads are spent,
+    /// <see cref="MostReads"/> succeeded or as many failed (<see cref="MadeReads.Spent"/>).
     /// </summary>
     internal static bool Due(HeldSend send, MadeReads? made, bool said, DispatcherOptions options, DateTimeOffset now)
     {
@@ -216,7 +214,7 @@ public sealed class DeferredReads(
             return now >= send.Moment.AddSeconds(options.DeferredReadGraceSeconds);
         }
 
-        if (made.Counted >= MostReads)
+        if (made.Spent)
         {
             return false;
         }
