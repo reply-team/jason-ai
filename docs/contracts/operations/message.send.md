@@ -226,8 +226,9 @@ provider's account full: it will hold no further contact, and the person had to 
 
 Five codes are a message handed a root `follows` with a reference that the provider would not place in that letter's
 thread, and none of them sends it as a letter of its own instead. `follows_not_sent_yet` is a letter that has not gone
-yet while this message would go before it: the message is attempted again, and goes into the thread once that letter
-has gone. `follows_never_sent` is a letter cancelled or failed for good, so there will be no thread. `follows_not_found`
+yet while this message would go before it: the message is attempted again within the runtime's retries; a letter held
+longer ends the item with this code, and the message is proposed again with a `send_after` later than that letter's
+moment. `follows_never_sent` is a letter cancelled or failed for good, so there will be no thread. `follows_not_found`
 is a reference the provider holds no letter under that went from this sender to this person: the claim's own checks
 keep such a letter from the provider, so it says the provider's record of it and the runtime's no longer agree.
 `follows_not_placed` is a thread the provider's mailbox could not place the message in. `follows_too_early` is a moment

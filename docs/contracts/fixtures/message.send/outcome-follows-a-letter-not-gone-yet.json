@@ -1,7 +1,7 @@
 {
   "operation": "message.send",
   "version": 1,
-  "case": "a follow-up that would go at once while the letter it follows has not gone yet: nothing was sent, and it is attempted again, to go into that letter's thread once it has gone",
+  "case": "a follow-up that would go at once while the letter it follows has not gone yet: nothing was sent, and it is attempted again within the runtime's retries",
   "outcome": {
     "protocol_version": 1,
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",

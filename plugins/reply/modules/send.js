@@ -257,7 +257,9 @@ function keyedFlags(operation, context, input) {
  */
 export function followedReference(input) {
   const follows = input.follows;
-  return follows !== null && typeof follows === "object" && typeof follows.reference === "string" ? follows.reference : null;
+  return follows !== null && typeof follows === "object" && typeof follows.reference === "string" && follows.reference.length > 0
+    ? follows.reference
+    : null;
 }
 
 /** Whether this attempt repeats one that may have sent: the runtime names when the earliest such attempt was claimed. */

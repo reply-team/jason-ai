@@ -161,10 +161,13 @@ public class ReplyFollowUpTests
     /// A follow-up held for a moment that is not later than the one the letter it follows is held for would go before that
     /// letter: Reply refuses it, which reply-cli names <c>follows.too_early</c>, and the item ends <c>follows_too_early</c>,
     /// <c>validation</c>, with nothing sent and nothing taken, since the moment it was given is wrong for a follow-up and a
-    /// repeat would meet the same answer.
+    /// repeat would meet the same answer. The same moment is not later, written as the letter's was or in another offset.
     /// </summary>
-    [Fact]
-    public async Task A_follow_up_timed_no_later_than_the_letter_it_follows_ends_follows_too_early_with_nothing_sent()
+    [Theory]
+    [InlineData("2099-11-02T09:00:00-05:00")]
+    [InlineData("2099-11-03T09:00:00-05:00")]
+    [InlineData("2099-11-03T14:00:00Z")]
+    public async Task A_follow_up_timed_no_later_than_the_letter_it_follows_ends_follows_too_early_with_nothing_sent(string moment)
     {
         using var account = Planted();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -175,7 +178,7 @@ public class ReplyFollowUpTests
         held["send_after"] = "2099-11-03T09:00:00-05:00";
         await SendAsync(api, campaign, contact, held);
         var before = Message("Any news?");
-        before["send_after"] = "2099-11-02T09:00:00-05:00";
+        before["send_after"] = moment;
 
         var refused = await ApprovedAsync(api, campaign, contact, before);
 
@@ -183,7 +186,7 @@ public class ReplyFollowUpTests
             (WorkItemStatus.Failed, "follows_too_early", FailureClass.Validation),
             (refused.Status, refused.LastError?.Code, Assert.Single(refused.Attempts!).Error?.Class));
         Assert.Equal(
-            ("email-1001", "2099-11-02T09:00:00-05:00"),
+            ("email-1001", moment),
             (LastSend(account).Option("--follows"), LastSend(account).Option("--send-after")));
         Assert.Single(account.Sent);
         Assert.Single(account.DirectSends);
@@ -240,6 +243,106 @@ public class ReplyFollowUpTests
         Assert.Contains("`follows`", refused.LastError.Message, StringComparison.Ordinal);
         Assert.Single(account.Sent);
         Assert.Equal(2, account.Calls.Count(call => call.Command == "contact send-email"));
+    }
+
+    /// <summary>
+    /// A follow-up of a letter held longer than the runtime's retries last is refused at each of them, <c>transient</c>, and
+    /// once they are spent the item ends <c>follows_not_sent_yet</c> with nothing sent, never as a letter of its own: the
+    /// message is proposed again with a <c>send_after</c> later than that letter's moment.
+    /// </summary>
+    [Fact]
+    public async Task A_follow_up_of_a_letter_held_past_the_retries_ends_follows_not_sent_yet_with_nothing_sent()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync();
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+        var held = Message(Body);
+        held["send_after"] = "2099-11-03T09:00:00-05:00";
+        await SendAsync(api, campaign, contact, held);
+
+        var item = await ApprovedAsync(api, campaign, contact, Message("Any news?"));
+        for (var scans = 0; item.Status != WorkItemStatus.Failed && scans < 10; scans++)
+        {
+            item = await ClaimAsync(api, item.Id);
+        }
+
+        Assert.Equal((WorkItemStatus.Failed, "follows_not_sent_yet"), (item.Status, item.LastError?.Code));
+        Assert.True(item.Attempts!.Count > 1, $"{item.Attempts.Count} attempt(s)");
+        Assert.All(item.Attempts, attempt => Assert.Equal(("follows_not_sent_yet", FailureClass.Transient), (attempt.Error?.Code, attempt.Error?.Class)));
+        Assert.All(account.Calls.Where(call => call.Command == "contact send-email").Skip(1), call => Assert.Equal("email-1001", call.Option("--follows")));
+        Assert.Single(account.Sent);
+        Assert.Single(account.DirectSends);
+        Assert.Empty(account.Threads);
+    }
+
+    /// <summary>
+    /// A follow-up whose answer was lost may have gone, and its repeat that meets a Reply without the follow-up route — one
+    /// of Reply's hosts not updated yet — says nothing of that attempt: it ends <c>send_not_settled</c>, as a plain send's
+    /// repeat that meets a 404 with no code does, and never says that nothing was sent.
+    /// </summary>
+    [Fact]
+    public async Task A_repeat_of_a_lost_follow_up_that_meets_a_reply_without_follow_ups_is_not_settled()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync();
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+        await SendAsync(api, campaign, contact, Message(Body));
+        account.LosesTheOutcome("contact send-email");
+        var lost = await ApprovedAsync(api, campaign, contact, Message("Any news?"));
+        Assert.Equal("provider_answer_lost", Assert.Single(lost.Attempts!).Error?.Code);
+        account.NotOffering("direct_send_follow_up");
+
+        var repeated = await ClaimAsync(api, lost.Id);
+
+        Assert.Equal(
+            (WorkItemStatus.Failed, "send_not_settled", FailureClass.Permanent),
+            (repeated.Status, repeated.LastError?.Code, Latest(repeated).Error?.Class));
+        var attempts = account.Calls.Where(call => call.Command == "contact send-email").Skip(1).ToList();
+        Assert.Equal(2, attempts.Count);
+        Assert.All(attempts, call => Assert.Equal(("email-1001", lost.Id), (call.Option("--follows"), call.Option("--idempotency-key"))));
+    }
+
+    /// <summary>
+    /// A message composed as a template follows the line's root as a final one does: <c>--follows</c> and the root's
+    /// reference, and its body alone, in Reply's syntax, which Reply fills in; and a template Reply could not fill in ends
+    /// as a letter of its own does, <c>template_unrendered</c>, with nothing sent.
+    /// </summary>
+    [Fact]
+    public async Task A_template_follows_the_line_s_root_with_its_body_alone_in_reply_s_syntax()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var started = await StartAsync();
+        var api = await DispatchHarness.ScannedOnceAsync(started, Ct);
+        var (campaign, contact) = await WorkAsync(api);
+        await SendAsync(api, campaign, contact, Message(Body));
+
+        var followUp = await SendAsync(api, campaign, contact, Template("Any news, {{contact.first_name}}?"));
+        Assert.Equal(("line_root", "email-1001"), (Because(followUp), LastSend(account).Option("--follows")));
+        Assert.Equal("""{"body":"Any news, {{FirstName}}?"}""", Stdin(LastSend(account)));
+        Assert.Equal(
+            ["Re: " + Subject],
+            account.OutboundIn(Assert.Single(account.Threads)!["id"]!.GetValue<int>()).Skip(1).Select(message => (string?)message["subject"]));
+
+        var own = Template("Hi {{contact.first_name}}", subject: "Another thought");
+        own["follows"] = "new_thread";
+        CouldNotFill(account);
+        var letter = await ApprovedAsync(api, campaign, contact, own);
+        CouldNotFill(account);
+        var unfilled = await ApprovedAsync(api, campaign, contact, Template("Any news, {{contact.first_name}}?"));
+
+        Assert.Equal(
+            (WorkItemStatus.Failed, "template_unrendered", FailureClass.Validation),
+            (letter.Status, letter.LastError?.Code, Assert.Single(letter.Attempts!).Error?.Class));
+        Assert.Equal(
+            (letter.Status, letter.LastError?.Code, FailureClass.Validation),
+            (unfilled.Status, unfilled.LastError?.Code, Assert.Single(unfilled.Attempts!).Error?.Class));
+        Assert.Equal("email-1001", LastSend(account).Option("--follows"));
+        Assert.Equal(2, account.DirectSends.Count);
     }
 
     /// <summary>
@@ -393,6 +496,20 @@ public class ReplyFollowUpTests
         account.Refuses(
             "contact send-email", "reply.refused", status: 400, replyCode: "contact.emailSendingFailed",
             detail: "The email could not be sent.", ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+
+    /// <summary>The next direct email is refused as Reply refuses a template it could not fill in for the person.</summary>
+    private static void CouldNotFill(ReplyAccount account) =>
+        account.Refuses(
+            "contact send-email", "contact.missing_variables", status: 400, replyCode: "contact.missingVariables",
+            details: new JsonObject { ["missing_variables"] = new JsonArray("nickname") },
+            ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+
+    private static JsonObject Template(string body, string subject = Subject)
+    {
+        var message = Message(body, subject);
+        message["message"]!["compose"] = "template";
+        return message;
+    }
 
     private static async Task<RuntimeApiFixture> StartAsync() =>
         await ReplyPlugins.StartAsync(

@@ -59,7 +59,7 @@ public partial class PageClaimsTests
     [
         ("journal-forwarder", "1.8.0 sha256:1af0e45e1a40781bc011a2968317a9bae1320cd4b6bb4a86d1567807bd86000e"),
         ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
-        ("reply", "0.20.0 sha256:7730a4b66f74f488d69b3756280ba4abeaa8be3fabad39175aa072bd05237fac"),
+        ("reply", "0.20.0 sha256:cf630b3504907528d4a354e5d3d700535619277d478c8bead89b9dd1358e4838"),
     ];
 
     /// <summary>

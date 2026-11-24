@@ -440,7 +440,8 @@ export const CODES = {
       "follows.too_early": "follow_up_before_its_email",
       "follows.not_available": "follow_ups_not_offered",
       "idempotency_key.in_use": "key_in_use",
-      "repeat:reply.refused:404": "send_not_settled"
+      "repeat:reply.refused:404": "send_not_settled",
+      "repeat:follows.not_available": "send_not_settled"
     },
     "audience.search": {
       "live_data.search_in_progress": "search_in_progress",
@@ -1709,7 +1710,7 @@ export const ROWS = {
         "when": "The message follows an earlier email, and the send answered `follows.not_sent`, Reply's code `contact.followedSendNotSent` at 409: that email has not gone yet, and this message would go at once. Reply's guard released the key with nothing taken, so a repeat under it is the send itself. Nothing is sent.",
         "code": "follows_not_sent_yet",
         "class": "transient",
-        "note": "The email this message follows has not gone yet, and this one would go at once, so Reply sent nothing. The runtime repeats the attempt, and the message goes into that email's thread once it has gone; one that should wait longer is proposed again with a `send_after` later than that email's moment."
+        "note": "The email this message follows has not gone yet, and this one would go at once, so Reply sent nothing. The message is attempted again within the runtime's retries, and goes into that email's thread if that email has gone by then; an email held longer ends the item with this code, and the message is proposed again with a `send_after` later than that email's moment."
       },
       "follow_up_not_placed": {
         "when": "The message follows an earlier email, and the send answered `follows.not_placed`, Reply's code `contact.followUpNotPlaced` at 409: that email went, and Reply could not find it to place the message in its thread. Nothing is sent, and the message does not go as a letter of its own instead. The reference of Reply's record of the message, where it names one, is kept on the attempt.",
@@ -1724,11 +1725,11 @@ export const ROWS = {
         "note": "The moment this message was given is not later than the one the email it follows is held for, so it would go before that email, and Reply sent nothing. Asking again meets the same answer: propose it again with a `send_after` later than that email's moment."
       },
       "follow_ups_not_offered": {
-        "when": "The message follows an earlier email, and the send answered `follows.not_available`: reply-cli's word for Reply's follow-up route answering 404 with no code of Reply's own, which is a Reply that does not offer follow-ups. reply-cli tries nothing else in its place, so nothing is sent, and the message does not go as a letter of its own instead.",
+        "when": "The message follows an earlier email, and the send answered `follows.not_available` on an attempt that repeats none that may have sent: reply-cli's word for Reply's follow-up route answering 404 with no code of Reply's own, which is a Reply that does not offer follow-ups. reply-cli tries nothing else in its place, so nothing is sent, and the message does not go as a letter of its own instead.",
         "code": "capability_not_offered",
         "class": "permanent",
         "quotes": "operation",
-        "note": "This Reply does not offer an email in an earlier email's thread, so the message that follows one (`follows`) was not sent, and not as a letter of its own either. Asking again meets the same answer."
+        "note": "This Reply does not offer an email in an earlier email's thread, so the message that follows one (`follows`) was not sent, and not as a letter of its own either. Asking again meets the same answer for as long as this Reply does not offer it; while Reply is updating its own servers, one answer may differ from the next."
       },
       "follows_on_linkedin": {
         "when": "The root `follows` names a letter to follow, and the message is a LinkedIn format: the manifest takes `follows` on email alone, so the claim hands none there, and the package holds it here too. Decided before any call; nothing is sent.",
@@ -1781,7 +1782,7 @@ export const ROWS = {
         "note": "The moment in `send_after` is not one this package can read, so the message was not sent: it goes at the moment a person approved or not at all. Asking again meets the same answer; the moment is the agent's to write again."
       },
       "send_not_settled": {
-        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — whose send answered `reply.refused` at status 404 with no code of Reply's own: Reply's API changed under this package version, so nothing here says whether the earlier attempt went, or that the key settles the repeat. Nothing is sent.",
+        "when": "A repeat after an attempt that may have sent — `context.unsettled_since` names when the earliest one was claimed — whose send answered `reply.refused` at status 404 with no code of Reply's own, or, on an email that follows an earlier one, `follows.not_available`, reply-cli's word for that 404 on the follow-up route: Reply's API changed under this package version, or a server of Reply's not updated yet answered, so nothing here says whether the earlier attempt went, or that the key settles the repeat. Nothing is sent.",
         "code": "send_not_settled",
         "class": "permanent",
         "note": "Reply answered this repeat with a 404 that carries no code of its own, so nothing says the key settles it, and repeating this message could send the person a second one. Nothing was sent. Whether the first attempt's went is a person's to find out at Reply."
@@ -2170,6 +2171,12 @@ export function rowOf(operation, error, variant, repeat) {
 
   if (unknown !== null && has(own, unknown)) {
     return own[unknown];
+  }
+
+  // A refusal a repeat reads otherwise than an attempt that repeats nothing, by the CLI's code alone: a follow-up route a
+  // server of Reply's does not know answers the repeat, and says nothing of the attempt that may have sent.
+  if (repeat === true && has(own, "repeat:" + code)) {
+    return own["repeat:" + code];
   }
 
   // The shared table holds no 404 key today; this lookup stays to keep the order: own repeat, own, shared, the CLI's code.

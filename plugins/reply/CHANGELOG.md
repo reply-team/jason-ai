@@ -19,11 +19,14 @@ absorbed by a release of this package alone.
 - A follow-up Reply refuses is never sent as a letter of its own in its place, and each refusal ends in a code of its
   own, with nothing sent: an email Reply does not hold under the reference for this account, this person and this
   mailbox, `follows_not_found`; one cancelled or failed for good, `follows_never_sent`; one not gone yet, while this
-  message would go at once, `follows_not_sent_yet`, transient, repeated until that email has gone; one Reply can no
-  longer find to answer, `follows_not_placed`; one held for an exact moment no earlier than the moment this message
-  names, so that it would go before that email, `follows_too_early`, validation, the moment being the message's to
-  correct; and a Reply that does not offer follow-ups, `capability_not_offered`, naming `follows`. A LinkedIn message is
-  handed no email to follow: the manifest takes `follows` on email alone.
+  message would go at once, `follows_not_sent_yet`, transient: attempted again within the runtime's retries, and where
+  that email is held longer the item ends with this code and the message is proposed again with a `send_after` later
+  than that email's moment; one Reply can no longer find to answer, `follows_not_placed`; one held for an exact moment
+  no earlier than the moment this message names, so that it would go before that email, `follows_too_early`,
+  validation, the moment being the message's to correct; and a Reply that does not offer follow-ups,
+  `capability_not_offered`, naming `follows`, or, on a repeat after an attempt that may have sent, `send_not_settled`,
+  as a plain send's repeat that meets a 404 with no code is. A LinkedIn message is handed no email to follow: the
+  manifest takes `follows` on email alone.
 - The manifest names `follows` among the arguments of `message.send` on email, which a runtime admits only where its
   `message.send` document names it: an older one refuses it at the reload, `argument_invalid`, and with it the whole
   reload. Update Jason before the package; `jason update apply` brings the two together.

@@ -105,8 +105,8 @@ export function messageSend(input, context) {
   // An email that follows an earlier one goes under that email's subject, which Reply writes as the thread's — `Re: ` and
   // the subject of the email followed — so its own subject, held above as every subject is, does not go: the text on
   // stdin is the body alone, which the CLI requires of a follow-up (`--follows`, send.js).
-  const text = format.text(message, args.sender);
-  const written = follows === null ? text : { body: text.body };
+  const whole = format.text(message, args.sender);
+  const written = follows === null ? whole : { body: whole.body };
 
   // The send an earlier attempt returned, where Reply's record of it says what became of it, is the work item's: nothing
   // more is called, and the account is the one the arguments name.
