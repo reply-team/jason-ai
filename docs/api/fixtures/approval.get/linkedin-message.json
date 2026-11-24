@@ -58,7 +58,7 @@
       "work_item": "wi_2"
     },
     "preview": {
-      "summary": "Send https://www.linkedin.com/in/noor-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/owner-example) — subject: —; text: Thanks for connecting, Noor.; send after: —",
+      "summary": "Send https://www.linkedin.com/in/noor-example a message by linkedin_message, from the provider's account s_34 (https://www.linkedin.com/in/owner-example) — subject: —; text: Thanks for connecting, Noor.; send after: —; follows: — (—)",
       "highlights": {
         "/contacts/0/channels/0/value": "https://www.linkedin.com/in/noor-example",
         "/args/channel": "linkedin",
@@ -71,7 +71,8 @@
           "body": "Thanks for connecting, Noor."
         },
         "/args/message/compose": null,
-        "/args/send_after": null
+        "/args/send_after": null,
+        "/follows": null
       },
       "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
       "reach": {

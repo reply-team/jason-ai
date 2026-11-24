@@ -1,0 +1,33 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "a follow-up that names, by its work item, the earlier letter of the campaign it follows",
+  "input": {
+    "args": {
+      "channel": "email",
+      "sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "message": { "format": "email", "subject": "Re: The Lisbon meetup", "body": "Hi Marta, one more thought after the meetup." },
+      "follows": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}
