@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.51.0-rc.1
+# Jason 0.51.0-rc.2
 
 Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
 that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
@@ -64,6 +64,12 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   goes as a letter of its own.
 - **A follow-up never hides an answer.** Jason's own follow-up reaching a thread first does not stop a person's answer
   there from being read: the answer is never missed because the follow-up got there first.
+- **A follow-up at a mailbox's daily limit.** Where Reply refuses a direct email because the mailbox has reached its
+  daily limit (`contact.dailyLimitReached`), a follow-up is held like any email from that mailbox, with nothing to set
+  up: nothing is sent, the email waits as `provider_blocked`, and every email from that mailbox waits with it until the
+  block clears, at the next midnight UTC at the latest. You are notified of the open block once. A follow-up held for
+  later that Reply could not send at that limit is read as `failed` with the same code and said once as
+  `message_unsent_observed`: nothing went, and the manager proposes it again as it was.
 
 **Letters held for later**
 
