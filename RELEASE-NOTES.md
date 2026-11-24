@@ -24,8 +24,8 @@ replaces the title and the body together.
 Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
 that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
 under which letter and subject it will land before you approve it. A letter a provider held for later and then failed or
-cancelled no longer counts as a touch, and Jason now keeps reading a letter held for later until it is known whether it went,
-and tells the campaign's manager about one that did not.
+cancelled no longer counts as a touch, and Jason now reads a letter held for later after its moment to learn whether it
+went, and tells the campaign's manager about one that did not.
 
 **Read this first.** Against a Reply that does not yet offer follow-ups, a follow-up is refused and nothing is sent: it
 never goes as a new letter instead. The refusal is `capability_not_offered`, naming `follows`. To reach the person now,
