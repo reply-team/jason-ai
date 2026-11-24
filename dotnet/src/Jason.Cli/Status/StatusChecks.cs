@@ -291,7 +291,7 @@ internal static partial class StatusChecks
             checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
-            checks.Add(PluginPackage(info, env.Paths));
+            checks.Add(PluginPackage(info, env.Paths, DesktopStartOwed(env)));
             // One plugin.list answer, read once and passed on: the two checks it serves describe the same snapshot.
             var asked = client is not null && info is not null;
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
@@ -308,7 +308,7 @@ internal static partial class StatusChecks
             checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env), profileNames));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info, env.ToastSetting));
-            checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
+            checks.Add(UiModule(info, SkillsSource.BuildVersion(env), DesktopStartOwed(env)));
             checks.Add(HarnessRoot(info));
             checks.Add(SendModes(info));
         }
@@ -502,6 +502,31 @@ internal static partial class StatusChecks
     };
 
     /// <summary>
+    /// The version the record of Jason Desktop's start (<c>&lt;data&gt;/desktop/machine-setup.json</c>) says this installation was
+    /// last set up for, or null where there is no record, it cannot be read, or it names none.
+    /// </summary>
+    private static string? DesktopSetUpFor(CliEnvironment env)
+    {
+        try
+        {
+            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordUnder(env.Paths.Root)));
+            return record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The version of the jason Jason Desktop carries, where this is that jason and Jason Desktop's start has not yet set the
+    /// installation up for it (no record, or one for another version): the start's finishing step places the plugin packages
+    /// and the UI, so what repairs them is that start. Null for any other jason, and once the record holds the version.
+    /// </summary>
+    private static string? DesktopStartOwed(CliEnvironment env) =>
+        CarriedExecutable.Of(env) is { } carried && !string.Equals(DesktopSetUpFor(env), carried.Version, StringComparison.Ordinal) ? carried.Version : null;
+
+    /// <summary>
     /// Linux, the deb, whose updates come with the system's: where they cannot arrive, because Jason's apt source is gone
     /// or turned off (a release upgrade of Ubuntu turns third-party sources off, with <c>Enabled: no</c>), and where the
     /// system installed a version this installation was not set up for yet (the version Jason Desktop's start last set the
@@ -523,15 +548,7 @@ internal static partial class StatusChecks
             return null;
         }
 
-        string? setUpFor = null;
-        try
-        {
-            using var record = JsonDocument.Parse(File.ReadAllText(DesktopRemoval.SetupRecordUnder(env.Paths.Root)));
-            setUpFor = record.RootElement.ValueKind == JsonValueKind.Object && record.RootElement.TryGetProperty("ran_for", out var ran) && ran.ValueKind == JsonValueKind.String ? ran.GetString() : null;
-        }
-        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or JsonException)
-        {
-        }
+        var setUpFor = DesktopSetUpFor(env);
 
         if (setUpFor is not null && !string.Equals(setUpFor, carried.Version, StringComparison.Ordinal))
         {
@@ -792,6 +809,16 @@ internal static partial class StatusChecks
     }
 
     /// <summary>
+    /// The sentence a fact about the UI adds where Jason Desktop's start is still owed for <paramref name="desktopStartOwed"/>
+    /// (the version of the jason it carries) and its finishing step places the UI: that start first, the command second. The
+    /// repair stays the command, since every repair is one an agent may run.
+    /// </summary>
+    private static string DesktopStartSaid(string? desktopStartOwed) =>
+        desktopStartOwed is null
+            ? string.Empty
+            : $" Open Jason Desktop: its start sets this installation up for {desktopStartOwed}, and places the UI; `{Repair.InstallUi}` places it now.";
+
+    /// <summary>
     /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
     /// default build is the release's, so one from another release is named with the command that places this one's —
     /// where neither is a development build: a candidate is published with its own UI, a development runtime has no
@@ -800,7 +827,7 @@ internal static partial class StatusChecks
     /// between a package manager's upgrade and the restart the two differ, the restart is the fix, and
     /// <c>runtime_version</c> names it.
     /// </summary>
-    private static StatusCheck UiModule(SystemInfoResponse? info, string build)
+    private static StatusCheck UiModule(SystemInfoResponse? info, string build, string? desktopStartOwed)
     {
         if (info is null)
         {
@@ -809,7 +836,7 @@ internal static partial class StatusChecks
 
         if (info.Ui is null)
         {
-            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed.", Repair.InstallUi);
+            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed." + DesktopStartSaid(desktopStartOwed), Repair.InstallUi);
         }
 
         var ui = info.Ui;
@@ -833,7 +860,7 @@ internal static partial class StatusChecks
             && SemanticVersion.TryParse(ui.Version, out var served) && !served.IsDevelopment
             && served != runtime)
         {
-            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}.", Repair.InstallUi);
+            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}." + DesktopStartSaid(desktopStartOwed), Repair.InstallUi);
         }
 
         return new StatusCheck("ui_module", false, CheckState.Ok, $"Serving {ui.Source} {ui.Version} from {ui.Directory}; built for API {ui.ApiVersion}, this runtime's; {ui.Digest}.", null);
@@ -1441,7 +1468,7 @@ internal static partial class StatusChecks
     /// passes with a line that says so, a development build compares against its own tree, named in the fact, and the
     /// packages not installed are one sentence.
     /// </summary>
-    private static StatusCheck PluginPackage(SystemInfoResponse? info, JasonPaths paths)
+    private static StatusCheck PluginPackage(SystemInfoResponse? info, JasonPaths paths, string? desktopStartOwed)
     {
         const string Name = "plugin_package";
         if (info is null)
@@ -1462,7 +1489,7 @@ internal static partial class StatusChecks
         var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
             : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
             : CheckState.Absent;
-        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages, paths)), null);
+        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages, paths, desktopStartOwed)), null);
     }
 
     /// <summary>
@@ -1470,7 +1497,7 @@ internal static partial class StatusChecks
     /// sentence naming their ids, where the first of them stands, since a release publishes more packages than a person
     /// installs and what there is to do is the same for each.
     /// </summary>
-    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages, JasonPaths paths)
+    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages, JasonPaths paths, string? desktopStartOwed)
     {
         var missing = packages.Where(package => package.State == ReleasedPluginState.NotInstalled).Select(package => package.Id).ToList();
         var said = false;
@@ -1478,7 +1505,7 @@ internal static partial class StatusChecks
         {
             if (package.State != ReleasedPluginState.NotInstalled || missing.Count == 1)
             {
-                yield return PackageLine(info, package, paths);
+                yield return PackageLine(info, package, paths, desktopStartOwed);
             }
             else if (!said)
             {
@@ -1489,7 +1516,7 @@ internal static partial class StatusChecks
         }
     }
 
-    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package, JasonPaths paths)
+    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package, JasonPaths paths, string? desktopStartOwed)
     {
         var runtime = info.RuntimeVersion;
         var released = $"{package.Id} {package.Released.Version}";
@@ -1504,7 +1531,11 @@ internal static partial class StatusChecks
             ReleasedPluginState.Current => $"{installed} is installed, the package runtime {runtime} carries.",
             ReleasedPluginState.Behind =>
                 $"{installed} is installed; runtime {runtime} carries {released}, the package its release publishes. "
-                + $"`jason plugin install {package.Id} --replace` places it in {directory} in place of the one there, and asks the runtime to load it.",
+                + (desktopStartOwed is null
+                    ? $"`jason plugin install {package.Id} --replace` places it in {directory} in place of the one there, and asks the runtime to load it."
+
+                    // Jason Desktop's finishing step replaces a package that is behind, so for its own jason, before its first start, that start repairs it.
+                    : $"Open Jason Desktop: its start sets this installation up for {desktopStartOwed}, and places this package; `jason plugin install {package.Id} --replace` places it now, in {directory} in place of the one there, and asks the runtime to load it."),
             ReleasedPluginState.Differs => $"{installed} is installed and is not the package runtime {runtime} carries ({released}); it names the same version or a later one, so it is a later release's package or one built or edited on this machine.",
             ReleasedPluginState.NotInstalled => $"{installed} is not installed; runtime {runtime} carries {released}, the package its release publishes, and `jason plugin install {package.Id}` installs it.",
 

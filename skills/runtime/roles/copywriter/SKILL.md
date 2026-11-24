@@ -67,7 +67,7 @@ show the sender's names or `contact.custom.*`, which only the provider fills in,
 account's identity, not the `sender.identity` preference you write by below. Answer with each text the format has as a template together,
 as this work item's result — the subject and the body of an email or an InMail, the body of a LinkedIn message:
 whoever raises the sends copies them into each person's `message.send` item, and each of those goes to its own claim,
-where a person's approval or the send mode they chose decides. Read `docs/contracts/README.md`,
+where a person's approval or the send mode they chose decides. A follow-up's subject is `Re: ` and the subject of the letter it follows, so what the person approves is what goes on both roads; its body does not repeat the first letter and reads whole if it goes as a letter of its own. Read `docs/contracts/README.md`,
 in the section "The template standard", before you write one: it is the only statement of what a template may hold,
 and a template outside it is refused when the work item that carries it is written. That page is published with the
 project's source and no verb prints it: on a machine with no copy of it, write final text for each person and say so
