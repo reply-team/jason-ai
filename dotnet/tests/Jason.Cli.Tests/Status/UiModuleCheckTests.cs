@@ -51,12 +51,12 @@ public class UiModuleCheckTests
         Assert.Equal(fix, check.Fix);
     }
 
-    private const string DesktopFirst = "Open Jason Desktop: its start sets this installation up for 0.34.0, and places the UI; `jason ui install` places it now.";
+    private const string DesktopFirst = " Open Jason Desktop: its start sets this installation up for 0.34.0, and places the UI; `jason ui install` places it now.";
 
     /// <summary>
     /// Between the install script's end and Jason Desktop's first start no UI is installed, and that start's finishing step
-    /// places it: so for the jason Jason Desktop carries, while the set-up record does not hold its version, the repair names
-    /// the application first and the command second, where no UI is installed and where the default one is another release's.
+    /// places it: so for the jason Jason Desktop carries, while the set-up record does not hold its version, the fact names
+    /// the application first and the command second, the repair staying the command, where no UI is installed and where the default one is another release's.
     /// Anywhere else the repair is the command alone. The state and the optional mark are what they were.
     /// </summary>
     [Theory]
@@ -94,7 +94,15 @@ public class UiModuleCheckTests
         var check = Assert.Single(report.Checks, c => c.Name == "ui_module");
         Assert.False(check.Required);
         Assert.Equal(served ? CheckState.Failed : CheckState.Absent, check.State);
-        Assert.Equal(desktopFirst ? DesktopFirst : "jason ui install", check.Fix);
+        Assert.Equal("jason ui install", check.Fix);
+        if (desktopFirst)
+        {
+            Assert.EndsWith(DesktopFirst, check.Fact, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("Open Jason Desktop", check.Fact, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

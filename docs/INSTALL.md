@@ -502,7 +502,7 @@ jason ui install
 ```
 
 Between the install script's end and Jason Desktop's first start, `jason status` may name this command for the UI; that start
-places the UI itself, and the repair it prints then names Jason Desktop first and this command second.
+places the UI itself, and the check's fact then names Jason Desktop first and this command after it.
 
 It downloads `jason-ui.zip` from the release this build was published as, checks it against that release's
 `checksums.txt`, and places it in the data directory as the default UI. A runtime works without it. A build from

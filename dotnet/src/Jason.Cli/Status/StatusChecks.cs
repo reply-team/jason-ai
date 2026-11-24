@@ -134,15 +134,6 @@ internal static partial class StatusChecks
         public const string InstallUi = "jason ui install";
 
         /// <summary>
-        /// <see cref="InstallUi"/>, or, where Jason Desktop's start is still owed for <paramref name="desktopStartOwed"/> (the
-        /// version of the jason it carries) and its finishing step places the UI, that start first and the command second.
-        /// </summary>
-        public static string InstallUiAt(string? desktopStartOwed) =>
-            desktopStartOwed is null
-                ? InstallUi
-                : $"Open Jason Desktop: its start sets this installation up for {desktopStartOwed}, and places the UI; `{InstallUi}` places it now.";
-
-        /// <summary>
         /// Deliberately the same as <see cref="InstallRoles"/>. Overwriting is not what repairs a role whose
         /// directory is missing a SKILL.md or is over the cap -- a plain install replaces it -- and --force
         /// overwrites every edited file in every root of the plan, so printing it as the repair for any role
@@ -818,6 +809,16 @@ internal static partial class StatusChecks
     }
 
     /// <summary>
+    /// The sentence a fact about the UI adds where Jason Desktop's start is still owed for <paramref name="desktopStartOwed"/>
+    /// (the version of the jason it carries) and its finishing step places the UI: that start first, the command second. The
+    /// repair stays the command, since every repair is one an agent may run.
+    /// </summary>
+    private static string DesktopStartSaid(string? desktopStartOwed) =>
+        desktopStartOwed is null
+            ? string.Empty
+            : $" Open Jason Desktop: its start sets this installation up for {desktopStartOwed}, and places the UI; `{Repair.InstallUi}` places it now.";
+
+    /// <summary>
     /// Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness. The
     /// default build is the release's, so one from another release is named with the command that places this one's —
     /// where neither is a development build: a candidate is published with its own UI, a development runtime has no
@@ -835,7 +836,7 @@ internal static partial class StatusChecks
 
         if (info.Ui is null)
         {
-            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed.", Repair.InstallUiAt(desktopStartOwed));
+            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed." + DesktopStartSaid(desktopStartOwed), Repair.InstallUi);
         }
 
         var ui = info.Ui;
@@ -859,7 +860,7 @@ internal static partial class StatusChecks
             && SemanticVersion.TryParse(ui.Version, out var served) && !served.IsDevelopment
             && served != runtime)
         {
-            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}.", Repair.InstallUiAt(desktopStartOwed));
+            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving default {ui.Version} from {ui.Directory}; this runtime is {info.RuntimeVersion}." + DesktopStartSaid(desktopStartOwed), Repair.InstallUi);
         }
 
         return new StatusCheck("ui_module", false, CheckState.Ok, $"Serving {ui.Source} {ui.Version} from {ui.Directory}; built for API {ui.ApiVersion}, this runtime's; {ui.Digest}.", null);
