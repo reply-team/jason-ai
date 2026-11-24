@@ -1,6 +1,7 @@
-// `message.send`: send one person one message outside any sequence and any thread, from one of the account's accounts,
-// through the reply-cli command made for the format: `reply contact send-email`, or on LinkedIn `contact
-// linkedin-message`, `contact linkedin-inmail` or `contact linkedin-voice`, which Reply speaks from the text.
+// `message.send`: send one person one message outside any sequence, from one of the account's accounts, as a letter of
+// its own or, an email, in the thread of an earlier one it follows, through the reply-cli command made for the format:
+// `reply contact send-email`, or on LinkedIn `contact linkedin-message`, `contact linkedin-inmail` or `contact
+// linkedin-voice`, which Reply speaks from the text.
 //
 // Everything before the send is the path every send outside a sequence takes (send.js): the subject and the text are held
 // to what Reply would send as written, the account to the address the person approving read, and the person to the value
@@ -15,6 +16,9 @@
 // written.
 //
 // The message is made under the work item's key, and at the moment the arguments name where one is still ahead (send.js).
+// An email may follow an earlier one, as the runtime decided at the claim and composed at the root of the input: it goes
+// as a reply in that email's thread, under the thread's subject, with `--follows` and its body alone, or Reply refuses it
+// with nothing sent — never as a letter of its own. Reply may quote the email followed beneath the text.
 // A message on any channel may also name, in the provider's own object, the Reply sending schedule it is timed by
 // (provider.js): it goes by that schedule, at the first opening at or after the moment where one is named too. Reply answers it `queued` with
 // the moment where the schedule is open now or opens within ten minutes, and `waitingForSchedule` with only an estimate
@@ -33,7 +37,7 @@
 // `message.status` reads.
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { contactNumber, refuseUnprojected, withOrigin } from "./contacts.js";
-import { acceptance, endedAtReply, readableMoment, recordedSend, refusePlaceholders, senderFor, sendTo, withNamedSend } from "./send.js";
+import { acceptance, endedAtReply, followedReference, readableMoment, recordedSend, refusePlaceholders, senderFor, sendTo, withNamedSend } from "./send.js";
 import { scheduleOf } from "./provider.js";
 import { inReplySyntax, refuseTagStart } from "./template.js";
 import { lookup, text } from "./reading.js";
@@ -66,6 +70,15 @@ export function messageSend(input, context) {
     fail(OPERATION, { call: null, row: "format_of_another_channel" }, undefined);
   }
 
+  // The earlier letter the message follows, as the runtime decided it at the claim (send.js). Reply places a direct email
+  // in an earlier one's thread and a LinkedIn message in none, and the manifest takes `follows` on email alone, so the
+  // claim hands no letter to follow to a LinkedIn format; this holds it here too, before anything is called, since a
+  // message that follows a letter goes into its thread or not at all.
+  const follows = followedReference(input);
+  if (follows !== null && message.format !== "email") {
+    fail(OPERATION, { call: null, row: "follows_on_linkedin" }, undefined);
+  }
+
   // The document holds a voice message to a final script; this holds it here too, before anything is called.
   const composed = message.compose === "template" ? "template" : undefined;
   if (composed !== undefined && message.format === "linkedin_voice") {
@@ -89,7 +102,11 @@ export function messageSend(input, context) {
   readableMoment(OPERATION, input);
   const schedule = scheduleOf(OPERATION, input);
 
-  const written = format.text(message, args.sender);
+  // An email that follows an earlier one goes under that email's subject, which Reply writes as the thread's — `Re: ` and
+  // the subject of the email followed — so its own subject, held above as every subject is, does not go: the text on
+  // stdin is the body alone, which the CLI requires of a follow-up (`--follows`, send.js).
+  const text = format.text(message, args.sender);
+  const written = follows === null ? text : { body: text.body };
 
   // The send an earlier attempt returned, where Reply's record of it says what became of it, is the work item's: nothing
   // more is called, and the account is the one the arguments name.

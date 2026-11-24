@@ -430,6 +430,15 @@ export const CODES = {
       "linkedin.missing_variables": "text_would_render",
       "linkedin.feature_disabled": "feature_not_included",
       "access.feature_unavailable": "feature_not_included",
+      "follows.not_found": "followed_email_not_held",
+      "follows.not_owned": "followed_email_not_owned",
+      "follows.other_contact": "followed_email_to_another_contact",
+      "follows.other_mailbox": "followed_email_from_another_mailbox",
+      "follows.never_sent": "followed_email_never_goes",
+      "follows.not_sent": "followed_email_not_gone_yet",
+      "follows.not_placed": "follow_up_not_placed",
+      "follows.too_early": "follow_up_before_its_email",
+      "follows.not_available": "follow_ups_not_offered",
       "idempotency_key.in_use": "key_in_use",
       "repeat:reply.refused:404": "send_not_settled"
     },
@@ -1665,6 +1674,68 @@ export const ROWS = {
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The message was cancelled at Reply before it went, so nothing was sent. Whether to propose it again is a person's to decide."
+      },
+      "followed_email_not_held": {
+        "when": "The message follows an earlier email — the root `follows` names its reference, which goes on the send as `--follows` — and the send answered `follows.not_found`, Reply's code `contact.followedSendNotFound` at 404: Reply holds no direct email under that reference that this account can see. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_not_found",
+        "class": "permanent",
+        "note": "Reply holds no email this account can see under the reference of the email this message follows, so it was not sent, and not as a letter of its own either. The runtime's checks at the claim hold the email followed to this person and this mailbox, so this should never have reached Reply: look that email up in Reply by the reference its own work item returned, and check that the route's profile signs in to the account that sent it."
+      },
+      "followed_email_not_owned": {
+        "when": "The message follows an earlier email, and the send answered `follows.not_owned`, Reply's code `contact.followedSendNotOwned` at 403: that email is a teammate's send the route's profile may not act for. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_not_found",
+        "class": "permanent",
+        "note": "The email this message follows is a teammate's send in Reply that the route's profile may not act for, so it was not sent, and not as a letter of its own either. The runtime's checks at the claim hold the email followed to this route and this mailbox, so this should never have reached Reply: check which Reply user the route's profile signs in as, and that it may act for the mailbox that sent that email."
+      },
+      "followed_email_to_another_contact": {
+        "when": "The message follows an earlier email, and the send answered `follows.other_contact`, Reply's code `contact.followedSendOtherContact` at 400: that email went to another contact than the one this message goes to. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_not_found",
+        "class": "permanent",
+        "note": "The email this message follows went to another of Reply's contacts than the one this message goes to, so it was not sent, and not as a letter of its own either. The runtime's checks at the claim hold the email followed to this person, so this should never have reached Reply: check the person's pin in Jason against the contact that email went to in Reply."
+      },
+      "followed_email_from_another_mailbox": {
+        "when": "The message follows an earlier email, and the send answered `follows.other_mailbox`, Reply's code `contact.followedSendOtherMailbox` at 400: that email goes from another mailbox than the one this message names in `--email-account-id`. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_not_found",
+        "class": "permanent",
+        "note": "The email this message follows goes from another mailbox than the one this message is sent from, so it was not sent, and not as a letter of its own either. The runtime's checks at the claim hold the email followed to this message's sender, so this should never have reached Reply: check the mailbox that email goes from in Reply against this message's `args.sender`."
+      },
+      "followed_email_never_goes": {
+        "when": "The message follows an earlier email, and the send answered `follows.never_sent`, Reply's code `contact.followedSendNeverSent` at 409: that email was cancelled or failed for good and will never go. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_never_sent",
+        "class": "permanent",
+        "note": "The email this message follows was cancelled or failed at Reply and will never go, so there is no thread to place this one in, and nothing was sent. To reach the person, propose the message again as a letter of its own, with `follows` written `new_thread`."
+      },
+      "followed_email_not_gone_yet": {
+        "when": "The message follows an earlier email, and the send answered `follows.not_sent`, Reply's code `contact.followedSendNotSent` at 409: that email has not gone yet, and this message would go at once. Reply's guard released the key with nothing taken, so a repeat under it is the send itself. Nothing is sent.",
+        "code": "follows_not_sent_yet",
+        "class": "transient",
+        "note": "The email this message follows has not gone yet, and this one would go at once, so Reply sent nothing. The runtime repeats the attempt, and the message goes into that email's thread once it has gone; one that should wait longer is proposed again with a `send_after` later than that email's moment."
+      },
+      "follow_up_not_placed": {
+        "when": "The message follows an earlier email, and the send answered `follows.not_placed`, Reply's code `contact.followUpNotPlaced` at 409: that email went, and Reply could not find it to place the message in its thread. Nothing is sent, and the message does not go as a letter of its own instead. The reference of Reply's record of the message, where it names one, is kept on the attempt.",
+        "code": "follows_not_placed",
+        "class": "permanent",
+        "note": "Reply could not place this message in the thread of the email it follows: that email went, and its mailbox could no longer find it to answer. Nothing was sent, and not as a letter of its own either. Whether to propose it again as one, with `follows` written `new_thread`, is a person's to decide."
+      },
+      "follow_up_before_its_email": {
+        "when": "The message follows an earlier email and names a moment, `--send-after`, and the send answered `follows.too_early`, Reply's code `contact.followUpBeforeFollowedSend` at 409: that email is held for an exact moment of its own, and this message's is not later, so it would go before that email or with it. Nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "follows_too_early",
+        "class": "validation",
+        "note": "The moment this message was given is not later than the one the email it follows is held for, so it would go before that email, and Reply sent nothing. Asking again meets the same answer: propose it again with a `send_after` later than that email's moment."
+      },
+      "follow_ups_not_offered": {
+        "when": "The message follows an earlier email, and the send answered `follows.not_available`: reply-cli's word for Reply's follow-up route answering 404 with no code of Reply's own, which is a Reply that does not offer follow-ups. reply-cli tries nothing else in its place, so nothing is sent, and the message does not go as a letter of its own instead.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "This Reply does not offer an email in an earlier email's thread, so the message that follows one (`follows`) was not sent, and not as a letter of its own either. Asking again meets the same answer."
+      },
+      "follows_on_linkedin": {
+        "when": "The root `follows` names a letter to follow, and the message is a LinkedIn format: the manifest takes `follows` on email alone, so the claim hands none there, and the package holds it here too. Decided before any call; nothing is sent.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "operation",
+        "note": "Reply places a message in an earlier letter's thread on email alone, so this LinkedIn message that follows one (`follows`) was not sent. Asking again meets the same answer."
       },
       "schedule_not_taken_on_the_route": {
         "when": "The provider's own object names a sending schedule in `provider.schedule_id`, and the send answered `reply.invalid_request` naming the field `scheduleId`: a Reply whose LinkedIn route does not take a schedule answers so (scheduleId is not supported for LinkedIn sends in this version.). The package gives Reply only a schedule id it can read, so the field refused is the route not taking one, never a request built wrong. Nothing is sent.",
