@@ -90,9 +90,11 @@ internal static class HeldSends
     /// send again, and only while its moment is still to come. The latest is the one that finished last. The moment comes
     /// back in UTC to the millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends
     /// keep nothing. Where a bound of the past is given, a send handed over before it is left out by its own column, before
-    /// any of its JSON is read.
+    /// any of its JSON is read. What names a held send is found by the index on the campaign, the operation and the send
+    /// (<see cref="SendProbe"/>); the latest read's status is compared under the unary plus, so the index on the status and
+    /// the finish, which would spare the sort, is not walked through the installation's finished work instead.
     /// </summary>
-    private static readonly string Sql = $$"""
+    internal static readonly string Sql = $$"""
         SELECT Campaign, WorkItem, Operation, strftime('%Y-%m-%dT%H:%M:%fZ', Moment) AS Moment, PluginId, BindingIdentity
         FROM (
             SELECT c.public_id AS Campaign, s.public_id AS WorkItem, s.operation AS Operation, s.id AS Id, s.campaign_id AS CampaignRow,
@@ -122,7 +124,7 @@ internal static class HeldSends
               SELECT 1 FROM work_items AS k
               WHERE k.campaign_id = held.CampaignRow
                 AND k.operation IN ({2}, {3})
-                AND json_extract(k.context_json, '$.input.send') = held.WorkItem
+                AND {{SendProbe.Names("k", "held.WorkItem")}}
                 AND (
                     (k.operation = {2} AND k.status = 'succeeded')
                     OR ({9} <> 'any' AND (
@@ -135,8 +137,8 @@ internal static class HeldSends
                             AND json_type(k.result_json, '$.cancelable') = 'false'
                             AND k.id = (
                                 SELECT r.id FROM work_items AS r
-                                WHERE r.campaign_id = held.CampaignRow AND r.operation = {3} AND r.status = 'succeeded'
-                                  AND json_extract(r.context_json, '$.input.send') = held.WorkItem
+                                WHERE r.campaign_id = held.CampaignRow AND r.operation = {3} AND +r.status = 'succeeded'
+                                  AND {{SendProbe.Names("r", "held.WorkItem")}}
                                 ORDER BY r.finished_at DESC, r.id DESC
                                 LIMIT 1))))))
         ORDER BY CampaignRow, Id

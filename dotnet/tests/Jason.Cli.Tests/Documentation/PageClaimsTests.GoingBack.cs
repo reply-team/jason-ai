@@ -30,6 +30,7 @@ public partial class PageClaimsTests
         "20261122065647_LaunchLimitLifts",
         "20261122075940_DeepReviewGrid",
         "20261124042822_DeferredSendReads",
+        "20261124072351_SendProbeIndex",
     ];
 
     /// <summary>

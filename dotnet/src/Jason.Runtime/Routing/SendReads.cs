@@ -30,8 +30,8 @@ internal static class SendReads
     /// and whether it succeeded. A read is matched to its send by the identifier its input names; nothing else of its
     /// context is read. One read may be left out by its id, the read whose own end is being decided.
     /// </summary>
-    private const string MadeSql = """
-        SELECT json_extract(w.context_json, '$.input.send') AS Send,
+    private static readonly string MadeSql = $$"""
+        SELECT {{SendProbe.Of("w")}} AS Send,
                strftime('%Y-%m-%dT%H:%M:%fZ', w.finished_at) AS Ended,
                CASE WHEN w.status = 'succeeded' THEN 1 ELSE 0 END AS Succeeded
         FROM work_items AS w
@@ -40,7 +40,7 @@ internal static class SendReads
           AND w.created_by_type = 'system'
           AND w.finished_at IS NOT NULL
           AND ({3} IS NULL OR w.public_id <> {3})
-          AND json_extract(w.context_json, '$.input.send') IN (SELECT value FROM json_each({2}))
+          AND {{SendProbe.Of("w")}} IN (SELECT value FROM json_each({2}))
         """;
 
     /// <summary>An open read the runtime made in the campaign: created by the system and not finished.</summary>
