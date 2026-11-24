@@ -132,17 +132,21 @@ public class ReplyStubFollowUpTests
         Assert.Equal((sent, direct, threads), (account.Sent.Count, account.DirectSends.Count, account.Threads.Count));
     }
 
+    /// <summary>
+    /// reply-cli refuses any direct email that names no mailbox, a follow-up too, since Reply would send it from the
+    /// default one: <c>usage.id</c>, exit 2, before anything is sent.
+    /// </summary>
     [Fact]
-    public async Task A_follow_up_without_a_mailbox_goes_from_the_mailbox_of_the_send_it_names()
+    public async Task A_follow_up_without_a_mailbox_is_refused_as_any_email_without_one_is()
     {
         using var account = Planted();
         var first = await FirstAsync(account, "Tuesday");
 
-        var (exit, _, _) = await account.RunAsync(
+        var (exit, _, said) = await account.RunAsync(
             ["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--follows", first, "--message", "-"], """{"body":"Hi"}""", Ct);
 
-        Assert.Equal(0, exit);
-        Assert.Equal(Mailbox, (long)account.Sent[1]!["accountId"]!);
+        Assert.Equal((2, "usage.id"), (exit, (string?)Error(said)["code"]));
+        Assert.Equal((1, 1), (account.Sent.Count, account.DirectSends.Count));
     }
 
     [Fact]
@@ -280,21 +284,6 @@ public class ReplyStubFollowUpTests
         Assert.Equal((1, 1), (one, two));
         Assert.Equal(Error(oneSaid).ToJsonString(), Error(twoSaid).ToJsonString());
         Assert.Equal(direct, account.DirectSends.Count);
-    }
-
-    [Fact]
-    public async Task A_keyed_repeat_with_the_mailbox_left_out_is_the_same_request_as_with_it_given()
-    {
-        using var account = Planted();
-        var first = await FirstAsync(account, "Tuesday");
-
-        var (one, oneOut, _) = await account.RunAsync([.. Follow(first), "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
-        var (two, twoOut, _) = await account.RunAsync(
-            ["--json", "-q", "contact", "send-email", "--contact-id", "1001", "--follows", first, "--message", "-", "--idempotency-key", Key], """{"body":"Hi"}""", Ct);
-
-        Assert.Equal((0, 0), (one, two));
-        Assert.Equal(JsonNode.Parse(oneOut)!.ToJsonString(), JsonNode.Parse(twoOut)!.ToJsonString());
-        Assert.Equal(2, account.DirectSends.Count);
     }
 
     [Fact]
