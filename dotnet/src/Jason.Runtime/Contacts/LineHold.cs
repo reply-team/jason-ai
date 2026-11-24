@@ -26,7 +26,9 @@ namespace Jason.Runtime.Contacts;
 /// attempt, or an answer the responder sent, a <c>conversation.reply</c> of the campaign into the line's own thread, at
 /// the end of its succeeded attempt. A touch records no thread, so touches are compared for the person across the
 /// campaign and an answer for its thread alone. Only a moment that has come counts, and a letter a cancel took back never
-/// went. Moments of the runtime's own record are compared and nothing else. A line whose stored event names the other side
+/// went, nor did one a succeeded read of the campaign says failed or was cancelled while no read of it says it went or may
+/// have gone (<see cref="Campaigns.LineTouches.NeverWentSql"/>), the one definition a touch that counts reads too. Moments of the
+/// runtime's own record are compared and nothing else. A line whose stored event names the other side
 /// always holds, whatever the moments (<see cref="OtherSideNamedAsync"/>): where the provider said who wrote, the moments
 /// do not overrule it.
 /// </para>
@@ -41,17 +43,14 @@ internal static class LineHold
     /// <summary>The answer into a thread, compared for the thread it names.</summary>
     private const string Answer = "conversation.reply";
 
-    /// <summary>The cancel that takes a letter back before it goes.</summary>
-    private const string Cancel = "message.cancel";
-
     /// <summary>
     /// Whether a letter of Jason's went out to the person at or after the line's moment and by now: a succeeded touch of the
     /// person in the campaign, at its result's <c>accepted_for</c> or else its succeeded attempt's end, or a succeeded answer
-    /// of the campaign into the line's thread, at its attempt's end; never one a succeeded cancel names. SQLite's date
-    /// functions read the stored moment and the contract's forms alike, and one they cannot read is NULL and counts for
-    /// nothing.
+    /// of the campaign into the line's thread, at its attempt's end; never one a succeeded cancel names, nor one a succeeded
+    /// read says failed or was cancelled while no read of it says it went or may have gone. SQLite's date functions read the stored moment and the contract's forms
+    /// alike, and one they cannot read is NULL and counts for nothing.
     /// </summary>
-    private const string OwnMoveSql = """
+    private static readonly string OwnMoveSql = $$"""
         SELECT count(*) AS "Value"
         FROM work_items AS s
         JOIN attempts AS a ON a.work_item_id = s.id AND a.status = 'succeeded'
@@ -59,12 +58,9 @@ internal static class LineHold
           AND s.status = 'succeeded'
           AND ((s.contact_id = {1} AND s.operation IN (SELECT value FROM json_each({2})))
                OR ({3} IS NOT NULL AND s.operation = {4} AND json_extract(s.context_json, '$.input.thread.external_id') = {3}))
-          AND NOT EXISTS (
-              SELECT 1 FROM work_items AS k
-              WHERE k.campaign_id = s.campaign_id AND k.operation = {5} AND k.status = 'succeeded'
-                AND json_extract(k.context_json, '$.input.send') = s.public_id)
-          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) >= julianday({6})
-          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) <= julianday({7})
+          AND NOT {{Campaigns.LineTouches.NeverWentSql("s")}}
+          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) >= julianday({5})
+          AND julianday(coalesce(json_extract(s.result_json, '$.items[0].accepted_for'), a.finished_at)) <= julianday({6})
         """;
 
     /// <summary>
@@ -145,7 +141,7 @@ internal static class LineHold
         ArgumentNullException.ThrowIfNull(db);
         object named = thread is null ? DBNull.Value : thread;
         var went = await db.Database
-            .SqlQueryRaw<int>(OwnMoveSql, campaignId, contactId, Touches, named, Answer, Cancel, Moment(moved), Moment(now))
+            .SqlQueryRaw<int>(OwnMoveSql, campaignId, contactId, Touches, named, Answer, Moment(moved), Moment(now))
             .SingleAsync(ct)
             .ConfigureAwait(false);
         return went > 0;

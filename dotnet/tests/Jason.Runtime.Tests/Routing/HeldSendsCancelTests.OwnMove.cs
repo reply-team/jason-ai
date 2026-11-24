@@ -106,6 +106,44 @@ public partial class HeldSendsCancelTests
     }
 
     /// <summary>
+    /// A letter that a succeeded read of the campaign says the provider failed or cancelled never went, so it moved no thread:
+    /// a line at its moment is not Jason's own move, holds the person and takes back the letter still waiting. A read that
+    /// says the letter went, that the provider still holds it, or that the provider lost track of it, leaves the letter
+    /// Jason's own move, and the line holds nobody; so does a read that says it went beside one that says it failed.
+    /// </summary>
+    [Theory]
+    [InlineData("failed", MembershipState.Paused)]
+    [InlineData("cancelled", MembershipState.Paused)]
+    [InlineData("unknown", MembershipState.Enrolled)]
+    [InlineData("queued", MembershipState.Enrolled)]
+    [InlineData("sent", MembershipState.Enrolled)]
+    [InlineData("failed", MembershipState.Enrolled, "sent")]
+    public async Task A_letter_a_read_says_never_went_is_no_move_of_Jasons(string state, MembershipState expected, string? then = null)
+    {
+        using var harness = Routed();
+        var (campaign, person) = await SceneAsync(harness);
+        var went = Noon.AddMinutes(-10);
+        var letter = await SentAsync(harness, campaign, person, sendAfter: null, cancelable: false, acceptedFor: Moment(went));
+        await StatusReadAsync(harness, campaign, letter, state, cancelable: false);
+        if (then is not null)
+        {
+            await StatusReadAsync(harness, campaign, letter, then, cancelable: false);
+        }
+
+        var waiting = await SentAsync(harness, campaign, person, Later);
+        await ReplyLineAsync(harness, campaign, person, "th-1", went.AddSeconds(-30));
+
+        await harness.RespondAsync(Ct);
+
+        await using var db = harness.Open();
+        Assert.Equal(expected, await StateOfAsync(db, campaign, person));
+        Assert.Equal(expected == MembershipState.Paused ? 1 : 0, await db.Journal.CountAsync(e => e.Kind == JournalKinds.ContactsPaused, Ct));
+        string?[] takenBack = expected == MembershipState.Paused ? [waiting] : [];
+        var cancels = await db.WorkItems.AsNoTracking().Where(w => w.Operation == HeldSends.Cancel).ToListAsync(Ct);
+        Assert.Equal(takenBack, cancels.Select(w => (string?)w.Context["input"]!["send"]));
+    }
+
+    /// <summary>
     /// Right after a continue the responder answers in the thread, and the thread moves: the line that move makes holds
     /// nobody. Its answer in another thread is no reason to leave this thread's line alone.
     /// </summary>

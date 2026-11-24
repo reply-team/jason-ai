@@ -17,7 +17,9 @@ namespace Jason.Runtime.Campaigns;
 /// <para>
 /// The line's root is the latest <c>message.send</c> of the same campaign about the same person on the same channel — its
 /// <c>args.channel</c> the message's own — that is a touch that counts (<see cref="LineTouches.CountedSql"/>, so a send a
-/// succeeded take-back names is none), whose latest succeeded attempt returned the provider's reference under
+/// succeeded take-back names is none, and neither is one a succeeded read says failed or was cancelled while no read of it
+/// says it went or may have gone), whose
+/// latest succeeded attempt returned the provider's reference under
 /// <c>external_ids_returned.send</c>, and that itself follows nothing: its <c>context.follows</c> is absent, as on every
 /// letter claimed before the runtime decided this at all, or names no work item. Latest is by that attempt's
 /// <c>claimed_at</c>, then by the work item's row, both descending. The work being claimed is never its own root. A letter
