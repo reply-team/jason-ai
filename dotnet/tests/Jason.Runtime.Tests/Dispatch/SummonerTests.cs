@@ -248,6 +248,36 @@ public class SummonerTests
         Assert.Null((await SingleCheckInAsync(harness)).Entry);
     }
 
+    /// <summary>
+    /// A send that did not go wakes the manager by the default list, as the cause the brief names, with the general text:
+    /// the check-in names no entry.
+    /// </summary>
+    [Fact]
+    public async Task A_send_that_did_not_go_wakes_the_manager_by_default_with_the_general_text()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.MessageUnsentObserved);
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var item = await SingleCheckInAsync(harness);
+        Assert.Equal("triggered", (string?)item.Context["review_intent"]);
+        Assert.Equal(JournalKinds.MessageUnsentObserved, (string?)item.Context["trigger"]);
+        Assert.Null(item.Entry);
+    }
+
+    /// <summary>A list narrowed before the kind existed does not hold it, so a send that did not go wakes nobody there.</summary>
+    [Fact]
+    public async Task A_list_narrowed_without_it_is_not_woken_by_a_send_that_did_not_go()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { Triggers = [JournalKinds.WorkItemFailed, JournalKinds.DecisionAnswered] });
+        var campaign = await SeedAsync(harness, live: true);
+        await JournalAsync(harness, campaign, JournalKinds.MessageUnsentObserved);
+
+        Assert.Equal(0, await SummonAsync(harness));
+    }
+
     /// <summary>And never twice, however many scans run while the first one is open.</summary>
     [Fact]
     public async Task A_due_campaign_is_not_summoned_again_while_its_check_in_is_open()
