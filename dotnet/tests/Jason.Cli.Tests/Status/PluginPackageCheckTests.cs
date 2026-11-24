@@ -1,4 +1,5 @@
 using Jason.Cli.Status;
+using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 
@@ -327,6 +328,71 @@ public class PluginPackageCheckTests
         Assert.Contains("`jason plugin install reply --replace` places it in <plugins>/reply in place of the one there", check.Fact, StringComparison.Ordinal);
         Assert.DoesNotContain("/elsewhere", check.Fact, StringComparison.Ordinal);
         Assert.DoesNotContain("/data/plugins", check.Fact, StringComparison.Ordinal);
+    }
+
+    private const string Behind = "reply 0.6.1 is installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes. ";
+
+    private const string PlainRepair = "`jason plugin install reply --replace` places it in <plugins>/reply in place of the one there, and asks the runtime to load it.";
+
+    private const string DesktopRepair = "Open Jason Desktop: its start sets this installation up for 0.34.0, and places this package; `jason plugin install reply --replace` places it now, in <plugins>/reply in place of the one there, and asks the runtime to load it.";
+
+    /// <summary>
+    /// Between the install script's end and Jason Desktop's first start the package is behind, and that start's finishing
+    /// step places it: so for the jason Jason Desktop carries, while the set-up record does not hold its version, the repair
+    /// names the application first and the command second. For a jason it does not carry, or once the record holds the
+    /// version, the words are what they were. Only the words move: the state is the same and the installation stays ready.
+    /// </summary>
+    [Theory]
+    [InlineData(true, null, true)]
+    [InlineData(true, "0.33.0", true)]
+    [InlineData(true, "0.34.0", false)]
+    [InlineData(false, null, false)]
+    [InlineData(false, "0.33.0", false)]
+    public async Task A_package_behind_names_jason_desktop_first_only_for_the_carried_jason_before_its_start_has_set_the_version_up(bool carried, string? setUpFor, bool desktopFirst)
+    {
+        var (report, check) = await CarriedAsync(
+            [Reply(ReleasedPluginState.Behind, new PluginPackageInfo("0.6.1", "sha256:earlier"))], carried, setUpFor);
+
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.False(check.Required);
+        Assert.Null(check.Fix);
+        Assert.Equal(Behind + (desktopFirst ? DesktopRepair : PlainRepair), check.Fact);
+    }
+
+    /// <summary>The finishing step places a package that is behind and never one that is not installed, so that sentence is not touched.</summary>
+    [Fact]
+    public async Task A_package_not_installed_keeps_its_words_for_the_carried_jason_before_its_start()
+    {
+        var (_, check) = await CarriedAsync([Reply(ReleasedPluginState.NotInstalled, null)], carried: true, setUpFor: null);
+
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.Equal("reply is not installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes, and `jason plugin install reply` installs it.", check.Fact);
+    }
+
+    private static async Task<(StatusReport Report, StatusCheck Check)> CarriedAsync(IReadOnlyList<ReleasedPluginInfo> released, bool carried, string? setUpFor)
+    {
+        using var dir = new TempPaths();
+        StatusCommandTests.Running(dir, version: "0.7.1", releasedPlugins: released);
+        var executable = Path.Combine(dir.Paths.Root, "app", "bundle", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "jason");
+        if (carried)
+        {
+            CarriedRecord.Beside(executable);
+        }
+
+        if (setUpFor is not null)
+        {
+            Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop"));
+            File.WriteAllText(Path.Combine(dir.Paths.Root, "desktop", "machine-setup.json"), $"{{\"ran_for\":\"{setUpFor}\",\"ran_from\":\"x\",\"report\":{{}}}}");
+        }
+
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, installPath: executable, build: "0.7.1"), Ct);
+        var report = StatusCommandTests.Read(output);
+        var own = dir.Paths.PluginsDirectory + Path.DirectorySeparatorChar;
+        report = report with { Checks = [.. report.Checks.Select(check => check with { Fact = check.Fact.Replace(own, "<plugins>/", StringComparison.Ordinal) })] };
+        return (report, Assert.Single(report.Checks, c => c.Name == "plugin_package"));
     }
 
     private static async Task<StatusCheck> CheckAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1", SetupInfo? setup = null) =>

@@ -1,4 +1,5 @@
 using Jason.Cli.Status;
+using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 
@@ -48,6 +49,52 @@ public class UiModuleCheckTests
         Assert.False(check.Required);
         Assert.Contains(fact, check.Fact, StringComparison.Ordinal);
         Assert.Equal(fix, check.Fix);
+    }
+
+    private const string DesktopFirst = "Open Jason Desktop: its start sets this installation up for 0.34.0, and places the UI; `jason ui install` places it now.";
+
+    /// <summary>
+    /// Between the install script's end and Jason Desktop's first start no UI is installed, and that start's finishing step
+    /// places it: so for the jason Jason Desktop carries, while the set-up record does not hold its version, the repair names
+    /// the application first and the command second, where no UI is installed and where the default one is another release's.
+    /// Anywhere else the repair is the command alone. The state and the optional mark are what they were.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true, null, true)]
+    [InlineData(false, true, "0.33.0", true)]
+    [InlineData(false, true, "0.34.0", false)]
+    [InlineData(false, false, null, false)]
+    [InlineData(false, false, "0.33.0", false)]
+    [InlineData(true, true, null, true)]
+    [InlineData(true, true, "0.33.0", true)]
+    [InlineData(true, true, "0.34.0", false)]
+    [InlineData(true, false, null, false)]
+    public async Task The_repair_names_jason_desktop_first_only_for_the_carried_jason_before_its_start_has_set_the_version_up(bool served, bool carried, string? setUpFor, bool desktopFirst)
+    {
+        using var dir = new TempPaths();
+        StatusCommandTests.Running(dir, version: "0.13.0", ui: served ? Served("default", "0.12.0") : null);
+        var executable = Path.Combine(dir.Paths.Root, "app", "bundle", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "jason");
+        if (carried)
+        {
+            CarriedRecord.Beside(executable);
+        }
+
+        if (setUpFor is not null)
+        {
+            Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop"));
+            File.WriteAllText(Path.Combine(dir.Paths.Root, "desktop", "machine-setup.json"), $"{{\"ran_for\":\"{setUpFor}\",\"ran_from\":\"x\",\"report\":{{}}}}");
+        }
+
+        var output = new StringWriter();
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, installPath: executable, build: "0.13.0"), Ct);
+
+        var report = StatusCommandTests.Read(output);
+        var check = Assert.Single(report.Checks, c => c.Name == "ui_module");
+        Assert.False(check.Required);
+        Assert.Equal(served ? CheckState.Failed : CheckState.Absent, check.State);
+        Assert.Equal(desktopFirst ? DesktopFirst : "jason ui install", check.Fix);
     }
 
     [Fact]
