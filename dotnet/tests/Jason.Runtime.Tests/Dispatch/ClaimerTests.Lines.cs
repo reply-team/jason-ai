@@ -10,6 +10,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
@@ -221,6 +222,95 @@ public partial class ClaimerTests
         {
             Assert.Equal(refused, await RefusalAsync(fresh, next));
         }
+    }
+
+    /// <summary>
+    /// A send that a succeeded <c>message.status</c> of the campaign says the provider failed or cancelled never went, so it
+    /// is no touch, whoever made the read — the dispatcher, a person or a role — and the next touch goes on to the person's
+    /// approval. A read that says the send went, that the provider still holds it or that the provider lost track of it, a
+    /// read that failed, a read of another person's send, and a read of another campaign that names the same item leave it
+    /// counted: the letter went, may still go, or may have gone.
+    /// </summary>
+    [Theory]
+    [InlineData("failed", WorkItemStatus.Succeeded, ActorType.System, "the send", null)]
+    [InlineData("cancelled", WorkItemStatus.Succeeded, ActorType.System, "the send", null)]
+    [InlineData("failed", WorkItemStatus.Succeeded, ActorType.Human, "the send", null)]
+    [InlineData("cancelled", WorkItemStatus.Succeeded, ActorType.Role, "the send", null)]
+    [InlineData("unknown", WorkItemStatus.Succeeded, ActorType.System, "the send", AttemptErrors.TouchCeilingReached)]
+    [InlineData("queued", WorkItemStatus.Succeeded, ActorType.System, "the send", AttemptErrors.TouchCeilingReached)]
+    [InlineData("sent", WorkItemStatus.Succeeded, ActorType.System, "the send", AttemptErrors.TouchCeilingReached)]
+    [InlineData(null, WorkItemStatus.Failed, ActorType.System, "the send", AttemptErrors.TouchCeilingReached)]
+    [InlineData("failed", WorkItemStatus.Succeeded, ActorType.System, "another person's send", AttemptErrors.TouchCeilingReached)]
+    [InlineData("failed", WorkItemStatus.Succeeded, ActorType.System, "the send, from another campaign", AttemptErrors.TouchCeilingReached)]
+    public async Task A_send_a_succeeded_read_says_the_provider_failed_or_cancelled_is_no_touch(
+        string? state, WorkItemStatus read, ActorType madeBy, string names, string? refused)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        using var harness = LineHarness();
+        var (campaign, contact) = await LineSceneAsync(db);
+        var (elsewhere, _) = await LineSceneAsync(db, "cnt_01K52JR0000000000000000002");
+        var (_, other) = await LineSceneAsync(db, "cnt_01K52JR0000000000000000003");
+        await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var held = await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var othersSend = await TouchedAsync(db, campaign, other, WorkItemStatus.Succeeded);
+        ReadSaid(
+            db,
+            names == "the send, from another campaign" ? elsewhere : campaign,
+            names == "another person's send" ? othersSend : held,
+            state,
+            read,
+            madeBy);
+        var next = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(refused is null ? 1 : 2, await LineTouches.OthersAsync(db, campaign.Id, contact.Id, next.Id, Ct));
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == next.Id, Ct);
+        if (refused is null)
+        {
+            Assert.Equal(WorkItemStatus.AwaitingApproval, row.Status);
+        }
+        else
+        {
+            Assert.Equal(refused, await RefusalAsync(fresh, next));
+        }
+    }
+
+    /// <summary>
+    /// The ceiling end to end, through a whole dispatcher and reads the provider answers: a person held at the ceiling of two
+    /// by a letter the provider took is refused the touch after it. A read of that letter, made by the manager and recorded as
+    /// every read is, that answers the provider lost track of it leaves it counted, since it may have gone, and the next touch
+    /// is refused too; a second read that answers the provider failed it takes it out of the count, and the touch after that
+    /// goes on to the person's approval: a letter that never went no longer holds the person at the ceiling.
+    /// </summary>
+    [Fact]
+    [Critical(Family.W3, "the ceiling of touches leaves out a letter a read says never went, and keeps one that may have gone")]
+    public async Task A_person_at_the_ceiling_by_a_letter_a_read_says_failed_may_be_written_to_again()
+    {
+        var answers = new Queue<string>(["unknown", "failed"]);
+        var command = new FakeCommand(
+            WorkItemKind.ProviderOp,
+            _ => Task.FromResult<CommandOutcome>(new CommandOutcome.Provider(StatusAnswer(answers.Dequeue()), null)));
+        using var harness = new DispatchHarness(Noon, commands: command);
+        harness.Lines.CurrentValue = new LinesOptions { MaxTouches = 2 };
+        RoutedToTheLineProvider(harness, "message.send", HeldSends.Status);
+        await using var db = harness.Open();
+        var (campaign, contact) = await LineSceneAsync(db);
+        await TouchedAsync(db, campaign, contact, WorkItemStatus.Succeeded);
+        var letter = Wrote(db, campaign, contact, hoursAgo: 2);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(AttemptErrors.TouchCeilingReached, await TouchAsync(harness, db, campaign, contact));
+
+        Assert.Equal("unknown", await ReadThroughAsync(harness, db, campaign, letter));
+        Assert.Equal(AttemptErrors.TouchCeilingReached, await TouchAsync(harness, db, campaign, contact));
+
+        Assert.Equal("failed", await ReadThroughAsync(harness, db, campaign, letter));
+        Assert.Null(await TouchAsync(harness, db, campaign, contact));
+        Assert.Empty(answers);
     }
 
     /// <summary>
@@ -468,12 +558,19 @@ public partial class ClaimerTests
         return harness;
     }
 
-    /// <summary>The same provider loaded and routed by default in a whole dispatcher's composition.</summary>
-    private static void RoutedToTheLineProvider(DispatchHarness harness)
+    /// <summary>
+    /// The same provider loaded and routed by default in a whole dispatcher's composition, performing
+    /// <paramref name="operations"/>, or <c>message.send</c> alone where none are named.
+    /// </summary>
+    private static void RoutedToTheLineProvider(DispatchHarness harness, params string[] operations)
     {
         var plugins = harness.Resolve<PluginRegistry>();
         plugins.Replace(
-            new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [TestPlugins.Loaded(LineProvider, ["message.send"])]),
+            new PluginSnapshot(
+                PublicId.New(PluginProtocol.SnapshotIdPrefix),
+                Noon,
+                SnapshotSource.Startup,
+                [TestPlugins.Loaded(LineProvider, operations.Length > 0 ? operations : ["message.send"])]),
             new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
         harness.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
             PublicId.New(RouteSnapshot.IdPrefix),
@@ -554,4 +651,110 @@ public partial class ClaimerTests
         await db.SaveChangesAsync(Ct);
         return item;
     }
+
+    /// <summary>
+    /// A <c>message.status</c> of <paramref name="campaign"/> naming <paramref name="send"/>, made by <paramref name="madeBy"/>,
+    /// that ended <paramref name="status"/>: succeeded, answering <paramref name="state"/>, or failed, the provider answering
+    /// that it holds no such send.
+    /// </summary>
+    private static WorkItem ReadSaid(
+        JasonDbContext db,
+        Campaign campaign,
+        WorkItem send,
+        string? state,
+        WorkItemStatus status = WorkItemStatus.Succeeded,
+        ActorType madeBy = ActorType.System)
+    {
+        var read = WorkItemFactory.NewProviderOp(campaign, HeldSends.Status, Noon.AddMinutes(-40));
+        read.CreatedByType = madeBy;
+        read.CreatedById = madeBy switch
+        {
+            ActorType.Human => "ada",
+            ActorType.Role => "manager",
+            _ => Actors.Dispatcher.Id,
+        };
+        read.Status = status;
+        read.FinishedAt = Noon.AddMinutes(-30);
+        read.Context = new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["send"] = send.PublicId } };
+        if (status == WorkItemStatus.Succeeded)
+        {
+            read.Result = ReadAnswer(state!);
+        }
+        else
+        {
+            read.LastError = new AttemptErrorDto("send_not_found", "The provider holds no such send.", Retriable: false, Class: FailureClass.Permanent);
+        }
+
+        db.WorkItems.Add(read);
+        return read;
+    }
+
+    /// <summary>
+    /// One more touch to the person, made and claimed through the whole dispatcher: the code the claim refused it with, or null
+    /// where it went on to the person's approval.
+    /// </summary>
+    private static async Task<string?> TouchAsync(DispatchHarness harness, JasonDbContext db, Campaign campaign, Contact contact)
+    {
+        var touch = Sending(db, campaign, contact);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.ClaimAsync(Ct));
+
+        await using var fresh = harness.Open();
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == touch.Id, Ct);
+        return row.Status == WorkItemStatus.AwaitingApproval ? null : await RefusalAsync(fresh, touch);
+    }
+
+    /// <summary>
+    /// A read of <paramref name="letter"/> made by the campaign's manager, claimed and run through the whole dispatcher with
+    /// the provider answering what the test queued: the state the read recorded.
+    /// </summary>
+    private static async Task<string?> ReadThroughAsync(DispatchHarness harness, JasonDbContext db, Campaign campaign, WorkItem letter)
+    {
+        var read = WorkItemFactory.NewProviderOp(campaign, HeldSends.Status, Noon);
+        read.CreatedByType = ActorType.Role;
+        read.CreatedById = "manager";
+        read.Context = new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["send"] = letter.PublicId } };
+        db.WorkItems.Add(read);
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+        Assert.Equal(read.PublicId, work.WorkItemPublicId);
+        await ProviderBlockRaceTests.RunAsync(harness, work);
+
+        await using var fresh = harness.Open();
+        var ended = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == read.Id, Ct);
+        Assert.Equal(WorkItemStatus.Succeeded, ended.Status);
+        return (string?)ended.Result!["state"];
+    }
+
+    /// <summary>The stand-in provider's answer to a read of a send, in one of the operation's five words.</summary>
+    private static PluginInvocationResult StatusAnswer(string state) => new(
+        new InvocationOutcome.Succeeded(ReadAnswer(state), null, new OutcomeDiagnostics(12, 1, 0, 1)),
+        new InvocationProvenance(
+            LineProvider,
+            "1.0.0",
+            "sha256:0",
+            PluginProtocol.CurrentVersion,
+            PluginProtocol.OperationContractVersion,
+            PluginProtocol.InvocationIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC",
+            "att_01K5B7Q2WE5X3M9T0YH4C6RDND",
+            PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNE"),
+        Launch: null);
+
+    /// <summary>What a read of a send answers, in one of the operation's five words; the letter's text is not carried.</summary>
+    private static JsonObject ReadAnswer(string state) => new()
+    {
+        ["state"] = state,
+        ["channel"] = "email",
+        ["cancelable"] = state == "queued",
+        ["accepted_for"] = null,
+        ["sent_at"] = state == "sent" ? "2026-09-14T10:05:00Z" : null,
+        ["message_id"] = state == "sent" ? "msg-2001" : null,
+        ["rendered_subject"] = null,
+        ["rendered_body"] = null,
+        ["failure_reason"] = state == "failed" ? "The receiving server refused the message." : null,
+        ["failure_code"] = state == "failed" ? "relay_refused" : null,
+        ["cancelled_at"] = state == "cancelled" ? "2026-09-14T10:05:00Z" : null,
+    };
 }
