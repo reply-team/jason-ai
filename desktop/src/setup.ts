@@ -1312,7 +1312,7 @@ export class Setup {
      * `reply` is found, its version was read and is below the minimum, npm is found, no try of this minimum stands in the
      * desktop's settings, and no plugin that runs it can be at work (`replyAtWork`). The mark is written before npm starts, and where it cannot be written npm is not run; it is taken
      * away once the CLI in use is at the minimum, so a minimum is tried once and a click is never held back. A missing CLI is
-     * installed on a click alone. After npm the version is read again and the runtime is asked to read its plugins again;
+     * installed on a click alone. After npm, however it ended, the version is read again, and where npm ended well or that version is at the minimum the runtime is asked to read its plugins again;
      * what the runtime then says it found is read back, so a CLI updated here and not where the runtime looks is not called
      * updated. The outcome is one line of the card, in memory for this run; npm's words reach that line alone.
      */
@@ -1345,8 +1345,11 @@ export class Setup {
         if (!this.#markReplyTried(replyMinimumVersion)) return 'unmarked';
 
         const result = await this.#npmInstall('reply', npmPackage);
-        if (result.exit !== 0) return this.#startUpdateEnded('failed', startUpdateSentences.failed(npmLine(result)));
+        // npm that ended badly, or was stopped at its time limit, may have put the new CLI in place before it did.
         const version = await this.#replyVersion();
+        if (result.exit !== 0 && (version === null || !versionAtLeast(version, replyMinimumVersion))) {
+            return this.#startUpdateEnded('failed', startUpdateSentences.failed(npmLine(result)));
+        }
         const reload = await this.#reloadPlugins();
         // Said of the CLI the runtime's reload found; a reload it did not make answers with the one it found before.
         const listed = reload.exit === 0 ? await this.#deps.cli.run(['plugin', 'list']) : null;

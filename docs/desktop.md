@@ -620,7 +620,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   could be read and is below the one Jason needs and npm is there. It runs only while no plugin that runs the Reply CLI is at
   work: where the runtime holds one as valid, Reply's or another, or does not say, nothing is run and no try is used up. It tries once for each version Jason comes to need; after
   that the click is yours, and it is never held back. The card says what came of it, in that run of the application only:
-  that it was updated, that it could not be, with the first line npm printed, or that the one in use is still the old one,
+  that it was updated, that it could not be, with one line of what npm printed, or that the one in use is still the old one,
   which was installed another way and is updated that way. A missing Reply CLI is never installed without a click: where npm
   is missing too, the card says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the

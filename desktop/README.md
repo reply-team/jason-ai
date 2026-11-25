@@ -139,8 +139,9 @@ it is updated once a Live start, in the queue the clicks wait in and by their on
 update off; a variable set only for a runtime started elsewhere is not seen, and a file that does not parse runs nothing
 and writes no mark. Nor is npm run while a plugin the runtime holds as valid requests `reply`, or where `jason plugin list`
 does not say (`replyAtWork`). The mark of the minimum tried (`reply_update_tried` in the desktop's settings) is written
-before npm starts and taken away on success. Once npm succeeded, on the click and at the start alike, the plugins are reloaded,
-and at the start the version the runtime found is read back from `jason plugin list`. npm's first line goes to the card
+before npm starts and taken away on success. Once npm succeeded, on the click and at the start alike, or at the start ended badly with the CLI at the minimum, the plugins are reloaded,
+and at the start the version the runtime found is read back from `jason plugin list`. One line of npm's, the one that names its error
+where one does (`npmLine`), goes to the card
 (`startUpdate` in the setup state, in memory for this run) and never to the log. What the CLI prints
 and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
 own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link

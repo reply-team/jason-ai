@@ -72,23 +72,29 @@ export function readUpdateSwitch(env: Readonly<Record<string, string | undefined
 
 const lineLimit = 200;
 
+/** A line that names npm's error, under its two spellings, and one that is npm's or Node's own warning or notice. */
+const errorLine = /^npm (?:error|ERR!)(?:\s|$)/i;
+const warningLine = /^(?:npm (?:warn|notice)(?:\s|$)|\(node:\d+\)|\(Use `node --trace)/i;
+
 /**
- * Pure: the first line npm printed, its errors before its output, as one plain line for the card: no colour codes, no
- * control or invisible characters, cut, and with no full stop of its own. It goes to the page alone, never to the log.
+ * Pure: the one line of what npm printed that the card says, its errors read before its output: the first that names the
+ * error, else the first that is no warning or notice, else the first. One plain line: no colour codes, no control or
+ * invisible characters, cut, and with no full stop of its own. It goes to the page alone, never to the log.
  */
 export function npmLine(result: RunResult): string {
-    for (const printed of [result.stderr, result.stdout]) {
-        for (const each of printed.split(/[\r\n]+/)) {
-            const line = each
+    const lines = [result.stderr, result.stdout]
+        .flatMap((printed) => printed.split(/[\r\n]+/))
+        .map((each) =>
+            each
                 .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
                 .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\s]+/gu, ' ')
-                .trim();
-            if (line === '') continue;
-            const letters = [...line];
-            return letters.length > lineLimit ? `${letters.slice(0, lineLimit).join('').trimEnd()}…` : line.replace(/[.]+$/, '');
-        }
-    }
-    return `npm ended with code ${result.exit}`;
+                .trim(),
+        )
+        .filter((each) => each !== '');
+    const line = lines.find((each) => errorLine.test(each)) ?? lines.find((each) => !warningLine.test(each)) ?? lines[0];
+    if (line === undefined) return `npm ended with code ${result.exit}`;
+    const letters = [...line];
+    return letters.length > lineLimit ? `${letters.slice(0, lineLimit).join('').trimEnd()}…` : line.replace(/[.]+$/, '');
 }
 
 export const startUpdateSentences = {

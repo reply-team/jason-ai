@@ -1209,6 +1209,8 @@ function startUpdate(
         before?: string | null;
         after?: string | null;
         npm?: RunResult | Promise<RunResult>;
+        /** npm puts `after` in place however it ended. */
+        putsAnyway?: boolean;
         programs?: readonly string[];
         runtime?: string | null;
         reload?: number;
@@ -1238,7 +1240,7 @@ function startUpdate(
                 ran.push(['npm', ...args].join(' '));
                 markAtNpm.push(readSettings(b.paths.settings).replyUpdateTried);
                 const result = await (options.npm ?? answer('added 1 package'));
-                if (result.exit === 0) version = options.after === undefined ? '0.24.0' : options.after;
+                if (result.exit === 0 || options.putsAnyway) version = options.after === undefined ? '0.24.0' : options.after;
                 return result;
             }
             if (name === 'reply' && args[0] === '--version') {
@@ -1492,10 +1494,42 @@ test('a failed update says the first line npm printed, on the card alone and nev
     assert.equal(s.ran.includes('jason plugin reload'), false, 'npm changed nothing for the runtime to read again');
     assert.equal(JSON.stringify(s.log.lines).includes('planted-words'), false);
 
+    const said = (stderr: string, stdout = '') => npmLine({ exit: 1, stdout, stderr });
+    // First the line that names the error, in either stream, under npm's two spellings of it.
+    assert.equal(said('npm warn deprecated thing\nnpm notice new version\n(node:41) Warning: old\nsomething else\nnpm error code EACCES\nnpm error second'), 'npm error code EACCES');
+    assert.equal(said('something else', 'npm ERR! code ENOSPC'), 'npm ERR! code ENOSPC');
+    assert.equal(said('npm errors are not one\nnpm error code E404'), 'npm error code E404');
+    // Else the first line that is no warning, no notice and not Node's own, the errors before the output.
+    assert.equal(said('npm WARN old lockfile\nnpm Notice x\n(node:1234) [DEP0040] DeprecationWarning: x\n(Use `node --trace-deprecation ...` to show where the warning was created)\nEPERM: not permitted', 'output'), 'EPERM: not permitted');
+    assert.equal(said('npm warn one', 'npm notice two\nthe output'), 'the output');
+    // Else the first line there is.
+    assert.equal(said('\nnpm warn one\nnpm warn two', 'npm notice three'), 'npm warn one');
+    assert.equal(said('', 'npm notice three'), 'npm notice three');
     assert.equal(npmLine({ exit: 1, stdout: '  \r\n only output\n', stderr: ' \n' }), 'only output');
     assert.equal(npmLine({ exit: 7, stdout: '', stderr: '' }), 'npm ended with code 7');
     assert.equal(npmLine({ exit: 1, stdout: '', stderr: 'left‮right\tand\u0007more' }), 'left right and more');
     assert.equal(npmLine({ exit: 1, stdout: '', stderr: 'x'.repeat(5000) }), `${'x'.repeat(200)}…`);
+});
+
+test('npm that ended badly or ran out of time and still put a CLI at the minimum in use is an update: the plugins are read again and the mark is taken away', async (t) => {
+    for (const npm of [
+        { exit: 1, stdout: '', stderr: 'npm error code EPERM' },
+        { exit: -1, stdout: '', stderr: 'It was stopped at its time limit of 300000 ms.' },
+    ]) {
+        const s = startUpdate(t, { npm, putsAnyway: true });
+        assert.equal(await s.setup.updateReplyAtStart(), 'updated', npm.stderr);
+        assert.deepEqual(s.ran, ['reply 0.22.0', 'jason plugin list', installLine, 'reply 0.24.0', 'jason plugin reload', 'jason plugin list']);
+        assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+        assert.equal(s.kept().replyUpdateTried, undefined);
+    }
+    // One that left the old CLI, or one that says no version, is a failure in npm's words, with no reload.
+    for (const after of ['0.22.0', null]) {
+        const s = startUpdate(t, { npm: { exit: -1, stdout: '', stderr: 'npm error code EPERM' }, putsAnyway: true, after });
+        assert.equal(await s.setup.updateReplyAtStart(), 'failed');
+        assert.equal(await line(s), 'Jason tried to update the Reply CLI when it started and could not: npm error code EPERM.');
+        assert.equal(s.ran.includes('jason plugin reload'), false);
+        assert.equal(s.kept().replyUpdateTried, replyMinimumVersion);
+    }
 });
 
 test('npm that ended well and left the old CLI in use is said as that, by the desktop’s own read or by what the runtime found', async (t) => {
