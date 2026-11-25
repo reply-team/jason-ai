@@ -617,7 +617,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once.
   Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in the
   background, once the runtime is up and the machine set-up has ended, with the npm line Update runs, where the version
-  could be read and is below the one Jason needs and npm is there. It tries once for each version Jason comes to need; after
+  could be read and is below the one Jason needs and npm is there. It runs only while no plugin that runs the Reply CLI is at
+  work: where the runtime holds one as valid, Reply's or another, or does not say, nothing is run and no try is used up. It tries once for each version Jason comes to need; after
   that the click is yours, and it is never held back. The card says what came of it, in that run of the application only:
   that it was updated, that it could not be, with the first line npm printed, or that the one in use is still the old one,
   which was installed another way and is updated that way. A missing Reply CLI is never installed without a click: where npm

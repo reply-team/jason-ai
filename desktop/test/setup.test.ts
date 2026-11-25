@@ -14,7 +14,7 @@ import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
-import { npmLine, readUpdateSwitch, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
+import { npmLine, readUpdateSwitch, replyAtWork, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
 import { parseSettings, readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import { Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
@@ -1212,6 +1212,8 @@ function startUpdate(
         programs?: readonly string[];
         runtime?: string | null;
         reload?: number;
+        /** What `jason plugin list` answers before a reload; the Reply plugin, unavailable for its CLI, where not given. */
+        listed?: RunResult;
         mark?: string;
         environment?: Record<string, string | undefined>;
         installation?: unknown;
@@ -1224,6 +1226,7 @@ function startUpdate(
     writeSettings(b.paths.settings, { feed: null, skillsDeployedFor: 'kept', theme: 'dark', ...(options.mark === undefined ? {} : { replyUpdateTried: options.mark }) });
     let kept = readSettings(b.paths.settings);
     let version = options.before === undefined ? '0.22.0' : options.before;
+    let reloaded = false;
     const ran: string[] = [];
     const markAtNpm: (string | undefined)[] = [];
     const answer = (stdout: string): RunResult => ({ exit: 0, stdout, stderr: '' });
@@ -1249,12 +1252,14 @@ function startUpdate(
             const verb = args.join(' ');
             if (verb === 'plugin reload') {
                 ran.push(`jason ${verb}`);
+                reloaded = (options.reload ?? 0) === 0;
                 return Promise.resolve({ exit: options.reload ?? 0, stdout: '{}', stderr: '' });
             }
             if (verb === 'plugin list') {
                 ran.push(`jason ${verb}`);
+                if (!reloaded && options.listed !== undefined) return Promise.resolve(options.listed);
                 const found = options.runtime === undefined ? version : options.runtime;
-                return Promise.resolve(answer(JSON.stringify({ plugins: [{ id: 'reply', status: 'valid', capabilities: { exec: { requested: [{ name: 'reply', version: found, min_version: '0.23.0' }], granted: ['reply'] } } }] })));
+                return Promise.resolve(answer(pluginList([{ id: 'reply', status: reloaded ? 'valid' : 'unavailable', program: 'reply', version: found }])));
             }
             return b.cli.run(args);
         },
@@ -1274,6 +1279,17 @@ function startUpdate(
     return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm };
 }
 
+/** What `jason plugin list` prints of plugins that each request one program, or none. */
+function pluginList(plugins: { id: string; status: string; program: string | null; version?: string | null }[]): string {
+    return JSON.stringify({
+        plugins: plugins.map(({ id, status, program, version }) => ({
+            id,
+            status,
+            capabilities: { exec: program === null ? null : { requested: [{ name: program, path: null, version: version ?? null, min_version: null }], granted: [program] } },
+        })),
+    });
+}
+
 const npmRuns = (s: StartUpdate) => s.ran.filter((each) => each.startsWith('npm'));
 const line = async (s: StartUpdate) => (await s.setup.status()).reply.startUpdate;
 const installLine = 'npm install -g reply-cli';
@@ -1283,7 +1299,7 @@ test('the start updates a Reply CLI below the minimum with the click’s own npm
     let changed = 0;
     s.setup.onChanged(() => changed++);
     assert.equal(await s.setup.updateReplyAtStart(), 'updated');
-    assert.deepEqual(s.ran, ['reply 0.22.0', installLine, 'reply 0.24.0', 'jason plugin reload', 'jason plugin list']);
+    assert.deepEqual(s.ran, ['reply 0.22.0', 'jason plugin list', installLine, 'reply 0.24.0', 'jason plugin reload', 'jason plugin list']);
     assert.equal(changed, 1, 'the page is asked to read the card again');
     assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: 'updated' }]);
@@ -1342,6 +1358,39 @@ test('nothing is run and nothing is marked for a CLI at the minimum, one whose v
         assert.equal(s.ran.includes('jason plugin reload'), false, outcome);
         assert.equal(await line(s), undefined, outcome);
     }
+});
+
+test('npm never replaces the Reply CLI while a plugin that runs it can be at work: a valid one that requests it, or an unread list, runs nothing and uses up no try', async (t) => {
+    const said = (stdout: string, exit = 0): RunResult => ({ exit, stdout, stderr: '' });
+    const older = { id: 'reply', status: 'valid', program: 'reply', version: '0.22.0' };
+    for (const [outcome, listed] of [
+        // A Reply plugin of an earlier release, valid on the CLI that is below this one's minimum.
+        ['in_use', said(pluginList([older]))],
+        // Another plugin that requests reply, beside a Reply plugin that is not valid.
+        ['in_use', said(pluginList([{ ...older, status: 'unavailable' }, { id: 'own-crm', status: 'valid', program: 'reply' }]))],
+        ['plugins_unread', said('', 3)],
+        ['plugins_unread', said(pluginList([]), 1)],
+        ['plugins_unread', said('not JSON')],
+        ['plugins_unread', said('{}')],
+        ['plugins_unread', said('{"plugins":[{"id":"own","status":"valid","capabilities":{"exec":{"requested":"reply"}}}]}')],
+    ] as const) {
+        const s = startUpdate(t, { listed });
+        assert.equal(await s.setup.updateReplyAtStart(), outcome, listed.stdout);
+        assert.deepEqual(npmRuns(s), [], listed.stdout);
+        assert.equal(s.kept().replyUpdateTried, undefined, listed.stdout);
+        assert.equal(s.ran.includes('jason plugin reload'), false, listed.stdout);
+        assert.equal(await line(s), undefined, listed.stdout);
+        assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: outcome }]);
+    }
+    // The ordinary case: the one plugin that requests it is not valid, and a valid one runs another program, or none.
+    const ordinary = startUpdate(t, { listed: said(pluginList([{ ...older, status: 'unavailable' }, { id: 'slack', status: 'valid', program: null }, { id: 'own', status: 'valid', program: 'crm-cli' }])) });
+    assert.equal(await ordinary.setup.updateReplyAtStart(), 'updated');
+
+    assert.equal(replyAtWork(pluginList([])), false);
+    assert.equal(replyAtWork(pluginList([{ ...older, program: 'REPLY' }])), true);
+    assert.equal(replyAtWork('{"plugins":[null]}'), null);
+    assert.equal(replyAtWork('{"plugins":[{"id":"own","status":"valid","capabilities":{"exec":{"requested":[{}]}}}]}'), null);
+    assert.equal(replyAtWork('{"plugins":[{"id":"own","status":"valid"}]}'), null);
 });
 
 test('Update:CheckEnabled false in the settings file or in the desktop’s own environment runs nothing, and uses up no try', async (t) => {
@@ -1434,7 +1483,7 @@ test('npm that ended well and left the old CLI in use is said as that, by the de
     // The runtime's list is taken at its word only after a reload it made; what it says nothing of leaves the desktop's read.
     const refused = startUpdate(t, { runtime: '0.22.5', reload: 1 });
     assert.equal(await refused.setup.updateReplyAtStart(), 'updated');
-    assert.equal(refused.ran.filter((each) => each === 'jason plugin list').length, 0);
+    assert.equal(refused.ran.filter((each) => each === 'jason plugin list').length, 1, 'the one before npm alone');
     const silent = startUpdate(t, { runtime: null });
     assert.equal(await silent.setup.updateReplyAtStart(), 'updated');
     assert.equal(runtimeReplyVersion('not JSON'), null);

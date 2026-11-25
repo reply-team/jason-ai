@@ -94,7 +94,7 @@ import {
     type PluginValues,
     type ReplyAccount,
 } from './setup-model.ts';
-import { npmLine, readUpdateSwitch, runtimeReplyVersion, startUpdateSentences, versionUnsaid } from './reply-update.ts';
+import { npmLine, readUpdateSwitch, replyAtWork, runtimeReplyVersion, startUpdateSentences, versionUnsaid } from './reply-update.ts';
 
 /** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
 export type TurnSteps = Partial<Record<ChatMode, { mode: ChatMode; why: string }>>;
@@ -435,11 +435,12 @@ function refusal(refused: string, reread = false): ReplyRefusal {
 /**
  * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
  * run, since it was looked at already, `reply` was not found, the switch is off or could not be read, the version was not
- * read or is at the minimum, npm was not found, this minimum was tried before, or the mark could not be written.
+ * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
+ * or the runtime did not say (`plugins_unread`), or the mark could not be written.
  */
 export type StartUpdateOutcome =
     | 'updated' | 'still_old' | 'failed'
-    | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'unmarked';
+    | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';
 
 export class Setup {
     #deps: SetupDeps;
@@ -1297,8 +1298,8 @@ export class Setup {
     /**
      * An installed Reply CLI below the minimum updated with no click, asked once a Live start (`replyUpdateAtStart`), in the
      * queue the clicks wait in: only where `Update:CheckEnabled` is not turned off as the desktop reads it (`updateSwitch`),
-     * `reply` is found, its version was read and is below the minimum, npm is found, and no try of this minimum stands in the
-     * desktop's settings. The mark is written before npm starts, and where it cannot be written npm is not run; it is taken
+     * `reply` is found, its version was read and is below the minimum, npm is found, no try of this minimum stands in the
+     * desktop's settings, and no plugin that runs it can be at work (`replyAtWork`). The mark is written before npm starts, and where it cannot be written npm is not run; it is taken
      * away once the CLI in use is at the minimum, so a minimum is tried once and a click is never held back. A missing CLI is
      * installed on a click alone. After npm the version is read again and the runtime is asked to read its plugins again;
      * what the runtime then says it found is read back, so a CLI updated here and not where the runtime looks is not called
@@ -1325,6 +1326,11 @@ export class Setup {
         if (this.#deps.programs.find('npm') === null) return 'no_npm';
         const tried = this.#deps.settings().replyUpdateTried;
         if (tried !== undefined && versionAtLeast(tried, replyMinimumVersion)) return 'tried';
+        // npm replaces the CLI's files under whatever runs it: nothing is run while a plugin the runtime holds as valid may, nor
+        // where the runtime does not say.
+        const running = await this.#deps.cli.run(['plugin', 'list']);
+        const atWork = running.exit === 0 ? replyAtWork(running.stdout) : null;
+        if (atWork !== false) return atWork === null ? 'plugins_unread' : 'in_use';
         if (!this.#markReplyTried(replyMinimumVersion)) return 'unmarked';
 
         const result = await this.#npmInstall('reply', npmPackage);

@@ -113,6 +113,32 @@ export function runtimeReplyVersion(stdout: string): string | null {
     }
 }
 
+/**
+ * Pure: whether a plugin that runs the Reply CLI can be at work, as `jason plugin list` printed it: one the runtime holds as
+ * valid requests the program `reply`. Null where the list does not say, which a caller reads as it can.
+ */
+export function replyAtWork(stdout: string): boolean | null {
+    let plugins: unknown;
+    try {
+        plugins = (JSON.parse(stdout) as { plugins?: unknown } | null)?.plugins;
+    } catch {
+        return null;
+    }
+    if (!Array.isArray(plugins)) return null;
+    for (const plugin of plugins as ({ status?: unknown; capabilities?: { exec?: { requested?: unknown } | null } | null } | null)[]) {
+        if (typeof plugin !== 'object' || plugin === null || typeof plugin.status !== 'string') return null;
+        if (plugin.status !== 'valid') continue;
+        const exec = plugin.capabilities?.exec;
+        if (exec === null) continue;
+        if (exec === undefined || !Array.isArray(exec.requested)) return null;
+        for (const each of exec.requested as ({ name?: unknown } | null)[]) {
+            if (typeof each?.name !== 'string') return null;
+            if (each.name.toLowerCase() === 'reply') return true;
+        }
+    }
+    return false;
+}
+
 // ---- The moment ----------------------------------------------------------------------------------------------------
 
 export interface ReplyUpdateMomentDeps {
