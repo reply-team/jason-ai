@@ -51,13 +51,29 @@ export function followsSentence(follows: FollowsWords, followed: Followed | null
  * arguments themselves.
  */
 export function followedOf(item: WorkItem): Followed {
+    return followedWords(followedFacts(item), new Date());
+}
+
+/** What a followed letter's work item holds of it: its subject and its moment as recorded, in no words yet. */
+export interface FollowedFacts {
+    subject: string | null;
+    /** The moment as the work item holds it, an ISO time; null where it holds none. */
+    at: string | null;
+}
+
+export function followedFacts(item: WorkItem): FollowedFacts {
     const input = (item.context as { input?: { message?: { subject?: unknown }; send_after?: unknown } }).input;
     const subject = input?.message?.subject;
     const sendAfter = input?.send_after;
     const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.finished_at;
+    return { subject: typeof subject === 'string' && subject ? subject : null, at: at || null };
+}
+
+/** The facts in words against the moment drawn: a moment of today drops its date, so words are made when drawn, never kept. */
+export function followedWords(facts: FollowedFacts, now: Date): Followed {
     return {
-        subject: typeof subject === 'string' && subject ? subject : null,
-        moment: at ? when(new Date(at), new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone) : null,
+        subject: facts.subject,
+        moment: facts.at ? when(new Date(facts.at), now, Intl.DateTimeFormat().resolvedOptions().timeZone) : null,
     };
 }
 

@@ -60,9 +60,11 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const [problem, setProblem] = useState<string | null>(null);
     // Where an email send lands: the letter it follows is read once, as the card is drawn, and decides nothing.
     const letter = followedLetter(card.follows);
+    // A letter still unread is asked again on the console's clock tick, as Needs you's pane asks at each paint.
+    const ticked = clock.value;
     useEffect(() => {
         if (letter !== null) void readFollowed(api, letter);
-    }, [api, letter]);
+    }, [api, letter, ticked]);
     const follows = followsRowOf(card.follows, card.channel);
     const cancelButton = useRef<HTMLButtonElement>(null);
     const rejectButton = useRef<HTMLButtonElement>(null);

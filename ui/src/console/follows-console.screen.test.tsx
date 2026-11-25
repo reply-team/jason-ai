@@ -14,7 +14,7 @@ import { Console } from './console';
 import { forgetFollowed } from './followed';
 import { attention, forgetNeeds, reads } from './needs';
 import { chatWaits } from './needs-chats';
-import { chats, conversations, lines } from './state';
+import { chats, clock, conversations, lines } from './state';
 import { forgetWaiting } from './waiting';
 
 // What an email send follows, in the console: the Follows row and the subject marked as not sent, on Needs you's pane and
@@ -212,6 +212,36 @@ describe('the Follows row in Needs you’s pane', () => {
         });
         expect(words(field.closest('label')!)).toBe('Subject');
     });
+
+    it('asks a failed read again at the next tick and says the letter once it answers', async () => {
+        const fake = new FakeApi();
+        const back = fake.unreachable('workitem.get');
+        await renderNeeds(fake);
+        await choose('apr_2');
+        await waitFor(() => expect(reading(fake).length).toBeGreaterThan(0));
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(words(pane().querySelector('.needs-follows')!)).toBe(`Follows ${t('follows.reply.unread')}`);
+        back();
+        flush(() => {
+            clock.value += 30_000;
+        });
+        await waitFor(() => expect(words(pane().querySelector('.needs-follows')!)).toMatch(LETTER));
+    });
+
+    it('words the letter’s moment when it is drawn: a read made on one day names the date on the next', async () => {
+        const fake = new FakeApi();
+        clock.value = Date.parse('2026-10-16T12:00:00Z');
+        await renderNeeds(fake);
+        await choose('apr_2');
+        await waitFor(() => expect(words(pane().querySelector('.needs-follows')!)).toMatch(/of 09:00, the letter/));
+        flush(() => {
+            clock.value = Date.parse('2026-10-17T12:00:00Z');
+        });
+        await waitFor(() =>
+            expect(words(pane().querySelector('.needs-follows')!)).toMatch(/of 16 Oct, 09:00, the letter/),
+        );
+        expect(reading(fake)).toHaveLength(1);
+    });
 });
 
 describe('the Follows row on an agent’s chat’s card', () => {
@@ -243,5 +273,46 @@ describe('the Follows row on an agent’s chat’s card', () => {
         const card = await openCard('apr_1');
         expect(words(card.querySelector('.waiting-follows')!)).toBe(`Follows ${OWN}`);
         expect(card.querySelector('.waiting-not-sent')).toBeNull();
+    });
+    it('asks a failed read again at the next tick and says the letter once it answers', async () => {
+        const fake = new FakeApi();
+        const back = fake.unreachable('workitem.get');
+        renderChat(fake);
+        const card = await openCard('apr_2');
+        await waitFor(() => expect(reading(fake).length).toBeGreaterThan(0));
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(words(card.querySelector('.waiting-follows')!)).toBe(`Follows ${t('follows.reply.unread')}`);
+        back();
+        flush(() => {
+            clock.value += 30_000;
+        });
+        await waitFor(() => expect(words(card.querySelector('.waiting-follows')!)).toMatch(LETTER));
+    });
+
+    it('labels the edit form’s subject as not sent on a follow-up, and keeps it editable', async () => {
+        const fake = new FakeApi();
+        renderChat(fake);
+        const card = await openCard('apr_2');
+        fireEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+        const field = await waitFor(() => {
+            const input = card.querySelector<HTMLInputElement>('.message-editor input');
+            expect(input).not.toBeNull();
+            return input!;
+        });
+        expect(words(card.querySelector(`label[for="${field.id}"]`)!)).toBe('Subject (not sent)');
+        expect(field.hasAttribute('disabled')).toBe(false);
+    });
+
+    it('labels the edit form’s subject plainly on a letter of its own', async () => {
+        const fake = new FakeApi();
+        renderChat(fake);
+        const card = await openCard('apr_1');
+        fireEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+        const field = await waitFor(() => {
+            const input = card.querySelector<HTMLInputElement>('.message-editor input');
+            expect(input).not.toBeNull();
+            return input!;
+        });
+        expect(words(card.querySelector(`label[for="${field.id}"]`)!)).toBe('Subject');
     });
 });

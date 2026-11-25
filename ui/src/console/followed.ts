@@ -2,17 +2,29 @@ import { signal } from '@preact/signals-react';
 import type { Api } from '../api/client';
 import type { Approval, WorkItem } from '../api/types';
 import { channelWords, toApprovalDetail } from './live';
-import { followedOf, followsRow, type Followed, type FollowsRow, type FollowsWords } from './follows';
+import { clock } from './state';
+import {
+    followedFacts,
+    followedWords,
+    followsRow,
+    type Followed,
+    type FollowedFacts,
+    type FollowsRow,
+    type FollowsWords,
+} from './follows';
 
 // The letter a follow-up goes under, read for its subject and its moment with `workitem.get`, once for each letter the
 // console draws an approval about. The letter is a finished fact, so a read that succeeded is kept; a read that failed
 // is dropped, so the next drawing asks again, and until a read has succeeded the card says the unread sentence.
 
-const reads = signal<Readonly<Record<string, Followed>>>({});
+const reads = signal<Readonly<Record<string, FollowedFacts>>>({});
 const asked = new Set<string>();
 
-/** What was read of a followed letter; null while it is unread or the read failed. */
-export const followedRead = (workItem: string): Followed | null => reads.value[workItem] ?? null;
+/** What was read of a followed letter, its moment worded against the console's clock; null while it is unread or the read failed. */
+export function followedRead(workItem: string): Followed | null {
+    const facts = reads.value[workItem];
+    return facts === undefined ? null : followedWords(facts, new Date(clock.value));
+}
 
 /** Reads a followed letter unless it is read or being read. */
 export async function readFollowed(api: Api, workItem: string): Promise<void> {
@@ -20,7 +32,7 @@ export async function readFollowed(api: Api, workItem: string): Promise<void> {
     asked.add(workItem);
     try {
         const item = await api.call<WorkItem>('workitem.get', { work_item_id: workItem });
-        reads.value = { ...reads.value, [workItem]: followedOf(item) };
+        reads.value = { ...reads.value, [workItem]: followedFacts(item) };
     } catch {
         asked.delete(workItem);
     }
