@@ -32,6 +32,12 @@ directly, not through ReplyApp Inc.'s address, on a schedule of its own, and dow
 GitHub's terms and privacy statement apply to those requests, and GitHub, like any web server, receives your IP address,
 the time of the request and the standard headers of the program that makes it.
 
+When its start finds an installed Reply CLI older than its release needs, and npm on this computer, Jason Desktop runs
+`npm install -g reply-cli` without a click, unless `Update:CheckEnabled` is `false` in the installation's settings file
+or in Jason Desktop's own environment (a settings file it cannot read stops it too): npm then downloads the package from
+the registry it is set to use, whose own terms and privacy statement apply, and which, like any web server, receives
+your IP address and the standard headers of npm's requests.
+
 ### Your providers and AI agents
 
 When you configure the runtime to act at third-party providers through plugins, to start an AI agent, or to send
