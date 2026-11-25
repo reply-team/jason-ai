@@ -4,7 +4,9 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
+using Jason.Cli.Doctor;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Tests.Autostart;
@@ -354,6 +356,29 @@ public class AutostartTurnOffTests
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
 
         Assert.Equal(said, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
+    }
+
+    /// <summary>A registration that names no data directory runs on the default one, so a stop of the default one says it.</summary>
+    [Fact]
+    public async Task A_stop_of_the_default_data_directory_says_it_holds_where_the_registration_names_none()
+    {
+        using var home = new TempPaths();
+        var root = Path.Combine(home.Paths.Root, JasonPaths.DefaultFolder);
+        var paths = new JasonPaths(root, 1);
+        Directory.CreateDirectory(paths.RunDirectory);
+        File.WriteAllText(paths.DescriptorFile, JsonSerializer.Serialize(RuntimeVerbs.Descriptor("rt_LIVE"), JasonJson.Options));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(paths.DescriptorFile);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var registrar = new RecordingRegistrar { State = new AutostartState(true, [Installed, "runtime", "run"], null) };
+        var (env, _, error) = Machine(home, registrar, new FakeProcessControl(), handler);
+        env = env with { Paths = paths, Identity = new IdentityFacts(home.Paths.Root, "x", "WORKSTATION-7", null, null) };
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
+
+        Assert.Contains(RuntimeStopCommand.UntilTheNextLogon, error.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A macOS machine whose load starts the runtime, as <c>RunAtLoad</c> does: the descriptor appears a moment after <c>Apply</c>.</summary>
