@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.51.0-rc.2
+# Jason 0.51.0
 
 Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
 that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
@@ -28,8 +28,10 @@ cancelled no longer counts as a touch, and Jason now reads a letter held for lat
 went, and tells the campaign's manager about one that did not.
 
 **Read this first.** Against a Reply that does not yet offer follow-ups, a follow-up is refused and nothing is sent: it
-never goes as a new letter instead. The refusal is `capability_not_offered`, naming `follows`. To reach the person now,
-propose the message again as a letter of its own, with `"follows": "new_thread"`.
+never goes as a new letter instead. The refusal is `capability_not_offered`, naming `follows`, and until Reply offers
+a reply in a thread every email follow-up ends that way: to reach the person, propose the message again as a letter of
+its own, with `"follows": "new_thread"`. Once Reply offers it, follow-ups go as replies with nothing to change on your
+side, no update and no restart; a follow-up refused before then stays refused.
 
 ## What is new since 0.50.0
 
@@ -90,9 +92,10 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 
 ## Fixed since 0.50.0
 
-- **`jason status` no longer tells you to repair what Jason Desktop's first start repairs itself.** Between the install
-  script's end and that first start, it named `jason plugin install reply --replace` and `jason ui install`; it now
-  names Jason Desktop's start first and the command second.
+- **`jason status` says first that Jason Desktop's first start repairs the plugin package and the UI.** Between the
+  install script's end and that first start, the lines of its `plugin_package` and `ui_module` checks named only
+  `jason plugin install reply --replace` and `jason ui install`; each now names Jason Desktop's start first and the
+  command second.
 
 ## Upgrading from 0.50.0
 
@@ -102,9 +105,8 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
 - **Update Jason itself, not the package alone.** A runtime older than 0.51.0 refuses the Reply plugin 0.20.0
   (`argument_invalid`, among the arguments of `message.send`); `jason plugin install reply --replace` puts a matching
   package back.
-- **The Reply plugin needs reply-cli 0.23.0 or later.** With an older reply-cli the whole Reply plugin is unavailable from the first reload, not only its follow-ups: update reply-cli with npm (`npm install -g reply-cli`) before or right after updating Jason. Against a
-  Reply that does not offer follow-ups yet, a follow-up is refused with `capability_not_offered` and nothing is sent;
-  propose it again with `"follows": "new_thread"` to reach the person now.
+- **The Reply plugin needs reply-cli 0.23.0 or later.** With an older reply-cli the whole Reply plugin is unavailable from the first reload, not only its follow-ups: update reply-cli with npm (`npm install -g reply-cli`) before or right after updating Jason. What a
+  follow-up does against a Reply that does not offer follow-ups yet is said under "Read this first" above.
 - **A letter the history already holds as failed or cancelled, by a provider's read, stops counting as a touch from this
   release.** A person below the ceiling only by such letters may be written to again by a touch not yet claimed. Nothing
   already refused comes back by itself.
@@ -112,7 +114,8 @@ propose the message again as a letter of its own, with `"follows": "new_thread"`
   queued is said overdue at once, so the manager may be woken for many of them in one wave.
 - **Approvals already waiting are asked again only where the letter now goes into a thread.** An approval given
   before this release is asked again where the follow-up would now go as a reply, and not where it goes as a letter of
-  its own.
+  its own. An approval still waiting from before this release says nothing of where its letter lands;
+  `jason workitem get --human` prints its `Follows:` line once the item is claimed.
 - **This version migrates the database.** Its first start writes a backup under `~/.jason/state/backups/` first, then
   adds the index. `context.follows` on a `message.send` is now the runtime's own record and is refused when a caller
   names it.
