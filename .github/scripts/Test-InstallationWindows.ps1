@@ -223,17 +223,27 @@ function Get-EveryProcess([switch] $OrSay) {
     }
 }
 
+# Every process of the table started under one, at any depth, each once: Windows gives a freed id to a later process, so a
+# table can show a process under its own descendant, and a walk that took one twice would go round it for ever.
+function Get-StartedBy([object[]] $all, [int] $id) {
+    $ids = [System.Collections.Generic.List[int]]::new()
+    $ids.Add($id)
+    for ($at = 0; $at -lt $ids.Count; $at++) {
+        foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) {
+            if ($ids.Contains([int] $child.ProcessId)) { continue }
+            $ids.Add([int] $child.ProcessId)
+            $child
+        }
+    }
+}
+
 # Every process the started one started, and every process of the application's folder and of jason, with its command
 # line shortened.
 function Write-ProcessTree([System.Diagnostics.Process] $process) {
     $all = @(Get-EveryProcess -OrSay)
-    $ids = @($process.Id)
     Write-Host "  the setup, process $($process.Id), ended: $($process.HasExited); the processes it started:"
-    for ($at = 0; $at -lt $ids.Count; $at++) {
-        foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) {
-            $ids += $child.ProcessId
-            Write-Host "    $($child.ProcessId), started by $($child.ParentProcessId): $("$($child.CommandLine)".Substring(0, [Math]::Min(200, "$($child.CommandLine)".Length)))"
-        }
+    foreach ($child in @(Get-StartedBy $all $process.Id)) {
+        Write-Host "    $($child.ProcessId), started by $($child.ParentProcessId): $("$($child.CommandLine)".Substring(0, [Math]::Min(200, "$($child.CommandLine)".Length)))"
     }
     Write-Host '  every process of the application folder and of jason:'
     foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
@@ -305,6 +315,19 @@ function Write-ProcessWindows([int] $id) {
     foreach ($line in $lines) { Write-Host "    $line" }
 }
 
+# The windows of a process, said, and the words of its static controls; where the reading overran, the reading's own words
+# in their place, so that what is failed by them is still failed.
+function Read-WindowWords([int] $id) {
+    try {
+        Write-ProcessWindows $id
+        @([JasonProof.Windows]::Describe([uint32] $id, $readSeconds * 1000) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
+    } catch [TimeoutException] {
+        $why = "(its windows were not read: $($_.Exception.Message))"
+        Write-Host "  $why"
+        $why
+    }
+}
+
 # The visible top-level windows of these processes, one line each: class and title.
 function Get-VisibleWindows([int[]] $ids) {
     Use-WindowsType
@@ -326,8 +349,7 @@ function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scr
     while (-not $process.HasExited -and ((Get-Date) - $started).TotalSeconds -lt $seconds) {
         try {
             $all = @(Get-EveryProcess)
-            $ids = @($process.Id)
-            for ($at = 0; $at -lt $ids.Count; $at++) { $ids += @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] -and $ids -notcontains $_.ProcessId } | ForEach-Object { [int] $_.ProcessId }) }
+            $ids = @($process.Id) + @(Get-StartedBy $all $process.Id | ForEach-Object { [int] $_.ProcessId })
             foreach ($window in (Get-VisibleWindows $ids)) { if (-not $seen.Contains($window)) { $seen.Add($window); Write-Host "  a window of the setup at $([int]((Get-Date) - $started).TotalSeconds) s: $window" } }
         } catch [TimeoutException] {
             $overran.Add($_.Exception.Message)
@@ -354,13 +376,9 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
     $file = $what; $arguments = @()
     if (-not $process.WaitForExit($seconds * 1000)) {
         $all = @(Get-EveryProcess -OrSay)
-        $ids = @($process.Id)
         Write-Host "$file $($arguments -join ' ') (process $($process.Id)) had not ended after $seconds seconds; the processes it started:"
-        for ($at = 0; $at -lt $ids.Count; $at++) {
-            foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) {
-                $ids += $child.ProcessId
-                Write-Host "  $($child.ProcessId), started by $($child.ParentProcessId): $($child.CommandLine)"
-            }
+        foreach ($child in @(Get-StartedBy $all $process.Id)) {
+            Write-Host "  $($child.ProcessId), started by $($child.ParentProcessId): $($child.CommandLine)"
         }
         Write-Host 'every process of the application folder and of jason:'
         foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
@@ -425,14 +443,16 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
         }
         if (-not (Wait-Job -Job $job -Timeout $seconds)) {
             $what = "$(Split-Path -Leaf $file) $($arguments -join ' ')"
+            $unread = ''
             Write-Host "$what had not ended after $seconds s"
             Write-JasonProcesses
             # The program's own process - the one this PowerShell started for it, running its file, created once its run
             # began, never a helper the step started before it - and every process under it, so that a program that started
             # others leaves none running past its bound. A process is under another only where it was created at or after
             # that one, so that one whose dead parent's id was given again to a process of ours is not taken; and this
-            # PowerShell's ancestors and the runner's own processes are never taken, whatever the table says of them.
-            $all = @(Get-CimInstance -ClassName Win32_Process -OperationTimeoutSec 30)
+            # PowerShell's ancestors and the runner's own processes are never taken, whatever the table says of them. Where
+            # the table is not read in its bound, the program's own process alone is ended, known by the same three things.
+            $all = @(try { Get-EveryProcess } catch [TimeoutException] { $unread = $_.Exception.Message })
             $byId = @{}
             foreach ($process in $all) { $byId[[int] $process.ProcessId] = $process }
             $ancestors = [System.Collections.Generic.HashSet[int]]::new()
@@ -449,6 +469,12 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
                     $id = [int] $child.ProcessId
                     if ($ids.Contains($id) -or $ancestors.Contains($id) -or $id -eq $PID -or "$($child.Name)" -like 'Runner.*') { continue }
                     $ids.Add($id)
+                }
+            }
+            if ($unread) {
+                Write-Host "  $unread; the processes under $what are not known, and its own process is ended"
+                foreach ($own in @(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($leaf)) -ErrorAction SilentlyContinue)) {
+                    try { if ($own.Parent -and $own.Parent.Id -eq $PID -and $own.StartTime -ge $began) { $ids.Add($own.Id) } } catch { Write-Host "  process $($own.Id) could not be read: $($_.Exception.Message)" }
                 }
             }
             foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
@@ -614,7 +640,7 @@ function Write-FeedServerState([System.Diagnostics.Process] $server, [int] $port
     $held = @(Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue)
     if ($held.Count -eq 0) { Write-Host "no TCP connection or listener on port $port" }
     foreach ($connection in $held) {
-        $owner = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -ErrorAction SilentlyContinue
+        $owner = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -OperationTimeoutSec 30 -ErrorAction SilentlyContinue
         Write-Host "  $($connection.LocalAddress):$($connection.LocalPort) $($connection.State), held by $($connection.OwningProcess) $(if ($owner) { "$($owner.Name): $($owner.CommandLine)" } else { '(no such process)' })"
     }
     @(netstat -ano | Select-String -Pattern ":$port\s") | ForEach-Object { Write-Host "  netstat: $($_.Line.Trim())" }
@@ -700,7 +726,7 @@ function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the appli
     $runs = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
     $seen = [System.Collections.Generic.HashSet[int]]::new()
     foreach ($process in @($watched | Where-Object { $_ })) { if ($seen.Add([int] $process.Id)) { $runs.Add($process) } }
-    foreach ($running in @(Get-CimInstance -ClassName Win32_Process -OperationTimeoutSec 30 | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
+    foreach ($running in @(Get-EveryProcess | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
         $id = [int] $running.ProcessId
         if ($seen.Contains($id)) { continue }
         # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.
@@ -909,7 +935,7 @@ function Skip-Leg([string] $why) {
 # leaves it: one JSON line in -Out\scratch-pids.txt with its id, its command line as Windows reports it now, and what it is;
 # its id said when it is started.
 function Register-Scratch([string] $what, [System.Diagnostics.Process] $process) {
-    $started = "$((Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($process.Id)" -ErrorAction SilentlyContinue).CommandLine)"
+    $started = "$((Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($process.Id)" -OperationTimeoutSec 30).CommandLine)"
     Add-Content -LiteralPath $scratchRecords -Value (ConvertTo-Json -Compress -InputObject ([ordered]@{ pid = $process.Id; command_line = $started; what = $what }))
     Say "started $what as process $($process.Id), recorded for a clean begin to stop if a leg leaves it running"
 }
@@ -922,7 +948,7 @@ function Get-RunningScratch {
         foreach ($row in @(Get-Content -LiteralPath $scratchRecords | Where-Object { $_ })) {
             $record = $row | ConvertFrom-Json
             if (-not $record.command_line) { continue }
-            $now = @(Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $([int]$record.pid)" -ErrorAction SilentlyContinue)
+            $now = @(Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $([int]$record.pid)" -OperationTimeoutSec 30)
             if ($now.Count -gt 0 -and "$($now[0].CommandLine)" -ceq $record.command_line) { $record }
         }
     })
@@ -1111,13 +1137,13 @@ function Write-Inherited([string] $by, [string] $listing, [string] $rows) {
 
 # Every jason runtime running on this machine: the processes of jason.exe whose command line runs `runtime run`.
 function Get-RuntimeProcesses {
-    @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'jason.exe'" | Where-Object { "$($_.CommandLine)" -match '\bruntime\s+run\b' })
+    @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'jason.exe'" -OperationTimeoutSec 30 | Where-Object { "$($_.CommandLine)" -match '\bruntime\s+run\b' })
 }
 
 # Whether the process a reading kept (its ProcessId and CreationDate) is still the one running under that id: Windows gives a
 # freed id to a later process, so one under the same id that started at another moment is another process.
 function Test-SameProcess($kept) {
-    $now = @(Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $([int]$kept.ProcessId)")
+    $now = @(Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $([int]$kept.ProcessId)" -OperationTimeoutSec 30)
     $now.Count -gt 0 -and $now[0].CreationDate -eq $kept.CreationDate
 }
 
@@ -1772,8 +1798,7 @@ switch ($Step) {
         }
         if ($asked) {
             Write-JasonProcesses
-            Write-ProcessWindows $asked.Id
-            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Id, $readSeconds * 1000) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
+            $text = @(Read-WindowWords $asked.Id)
             Fail-Held "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; '); its text: $($text -join ' / ')"
             Stop-Process -Id $asked.Id -Force -ErrorAction SilentlyContinue
             Wait-Until { -not (Get-Process -Id $asked.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
@@ -2310,7 +2335,7 @@ switch ($Step) {
         # The runtime answering, from the carried file, and none from the retired one.
         $status = Invoke-Program $carried @('runtime', 'status') $quiet
         if ($status.Exit -ne 0) { Fail 'no runtime answers after the move' }
-        $runtimes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'jason.exe'" | Where-Object { "$($_.CommandLine)" -match '\bruntime\s+run\b' })
+        $runtimes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'jason.exe'" -OperationTimeoutSec 30 | Where-Object { "$($_.CommandLine)" -match '\bruntime\s+run\b' })
         $fromCarried = @($runtimes | Where-Object { [string]$_.ExecutablePath -ieq $carried })
         $fromOld = @($runtimes | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" })
         if ($fromCarried.Count -lt 1) { Fail "no runtime runs from $carried; the runtimes running: $(($runtimes | ForEach-Object { $_.ExecutablePath }) -join ', ')" }
