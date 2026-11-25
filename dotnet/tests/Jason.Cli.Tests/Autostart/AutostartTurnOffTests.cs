@@ -4,7 +4,9 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
+using Jason.Cli.Doctor;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Tests.Autostart;
@@ -68,7 +70,7 @@ public class AutostartTurnOffTests
     [Theory]
     [InlineData("runtime autostart disable", "After a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.")]
     [InlineData("runtime autostart disable", "record that you turned it off (autostart/off.json in the data directory)")]
-    [InlineData("runtime stop", "Where the runtime is registered to start at logon, the stop holds until the next logon, which starts it again")]
+    [InlineData("runtime stop", "Where the logon registration starts the runtime of this data directory, the stop holds until the next logon, which starts it again")]
     [InlineData("runtime autostart enable", "starts the runtime now where none answers")]
     public async Task The_help_says_what_the_verb_does_to_the_start_at_logon(string verb, string said)
     {
@@ -315,11 +317,25 @@ public class AutostartTurnOffTests
         Assert.Contains("none was started now", error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sentence is said only where the registration starts the runtime of the data directory the stop acted on: one
+    /// naming this directory (spelt as it is, with a separator at its end, or in another case where the platform ignores
+    /// case) does, and one naming another, one naming none while this root is not the default, one with no line and one
+    /// naming a path nothing can read do not.
+    /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_persons_stop_says_it_holds_until_the_next_logon_where_the_start_at_logon_stands(bool registered)
+    [InlineData("none", false)]
+    [InlineData("this", true)]
+    [InlineData("this-with-separator", true)]
+    [InlineData("this-recased", true)]
+    [InlineData("another", false)]
+    [InlineData("names-none", false)]
+    [InlineData("empty-line", false)]
+    [InlineData("empty-data-dir", false)]
+    [InlineData("nul-data-dir", false)]
+    public async Task A_persons_stop_says_it_holds_until_the_next_logon_where_the_start_at_logon_stands(string registration, bool said)
     {
+        Assert.SkipWhen(registration == "this-recased" && !OperatingSystem.IsWindows(), "Only Windows reads a path without regard to case.");
         using var dir = new TempPaths();
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
         var handler = new FakeHandler(_ =>
@@ -328,16 +344,87 @@ public class AutostartTurnOffTests
             return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
         });
         var registrar = new RecordingRegistrar();
-        if (registered)
+        string[]? run = registration switch
         {
-            registrar.State = new AutostartState(true, [Installed, "runtime", "run"], null);
+            "this" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root],
+            "this-with-separator" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root + Path.DirectorySeparatorChar],
+            "this-recased" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root.ToUpperInvariant()],
+            "empty-line" => [],
+            "empty-data-dir" => [Installed, "runtime", "run", "--data-dir", ""],
+            "nul-data-dir" => [Installed, "runtime", "run", "--data-dir", "a\0b"],
+            "another" => [Installed, "runtime", "run", "--data-dir", Path.Combine(dir.Paths.Root, "other")],
+            "names-none" => [Installed, "runtime", "run"],
+            _ => null,
+        };
+        if (run is not null)
+        {
+            registrar.State = new AutostartState(true, run, null);
         }
 
         var (env, _, error) = Machine(dir, registrar, new FakeProcessControl(), handler);
 
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
 
-        Assert.Equal(registered, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
+        Assert.Equal(said, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
+    }
+
+    /// <summary>A registration that names this folder through a link starts that very folder, so the stop says it.</summary>
+    [Fact]
+    public async Task A_stop_says_it_holds_where_the_registration_names_this_data_directory_through_a_link()
+    {
+        using var dir = new TempPaths();
+        var link = dir.Paths.Root + "-link";
+        try
+        {
+            Directory.CreateSymbolicLink(link, dir.Paths.Root);
+        }
+        catch (IOException refused) when (OperatingSystem.IsWindows() && refused.HResult == unchecked((int)0x80070522))
+        {
+            Assert.Skip(Installation.ManagedLayouts.NoLinkPrivilege);
+        }
+
+        try
+        {
+            dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+            var handler = new FakeHandler(_ =>
+            {
+                File.Delete(dir.Paths.DescriptorFile);
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+            });
+            var registrar = new RecordingRegistrar { State = new AutostartState(true, [Installed, "runtime", "run", "--data-dir", link], null) };
+            var (env, _, error) = Machine(dir, registrar, new FakeProcessControl(), handler);
+
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
+
+            Assert.Contains(RuntimeStopCommand.UntilTheNextLogon, error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    /// <summary>A registration that names no data directory runs on the default one, so a stop of the default one says it.</summary>
+    [Fact]
+    public async Task A_stop_of_the_default_data_directory_says_it_holds_where_the_registration_names_none()
+    {
+        using var home = new TempPaths();
+        var root = Path.Combine(home.Paths.Root, JasonPaths.DefaultFolder);
+        var paths = new JasonPaths(root, 1);
+        Directory.CreateDirectory(paths.RunDirectory);
+        File.WriteAllText(paths.DescriptorFile, JsonSerializer.Serialize(RuntimeVerbs.Descriptor("rt_LIVE"), JasonJson.Options));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(paths.DescriptorFile);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var registrar = new RecordingRegistrar { State = new AutostartState(true, [Installed, "runtime", "run"], null) };
+        var (env, _, error) = Machine(home, registrar, new FakeProcessControl(), handler);
+        env = env with { Paths = paths, Identity = new IdentityFacts(home.Paths.Root, "x", "WORKSTATION-7", null, null) };
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
+
+        Assert.Contains(RuntimeStopCommand.UntilTheNextLogon, error.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A macOS machine whose load starts the runtime, as <c>RunAtLoad</c> does: the descriptor appears a moment after <c>Apply</c>.</summary>

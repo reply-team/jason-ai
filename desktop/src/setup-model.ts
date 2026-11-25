@@ -369,7 +369,10 @@ export interface ProgramInstall {
     command: string;
     /** Where it is explained. */
     link: string;
-    /** The npm package the desktop installs on a click, or null for a program it never installs. */
+    /**
+     * The npm package the desktop installs on a click, or null for a program it never installs. The Reply CLI's is also
+     * updated at a start, with no click, where the one installed is below the minimum (`Setup.updateReplyAtStart`).
+     */
     npmPackage: string | null;
 }
 

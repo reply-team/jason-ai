@@ -659,12 +659,7 @@ jason update apply              # self-update, with skills and UI
 jason profile create local-codex --host codex --program codex  # run background roles on Codex
 ```
 
-**What leaves your machine:** what the plugins you install send to their services, whether a provider, a notification
-topic (ntfy publishes the pointer to a topic, on the public server unless you name your own) or a receiver you name
-for journal lines; the Reply plugin's calls name Jason and its version as their client; what your agent sends to its
-model; a check for a newer release five minutes after the runtime starts and then once a day (one request carrying
-only the version, to an address Reply.io operates, which you can turn off); and installs and updates you start
-yourself. Nothing else. No telemetry.
+**Local first, no telemetry.** Jason keeps its state on your machine. What it asks of the network, and when, is in the [handbook](docs/handbook.md) and in [Responsible use](docs/responsible-use.md).
 
 ---
 

@@ -374,8 +374,8 @@ skills step and by `jason skills`.
 ### With a package manager
 
 On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon
-Mac, Homebrew's cask installs the same Jason Desktop, from the same release, once the tap carries it; until then the
-install script is the way:
+Mac, Homebrew's cask installs the same Jason Desktop, and the tap moves it to a new release within hours of its
+publication:
 
 ```sh
 brew install --cask reply-team/tap/jason
@@ -391,6 +391,8 @@ Where a package manager installed Jason, it is under the same MIT licence, and t
 installation: it updates it and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
 names the manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
 upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.
+Homebrew's older formula gets no newer version from the tap: take it off as above, and install Jason Desktop by one of
+the ways here.
 
 ### By hand
 
