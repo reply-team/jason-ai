@@ -351,7 +351,7 @@ public class AutostartTurnOffTests
             "this-recased" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root.ToUpperInvariant()],
             "empty-line" => [],
             "empty-data-dir" => [Installed, "runtime", "run", "--data-dir", ""],
-            "nul-data-dir" => [Installed, "runtime", "run", "--data-dir", "a b"],
+            "nul-data-dir" => [Installed, "runtime", "run", "--data-dir", "a\0b"],
             "another" => [Installed, "runtime", "run", "--data-dir", Path.Combine(dir.Paths.Root, "other")],
             "names-none" => [Installed, "runtime", "run"],
             _ => null,
