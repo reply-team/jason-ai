@@ -68,7 +68,7 @@ public class AutostartTurnOffTests
     [Theory]
     [InlineData("runtime autostart disable", "After a restart of this computer nothing of Jason runs until `jason runtime start`, or until you open Jason Desktop.")]
     [InlineData("runtime autostart disable", "record that you turned it off (autostart/off.json in the data directory)")]
-    [InlineData("runtime stop", "Where the runtime is registered to start at logon, the stop holds until the next logon, which starts it again")]
+    [InlineData("runtime stop", "Where the logon registration starts the runtime of this data directory, the stop holds until the next logon, which starts it again")]
     [InlineData("runtime autostart enable", "starts the runtime now where none answers")]
     public async Task The_help_says_what_the_verb_does_to_the_start_at_logon(string verb, string said)
     {
@@ -315,10 +315,18 @@ public class AutostartTurnOffTests
         Assert.Contains("none was started now", error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sentence is said only where the registration starts the runtime of the data directory the stop acted on. The
+    /// old registered row now names this directory, so it keeps its meaning; a line naming none runs on the default
+    /// directory, which a temporary root is not.
+    /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_persons_stop_says_it_holds_until_the_next_logon_where_the_start_at_logon_stands(bool registered)
+    [InlineData("none", false)]
+    [InlineData("this", true)]
+    [InlineData("this-with-separator", true)]
+    [InlineData("another", false)]
+    [InlineData("names-none", false)]
+    public async Task A_persons_stop_says_it_holds_until_the_next_logon_where_the_start_at_logon_stands(string registration, bool said)
     {
         using var dir = new TempPaths();
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
@@ -328,16 +336,24 @@ public class AutostartTurnOffTests
             return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
         });
         var registrar = new RecordingRegistrar();
-        if (registered)
+        string[]? run = registration switch
         {
-            registrar.State = new AutostartState(true, [Installed, "runtime", "run"], null);
+            "this" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root],
+            "this-with-separator" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root + Path.DirectorySeparatorChar],
+            "another" => [Installed, "runtime", "run", "--data-dir", Path.Combine(dir.Paths.Root, "other")],
+            "names-none" => [Installed, "runtime", "run"],
+            _ => null,
+        };
+        if (run is not null)
+        {
+            registrar.State = new AutostartState(true, run, null);
         }
 
         var (env, _, error) = Machine(dir, registrar, new FakeProcessControl(), handler);
 
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
 
-        Assert.Equal(registered, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
+        Assert.Equal(said, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
     }
 
     /// <summary>A macOS machine whose load starts the runtime, as <c>RunAtLoad</c> does: the descriptor appears a moment after <c>Apply</c>.</summary>

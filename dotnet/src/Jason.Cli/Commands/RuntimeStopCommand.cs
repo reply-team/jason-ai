@@ -2,8 +2,11 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Discovery;
+using Jason.Cli.Moving;
 using Jason.Cli.Process;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Commands;
@@ -45,12 +48,27 @@ public static class RuntimeStopCommand
     internal const string UntilTheNextLogon =
         "It stays stopped until the next logon, which starts it again; `jason runtime autostart disable` stops that.";
 
-    /// <summary>Whether this account has the runtime registered to start at logon, as <c>runtime autostart status</c> reads it; no where that cannot be read.</summary>
+    /// <summary>
+    /// Whether the registration starts the runtime of the data directory this stop acted on, read as <c>runtime autostart
+    /// status</c> reads it; no where that cannot be read. A line that names a data directory is this one's where it is the
+    /// same folder, compared as the export compares it (<see cref="FolderPaths.Same"/> over <see cref="FolderPaths.Normal"/>:
+    /// the registered text is a path as typed and nothing is followed through links, since a start at logon opens the path
+    /// as written); a line that names none runs on the default data directory, so it is this one's only where this one is
+    /// <see cref="JasonPaths.DefaultFolder"/> in the home directory. A registration of another data directory says nothing here.
+    /// </summary>
     private static bool StartsAtLogon(CliEnvironment env)
     {
         try
         {
-            return RuntimeAutostartCommands.Registrar(env).Read().Registered;
+            var state = RuntimeAutostartCommands.Registrar(env).Read();
+            if (!state.Registered)
+            {
+                return false;
+            }
+
+            var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run)
+                ?? Path.Combine(InstallationPlaces.Home(env), JasonPaths.DefaultFolder);
+            return FolderPaths.Same(FolderPaths.Normal(named), FolderPaths.Normal(env.Paths.Root));
         }
         catch (Autostart.AutostartException)
         {
