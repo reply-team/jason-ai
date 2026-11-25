@@ -31,8 +31,8 @@ handbook now lists what Jason asks of the network by itself.
 
 - **Jason Desktop updates an older Reply CLI when it starts.** Where the Reply CLI installed on your computer is older than
   Jason needs, the Reply plugin is unavailable and Connect asked you to update it. Jason Desktop now does that once by
-  itself, in the background of a start in Live, with the same npm line as the Update button, and never while a plugin
-  that runs the Reply CLI is at work. The Reply card says in one line what came of it. It tries once for each version Jason
+  itself, in the background of a start in Live, with the same npm line as the Update button. It runs nothing
+  where a plugin that runs the Reply CLI is loaded and valid, or where the runtime does not say. The Reply card says in one line what came of it. It tries once for each version Jason
   comes to need; after that the button is yours. A missing Reply CLI is still installed only on your click, and
   nothing of this happens in the Demo. `Update:CheckEnabled` set to `false`, in the settings file or in Jason Desktop's own
   environment, turns it off.
@@ -54,8 +54,8 @@ handbook now lists what Jason asks of the network by itself.
 
 **Speed**
 
-- **After a read of a held letter's state, Jason finds that one letter by its own id,** instead of reading through all the
-  finished work of the installation.
+- **When Jason checks whether one letter held for later went or is overdue, it finds that letter by its own id,** instead
+  of reading through all the finished work of the installation.
 
 ## Fixed since 0.51.0
 
@@ -78,6 +78,7 @@ handbook now lists what Jason asks of the network by itself.
 
 ## Known issues
 
+- A click on Update runs npm even where a plugin that runs the Reply CLI is loaded.
 - A quit or a switch of mode while Jason Desktop is updating the Reply CLI is not waited for: the Reply card then offers
   Update. Where npm itself placed an older version, the card's line says the CLI was installed another way.
 - The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches count your
