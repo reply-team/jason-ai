@@ -321,15 +321,16 @@ public class UnsentFactsTests
     public async Task The_read_of_one_send_answers_what_the_text_every_other_reader_runs_answers()
     {
         using var database = new TestDatabase();
-        var (names, campaigns) = await SeedEveryKindAsync(database);
+        var (sends, campaigns) = await SeedEveryKindAsync(database);
         var one = new HeldReads();
         var every = new HeldReads(Bound(HeldSends.Sql));
         await using var db = one.Open(database);
         await using var same = every.Open(database);
-        var ids = await db.WorkItems.AsNoTracking().OrderBy(item => item.Id).Select(item => item.PublicId).ToListAsync(Ct);
+        var others = (await db.WorkItems.AsNoTracking().Select(item => item.PublicId).ToListAsync(Ct)).Except(sends.Select(send => send.Id)).ToList();
+        Assert.NotEmpty(others);
         List<string> passed = [], covered = [], refused = [], differ = [];
 
-        foreach (var id in ids.Append("wi_NOBODY").Append(ids[0].ToLowerInvariant()))
+        foreach (var (id, name) in sends.Concat(others.Append("wi_NOBODY").Append(sends[0].Id.ToLowerInvariant()).Select(id => (id, id))))
         {
             foreach (var campaign in campaigns)
             {
@@ -342,7 +343,6 @@ public class UnsentFactsTests
                 {
                     var answer = await AnswerAsync(db, call);
                     var expected = await AnswerAsync(same, call);
-                    var name = names.GetValueOrDefault(id, id);
                     if (!answer.Rows.SequenceEqual(expected.Rows) || answer.Refused != expected.Refused)
                     {
                         differ.Add($"{name}, {which}, campaign {campaign}: {Said(answer)}, where the text every other reader runs answers {Said(expected)}");
@@ -359,22 +359,25 @@ public class UnsentFactsTests
 
         Assert.Equal([], differ);
         Assert.All(one.Sent, read => Assert.Equal(Bound(HeldSends.OneSendSql), read.Text));
+
+        // What was answered, so that the two are not the same for having answered nothing: each send once, under its own campaign.
         Assert.Equal(
             [
-                "passed", "passed at the bound", "named by its arguments", "an invitation", "no finish", "a failed attempt after", "two attempts that succeeded",
-                "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "read queued", "context not JSON",
+                "moment passed", "moment at the bound", "moment named by its arguments", "an invitation", "no finish", "a failed attempt after",
+                "two attempts that succeeded", "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "read queued",
+                "context not JSON",
             ],
             passed);
         Assert.Equal(
             [
-                "passed", "passed at the bound", "to come", "named by its arguments", "an invitation", "no finish", "a failed attempt after", "two attempts that succeeded",
-                "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "gone by its cancel", "gone by a read", "read sent", "read queued",
-                "a read not JSON", "context not JSON",
+                "moment passed", "moment at the bound", "moment to come", "moment named by its arguments", "an invitation", "no finish", "a failed attempt after",
+                "two attempts that succeeded", "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "gone by its cancel",
+                "gone by a read", "read sent", "read queued", "a read not JSON", "context not JSON",
             ],
             covered);
         Assert.Equal(
             [
-                "a read not JSON, passed", "context not JSON and named by its arguments, passed", "context not JSON and named by its arguments, covered",
+                "a read not JSON, passed", "context not JSON that names the moment, passed", "context not JSON that names the moment, covered",
                 "result not JSON, passed", "result not JSON, covered",
             ],
             refused);
@@ -499,7 +502,7 @@ public class UnsentFactsTests
     /// Sends of every kind the one definition of a held send tells apart, and as only an edit by hand leaves one, each by the
     /// name the test gives it; and the rows of their campaigns: the one most are of, another, a paused and an archived one.
     /// </summary>
-    private static async Task<(IReadOnlyDictionary<string, string> Names, IReadOnlyList<int> Campaigns)> SeedEveryKindAsync(TestDatabase database)
+    private static async Task<(IReadOnlyList<(string Id, string Name)> Sends, IReadOnlyList<int> Campaigns)> SeedEveryKindAsync(TestDatabase database)
     {
         await using var db = database.Open();
         var created = Noon.AddDays(-30).UtcDateTime;
@@ -507,24 +510,24 @@ public class UnsentFactsTests
         var paused = WorkItemFactory.NewCampaign(status: CampaignStatus.Paused, now: created);
         var archived = WorkItemFactory.NewCampaign(status: CampaignStatus.Archived, now: created);
         var earlier = Noon.AddHours(-3);
-        var sends = new Dictionary<string, WorkItem>(StringComparer.Ordinal);
+        var sends = new List<(string Name, WorkItem Item)>();
 
         WorkItem Kind(string name, DateTimeOffset? moment, Campaign? of = null, bool cancelable = true)
         {
             var send = Taken(of ?? mine, moment, cancelable);
-            sends.Add(name, send);
+            sends.Add((name, send));
             return send;
         }
 
         JsonObject Outcome(WorkItem send) => send.Result!["items"]![0]!.AsObject();
         JsonObject Arguments(WorkItem send) => send.Context["input"]!.AsObject();
 
-        Kind("passed", earlier);
-        Kind("passed at the bound", Noon);
-        Kind("to come", Noon.AddDays(2));
-        Arguments(Kind("named by its arguments", moment: null))["send_after"] = InboundSync.Instant(earlier);
+        Kind("moment passed", earlier);
+        Kind("moment at the bound", Noon);
+        Kind("moment to come", Noon.AddDays(2));
+        Arguments(Kind("moment named by its arguments", moment: null))["send_after"] = InboundSync.Instant(earlier);
         Kind("no moment", moment: null);
-        Outcome(Kind("a moment that cannot be read", earlier))["accepted_for"] = "soon";
+        Outcome(Kind("moment that cannot be read", earlier))["accepted_for"] = "soon";
         Kind("not cancellable", earlier, cancelable: false);
         Outcome(Kind("cancelling unsaid", earlier)).Remove("cancelable");
         Kind("an invitation", earlier).Operation = "social_invitation.send";
@@ -542,46 +545,47 @@ public class UnsentFactsTests
         Kind("of a paused campaign", earlier, paused);
         Kind("of an archived campaign", earlier, archived);
         Kind("of another campaign", earlier, other);
-        Kind("taken back", earlier);
-        Kind("taken back elsewhere", earlier);
-        Kind("nothing to take back", earlier);
-        Kind("gone by its cancel", earlier);
-        Kind("gone by a read", earlier);
-        Kind("read sent", earlier);
-        Kind("read queued", earlier);
-        Kind("a read not JSON", earlier);
-        Kind("context not JSON", earlier);
-        Kind("context not JSON and named by its arguments", moment: null);
-        Kind("result not JSON", earlier).Status = WorkItemStatus.Processing;
-        db.WorkItems.AddRange(sends.Values);
+        var takenBack = Kind("taken back", earlier);
+        var takenBackElsewhere = Kind("taken back elsewhere", earlier);
+        var nothingPending = Kind("nothing to take back", earlier);
+        var goneByCancel = Kind("gone by its cancel", earlier);
+        var goneByRead = Kind("gone by a read", earlier);
+        var readSent = Kind("read sent", earlier);
+        var readQueued = Kind("read queued", earlier);
+        var brokenRead = Kind("a read not JSON", earlier);
+        var brokenContext = Kind("context not JSON", earlier);
+        var brokenArguments = Kind("context not JSON that names the moment", moment: null);
+        var brokenResult = Kind("result not JSON", earlier);
+        brokenResult.Status = WorkItemStatus.Processing;
+        db.WorkItems.AddRange(sends.Select(send => send.Item));
         await db.SaveChangesAsync(Ct);
 
-        await EarlierAsync(db, sends["taken back"], earlier, ActorType.Human, operation: HeldSends.Cancel, state: null);
-        await EarlierAsync(db, sends["taken back elsewhere"], earlier, ActorType.Human, operation: HeldSends.Cancel, state: null, of: other);
-        await EarlierAsync(db, sends["nothing to take back"], earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_pending");
-        await EarlierAsync(db, sends["gone by its cancel"], earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_found");
-        await EarlierAsync(db, sends["gone by a read"], earlier, ActorType.System, code: "send_not_found");
-        await EarlierAsync(db, sends["read sent"], earlier, ActorType.Role, state: "sent");
-        await EarlierAsync(db, sends["read queued"], earlier, ActorType.System);
-        var read = await EarlierAsync(db, sends["a read not JSON"], ended: null, ActorType.System);
+        await EarlierAsync(db, takenBack, earlier, ActorType.Human, operation: HeldSends.Cancel, state: null);
+        await EarlierAsync(db, takenBackElsewhere, earlier, ActorType.Human, operation: HeldSends.Cancel, state: null, of: other);
+        await EarlierAsync(db, nothingPending, earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_pending");
+        await EarlierAsync(db, goneByCancel, earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_found");
+        await EarlierAsync(db, goneByRead, earlier, ActorType.System, code: "send_not_found");
+        await EarlierAsync(db, readSent, earlier, ActorType.Role, state: "sent");
+        await EarlierAsync(db, readQueued, earlier, ActorType.System);
+        var read = await EarlierAsync(db, brokenRead, ended: null, ActorType.System);
 
         // As an edit made with the columns' own checks turned off stores it. A result is written while its item still runs,
         // since it is frozen once the item has finished.
         const string Cut = "{\"items\":[";
         await db.Database.OpenConnectionAsync(Ct);
         await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = ON;", Ct);
-        foreach (var item in new[] { sends["context not JSON"], sends["context not JSON and named by its arguments"] })
+        foreach (var item in new[] { brokenContext, brokenArguments })
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET context_json = {Cut} WHERE public_id = {item.PublicId}", Ct);
         }
 
-        foreach (var item in new[] { sends["result not JSON"], read })
+        foreach (var item in new[] { brokenResult, read })
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET result_json = {Cut}, status = 'succeeded' WHERE public_id = {item.PublicId}", Ct);
         }
 
         await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = OFF;", Ct);
-        return (sends.ToDictionary(send => send.Value.PublicId, send => send.Key, StringComparer.Ordinal), [mine.Id, other.Id, paused.Id, archived.Id]);
+        return ([.. sends.Select(send => (send.Item.PublicId, send.Name))], [mine.Id, other.Id, paused.Id, archived.Id]);
     }
 
     /// <summary>One more read of the send under way, made by <paramref name="by"/>.</summary>
