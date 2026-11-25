@@ -112,10 +112,8 @@ Jason is built to do as much as it can on its own and nothing that should be you
 - **Notifications are pointers.** When something waits for you, Jason tells you how many things wait and where to
   look. The decision is made where the record is, never in the notification.
 - **Your data and your machine.** The runtime keeps its data in a directory you own, and its history is append-only:
-  what happened is not rewritten. What leaves your machine is what the plugins you install send to their providers, what
-  the agents you use send to theirs, the runtime's check for a newer release, and the requests you start yourself, such
-  as an install or an update; nothing else, and no telemetry. The exact list is in the [handbook](handbook.md), right
-  under its opening.
+  what happened is not rewritten. What Jason asks of the network by itself, and when, is in the
+  [handbook](handbook.md), right under its opening; there is no telemetry.
 
 ## Who it is for
 

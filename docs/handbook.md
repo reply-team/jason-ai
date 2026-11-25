@@ -35,14 +35,52 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 > only in a provider account you keep for testing, never in the one your company sells from.
 >
 > **What leaves your machine:** what the plugins you install send to their providers, and what the AI agents you
-> configure Jason to start send to theirs; the runtime's check for a newer release — five minutes after it starts
-> and then once a day, at the default settings, a single `GET` that identifies only the runtime's version, including
-> its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
-> scripts, `jason update` and `jason ui install`, and `jason skills install` and `update`. The check, the install
-> scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io operates, which
-> redirects them to this repository's releases; the skills come from this repository's releases on GitHub directly. What that address keeps,
-> and for how long, is in [docs/responsible-use.md](responsible-use.md#update-check-and-downloads). Nothing else,
-> and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
+> configure Jason to start send to theirs; the requests you start yourself — the install scripts, `jason update` and
+> `jason ui install`, and `jason skills install` and `update`; and what Jason does by itself:
+>
+> - **The runtime's check for a newer release:** five minutes after it starts and then once a day, at the default
+>   settings, a single `GET` that identifies only the runtime's version, including its build (`Update:CheckEnabled` set
+>   to `false` turns it off).
+> - **Jason Desktop's look for a newer version**, on Windows, on macOS and from the AppImage: in Live, 30 seconds after it
+>   starts and then every six hours; after a failure it looks again after a minute, then after longer and longer gaps up
+>   to a day. It reads this repository's releases on GitHub. Each look also sends an identifier: random, made once for the
+>   installation and kept on the machine, the same each time, which Jason does not use. It downloads a newer version only
+>   on your word. No setting turns the look off. With the deb, the system does it instead: the package adds Jason's apt
+>   source, at `get.jasonharness.ai`, and apt reads it on the system's schedule.
+> - **The first start of a version of Jason Desktop from a given place**, in the Demo too, each start after it until this
+>   has completed, and once more when Live brings up a new installation: where an installation is there,
+>   `jason update apply --finish` reads that version's release and brings the installed plugin packages, the UI and the
+>   skills `jason` has deployed up to it, the skills from the source they were installed from.
+> - **A start in Live whose UI is absent or stale:** `jason ui install`.
+> - **The Reply card**, in Live, where the Reply CLI is installed: when the window's page loads, when it takes the focus
+>   (at most once in 30 seconds) and when a card changes, `reply auth status` and, signed in, `reply account list` and
+>   `reply account pending` for email and for LinkedIn; and `reply --version` once a run, read again where it was unread
+>   or older than Jason needs.
+> - **The Reply skills:** while no Reply skills are recorded as installed, a start in Live runs `reply auth status` and,
+>   once signed in, `reply skills install`.
+> - **The Reply CLI's update:** at a start in Live, where an installed Reply CLI is older than Jason needs, npm is there
+>   and no plugin the runtime holds as valid runs the Reply CLI, `npm install -g reply-cli`, tried once for each version
+>   Jason comes to need, unless `Update:CheckEnabled` is `false` in the settings file or in Jason Desktop's own
+>   environment.
+> - **The agent programs**, in Live, where they are found: `claude --version` when the window's page loads, when it takes
+>   the focus (at most once in 30 seconds) and when a card changes; `codex`, `gemini`, `agy`, `cursor-agent` and `copilot`
+>   with `--version` once a run; and Codex's list of models (`codex app-server`) at most once a day, again an hour after a
+>   failed ask and at once at the next start.
+> - **The name of a set-up chat:** after the chat's first turn, your first message, at most 1000 characters of it, is sent
+>   once more, to that chat's own host, for a name. A chat you have already renamed is not sent.
+> - **Your login shell**, on macOS and Linux: run once at a start of Jason Desktop in Live, and at one in the Demo that
+>   sets the machine up, for your `PATH`, so your profile runs.
+>
+> What the programs Jason runs (the Reply CLI, npm, the agent programs, git, apt, your shell's profile) ask of the network,
+> and what the Chromium inside Electron asks, this page cannot say.
+>
+> The check, the install scripts, `jason update` and `jason ui install` go to `get.jasonharness.ai`, an address Reply.io
+> operates, which redirects them to this repository's releases; the skills come from this repository's releases on
+> GitHub directly. What that address keeps, and for how long, is in
+> [docs/responsible-use.md](responsible-use.md#update-check-and-downloads). The first-start step reads the release's
+> manifest, plugin packages and UI from `get.jasonharness.ai` too. There is no telemetry: no usage data and no crash
+> reports are sent. Jason Desktop's updater does send the identifier named above at each look. The file `jason doctor`
+> writes stays on your machine unless you send it.
 
 ## Installing
 

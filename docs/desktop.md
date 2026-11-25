@@ -434,17 +434,21 @@ words.
 
 The demo is a page: a mock of Jason at work on sample data, so you can see what Jason does before you connect anything of
 your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
-shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
-started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
-writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
-Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
-reaches the network there: Demo runs no runtime, checks for no update (while it shows, a terminal's `jason update apply`
-reads the feed first: where the feed offers nothing newer the answer is the ordinary one, `update_up_to_date`, and where
-it offers a newer version it is refused with `update_refused_by_desktop`, the desktop's reason `demo_open`, and nothing
-is stopped, kept or downloaded; leave the demo or quit the desktop, then run it again) and loads nothing but the
-application's own files,
-and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
-beginning each time it is shown.
+shows it as it was built. It is not an installation and has nothing to do with the runtime: the demo itself starts no
+runtime, makes no folder of an installation and reads and writes nothing of your own installation; the machine set-up and
+the start that is owed, below, which also run in Demo, are what touches your own installation. The desktop itself writes
+only its own records in your data directory (the record of the mode, the record of the machine set-up below,
+Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo its own
+process resolves no host name at all: the page runs no runtime, the desktop checks for no update (while it shows, a
+terminal's `jason update apply` reads the feed first: where the feed offers nothing newer the answer is the ordinary one,
+`update_up_to_date`, and where it offers a newer version it is refused with `update_refused_by_desktop`, the desktop's
+reason `demo_open`, and nothing is stopped, kept or downloaded; leave the demo or quit the desktop, then run it again) and
+loads nothing but the application's own files, and needs no name. The programs the desktop starts in Demo may reach the
+network. The machine set-up below, where it runs, ends with `jason update apply --finish`, which, where an installation is
+there, reads the release of this version and brings what is installed up to it; a runtime that the set-up, or a start
+that is owed, brings up is your installation's and asks what it always asks; and on macOS and Linux the set-up reads your
+`PATH` from your login shell, which runs your profile. Nothing the page shows is sent anywhere, and nothing you do in it
+is kept; the page starts from its beginning each time it is shown.
 
 **How you meet it.** A new installation opens on the demo, at once: the first start of a desktop that finds no data
 directory of yours, or one holding nothing but the desktop's own records (the record of the mode, Electron's profile and
