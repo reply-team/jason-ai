@@ -234,7 +234,14 @@ public static class StatusCommand
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        if (repairs.Count == 0)
+        // A failed check with no command of its own is named, so the block never leaves it out in silence: its own
+        // line in the table says what to do.
+        var unrepaired = report.Checks
+            .Where(check => check.State == CheckState.Failed && check.Fix is null)
+            .Select(check => check.Name)
+            .ToList();
+
+        if (repairs.Count == 0 && unrepaired.Count == 0)
         {
             return;
         }
@@ -244,6 +251,11 @@ public static class StatusCommand
         foreach (var repair in repairs)
         {
             output.WriteLine($"  {repair}");
+        }
+
+        foreach (var name in unrepaired)
+        {
+            output.WriteLine($"  {name}: see its line above.");
         }
     }
 

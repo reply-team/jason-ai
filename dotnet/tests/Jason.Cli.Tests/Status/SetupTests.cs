@@ -121,6 +121,53 @@ public class SetupTests
         Assert.DoesNotContain("To repair:", text, StringComparison.Ordinal);
     }
 
+    private static string RenderChecks(params StatusCheck[] checks)
+    {
+        var root = OperatingSystem.IsWindows() ? @"C:\data" : "/data";
+        var output = new StringWriter();
+        StatusCommand.Render(output, new StatusReport(false, checks, SetupInfo.From(new Contracts.Discovery.JasonPaths(root, 2))));
+        return output.ToString();
+    }
+
+    /// <summary>
+    /// A failed check with no command is named under the commands, in the order of the checks, beside one that has a command.
+    /// </summary>
+    [Fact]
+    public void Repair_block_names_a_failed_check_with_no_fix_after_the_commands()
+    {
+        var text = RenderChecks(
+            new StatusCheck("plugin_package", false, CheckState.Failed, "a package is behind", null),
+            new StatusCheck("runtime", true, CheckState.Failed, "not running", "jason runtime start"));
+
+        var lines = text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.TrimEnd()).ToArray();
+        Assert.Equal(["To repair:", "  jason runtime start", "  plugin_package: see its line above."], lines[..3]);
+    }
+
+    /// <summary>
+    /// A failed check with no command alone still brings the heading.
+    /// </summary>
+    [Fact]
+    public void Repair_block_is_printed_for_a_failed_check_with_no_fix_alone()
+    {
+        var text = RenderChecks(new StatusCheck("ui_module", false, CheckState.Failed, "a problem", null));
+
+        Assert.Contains("To repair:" + Environment.NewLine + "  ui_module: see its line above.", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An unknown or an absent check with no command stays out, and with it the heading.
+    /// </summary>
+    [Fact]
+    public void Repair_block_leaves_out_unknown_and_absent_checks_with_no_fix()
+    {
+        var text = RenderChecks(
+            new StatusCheck("a", false, CheckState.Unknown, "not known", null),
+            new StatusCheck("b", false, CheckState.Absent, "not there", null));
+
+        Assert.DoesNotContain("To repair:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("see its line above", text, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A data directory a newer Jason laid out is reported, never refused: the body carries the stamp's layout, the
     /// required layout check fails with the refusal's own sentence and the stamp's version and moment, <c>ready</c> is
