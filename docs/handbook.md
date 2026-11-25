@@ -58,9 +58,10 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 >   or older than Jason needs.
 > - **The Reply skills:** while no Reply skills are recorded as installed, a start in Live runs `reply auth status` and,
 >   once signed in, `reply skills install`.
-> - **The Reply CLI's update:** at a start in Live, where an installed Reply CLI is older than Jason needs and npm is
->   there, `npm install -g reply-cli`, tried once for each version Jason comes to need, unless `Update:CheckEnabled` is
->   `false` in the settings file or in Jason Desktop's own environment.
+> - **The Reply CLI's update:** at a start in Live, where an installed Reply CLI is older than Jason needs, npm is there
+>   and no plugin the runtime holds as valid runs the Reply CLI, `npm install -g reply-cli`, tried once for each version
+>   Jason comes to need, unless `Update:CheckEnabled` is `false` in the settings file or in Jason Desktop's own
+>   environment.
 > - **The agent programs**, in Live, where they are found: `claude --version` when the window's page loads, when it takes
 >   the focus (at most once in 30 seconds) and when a card changes; `codex`, `gemini`, `agy`, `cursor-agent` and `copilot`
 >   with `--version` once a run; and Codex's list of models (`codex app-server`) at most once a day, again an hour after a
