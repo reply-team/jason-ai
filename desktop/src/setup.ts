@@ -180,6 +180,8 @@ export interface ReplyState {
      * so; the card then offers no act. Null otherwise.
      */
     belowMinimum: string | null;
+    /** What came of the update of the Reply CLI at this start of the application, as one sentence; absent where none was made. */
+    startUpdate?: string | null;
 }
 
 /**
@@ -1241,7 +1243,11 @@ export class Setup {
         });
     }
 
-    /** Runs the npm install of a missing program, on a person's click only, and only where npm is there. */
+    /**
+     * Runs the npm install of a program, on a person's click only, and only where npm is there. Once the Reply CLI was
+     * installed or updated, the runtime is asked to read its plugins again: its Reply plugin holds the CLI it last found to
+     * the version its manifest asks for, and says the old one until then.
+     */
     installProgram(programId: unknown): Promise<void> {
         return this.#serial(async () => {
             const install = isProgramName(programId) ? programInstalls[programId] : undefined;
@@ -1253,7 +1259,9 @@ export class Setup {
             this.#deps.log.info('program_installed', { Program: programId, Exit: result.exit });
             this.#versions.delete(programId);
             if (result.exit !== 0) throw new Refused(words(result, `npm ended with code ${result.exit}.`));
+            const reload = programId === 'reply' ? await this.#reloadPlugins() : null;
             this.#changed();
+            if (reload !== null && reload.exit !== 0) throw this.#reloadRefused(reload);
         });
     }
 

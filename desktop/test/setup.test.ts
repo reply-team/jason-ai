@@ -935,6 +935,30 @@ test('a missing program is installed with npm on a click, and only where npm is 
     await assert.rejects(setupOn(withoutNpm).installProgram('claude'), (error: unknown) => error instanceof Refused && /nodejs\.org/.test(error.message));
 });
 
+test('installing or updating the Reply CLI on a click has the runtime read its plugins again; no other program does', async (t) => {
+    const reloads = (b: Bench) => b.record().filter((entry) => entry.name === 'jason' && entry.args.join(' ') === 'plugin reload').length;
+    const b = bench(t, { programs: ['npm', 'reply'] });
+    await setupOn(b).installProgram('reply');
+    assert.deepEqual(
+        b.record().filter((entry) => (entry.name === 'npm' && entry.args[0] === 'install') || (entry.name === 'jason' && entry.args[0] === 'plugin')).map((entry) => [entry.name, ...entry.args].join(' ')),
+        ['npm install -g reply-cli', 'jason plugin reload'],
+        'the reload after the install, once',
+    );
+    const others = bench(t, { programs: ['npm'] });
+    await setupOn(others).installProgram('codex');
+    await setupOn(others).installProgram('claude');
+    assert.equal(reloads(others), 0);
+
+    // npm that failed put nothing there to read again.
+    const failed = bench(t, { programs: ['npm', 'reply'] });
+    const programs: Programs = {
+        find: (name) => failed.programs.find(name),
+        run: (name, args, options) => (name === 'npm' ? Promise.resolve({ exit: 1, stdout: '', stderr: 'npm error code EACCES' }) : failed.programs.run(name, args, options)),
+    };
+    await assert.rejects(new Setup({ ...setupDeps(failed, memoryLog(), { feed: null, skillsDeployedFor: null, theme: null }), programs }).installProgram('reply'), Refused);
+    assert.equal(reloads(failed), 0);
+});
+
 test('a provider’s key is kept encrypted under <data>/desktop and removed by an empty one', async (t) => {
     const b = bench(t);
     const setup = setupOn(b);
