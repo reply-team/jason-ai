@@ -25,12 +25,15 @@
 // moment the arguments name that is still ahead goes beside it as `--send-after`, as written, and Reply holds the send
 // for it. A moment already past is no moment: the send goes as one that names none. A message may name the sending
 // schedule Reply times it by (provider.js), which goes beside the key as `--schedule-id`, with the moment where one is
-// named too. Reply's direct-send routes are on every account, so nothing is read before a send for any of this: a 404
-// with no code of Reply's own on the send says Reply's API changed under this package version, and ends it with nothing
-// sent (`provider_call_failed`, on a repeat `send_not_settled`). The runtime says when the earliest attempt that may
-// have sent was claimed, `context.unsettled_since`, and null where none was; Reply keeps a key for a day, so a repeat 23
-// hours or more after that moment is not settled by it, and ends before anything is sent. A later attempt after
-// attempts that all settled is a first send again.
+// named too; and an email that follows an earlier one, as the runtime decided at the claim, names it beside the key as
+// `--follows` and that email's reference, which Reply places it under or refuses with nothing sent (message.js).
+// Reply's direct-send routes are on every account, so nothing is read before a send for any of this: a 404 with no code
+// of Reply's own on the send says Reply's API changed under this package version, and ends it with nothing sent
+// (`provider_call_failed`, on a repeat `send_not_settled`); on a follow-up, reply-cli names that 404 a Reply without
+// follow-ups, `follows.not_available`, which ends it `capability_not_offered`. The runtime says when the earliest
+// attempt that may have sent was claimed, `context.unsettled_since`, and null where none was; Reply keeps a key for a
+// day, so a repeat 23 hours or more after that moment is not settled by it, and ends before anything is sent. A later
+// attempt after attempts that all settled is a first send again.
 //
 // Where the runtime also names the send such an attempt returned, `context.unsettled_reference`, that send is read
 // first, by `direct-send get` of its reference, inside the window and past it: a read never makes a send twice. Reply's
@@ -226,20 +229,49 @@ export function readableMoment(operation, input) {
 /**
  * The flags a send carries beside its own: the work item's key, the moment it goes out after where the arguments name
  * one still ahead, as written (`readableMoment`), and for a message the sending schedule the provider's object names
- * (`scheduleOf`). A repeat after an attempt that may have sent goes only while Reply still keeps the key
- * (`repeatStillSettleable`). Nothing is read before the send for any of them.
+ * (`scheduleOf`) and the earlier email it follows, by its reference, where the runtime composed one (`followedReference`).
+ * A repeat after an attempt that may have sent goes only while Reply still keeps the key (`repeatStillSettleable`).
+ * Nothing is read before the send for any of them.
  */
 function keyedFlags(operation, context, input) {
   const at = readableMoment(operation, input);
   const ahead = at !== null && at > Date.now();
   const schedule = operation === "message.send" ? scheduleOf(operation, input) : null;
+  const follows = operation === "message.send" ? followedReference(operation, input) : null;
   if (isRepeat(context) && !repeatStillSettleable(context)) {
     fail(operation, { call: null, row: "send_not_settled_after_the_window" }, undefined);
   }
 
   return ["--idempotency-key", input.idempotency_key]
     .concat(ahead ? ["--send-after", input.args.send_after] : [])
-    .concat(schedule !== null ? ["--schedule-id", schedule] : []);
+    .concat(schedule !== null ? ["--schedule-id", schedule] : [])
+    .concat(follows !== null ? ["--follows", follows] : []);
+}
+
+/**
+ * The reference of the earlier letter a message follows, as the runtime composed it at the root of the input, or null
+ * where it follows none: a root `follows` that names no letter, or none at all, is a letter of its own. The runtime
+ * decides it at the claim from the caller's `args.follows` and the campaign's own earlier sends, and keeps that decision
+ * on a repeat, so the root is read and `args.follows` never is. The reference is the one Reply answered that letter's
+ * send with, and goes on the send as it is; it never goes on stdin. A letter named by its work item without that
+ * reference cannot be named to Reply, and a message that follows a letter goes into its thread or not at all: it is
+ * refused before anything is called, never sent as a letter of its own.
+ */
+export function followedReference(operation, input) {
+  const follows = input.follows;
+  if (follows === null || typeof follows !== "object" || Array.isArray(follows)) {
+    return null;
+  }
+
+  if (typeof follows.reference === "string" && follows.reference.length > 0) {
+    return follows.reference;
+  }
+
+  if (typeof follows.work_item === "string" && follows.work_item.length > 0) {
+    fail(operation, { call: null, row: "follows_without_a_reference" }, undefined);
+  }
+
+  return null;
 }
 
 /** Whether this attempt repeats one that may have sent: the runtime names when the earliest such attempt was claimed. */

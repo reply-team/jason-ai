@@ -82,6 +82,7 @@ public sealed class ReplyAccount : IDisposable
     public const string SchedulesFile = "schedules.json";
     public const string KeysFile = "keys.json";
     public const string DirectSendsFile = "direct-sends.json";
+    public const string TimeMovesFile = "time-moves.json";
     public const string FeedFile = "feed.json";
     public const string SearchesFile = "searches.json";
     public const string PreviewFile = "preview.json";
@@ -449,6 +450,34 @@ public sealed class ReplyAccount : IDisposable
     {
         ArgumentNullException.ThrowIfNull(thread);
         return Replace(ThreadsFile, thread["id"]!.GetValue<int>(), thread);
+    }
+
+    /// <summary>
+    /// The person writes back in a thread the account holds: their message is added at its end, inbound, dated now by this
+    /// machine's clock, which is the stand-in's, and the thread's last activity moves to it, as Reply's inbox then holds it.
+    /// </summary>
+    public ReplyAccount Answers(int thread, string body)
+    {
+        var threads = ReadArray(ThreadsFile);
+        var planted = threads.OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == thread);
+        var messages = planted["messages"]!.AsArray();
+        var now = DateTimeOffset.UtcNow;
+        var date = now.AddTicks(-(now.Ticks % (TimeSpan.TicksPerMillisecond * 10))).ToString("yyyy-MM-dd'T'HH:mm:ss.ff'Z'", CultureInfo.InvariantCulture);
+        var subject = (string?)messages.OfType<JsonObject>().First()["subject"];
+        messages.Add(new JsonObject
+        {
+            ["channel"] = "email",
+            ["messageId"] = $"<answer-{thread}-{messages.Count}@mail.example.com>",
+            ["date"] = date,
+            ["subject"] = subject is null ? null : "Re: " + subject,
+            ["body"] = body,
+            ["isOutbound"] = false,
+            ["status"] = null,
+        });
+        planted["lastActivityDate"] = date;
+        planted["isRead"] = false;
+        Write(ThreadsFile, threads);
+        return this;
     }
 
     /// <summary>One of the inbox categories a thread can be filed under, as Reply lists them.</summary>
@@ -875,7 +904,7 @@ public sealed class ReplyAccount : IDisposable
         string? failureCode = null,
         string? estimatedSendAt = null,
         JsonNode? bounced = null, string? bounceType = null, string? bouncedAt = null,
-        JsonObject? reply = null)
+        JsonObject? reply = null, string? subject = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         var sends = ReadArray(DirectSendsFile);
@@ -890,6 +919,8 @@ public sealed class ReplyAccount : IDisposable
             ["messageId"] = messageId,
             ["failureReason"] = failureReason,
             ["cancelledAt"] = cancelledAt,
+            // An email Reply kept has a subject, which a follow-up goes under; a planted one is given one unless a test says.
+            ["subject"] = subject ?? (reference.StartsWith("email-", StringComparison.Ordinal) ? "A planted email" : null),
         };
         if (renderedSubject is not null)
         {
@@ -933,6 +964,35 @@ public sealed class ReplyAccount : IDisposable
 
         sends.Add(record);
         Write(DirectSendsFile, sends);
+        return this;
+    }
+
+    /// <summary>
+    /// Time passing for a direct send Reply holds, which the stand-in never advances by itself: <paramref name="reference"/>
+    /// becomes <c>sent</c>, <c>failed</c> or <c>cancelled</c>. The stand-in applies it, with what a send that goes does
+    /// (opening its thread, or placing a follow-up in the thread it follows), before it answers its next command.
+    /// </summary>
+    public ReplyAccount SendBecomes(string reference, string state) => TimeMoves(reference, state);
+
+    /// <summary>
+    /// The moment a follow-up was held for comes: the stand-in reads the send it follows, as Reply does when it comes due,
+    /// and the follow-up goes into the thread or fails final, before it answers its next command.
+    /// </summary>
+    public ReplyAccount FollowUpComesDue(string reference) => TimeMoves(reference, "due");
+
+    private ReplyAccount TimeMoves(string reference, string to)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var moves = ReadArray(TimeMovesFile);
+        moves.Add(new JsonObject { ["reference"] = reference, ["to"] = to });
+        Write(TimeMovesFile, moves);
+        return this;
+    }
+
+    /// <summary>The next follow-up that goes at once fails in the mailbox, which cannot place it in its thread (once).</summary>
+    public ReplyAccount CannotPlaceTheNextFollowUp()
+    {
+        Write("place-fails.json", new JsonObject());
         return this;
     }
 

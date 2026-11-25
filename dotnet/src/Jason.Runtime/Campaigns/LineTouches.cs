@@ -20,12 +20,19 @@ namespace Jason.Runtime.Campaigns;
 /// side of a ceiling; nothing the store keeps proves an earlier attempt did not act. Work none of whose attempts ended
 /// ambiguous, and that did not succeed, reached nobody, and counts for nothing. Nor does a send a succeeded
 /// <c>message.cancel</c> of the campaign names (<see cref="HeldSends.Cancel"/>): the provider held it, and said it took it
-/// back, so it never went, as the hold reads it too; a cancel that failed, or is still to run, takes nothing back.
+/// back, so it never went, as the hold reads it too; a cancel that failed, or is still to run, takes nothing back. A send a
+/// succeeded <c>message.status</c> of the campaign (<see cref="HeldSends.Status"/>) says failed or was cancelled
+/// (<see cref="HeldSends.UnsentStates"/>) is not counted, whoever asked for the read, unless a read of it says it went or
+/// may have gone (<c>sent</c> or <c>unknown</c>, <see cref="HeldSends.MayHaveGoneStates"/>): reads that disagree leave it
+/// counted, the safe side of a ceiling. A <c>queued</c> read, a read that failed and a letter the provider still holds as
+/// <c>queued</c>, however long past its moment, leave it counted.
 /// </para>
 /// <para>
 /// In SQL because the class sits in a JSON column only SQLite's own functions reach, and because the people list's reads
 /// are SQL (<see cref="CampaignPeople"/>). <see cref="CountedSql"/> is a condition over one work item aliased <c>w</c>; its
-/// attempts are read by the attempts' index on the work item.
+/// attempts are read by the attempts' index on the work item, and what names it by the work items' index on the send an
+/// item names, the campaign and the operation (<see cref="SendProbe"/>): each take-back and read of the send is found by a
+/// seek, so the cost grows with what names the send rather than with the campaign's work.
 /// </para>
 /// </remarks>
 internal static class LineTouches
@@ -34,6 +41,55 @@ internal static class LineTouches
     private static readonly string TouchesSql =
         string.Join(", ", OperationCatalog.Touches.Order(StringComparer.Ordinal).Select(operation => $"'{operation}'"));
 
+    /// <summary>
+    /// Whether the work item aliased <paramref name="item"/> names the send aliased <paramref name="send"/> under
+    /// <c>args.send</c>: the one wording of every probe of a send (<see cref="SendProbe"/>), so the index on what an item
+    /// names is taken by each of them.
+    /// </summary>
+    private static string NamesSql(string item, string send) => SendProbe.Names(item, $"{send}.public_id");
+
+    /// <summary>The states in <paramref name="states"/> as a SQL list of literals.</summary>
+    private static string ListSql(IEnumerable<string> states) => string.Join(", ", states.Select(state => $"'{state}'"));
+
+    /// <summary>
+    /// Whether the send aliased <paramref name="send"/> never went: a succeeded <c>message.cancel</c> of the campaign names it,
+    /// as <see cref="TakenBackSql"/> reads, or a succeeded <c>message.status</c> of the campaign names it and says it failed
+    /// or was cancelled (<see cref="HeldSends.ReadSaidSql"/>), whoever asked for the read, while no succeeded read of it says
+    /// it went or may have gone. Each looks for one operation's items naming the send, so each seeks the index on the
+    /// campaign, the operation and the send (<see cref="SendProbe"/>); the reads that may outweigh a read are looked for only
+    /// behind a read that says the send never went. The one definition, which a touch that counts and the hold's reading of
+    /// Jason's own move both read.
+    /// </summary>
+    internal static string NeverWentSql(string send) => $$"""
+        ({{TakenBack(send)}}
+         OR EXISTS (SELECT 1 FROM work_items AS k
+                    WHERE k.campaign_id = {{send}}.campaign_id AND k.operation = '{{HeldSends.Status}}' AND k.status = 'succeeded'
+                      AND {{NamesSql("k", send)}}
+                      AND {{HeldSends.ReadSaidSql("k", ListSql(HeldSends.UnsentStates))}}
+                      AND NOT EXISTS (SELECT 1 FROM work_items AS g
+                                      WHERE g.campaign_id = {{send}}.campaign_id AND g.operation = '{{HeldSends.Status}}'
+                                        AND g.status = 'succeeded'
+                                        AND {{NamesSql("g", send)}}
+                                        AND {{HeldSends.ReadSaidSql("g", ListSql(HeldSends.MayHaveGoneStates))}})))
+        """;
+
+    /// <summary>
+    /// Whether a succeeded <c>message.cancel</c> of the campaign names the send aliased <paramref name="send"/>: the provider
+    /// held it and said it took it back, so it never went.
+    /// </summary>
+    private static string TakenBack(string send) => $$"""
+        EXISTS (SELECT 1 FROM work_items AS k
+                WHERE k.campaign_id = {{send}}.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
+                  AND {{NamesSql("k", send)}})
+        """;
+
+    /// <summary>
+    /// Whether a succeeded <c>message.cancel</c> of the campaign names the work item aliased <c>w</c>: the provider held the
+    /// send and said it took it back, so it never went. A letter a message is named to follow (<see cref="LineRoots"/>) is
+    /// asked this alone; a touch that counts asks it with what a read said, in <see cref="NeverWentSql"/>.
+    /// </summary>
+    internal static readonly string TakenBackSql = TakenBack("w");
+
     /// <summary>Whether the work item aliased <c>w</c> is a touch that counts: the one definition.</summary>
     internal static readonly string CountedSql = $$"""
         (w.kind = 'provider_op'
@@ -41,9 +97,7 @@ internal static class LineTouches
          AND (w.status = 'succeeded'
               OR EXISTS (SELECT 1 FROM attempts AS a
                          WHERE a.work_item_id = w.id AND json_extract(a.error_json, '$.class') = 'ambiguous'))
-         AND NOT EXISTS (SELECT 1 FROM work_items AS k
-                         WHERE k.campaign_id = w.campaign_id AND k.operation = '{{HeldSends.Cancel}}' AND k.status = 'succeeded'
-                           AND json_extract(k.context_json, '$.input.send') = w.public_id))
+         AND NOT {{NeverWentSql("w")}})
         """;
 
     /// <summary>

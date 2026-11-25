@@ -396,7 +396,7 @@ public partial class RoleSkillTests
     }
 
     /// <summary>The planner's sentence on a person's line, in the judgement both planner files share.</summary>
-    internal const string PlannerLine = "**A person's line is three touches where nothing better was thought out.** The first letter and two follow-ups, each written when it is due, one at a time, and the line never planned ahead as a whole";
+    internal const string PlannerLine = "**A person's line is three touches where nothing better was thought out.** The first letter and two follow-ups, each written when it is due, one at a time: each follow-up is written from what has happened since the last";
 
     /// <summary>The planner's words on the ceiling, in the same shared judgement.</summary>
     internal const string PlannerCeiling = "never more than `Lines:MaxTouches`, the ceiling the settings hold, which no role raises and none asks to have raised";

@@ -11,8 +11,8 @@ reply means, and what to do about it, is the responder's first and the manager's
 
 ## 1. Where it runs
 
-Each scan runs in thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**,
-**bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
+Each scan runs in fourteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**,
+**bounce**, **deferred**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
 summon, so a reply it says wakes the responder and the manager in the same scan, and before the claim, so a read it
 starts can be claimed in the same scan. Events, before it, hands a read of an account's events to a reader that runs off the scan
 ([events](events.md) §5).
@@ -122,6 +122,70 @@ them. A paused campaign's bounces wait, and so do the reads they ask for: the st
 read a paused campaign, and its watermark holds until the campaign is live again. The bounce step runs whatever
 `Inbound:Enabled` says, since its lines come from the events' read, not from sync.
 
+**Deferred**, right after it, reads the deferred sends whose moment has passed, to learn what became of each. A deferred
+send is one the provider holds by the one definition a route change and a take-back hold it by ([routing](routing.md)
+§6): a send of a campaign that is not archived, succeeded with the provider's reference, whose result says the provider
+can cancel it, for the moment its result names as `accepted_for` or, where it names none, the `send_after` its arguments
+named. The step reads those whose moment passed at least `Dispatcher:DeferredReadGraceSeconds` ago (900, a quarter of an
+hour, by default) and no more than 30 days ago, and of which nothing yet says what became of them: no cancel of it that
+succeeded, no answer of a cancel or a read that the provider holds no such send (`send_not_found`), and no read, whoever made it, that found it `sent`, `failed`, `cancelled` or
+`unknown`. A cancel answered `send_not_pending`, and a read that says the send can no longer be cancelled, say only that
+it can no longer be taken back, so such a send is still read. For each it queues a read where the send ran: a
+`message.status` `provider_op` whose input names the send and nothing else, created by the dispatcher as root work at
+priority 0, its reason "a deferred send to read". The first read is due once the grace has passed; the second
+`Dispatcher:DeferredReadFirstWaitSeconds` (an hour) after the first ended; each later one
+`Dispatcher:DeferredReadWaitSeconds` (a day) after the one before it ended, whatever it answered, since a provider may
+carry a send it could not make to its next day. The reads end once something says what became of the send, as above, or
+once it is said to be `overdue`, which the first read that ends `Dispatcher:DeferredReadOverdueSeconds` (a week) or more
+after the moment and still finds it `queued` says, so an overdue span changed while a send's reads are under way is met
+by a later read, but for the two limits below; and at 9 at most that succeeded and 9 at most that failed of the step's
+own, 18 in all, under settings that stand, counting the reads the runtime made of the send that ended at or after its moment, whichever step made them, and a
+read cancelled before it answered as one that failed. Until the overdue span after the moment has passed, the step makes
+a read only while fewer than 8 of them have succeeded, so its last read waits for the span; once the span has passed, a
+read is due after its wait until 9 have succeeded with one of them ended past the span, or 9 have failed. A read the
+bounce step made of the send after its moment is one of those counted, and any of its reads spaces the next: it can
+leave the step fewer reads before the span, never take its last one past it away. An overdue span beyond the grace, the first wait and
+seven waits is refused: a bound chosen on how far past its moment a send is read. The step makes no read in a campaign
+while 5 reads the runtime made are open there, whichever step made them: the cap is the step's own, and the bounce step's reads are not
+held to it. It takes the oldest sends first, and never makes a second read of a send that already has an open one; a
+read a person or a role made is theirs, and the runtime makes its own beside it. The step reads its candidates at most
+once a minute, and only an active campaign's: a paused campaign's reads would wait, so none is made there until it is
+live again. A read of the candidates that fails, on a stored value it cannot parse or on anything else, skips that run,
+logged by the step's name and how many runs in a row it skipped, and never the rest of the scan.
+
+Each read decides alone, when it ends, whoever made it ([`message.status`](contracts/operations/message.status.md)): one
+that finds the send `sent` says `message_sent_observed`, as every read of a send does; one that finds it `failed` or
+`cancelled` says `message_unsent_observed`, with the state, the provider's own code where it is one word, the moment and
+when it was cancelled; and the read that ends the overdue span or more after the moment, with no read of the runtime's
+open or still to come and none having found what became of the send, says `message_unsent_observed` with the state
+`overdue`. Never earlier, and never of a send a succeeded `message.cancel` of the campaign took back, whose own line is
+the record. A read
+that finds the send `unknown`, which the provider lost track of and which may have gone, ends the reads and says
+nothing. `message_unsent_observed` is a default trigger of the campaign's manager
+([campaign manager](campaign-manager.md)). The step itself writes no line. It queues no read of a send for this reason,
+logged once per campaign by id and code, and asks again at its next run:
+
+| Code | Why |
+|---|---|
+| `deferred_read_not_routed` | No route active now takes a read of the send where it ran, its plugin and its account, so the claim would refuse one. |
+
+Six limits hold. A send that named no moment, one the provider makes as soon as it can or one a sending schedule of
+the provider's own holds, has no moment to have passed, and is not read. A send the provider took saying it cannot be
+cancelled is not held by the definition, and is not read either. A send taken for a moment more than a year after it
+was handed over may not be read: the contract names no latest `send_after`, and the step leaves out by their own column
+the sends handed over more than 395 days ago, a year before the 30 days it looks back. An overdue span lowered after 9
+reads of a send succeeded is not met where one of them already ended past the new span, judged under the old one, so
+that send is not said `overdue`. An overdue span raised while the step's read past the old span is still open adds one
+read for each such raise, never past the span's own cap. And a send whose 9 failed reads are spent is read no more by the step and may end never said
+by a line: each of those failures was a `workitem_failed` the manager was woken by, and a read a person or a role makes
+of the send still answers, as every read does, and spends nothing.
+
+A read that fails says nothing, and its failure is the manager's as every failed item is (`workitem_failed`). It counts
+toward the 9 that failed and never toward the 9 that succeeded, and the next read follows it after the same wait as
+after one that succeeded, never sooner. So, under settings that stand, the step reads one send eighteen times at most,
+nine answered reads of its own and nine that failed, however short the waits. The step runs whatever `Inbound:Enabled`
+says.
+
 Sync runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
 A runtime with no dispatch loop reads nothing.
@@ -229,8 +293,10 @@ result names one and otherwise at the end of its succeeded attempt, or an answer
 thread, a `conversation.reply` of the campaign into that thread, at the end of its succeeded attempt. A touch records no
 thread, so touches count for the person across the campaign and an answer only for its own thread. Only a moment that
 has come counts, so a letter the provider still holds for later is no reason to leave a reply alone, and a letter a
-cancel took back never went. A line later than every such moment holds the line as any reply does, whoever moved the
-thread.
+cancel took back never went, nor did one a succeeded `message.status` of the campaign says failed or was cancelled,
+unless a read of it says it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a
+letter the provider still holds as `queued`, however long past its moment, leave it Jason's own letter. A line later than every such moment holds the line as any reply does,
+whoever moved the thread.
 
 The rule has limits, and they run both ways:
 

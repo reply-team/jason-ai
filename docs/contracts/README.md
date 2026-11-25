@@ -240,6 +240,10 @@ instead where it is not offered.
   create the item with `not_before` at the moment instead; it is claimed once the moment has passed and, being
   `confirm_each`, waits for a person's approval then. A refusal recorded `ambiguous` says an earlier attempt of the
   item may have reached the person: the new item is created only once the provider has said that attempt did not act.
+- `message.send` with a root `follows` that names a letter: where the provider does not offer replies in a thread, the
+  message is not sent as a letter of its own in its place. Create it again with `follows` written `new_thread` only where
+  a letter of its own is what the person wants, and say that it reaches them as a new letter, not under the one it
+  followed.
 - `message.status` and `message.cancel`: where the provider does not offer them, a send that ended `accepted` is known
   only as accepted. Say so rather than guess whether it went, and read the conversation for what the person received;
   a send that cannot be cancelled is stopped, if at all, at the provider by a person.
@@ -312,6 +316,14 @@ definition the search is searched by, whichever way its arguments named the audi
 ([`docs/campaign-manager.md`](../campaign-manager.md) §10). `workitem.create` and `workitem.update` refuse a search that
 writes the key or removes it, as `validation_failed` at the field `context.audience`; on any other work the key is the
 caller's own.
+
+**A fourth, the runtime's own: `context.follows` on a message.** The claim of a `message.send` that it does not refuse
+records there which earlier letter the message follows, and why, as it composed it at the root of the input less the
+provider's reference: `{"work_item": "wi_…", "operation": "message.send", "because": "line_root"}`, or for a
+letter of its own `{"work_item": null, "operation": null, "because": "asked_new_thread"}`, and a repeat reads it back
+rather than decide again ([`docs/work-execution.md`](../work-execution.md), "A person's line in a campaign").
+`workitem.create` and `workitem.update` refuse a message that writes the key or removes it, as `validation_failed` at
+the field `context.follows`; on any other work the key is the caller's own.
 
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
@@ -436,6 +448,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`launch_limit_lifted`](journal/launch_limit_lifted.json) | `0.50.0` | no | none | A person lifted the daily limits of launches for the rest of the installation's day, so every role in every campaign runs past them until the next local midnight, and what they held was let go. |
 | [`message_bounce_observed`](journal/message_bounce_observed.json) | `0.43.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it; said once per send, and once more where a bounce first said soft is found to stop. |
 | [`message_sent_observed`](journal/message_sent_observed.json) | `0.22.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message went out, with the moment it went and the provider's identifier for it. |
+| [`message_unsent_observed`](journal/message_unsent_observed.json) | `0.51.0` | yes | campaign, contact, work_item, plugin | A send the provider took for a moment did not go: a read found it failed or cancelled, or the last read of it after its moment had passed still found it waiting, and it is overdue; said once per send, and never of a send a succeeded message.cancel of the campaign took back. |
 | [`notification_channel_updated`](journal/notification_channel_updated.json) | `0.48.5` | yes | none | One notification channel, the toast or a notification plugin, was turned on or off by notification.enable or notification.disable: whether it was on before and after, apart from the switch for every notification. |
 | [`notification_sent`](journal/notification_sent.json) | `0.2.0` | yes | none | A notification pointing at what waits for a person went out, with the counts it carried and what each channel did with it. |
 | [`plugin_grants_updated`](journal/plugin_grants_updated.json) | `0.42.0` | yes | plugin | A plugin was granted something its manifest requests, or a grant was taken back, by plugin.grant or plugin.revoke: that capability's grants in force before and after, as the reload froze them. |
@@ -585,6 +598,11 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
   provider's own shape, composed from `args.definition`, or, for an audience named by its number, from the audience the
   campaign holds. `args` is the caller's as written and the runtime never rewrites it, so the definition is placed at
   the root, as `send` is, and the plugin reads it there and nowhere else.
+- `follows` appears where the operation's input schema declares it — today `message.send` — and says which earlier
+  letter of the campaign the message follows, as a reply in its thread: that send's work item, its operation and the
+  provider's reference for it, or, with all three null, a new letter, and in `because` why either way. The runtime
+  composes it at the claim from `args.follows` and the campaign's own earlier sends; a caller never writes it, and the
+  plugin reads it there, never `args.follows`.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
   visible.
 
@@ -619,7 +637,9 @@ the input it singles out.
   fallback, since the provider then sends nothing. A condition on a name the input does not hold takes its other branch in the example, where the provider
   may take the first, and the name is listed. The example renders text and escapes nothing. It is the runtime's
   rendering, not the provider's, which may differ — in what it counts as no value, and in what it makes of markup in a
-  field.
+  field. Where the root `follows` names a letter, the message goes under that letter's subject, which the input does
+  not carry: `subject` is then null, since the subject the arguments carry is not sent, and it is neither rendered nor read for
+  names.
 - Every pointer is checked when the document loads. The walk steps through plain `properties` by name and `items`
   by index, and refuses a name a closed object does not allow, an index past `maxItems` and a step into a value
   whose only type is a scalar; a value that may be a scalar or something else is not refused.

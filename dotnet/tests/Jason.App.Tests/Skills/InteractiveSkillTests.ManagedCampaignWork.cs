@@ -1571,4 +1571,21 @@ public partial class InteractiveSkillTests
 
     [GeneratedRegex(@"(?<=[.!?])\s+")]
     private static partial Regex SentenceEnd();
+
+    /// <summary>A letter a person has written by hand to somebody who already has one in the campaign goes into that letter's thread.</summary>
+    [Fact]
+    public void The_session_skills_say_that_a_letter_to_a_person_who_has_one_goes_into_its_thread()
+    {
+        var session = Flattened("managed-campaign-work");
+        Assert.Contains("an email to a person who already has one in the campaign goes under the line's root, the latest letter to them on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back, where the provider can place it there, unless it says `\"follows\": \"new_thread\"`; otherwise it goes as a letter of its own", session, StringComparison.Ordinal);
+
+        var approvals = Flattened("approvals-and-questions");
+        Assert.Contains("a message to the same person that is no answer in the thread they wrote in, a follow-up or a letter of its own, is covered too", approvals, StringComparison.Ordinal);
+
+        var planner = Flattened("planner-in-session");
+        Assert.Contains("so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed", planner, StringComparison.Ordinal);
+        Assert.Contains("The follow-ups go under the line's root, as replies, where the provider can: the latest letter that went as one of its own", planner, StringComparison.Ordinal);
+        Assert.Contains("`wait_on` naming the work item of the letter it follows", planner, StringComparison.Ordinal);
+        Assert.DoesNotContain("never planned ahead", planner, StringComparison.Ordinal);
+    }
 }

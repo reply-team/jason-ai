@@ -10,6 +10,8 @@ import { editable, readItem, sentence } from '../screens/attention/message-edit'
 import { changedSince, withdrawn } from '../screens/attention/reasking';
 import { DIFFERS_SENTENCE, stateSentence, withWords } from '../screens/attention/reasking-model';
 import { Doubts } from '../screens/send-modes/doubts';
+import { t } from '../platform/i18n';
+import { followedLetter, followsRowOf, readFollowed } from './followed';
 import { attention } from './needs';
 import { senderReads, type SenderReads } from './senders';
 import { clock, here } from './state';
@@ -56,6 +58,14 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const [editing, setEditing] = useState<WorkItem | null>(null);
     const [checking, setChecking] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
+    // Where an email send lands: the letter it follows is read once, as the card is drawn, and decides nothing.
+    const letter = followedLetter(card.follows);
+    // A letter still unread is asked again on the console's clock tick, as Needs you's pane asks at each paint.
+    const ticked = clock.value;
+    useEffect(() => {
+        if (letter !== null) void readFollowed(api, letter);
+    }, [api, letter, ticked]);
+    const follows = followsRowOf(card.follows, card.channel);
     const cancelButton = useRef<HTMLButtonElement>(null);
     const rejectButton = useRef<HTMLButtonElement>(null);
     const wasRejecting = useRef(false);
@@ -139,6 +149,14 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
             <div className="ask-w">{card.why}</div>
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
             {whole !== undefined && saved === undefined && <Doubts preview={whole.preview} />}
+            {follows !== null && (
+                <div className="meta waiting-follows">
+                    <b>{t('follows.row')}</b> {follows.words}
+                </div>
+            )}
+            {follows?.subjectNotSent && card.subject !== null && (
+                <div className="meta waiting-not-sent">{t('follows.subject.not_sent')}</div>
+            )}
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
             {card.body !== null && (
                 <div ref={bodyBox} className={open ? 'ask-b open said waiting-body' : 'ask-b said waiting-body'}>

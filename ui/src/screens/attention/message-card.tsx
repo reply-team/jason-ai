@@ -1,4 +1,9 @@
+import { useEffect, useState } from 'react';
+import { useApi } from '../../api/context';
+import type { WorkItem } from '../../api/types';
 import { channelWords, type ApprovalDetail } from '../../console/live';
+import { followedOf, followsRow, followsSentence, type Followed, type FollowsWords } from '../../console/follows';
+import { t } from '../../platform/i18n';
 
 /** A person's text as a text node: the framework escapes it, and the line breaks it carries are drawn by the style. */
 function Text({ value }: { value: string }) {
@@ -14,6 +19,27 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     );
 }
 
+/** The Follows row of a letter that goes under an earlier one: that letter is read for its subject and its moment. */
+function Following({ follows }: { follows: FollowsWords }) {
+    const api = useApi();
+    const [followed, setFollowed] = useState<Followed | null>(null);
+    useEffect(() => {
+        let live = true;
+        api.call<WorkItem>('workitem.get', { work_item_id: follows.workItem! }).then(
+            (item) => {
+                if (!live) return;
+                // A work item's context.input is the operation's arguments themselves.
+                setFollowed(followedOf(item));
+            },
+            () => undefined,
+        );
+        return () => {
+            live = false;
+        };
+    }, [api, follows.workItem]);
+    return <>{followsSentence(follows, followed)}</>;
+}
+
 /**
  * The message an approval would send, as it was written: an email's sender, recipient, subject and body in that order,
  * a LinkedIn message's text, a reply's account, recipient, channel and text, a template with the example the runtime
@@ -24,6 +50,7 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
     if (!detail.body) return null;
     const email = !reply && detail.channel === channelWords('email');
     const template = detail.compose === 'template';
+    const row = followsRow(detail.follows, email, null);
     return (
         <div className="section message-card">
             <h3>The message as written</h3>
@@ -31,8 +58,17 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                 {(email || reply) && detail.from && <Row label="From">{detail.from}</Row>}
                 {(email || reply) && detail.to && <Row label="To">{detail.to}</Row>}
                 {reply && detail.channel && <Row label="Channel">{detail.channel}</Row>}
+                {row !== null && detail.follows && (
+                    <Row label={t('follows.row')}>
+                        {detail.follows.workItem === null ? (
+                            followsSentence(detail.follows, null)
+                        ) : (
+                            <Following follows={detail.follows} />
+                        )}
+                    </Row>
+                )}
                 {detail.subject && (
-                    <Row label="Subject">
+                    <Row label={row?.subjectNotSent ? t('follows.subject.not_sent') : 'Subject'}>
                         <Text value={detail.subject} />
                     </Row>
                 )}
@@ -65,8 +101,8 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                 </>
             )}
             <p className="hint">
-                Not shown: the sender's signature kept at the provider, and the provider's tracking, which are added
-                when it sends.
+                Not shown: the sender's signature kept at the provider, the provider's tracking and, under a reply, the
+                quotation of the earlier email the mailbox appends, which are added when it sends.
             </p>
         </div>
     );

@@ -56,7 +56,9 @@
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
-        "20261122075940_DeepReviewGrid"
+        "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads",
+        "20261124072351_SendProbeIndex"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -103,7 +105,9 @@
         "20261116053811_DecisionThread",
         "20261122055316_WorkItemEntry",
         "20261122065647_LaunchLimitLifts",
-        "20261122075940_DeepReviewGrid"
+        "20261122075940_DeepReviewGrid",
+        "20261124042822_DeferredSendReads",
+        "20261124072351_SendProbeIndex"
       ],
       "backup_file": null
     },
@@ -175,7 +179,7 @@
         "id": "journal-forwarder",
         "state": "not_installed",
         "released": {
-          "version": "1.8.0",
+          "version": "1.9.0",
           "digest": "sha256:recorded-1"
         },
         "installed": null
@@ -193,7 +197,7 @@
         "id": "reply",
         "state": "not_installed",
         "released": {
-          "version": "0.19.1",
+          "version": "0.20.0",
           "digest": "sha256:recorded-3"
         },
         "installed": null

@@ -161,6 +161,13 @@ export interface DesktopUpdateItem {
      * none. The page marks Settings with it. A desktop of an earlier version answers without it.
      */
     newer?: string | null;
+    /**
+     * Which step of an update the item is at, as the updater has it: `offered` (a newer version waits to be downloaded),
+     * `downloading`, or `downloaded` (waits to be installed); null at every other step (idle, checking, installing, the
+     * deb's restart, a demo run). `newer` is the version of those three steps. A desktop of an earlier version answers
+     * without it, and the page then shows no card: it never reads a step from the label.
+     */
+    step?: 'offered' | 'downloading' | 'downloaded' | null;
 }
 
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
@@ -739,9 +746,10 @@ export interface JasonDesktop {
          * Presses the update item as a click in the menu does: the same act, the same boxes and refusals of the
          * desktop's own. `label` is the label the page drew; the desktop presses only while its item is enabled and says
          * that very label, and otherwise does nothing, so a click lands only on the step the person saw. The page learns
-         * what came of it through `onChanged`.
+         * what came of it through `onChanged`. With `ask`, a press at the downloaded step first asks the desktop's own
+         * question (the one its key asks) and installs only on "Restart and Install"; at any other step it asks nothing.
          */
-        press(label: string): Promise<void>;
+        press(label: string, options?: { ask?: boolean }): Promise<void>;
         /** Calls `handler` whenever what `item()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

@@ -98,7 +98,13 @@ internal static partial class Account
         return await PrintAsync(Handle(root, command, line, stdin));
     }
 
-    private static Ending Handle(string root, string command, Parsed line, string? stdin) => command switch
+    private static Ending Handle(string root, string command, Parsed line, string? stdin)
+    {
+        Settle(root);
+        return Dispatch(root, command, line, stdin);
+    }
+
+    private static Ending Dispatch(string root, string command, Parsed line, string? stdin) => command switch
     {
         "sequence list" => SequenceListByName(root, line, stdin),
         "sequence create" => SequenceCreateByName(root, line, stdin),

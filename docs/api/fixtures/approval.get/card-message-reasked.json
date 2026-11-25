@@ -29,6 +29,12 @@
             "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?"
           }
         },
+        "follows": {
+          "work_item": null,
+          "operation": null,
+          "reference": null,
+          "because": "not_offered"
+        },
         "contacts": [
           {
             "id": "cnt_1",
@@ -61,7 +67,7 @@
       "work_item": "wi_1"
     },
     "preview": {
-      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, thanks for the talk at the meetup. Shall we talk next week?; send after: —",
+      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Ines, thanks for the talk at the meetup. Shall we talk next week?; send after: —; follows: — (not_offered); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
       "highlights": {
         "/contacts/0/channels/0/value": "ines@example.test",
         "/args/channel": "email",
@@ -75,7 +81,13 @@
           "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?"
         },
         "/args/message/compose": null,
-        "/args/send_after": null
+        "/args/send_after": null,
+        "/follows": {
+          "work_item": null,
+          "operation": null,
+          "reference": null,
+          "because": "not_offered"
+        }
       },
       "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
       "reach": {
@@ -119,6 +131,12 @@
               "subject": "Notes from the meetup",
               "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?"
             }
+          },
+          "follows": {
+            "work_item": null,
+            "operation": null,
+            "reference": null,
+            "because": "not_offered"
           },
           "contacts": [
             {

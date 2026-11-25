@@ -347,6 +347,18 @@ public class ApprovalCommandsTests
     }
 
     [Fact]
+    public async Task Get_prints_no_subject_row_for_an_example_that_holds_none()
+    {
+        using var cli = new CliRun(WithExample("""{"subject": null, "body": "Hi Ada", "unfilled": []}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        var text = cli.Text.ReplaceLineEndings("\n");
+        Assert.Contains("Example:       one reading of the template, as the runtime renders it\n  Body:\n    Hi Ada\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("  Subject:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Get_of_an_example_with_nothing_unfilled_prints_no_unfilled_line()
     {
         using var cli = new CliRun(WithExample("""{"subject": "Autumn outreach, Ada", "body": "Hi Ada", "unfilled": []}"""));
@@ -553,6 +565,33 @@ public class ApprovalCommandsTests
 
     private static string WithExample(string example) =>
         OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"example\": {example},", StringComparison.Ordinal);
+
+    private static string WithFollows(string channel, string follows) =>
+        OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"highlights\": {{\"/args/channel\": \"{channel}\", \"/follows\": {follows}}},", StringComparison.Ordinal);
+
+    [Theory]
+    [InlineData("""{"work_item": "wi_7", "operation": "message.send", "reference": "r", "because": "line_root"}""", "Follows:       wi_7: a reply; it goes under that letter's subject, its own subject is not sent")]
+    [InlineData("""{"work_item": null, "operation": null, "reference": null, "because": "other_mailbox"}""", "Follows:       A new letter: the earlier letter went from another mailbox.")]
+    [InlineData("""{"work_item": null, "operation": null, "reference": null, "because": "not_offered"}""", "Follows:       A new letter: this provider's plugin does not offer a reply in a thread on this channel.")]
+    public async Task Get_says_what_an_email_send_follows(string follows, string line)
+    {
+        using var cli = new CliRun(WithFollows("email", follows));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(line + "\n", cli.Text.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Get_says_nothing_of_follows_for_a_send_that_is_not_an_email()
+    {
+        using var cli = new CliRun(WithFollows("linkedin", """{"work_item": null, "operation": null, "reference": null, "because": "not_offered"}"""));
+
+        await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.DoesNotContain("Follows:", cli.Text, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task List_renders_a_table_of_what_is_waiting()

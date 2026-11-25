@@ -82,6 +82,14 @@ public sealed class ManagerOptions
         // people, or a look at what changed while it stood — rather than a cadence later. One review at each going live.
         // An installation that narrowed this list before the kind was in it is not woken by a start until it adds it.
         JournalKinds.CampaignStarted,
+
+        // A send the provider took for a moment did not go: a read found it failed or cancelled, or the last read of it
+        // after its moment still found it waiting, overdue. An overdue send is still held by the provider and may still
+        // go, so a second letter comes only after a message.cancel of it succeeds; a cancelled one may be the provider's
+        // own stop on a reply, or a person's act there, so it is read against the person's thread and where they stand
+        // first; a failed one is final, and the letter did not go. Said once per send. An installation that narrowed this
+        // list before the kind existed is not woken by it until it adds it.
+        JournalKinds.MessageUnsentObserved,
     ];
 
     /// <summary>

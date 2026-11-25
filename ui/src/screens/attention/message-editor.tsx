@@ -4,6 +4,8 @@ import type { Approval, WorkItem } from '../../api/types';
 import { Unpaired } from '../../api/client';
 import { repeated } from './store';
 import { TextMoved, hasSubject, heldArgs, saveEdit, sentence, wordsOf, type Words } from './message-edit';
+import { t } from '../../platform/i18n';
+import { subjectIsNotSent } from '../../console/followed';
 
 type Props = {
     approval: Approval;
@@ -81,7 +83,9 @@ export function MessageEditor({ approval, item, busy, onSaved, onMoved, startOpe
         <div className="message-editor">
             {withSubject && (
                 <div className="field">
-                    <label htmlFor={`edit-subject-${approval.id}`}>Subject</label>
+                    <label htmlFor={`edit-subject-${approval.id}`}>
+                        {subjectIsNotSent(approval) ? t('follows.subject.not_sent') : 'Subject'}
+                    </label>
                     <input
                         id={`edit-subject-${approval.id}`}
                         value={subject}

@@ -19,200 +19,117 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.50.0
+# Jason 0.51.0
 
-Jason 0.50 tunes how the work is done. A campaign's manager keeps two clocks, a quick look every six hours and a deep
-review once a day, each starting from where the last one stopped, and you can ask it for a review at any moment. Each
-person in a campaign has a line of their own: a reply pauses it, a ceiling of touches bounds it, and one command each
-ends, continues and reopens it. Every role has a daily limit of launches, counted by your installation's own day, and
-one word lifts it for today. The agent sets a campaign up with you and starts it on your yes, and your word outranks a
-rule of the skills.
+Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
+that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
+under which letter it will land before you approve it. A letter a provider held for later and then failed or
+cancelled no longer counts as a touch, and Jason now reads a letter held for later after its moment to learn whether it
+went, and tells the campaign's manager about one that did not.
 
-## What is new since 0.49.3
+**Read this first.** Against a Reply that does not yet offer follow-ups, a follow-up is refused and nothing is sent: it
+never goes as a new letter instead. The refusal is `capability_not_offered`, naming `follows`, and until Reply offers
+a reply in a thread every email follow-up ends that way: to reach the person, propose the message again as a letter of
+its own, with `"follows": "new_thread"`. Once Reply offers it, follow-ups go as replies with nothing to change on your
+side, no update and no restart; a follow-up refused before then stays refused.
 
-**Your word, in the chat and in a terminal**
-
-- **Your word outranks a rule of the skills.** Where what you plainly ask departs from a rule the skills teach, the
-  agent says once what follows from departing and asks, then does what you answer. What the runtime itself refuses
-  stays refused, and the agent says so.
-- **A new chat from the Chats plus is a plain chat.** It answers what you ask and offers no set-up, and it sets an agent
-  up only when you ask for one. Start, with its box "Tell Jason what you sell and who you want to reach", still sets an
-  agent up at once.
-- **"Pause all" pauses at once.** A bare "pause all" pauses each campaign without asking first, and the agent then says
-  which were paused. A bare "all" for starting or archiving is still asked once.
-- **The command you name is the one run.** When you name a `jason` command yourself, `jason runtime status` say, the
-  agent runs that one. Where it is refused or does not exist, the agent says exactly what was answered, and never runs
-  another in its place.
-- **"All of these" covers what was shown.** Said about a list the agent showed, it is your word for each item whose
-  content was shown. Where some were not shown, the agent says how many would go out unread and asks whether to show
-  them first.
-- **A memory file is written on your word.** Otherwise the agent says the exact line and the file it would go in, and
-  asks once.
-- **Who decided, in the lists.** `jason approval list --human` has a DECIDED BY column, with the reason beside the actor
-  where a send mode or a standing approval let an approval go, for example `system:dispatcher (automatic_mode)`.
-  `jason decision list --human` has an ANSWERED BY column.
-- **What you read is in your language.** The chat's short lines between actions are in your language too.
-- **A memory file is what the agents plan by.** They read it and plan by it. It is never a rule Jason enforces: a
-  message you approved on a Friday goes out whatever a file says about Fridays, and the chat says so.
-- **On Codex, Ask first and Auto-edit read and propose.** Codex never asks in these chats, so they only read and
-  propose, and the chat now says so: nothing written there reaches a person without your approval.
-- **Plan only on Claude Code reads a folder with its own tools.** Asked what is in a folder, the chat reads it with its
-  reading tools instead of stopping at the refused shell line.
-- **In Plan only, the chat says why it cannot read outside its folders.** Claude Code refuses such a read on its own, so
-  there is no card to approve; the chat now tells you, and that another mode can let it read there.
-
-**Setting a campaign up and starting it**
-
-- **The set-up, then the start on your yes.** The agent sets a campaign up with you. It asks for the sender's name once,
-  first; says how messages go out; checks that the roles can launch, and speaks only when something is wrong now; says
-  once if nothing will tell you when Jason waits for you; and records a first batch of twenty, or the number you name.
-  Then it asks whether to start, and starts on your yes, under your name. A missing tone of voice holds nothing back:
-  the work goes on in a plain, neutral voice, and you are told once that you may name one. The question and the
-  confirmation of the start are said in the language you write in.
-- **A draft that stands is named at once.** The set-up reads the campaign list before its first question and names a
-  matching draft.
-- **The quick start takes up a draft that stands.** Where a draft campaign already stands for what you sell, the quick
-  start fills it in and makes no second one.
-- **A plan card's steps say when and by which channel.** A subject and a body go on a step only where you asked to see
-  a letter, and are called an example.
-- **After the start, the agent says what happens next, once.** What the set-up already said, about a check, the roles
-  or the notifications, is not said again.
-- **A reserve at the first start.** A campaign whose people come from a search gets a reserve threshold of twenty when
-  it first starts, so its manager hears that people are running low while a top-up still has time to land. The number
-  is `Manager:AudienceThreshold`. A threshold you set is kept, and `jason campaign update <cmp> --clear audience_threshold`
-  leaves a campaign with none.
-
-**A campaign's manager**
-
-- **A quick look every six hours, and a deep review once a day.** A quick look reads the counts and acts on what is
-  off. A deep review, on a daily grid that starts when the campaign goes live, widens the first batch, goes over each
-  person's line and carries any cause that is waiting. `Manager:ReviewSeconds`, now 21600, sets the quick look's pace,
-  and the new `Manager:DeepReviewSeconds`, 86400 by default, the deep review's. `jason campaign get --human` says when
-  the next deep review is due.
-- **One entry for each reason it is woken.** The manager's skill is a head and five entries: the first start, a resume,
-  a quick look, a deep review and a reply. Each review begins from the note the last one left, so a deep review a few
-  hours after another covers only what changed since. To change one kind of review, edit that entry's file.
-- **Ask for a review now.** `jason campaign review <cmp>` asks the manager for a quick look now, and `--depth deep` for
-  a deep review, which leaves the day's own deep review where it is. The chat runs it on your word.
-  [The cadence](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/campaign-manager.md#4-the-cadence) says
-  when a manager looks in.
-
-**The line with a person**
-
-- **Each person has a line in the campaign.** By default it is a first letter and two follow-ups, each written when it
-  is due, one at a time. `jason campaign list-contacts` shows each person's `touches` and `last_touch_at`, and its
-  summary counts the people whose line is paused or finished.
-- **A ceiling of touches.** `Lines:MaxTouches`, 5 by default and from 1 to 20, is the most touches one person has in a
-  campaign. A touch past it is refused before anything is sent, and the manager ends the line. A letter Jason took back
-  is no touch.
-- **A reply pauses the line.** When a person replies, their line is paused: Jason writes nothing more to them until the
-  manager continues the line or ends it, and the person is still answered. A reply the provider names as the other
-  side's always pauses the line. An out-of-office reply continues it, with the next letter moved to the date the reply
-  names.
-- **A letter held for later is taken back on a reply.** Where the provider holds a letter for a later moment and says
-  it can be cancelled, a reply takes it back, and so does ending the person's line or removing them.
-- **Finish, continue and reopen.** `jason campaign finish-contacts` ends a line, always with a reason, and cancels the
-  person's waiting touches in that campaign. `jason campaign continue-contacts` takes a paused person back into their
-  line. `jason campaign reopen-contacts` reopens an ended line, which is your decision: on your own word, or by the
-  manager naming a question you answered yes. Where the person's touches already stand at the ceiling, the agent says
-  that reopening alone sends nothing more.
-  [A person's line in a campaign](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-persons-line-in-a-campaign)
-  says what each state means.
-- **The people in a campaign, in a table.** `jason campaign list-contacts --human` shows each person's touches and the
-  last one.
-- **An opt-out with no provider sequence is completed.** Where the campaign holds no provider's campaign, as
-  with Jason's own direct letters, recording the opt-out completes it, and the summary says nothing was stopped at the
-  provider, with no stop that could only fail.
-
-**Daily limits of launches**
-
-- **Every role has a daily limit of launches.** `Launches:MaxPerDay` now has a default for each role Jason ships, 25 for
-  the manager and the responder among them. A limit you set wins, entry by entry.
-- **The day is your installation's own.** It runs from one local midnight to the next, in the system's time zone or in
-  the IANA zone `Runtime:TimeZone` names, so the count no longer starts again in the middle of your afternoon.
-- **Lift today's limits with one word.** Tell your agent "ignore the limit", or run
-  `jason launches lift --actor human:<your name>`: what the limits hold is released at once, and nothing new is held
-  until the installation's midnight. The agent says until when, in your own time and naming the zone, and how long from now. The notification
-  of an item held at a daily limit says how to go on today.
-- **"Ignore the limit" lifts what is held.** Where something is held at a daily limit, that is what the word means and
-  it is lifted as you; the agent asks which limit only where nothing is held. Asked what the daily limits are, the chat
-  runs `jason launches list`.
-- **Read the limits.** `jason launches list` says the installation's day and when it ends, each role's limit and
-  whether it comes from the default or from your settings, a lift that stands and how many items are held. With
-  `--campaign`, it also says how many each role started there today. A limit is still set in the settings file.
-- **A line on Needs you while work is held.** It says how many items are held at a daily limit and until when, with a
-  button that lifts today's limits as you. It is not counted among what waits for you.
-
-**Notifications**
-
-- **A reply is notified, once.** When a role judges a reply to be the person's own, Jason tells you once, at the end of
-  the run that judged it: "1 reply came in." Automatic replies, bounces and opt-outs are not counted, and under "every
-  message" the reply and the approval its answer needs come as one notification. `Notifications:Replies` turns it off.
-- **An old outcome is said as history.** A channel's last notification outcome that is older than the switches' present
-  reading is told as what happened then; what `jason status` says now is the answer.
+## What is new since 0.50.0
 
 **Jason Desktop**
 
-- **The plus buttons are smaller.** The plus beside Agents and the one beside Chats are drawn smaller and thinner, on
-  the centre of their square.
-- **The mark opens Start.** A click on Jason's mark at the top of the sidebar shows Start again, with the words you
-  typed there and did not send, and closes nothing.
-- **A chat you open has the caret in its box.** By any act of your own, from a row, Search, a plus, the Agents page, a
-  link or Back and Forward, you can type at once. Space on an agent's tab now opens it, as a click does, and a screen
-  reader hears which chat it enters.
+- **A new version shows above Settings in Jason Desktop.** While a version is offered, downloading or ready, a small card above Settings says so and carries the one act of that step: Download, or Restart to install, which asks before it restarts. Not now puts an offered card away until the next start of the application.
 
-## Fixed since 0.49.3
+**Follow-ups in the thread of the letter that opened it**
 
-- **Words in another alphabet piped to `jason` on Windows are kept as written.** Standard input was read by the
-  console's code page, so Cyrillic, CJK and symbols were stored garbled. It is now read as UTF-8 on every system, a
-  file given by `--file`, `--value-file`, `--note-file` or `--result-file` is read the same way, and bytes that are not
-  UTF-8 are refused, never guessed. The skills' PowerShell examples set `$OutputEncoding` first, since Windows
-  PowerShell before 7 replaces such characters before Jason sees them.
-- **The refusal at a daily limit says the limit as a limit.** It names how many runs started, the limit beside it and
-  `jason launches list`, where it printed the limit as if it were the count.
-- **An act's reason is the agent's own short line**, never the text you pasted.
-- **The skills' examples pass long text on standard input.** A campaign's context, a role's brief or a note goes through
-  a here-document, so an agent copying an example no longer breaks it on an apostrophe or shows the text in the list of
-  running processes.
-- **A reply Jason drafts in somebody's thread is plain text:** a draft that carried the thread's own HTML, such as
-  `<br>`, is refused when it is written instead of reaching you with its tags on the card, and with the Reply plugin an
-  email reply now goes out as HTML that shows exactly the text you approved, line breaks included.
-- **An approval's summary no longer says a send is "outside any campaign".** It names the person, the format, the
-  account, the subject, the text and the send time.
-- **A "Jason asks" card's answers can be clicked when the same turn made the chat a campaign's conversation.** The line
-  that says so no longer locks the question above it, so a click sends that answer, as it does in any other chat.
+- **A follow-up goes as a reply under the subject of the letter that opened the thread.** Where you do not say otherwise,
+  an email follow-up follows the earlier letter that opened the thread: the latest earlier email to that person in the campaign that went as a letter of its
+  own, held the provider's reference, counted as a touch and was not taken back. Its own subject is not sent; the
+  provider may add a quotation of the earlier letter beneath your approved text.
+- **Say otherwise when you want to.** `"follows": "new_thread"` sends a letter of its own, and a work item's id follows
+  that letter. A follow-up goes as a letter of its own, and the approval says so, where the routed plugin does not offer
+  replies in a thread, where there is no earlier letter to follow, or where the earlier letter went through another
+  account or another mailbox. A LinkedIn message follows nothing.
+- **The approval says where it lands.** The approval card has a "Follows" row, and `jason approval get --human` and
+  `jason workitem get --human` print a `Follows:` line: under which letter the email goes, or that it goes
+  as a new letter and why. The card names that letter's subject; the terminal names the letter's work item. The Subject row
+  says "(not sent)" for a reply.
+- **A follow-up that cannot go says why.** A followed letter that has not gone yet is tried again, and one held longer
+  ends the item `follows_not_sent_yet`, to be proposed again with a later `send_after`. One that will never go ends it
+  `follows_never_sent`; after a read of that letter records it as failed or cancelled it leaves the line, and the message
+  can be proposed again. Nothing is sent in any of these.
+- **The Reply plugin sends it.** The Reply plugin is now 0.20.0 and needs reply-cli 0.23.0 or later; an older reply-cli
+  makes the plugin unavailable. reply-cli is a Node program installed with npm, and the
+  plugin's README says how: [the Reply plugin](https://github.com/reply-team/jason-ai/blob/v{{version}}/plugins/reply/README.md).
+- **The skills say the same.** The manager, the copywriter, the critic and the planners write a follow-up as a reply,
+  the critic judges it against the letter it would land under, and they know what to do with the codes above. A
+  follow-up the provider could not place under its letter is never proposed again as it was: you are asked whether it
+  goes as a letter of its own.
+- **A follow-up never hides an answer.** Jason's own follow-up reaching a thread first does not stop a person's answer
+  there from being read: the answer is never missed because the follow-up got there first.
+- **A follow-up at a mailbox's daily limit.** Where Reply refuses a direct email because the mailbox has reached its
+  daily limit (`contact.dailyLimitReached`), a follow-up is held like any email from that mailbox, with nothing to set
+  up: nothing is sent, the email waits as `provider_blocked`, and every email from that mailbox waits with it until the
+  block clears, at the next midnight UTC at the latest. You are notified of the open block once. A follow-up held for
+  later that Reply could not send at that limit is read as `failed` with the same code and said once as
+  `message_unsent_observed`: nothing went, and the manager proposes it again as it was.
 
-## Upgrading from 0.49.3
+**Letters held for later**
 
-- **Updating from 0.49.3.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
-  `jason update apply` in a terminal, which hands the update to Jason Desktop. On Linux, a deb takes it with the
-  system's own updates, Software Updater or `sudo apt update && sudo apt upgrade`, and an AppImage by its own update
-  item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
+- **A letter that did not go is told.** After a letter's moment, Jason reads it again and again, a limited number of
+  times, until it is known whether it went. It looks back thirty days from a letter's moment and reads only a few at a
+  time in each campaign. A letter the provider failed or cancelled, or still holds seven days
+  past its moment, is said once in the journal as `message_unsent_observed`, and the manager is woken. The manager is
+  told what each state means: a failed letter did not go; an overdue one may still go, so a second letter comes only
+  after cancelling it succeeds; a cancelled one is read against the thread and the person's state first.
+- **A failed or cancelled letter is no touch.** A letter the provider's own read says failed or was cancelled stops
+  counting toward the ceiling of touches, the people list and the choice of the letter a follow-up lands under, unless another read says it went or may have
+  gone (`unknown`).
+
+**Speed**
+
+- **A large campaign's lists and checks are fast.** An index on the sends a campaign names takes the people list of a
+  campaign of 2,000 people from seconds to milliseconds.
+
+## Fixed since 0.50.0
+
+- **`jason status` says first that Jason Desktop's first start repairs the plugin package and the UI.** Between the
+  install script's end and that first start, the lines of its `plugin_package` and `ui_module` checks named only
+  `jason plugin install reply --replace` and `jason ui install`; each now names Jason Desktop's start first and the
+  command second.
+
+## Upgrading from 0.50.0
+
+- **Updating from 0.50.0.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
+  `jason update apply` in a terminal. On Linux, a deb takes it with the system's own updates, and an AppImage by its own
+  update item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
+- **Update Jason itself, not the package alone.** A runtime older than 0.51.0 refuses the Reply plugin 0.20.0
+  (`argument_invalid`, among the arguments of `message.send`); `jason plugin install reply --replace` puts a matching
+  package back.
+- **The Reply plugin needs reply-cli 0.23.0 or later.** With an older reply-cli the whole Reply plugin is unavailable from the first reload, not only its follow-ups: update reply-cli with npm (`npm install -g reply-cli`) before or right after updating Jason. What a
+  follow-up does against a Reply that does not offer follow-ups yet is said under "Read this first" above.
+- **A letter the history already holds as failed or cancelled, by a provider's read, stops counting as a touch from this
+  release.** A person below the ceiling only by such letters may be written to again by a touch not yet claimed. Nothing
+  already refused comes back by itself.
+- **Right after the update, every send held for later within the last thirty days is read once.** An old one still
+  queued is said overdue at once, so the manager may be woken for many of them in one wave.
+- **Approvals already waiting are asked again only where the letter now goes into a thread.** An approval given
+  before this release is asked again where the follow-up would now go as a reply, and not where it goes as a letter of
+  its own. An approval still waiting from before this release says nothing of where its letter lands;
+  `jason workitem get --human` prints its `Follows:` line once the item is claimed.
 - **This version migrates the database.** Its first start writes a backup under `~/.jason/state/backups/` first, then
-  adds the new record of a work item's entry, of the deep review's grid and of a day's lift. Each active campaign's
-  first deep review comes one day after the update.
-- **Going back.** From 0.49.0 on, a runtime refuses a database holding a migration it does not know (`data_newer`), so
-  0.49.x refuses data that 0.50 has opened; a version before 0.49.0 has no such check and runs its own model over the
-  newer schema, so it is not run on such data.
-  [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says
-  when `jason update rollback` restores the backup the migration took, and
-  [Restoring a database by hand](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#restoring-a-database-by-hand)
-  how you put it back yourself where it does not. The journal forwarder is now 1.8.0, which a runtime before 0.50.0
-  refuses;
+  adds the index. `context.follows` on a `message.send` is now the runtime's own record and is refused when a caller
+  names it.
+- **The journal forwarder is now 1.9.0**, which can forward the new kind and needs Jason 0.51.0 or newer.
   [Applying an older release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release)
   says how to put back the package an older release published.
-- **What changes for the campaigns you have.** A quick look comes every six hours, unless a campaign sets its own
-  `review_seconds`. Every role has its daily limit, unless you set your own, and the day is the installation's from the
-  update on. The ceiling of touches counts the touches already made, so a person who has had five touches in a campaign
-  is sent no more there. A campaign already live is given no reserve threshold: only a first start sets one.
-- **Your chats.** A chat about no agent made before this version reads as a plain chat.
-- **A reply drafted before this release with HTML in its text, such as `<br>`, still waits for your approval.**
-  Approve refuses it and says what to remove, and the card stays; edit the tags out on the card, and Jason asks again;
-  approve then, or reject it.
+- **Going back.** A runtime refuses a database holding a migration it does not know (`data_newer`), so 0.50.x refuses
+  data that 0.51 has opened.
+  [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says when
+  `jason update rollback` restores the backup the migration took.
 
 ## Known issues
 
-- The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches now count your
+- The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches count your
   installation's own day.
 - Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
   turn that runs in Ask first, Auto-edit or Plan only.

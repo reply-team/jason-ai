@@ -95,6 +95,8 @@ campaign and numbers; the `intent` beside it is the operation's generic sentence
 Where the preview carries an `example`, present it as one reading of the template and say that what is approved is the
 template as written: the example is the runtime's rendering for one person, and the provider's rendering may differ.
 
+Where the preview names a followed letter (a `Follows:` line, or `follows` among its highlights), say under which letter the email lands and that letter's subject, read from the item with `jason workitem get <the named wi_…>`, and say that the message's own subject is not sent.
+
 Give the person all of it. The reach, the cost and what can be undone are the three lines a decision
 actually turns on, and a summary that drops them to be shorter has dropped the part worth reading.
 Where one of them is marked conditional, say so and give the detail beside it: that is the operation's
@@ -230,7 +232,7 @@ jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_
   `very_interested` nor `Interested`. The base categories are the responder's `categories.json`, not copied here, and
   `approval-boundaries` says which are worth setting one on and which never.
 - **The operations** it covers are `conversation.reply` when none is named; name `message.send` with `--operation` only
-  where the person says a message to the same person outside the thread is covered too, and repeat the option for both.
+  where the person says a message to the same person that is no answer in the thread they wrote in, a follow-up or a letter of its own, is covered too, and repeat the option for both.
 - **The limits are the person's to choose, and none is the default.** `--expires-at` is when it stops, and
   `--max-releases`, from 1 to 10000, is how many drafts it may let go. Offer both. Setting one again replaces what was
   set and starts its count over; taking one back leaves the drafts already let go as they were.

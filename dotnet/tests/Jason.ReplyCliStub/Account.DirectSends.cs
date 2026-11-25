@@ -134,6 +134,11 @@ internal static partial class Account
                 status: 409, replyCode: prefix + "idempotencyKeyInUse", ids: ids);
         }
 
+        if (Text(kept, "request") == request && Text(kept, "notPlaced") is { Length: > 0 } unplaced)
+        {
+            return NotPlacedRefusal(unplaced, ids);
+        }
+
         if (Text(kept, "request") == request)
         {
             return Done((JsonObject)kept["answer"]!.DeepClone());
@@ -234,7 +239,8 @@ internal static partial class Account
 
     /// <summary>Reply's record of a send it kept: its reference, the moment it holds it for and its state; and the key, kept with its answer.</summary>
     private static JsonObject Kept(
-        string root, DirectSend send, int contactId, DateTimeOffset? sendAfter, int? schedule, string? key, string request, JsonObject answer)
+        string root, DirectSend send, int contactId, long accountId, DateTimeOffset? sendAfter, int? schedule, string? key, string request,
+        JsonObject answer, JsonObject? written, string? follows)
     {
         var sends = Read(root, DirectSendsFile);
 
@@ -268,7 +274,25 @@ internal static partial class Account
             record["estimatedSendAt"] = waiting["_estimate"]?.DeepClone();
         }
 
+        // What a follow-up and its refusals are answered from, and what goes into the thread when the send goes: the mailbox
+        // and the text as Reply rendered it, and what a follow-up follows (Account.FollowUps.cs).
+        if (send.Channel == "email")
+        {
+            record["accountId"] = accountId;
+            record["subject"] = written?["subject"]?.DeepClone();
+            record["body"] = written?["body"]?.DeepClone();
+            if (follows is not null)
+            {
+                record["follows"] = follows;
+            }
+        }
+
         sends.Add(record);
+        if (send.Channel == "email" && Text(record, "state") == "sent")
+        {
+            Gone(root, sends, record);
+        }
+
         Write(root, DirectSendsFile, sends);
 
         answer["reference"] = reference;
@@ -327,7 +351,7 @@ internal static partial class Account
             return Refused("direct_send.not_found", $"Reply holds no direct send {reference}.", status: 404, replyCode: "directSend.notFound");
         }
 
-        // The members in the order reply-cli 0.22.0 builds them (src/operations/direct-sends.ts, `direct_send_of`).
+        // The members in the order reply-cli 0.23.0 builds them (src/operations/direct-sends.ts, `direct_send_of`).
         var record = new JsonObject
         {
             ["reference"] = Text(held, "reference"),
@@ -382,6 +406,17 @@ internal static partial class Account
             {
                 record[to] = value?.DeepClone();
             }
+        }
+
+        // What a send follows, last, as reply-cli 0.23.0 passes Reply's `follows` on (src/operations/direct-sends.ts,
+        // `follows_of`): the reference of the email a follow-up went in the thread of, or null for a send that follows none.
+        // A Reply that offers follow-ups gives the member on every send, and an older one on none, so it is printed exactly
+        // where the route is offered.
+        if (Offered(root, "direct_send_follow_up"))
+        {
+            record["follows"] = held["follows"] is JsonValue follows && follows.GetValueKind() == System.Text.Json.JsonValueKind.String
+                ? follows.DeepClone()
+                : null;
         }
 
         return Done(record);

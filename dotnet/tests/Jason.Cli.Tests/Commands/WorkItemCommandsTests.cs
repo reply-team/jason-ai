@@ -796,6 +796,40 @@ public class WorkItemCommandsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// What an email send follows, read from the exchanges the runtime recorded: a letter that goes under the line's first
+    /// one, a letter of its own and why, a send the claim recorded nothing for, and a send on another channel. The terminal
+    /// names the followed item and makes no second call.
+    /// </summary>
+    [Theory]
+    [InlineData("card-follow-parked", "email", true, "Follows:", "wi_1: a reply; it goes under that letter's subject, its own subject is not sent")]
+    [InlineData("card-message-parked", "email", true, "Follows:", "A new letter: this provider's plugin does not offer a reply in a thread on this channel.")]
+    [InlineData("card-follow-parked", "email", false, null, null)]
+    [InlineData("card-follow-parked", "linkedin", true, null, null)]
+    public async Task Human_mode_says_what_an_email_send_follows_where_the_claim_decided(string recorded, string channel, bool decided, string? label, string? words)
+    {
+        var item = JsonNode.Parse(Jason.Cli.Tests.Human.CopyPromptTests.Fixture("workitem.get", recorded))!;
+        item["context"]!["input"]!["channel"] = channel;
+        if (!decided)
+        {
+            item["context"]!.AsObject().Remove("follows");
+        }
+
+        using var cli = new CliRun(item.ToJsonString());
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        if (label is null)
+        {
+            Assert.DoesNotContain("Follows:", cli.Text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches("(?m)^" + label + @"\s+" + System.Text.RegularExpressions.Regex.Escape(words!), cli.Text);
+        }
+    }
+
     [Fact]
     public async Task Human_mode_says_in_words_which_block_a_parked_item_waits_on()
     {

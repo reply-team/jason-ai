@@ -421,14 +421,20 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The two sends take a moment to go out at, and a provider may take it on one of its channels and not yet on
-    /// another, so they are the documents that name an argument per channel; no other document names one, in this
-    /// version, and each says so with a null.
+    /// another, so they are the documents that name an argument per channel; a message also names the earlier letter it
+    /// follows, which a provider places in a thread on some channels and not on others. No other document names one, in
+    /// this version, and each says so with a null.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
     public void Only_the_two_sends_name_an_argument_a_plugin_takes_per_channel(string id)
     {
-        var expected = id is "message.send" or "social_invitation.send" ? new[] { "send_after" } : null;
+        var expected = id switch
+        {
+            "message.send" => new[] { "send_after", "follows" },
+            "social_invitation.send" => new[] { "send_after" },
+            _ => null,
+        };
 
         Assert.Equal(expected, Contract(id).ChannelArguments);
     }
@@ -529,9 +535,10 @@ public class ContractDocumentTests
     }
 
     /// <summary>
-    /// A message outside any thread goes to the work item's own person and to nobody else, from the one account named: an
-    /// added recipient would be somebody the suppression register was never asked about. So the arguments are exactly the
-    /// channel, the sender, the message and the moment it may go out at, the message is exactly its format, how it is
+    /// A message outside a thread the person opened goes to the work item's own person and to nobody else, from the one
+    /// account named: an added recipient would be somebody the suppression register was never asked about. So the
+    /// arguments are exactly the channel, the sender, the message, the moment it may go out at and the earlier letter it
+    /// follows, the message is exactly its format, how it is
     /// composed, its subject and its text, both closed, and no copy, blind copy, attachment or recording can be named in
     /// this version.
     /// </summary>
@@ -541,10 +548,51 @@ public class ContractDocumentTests
         var arguments = (JsonObject)Contract("message.send").InputSchema["properties"]!["args"]!;
         var message = (JsonObject)arguments["properties"]!["message"]!;
 
-        Assert.Equal(["channel", "message", "send_after", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["channel", "follows", "message", "send_after", "sender"], ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)arguments["additionalProperties"]!);
         Assert.Equal(["body", "compose", "format", "subject"], ((JsonObject)message["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
         Assert.False((bool)message["additionalProperties"]!);
+    }
+
+    /// <summary>
+    /// Which letter a message follows is the runtime's decision, composed at the root as `send` is for a read of a send,
+    /// never in `args`, which stays the caller's wish. The member is optional, closed, and says the whole decision in its
+    /// four members: a letter followed names its work item, its operation and the provider's reference, for one of two
+    /// reasons; a new letter names none of the three, for one of five. `because` is never absent and lists exactly the
+    /// seven reasons the two shapes allow.
+    /// </summary>
+    [Fact]
+    public void A_message_carries_the_runtime_s_decision_on_what_it_follows_at_the_root()
+    {
+        var input = Contract("message.send").InputSchema;
+        var follows = (JsonObject)input["$defs"]!["follows"]!;
+
+        Assert.Equal("#/$defs/follows", (string?)input["properties"]!["follows"]!["$ref"]);
+        Assert.DoesNotContain("follows", Strings(input["required"]));
+        Assert.False((bool)follows["additionalProperties"]!);
+        Assert.Equal(["work_item", "operation", "reference", "because"], Strings(follows["required"]));
+        Assert.Contains("never written by a caller", (string?)follows["description"], StringComparison.Ordinal);
+
+        var shapes = ((JsonArray)follows["anyOf"]!).OfType<JsonObject>().ToList();
+        Assert.Equal(2, shapes.Count);
+        var followed = Assert.Single(shapes, shape => shape["properties"]!["operation"]!["const"] is JsonValue);
+        var fresh = Assert.Single(shapes, shape => !ReferenceEquals(shape, followed));
+        Assert.Equal("message.send", (string?)followed["properties"]!["operation"]!["const"]);
+        Assert.Equal(["named", "line_root"], Strings(followed["properties"]!["because"]!["enum"]));
+        foreach (var member in new[] { "work_item", "operation", "reference" })
+        {
+            var schema = (JsonObject)fresh["properties"]![member]!;
+            Assert.True(schema.ContainsKey("const") && schema["const"] is null, $"A new letter's `{member}` is null.");
+        }
+
+        Assert.Equal(
+            ["asked_new_thread", "no_earlier_letter", "not_offered", "other_account", "other_mailbox"],
+            Strings(fresh["properties"]!["because"]!["enum"]));
+        Assert.Equal(
+            Strings(followed["properties"]!["because"]!["enum"]).Concat(Strings(fresh["properties"]!["because"]!["enum"])),
+            Strings(follows["properties"]!["because"]!["enum"]));
+
+        static string[] Strings(JsonNode? list) => [.. ((JsonArray)list!).Select(item => item!.GetValue<string>())];
     }
 
     /// <summary>

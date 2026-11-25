@@ -29,14 +29,15 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com) — subject: The Lisbon meetup, {{contact.first_name}}; text: Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing? {{sender.first_name}}; send after: —",
+    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com) — subject: The Lisbon meetup, {{contact.first_name}}; text: Hi {{contact.first_name}}, {{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing? {{sender.first_name}}; send after: —; follows: — (—); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
     "highlights": {
       "/contacts/0/channels/0/value": "marta@example.com",
       "/args/channel": "email",
       "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
       "/args/message": { "format": "email", "compose": "template", "subject": "The Lisbon meetup, {{contact.first_name}}", "body": "Hi {{contact.first_name}},\n{{#if contact.title == 'Head of Growth'}}growth was the theme of the night.{{else}}thanks for the chat.{{/if}} How is {{contact.custom.team | 'your team'}} doing?\n{{sender.first_name}}" },
       "/args/message/compose": "template",
-      "/args/send_after": null
+      "/args/send_after": null,
+      "/follows": null
     },
     "example": {
       "subject": "The Lisbon meetup, Marta",

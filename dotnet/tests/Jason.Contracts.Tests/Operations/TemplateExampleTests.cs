@@ -113,6 +113,52 @@ public class TemplateExampleTests
         Assert.Equal("Hi Marta.", (string?)example["body"]);
     }
 
+    /// <summary>
+    /// A template that follows a letter goes under that letter's subject, so its example renders no subject of its own and
+    /// holds none, never a sentence in its place: the summary says that the message goes as a reply under that letter's
+    /// subject and its own subject is not sent. A name only that subject reads is not listed, and a subject the standard would refuse no
+    /// longer leaves the person without an example.
+    /// </summary>
+    [Theory]
+    [InlineData("The Lisbon meetup, {{contact.first_name}}")]
+    [InlineData("For {{contact.custom.tier}}")]
+    [InlineData("{{#if contact.first_name}}Hi")]
+    public void A_template_that_follows_a_letter_shows_that_its_own_subject_is_not_sent(string subject)
+    {
+        var input = Input(subject, "Any news, {{contact.first_name}}?", "Head of Growth", "Puerto Analytics");
+        input["follows"] = new JsonObject
+        {
+            ["work_item"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA", ["operation"] = "message.send", ["reference"] = "email-1001", ["because"] = "line_root",
+        };
+
+        var example = Preview.Example(input)!;
+
+        Assert.Null(example["subject"]);
+        Assert.EndsWith(
+            "; a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+            Preview.Summary.Render(input),
+            StringComparison.Ordinal);
+        Assert.Equal("Any news, Marta?", (string?)example["body"]);
+        Assert.Empty(example["unfilled"]!.AsArray());
+    }
+
+    /// <summary>A template that follows no letter, a new letter included, renders its own subject as it always did.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("asked_new_thread")]
+    public void A_template_that_follows_no_letter_renders_its_own_subject(string? because)
+    {
+        var input = Input("The Lisbon meetup, {{contact.first_name}}", "Hi {{contact.first_name}}.", "Head of Growth", "Puerto Analytics");
+        if (because is not null)
+        {
+            input["follows"] = new JsonObject { ["work_item"] = null, ["operation"] = null, ["reference"] = null, ["because"] = because };
+        }
+
+        var example = Preview.Example(input)!;
+
+        Assert.Equal(("The Lisbon meetup, Marta", "Hi Marta."), ((string?)example["subject"], (string?)example["body"]));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("text")]

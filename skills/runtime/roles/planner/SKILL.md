@@ -121,12 +121,12 @@ ended without knowing whether it went out is not planned again: a new item for t
 message, so it goes back to the person.
 
 **A person's line is three touches where nothing better was thought out.** The first letter and two follow-ups, each
-written when it is due, one at a time, and the line never planned ahead as a whole: each follow-up is written from what
+written when it is due, one at a time: each follow-up is written from what
 has happened since the last. Where the campaign's plan, its context or what is known of the person says why, the roles
 may give a line another number of touches or other days between them, and never more than `Lines:MaxTouches`, the
 ceiling the settings hold, which no role raises and none asks to have raised. How many and how far apart, where the
 person said so at the set-up, is in the context in their own words. The first letters are the pilot's; the follow-ups
-are the manager's, at its deep reviews, and so is the end of each line.
+are the manager's, at its deep reviews, and so is the end of each line. The follow-ups go under the line's root, as replies, where the provider can: the latest letter that went as one of its own. Where a line is laid ahead, each follow-up is created with `wait_on` naming the work item of the letter it follows, so that letter has normally ended, and holds the provider's reference, before the follow-up is claimed; where it has not, the follow-up goes as a letter of its own.
 
 **Who decides what.** Anything that changes who the campaign reaches, what it says or how much it spends belongs
 to the person who owns it, unless the campaign's context already allows it, and so does anything you are not sure

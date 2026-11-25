@@ -164,11 +164,17 @@ public class SendModeApprovalExchangesTests
             await db.SaveChangesAsync(Ct);
         }
 
-        // Composed the way the claim composes it, from the item, the campaign and the person, never written by hand.
-        var input = CanonicalInput.Compose(Send, new PreflightFacts(item, campaign, contact, NoPins, NoPins, Suppressed: false));
+        // Composed the way the claim composes it, from the item, the campaign and the person, never written by hand, with the
+        // claim's decision about the earlier letter it follows: the plugin lists no follows, so a letter of its own.
+        var plugin = TestPlugins.Loaded("reply", [Send.Id]);
         var binding = new JsonObject { ["workspace"] = "a" };
+        var facts = new PreflightFacts(item, campaign, contact, NoPins, NoPins, Suppressed: false);
+        var input = CanonicalInput.Compose(Send, facts, FollowsDecision.Decide(Send, facts, new Route("reply", binding, BindingIdentity.Of(binding)), plugin));
+        // And recorded on the item as the claim records it, less the provider's reference.
+        item.Context[FollowsDecision.Key] = FollowsDecision.Recorded(input[FollowsDecision.Key]!.AsObject());
+        db.Entry(item).Property(w => w.Context).IsModified = true;
         var subject = ApprovalSubject.Of(
-            new ProviderOpPlan(TestPlugins.Loaded("reply", [Send.Id]), "snp_01K7QR00000000000000000001", "rts_01K7QR00000000000000000001",
+            new ProviderOpPlan(plugin, "snp_01K7QR00000000000000000001", "rts_01K7QR00000000000000000001",
                 RouteScope.GlobalDefault, binding, BindingIdentity.Of(binding), Send, input),
             item);
         var preview = ApprovalPreview.Of(Send, subject, campaign, contact, "email");

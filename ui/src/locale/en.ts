@@ -45,6 +45,14 @@ export const en = {
     'settings.models': 'Models',
     'settings.notifications': 'Notifications',
     'settings.update': 'Update',
+    'update.card.offered': 'Jason {version} is available',
+    'update.card.downloading': 'Downloading Jason {version}…',
+    'update.card.downloaded': 'Jason {version} is ready',
+    'update.card.download': 'Download',
+    'update.card.notNow': 'Not now',
+    'update.card.restart': 'Restart to install',
+    'update.card.working': 'You can keep working.',
+    'update.card.progress': 'Download in progress',
     'settings.update.newer': 'Jason Desktop {version} is available',
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
@@ -422,6 +430,22 @@ export const en = {
     // shown as the property's name and the value, never guessed.
     // Where a reply in a thread goes from: the provider answers from the account the conversation is in, which the reply
     // does not name, so neither do these words, and no account is guessed in their place.
+    // What an email send follows: a reply under an earlier letter's subject, or a letter of its own and why.
+    'follows.reply.named':
+        'A reply to "{subject}" of {moment}, as asked. It goes under that subject; its own subject below is not sent.',
+    'follows.reply.line_root':
+        'A reply to "{subject}" of {moment}, the letter this campaign\'s latest thread with this person began with. It goes under that subject; its own subject below is not sent.',
+    'follows.reply.unread':
+        "A reply to an earlier letter of this campaign. It goes under that letter's subject; its own subject below is not sent.",
+    'follows.new.asked_new_thread': 'A new letter, as asked.',
+    'follows.new.not_offered':
+        "A new letter: this provider's plugin does not offer a reply in a thread on this channel.",
+    'follows.new.no_earlier_letter': 'A new letter: no earlier letter of this campaign to this person can be followed.',
+    'follows.new.other_account': 'A new letter: the earlier letter went through another account.',
+    'follows.new.other_mailbox': 'A new letter: the earlier letter went from another mailbox.',
+    'follows.new.other': 'A new letter.',
+    'follows.row': 'Follows',
+    'follows.subject.not_sent': 'Subject (not sent)',
     'approval.from.conversation': 'the account this conversation is in',
     'approval.fact.reach': 'Reach',
     'approval.fact.reversibility': 'Reversibility',

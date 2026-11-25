@@ -39,7 +39,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the thirty checks' order")]
+    [Critical(Family.W3, "the thirty-five checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -119,6 +119,35 @@ public partial class ProviderOpPreflightTests
 
         scenario.Named = Made();
         met.Add(Refused(scenario, FailureClass.Permanent));
+
+        // Thirty-first to thirty-fifth, asked right after the fourteenth: an earlier letter a message is named to follow is
+        // one this campaign sent the same person on the same channel, that went with the provider's reference, that no
+        // take-back stopped, and that went through the account and from the mailbox this message goes through and from. The
+        // routed plugin takes follows on the channel, or the twenty-first would refuse the argument instead.
+        scenario.Named = null;
+        scenario.Operation = Send;
+        scenario.Plugin = Offering(operations: [Add, Enroll, Get, Delete, Send], binding: Scenario.BindingSchema);
+        scenario.Arguments = Scenario.Sending("snd-1").Arguments;
+        scenario.Arguments!["follows"] = LetterItem;
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        var went = Went() with { BindingIdentity = "sha256:west" };
+        scenario.Followed = went with { Reference = null };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Followed = went with { TakenBack = true };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Followed = went with { BindingIdentity = "sha256:east" };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Followed = went with { Sender = "snd-2" };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        // A letter that went, as named, asks nothing more of these five: the send goes on to the person's approval.
+        scenario.Followed = went;
+        Assert.Equal(AttemptErrors.ApprovalRequired, scenario.Check().Code);
+        scenario.Followed = null;
 
         // Fifteenth to seventeenth: the same three questions of a search a status read names, by the reference the search's
         // own attempt returned — a search the campaign does not hold, then one that kept no reference, as one the provider
@@ -296,7 +325,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the thirty is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the thirty-five is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -326,13 +355,13 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// The one answer three of the checks give that is not a refusal is named beside the thirty rather than among
+    /// The one answer three of the checks give that is not a refusal is named beside the thirty-five rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
     /// outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_thirty()
+    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_thirty_five()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -1507,6 +1536,15 @@ public partial class ProviderOpPreflightTests
         /// <summary>The search the arguments name under <c>args.search</c>, as the claim would have read it; null where it found none.</summary>
         public NamedSearch? Searched { get; set; }
 
+        /// <summary>
+        /// The earlier letter a message would follow, as the claim would have read it: the one <c>args.follows</c> names, the
+        /// line's root where the argument is absent, or on a repeat the one its first claim recorded; null where it found none.
+        /// </summary>
+        public EarlierLetter? Followed { get; set; }
+
+        /// <summary>What an earlier claim of the item recorded under the reserved context key <c>follows</c>; null where none did.</summary>
+        public JsonObject? RecordedFollows { get; set; }
+
         /// <summary>Another search of the campaign that has not ended, as the claim would have read it for a search; null where none.</summary>
         public string? SearchInTheWay { get; set; }
 
@@ -1529,6 +1567,12 @@ public partial class ProviderOpPreflightTests
         /// is described by <see cref="UnsettledUnder"/> and <see cref="UnsettledArguments"/>, and kept no digest.
         /// </summary>
         public Func<PreflightFacts, PreflightFacts>? UnsettledClaim { get; set; }
+
+        /// <summary>
+        /// Whether the claim of the earlier attempt was made by a runtime that composed no root <c>follows</c>: the digest
+        /// it wrote is of the input it composed less that member. Read only where <see cref="UnsettledClaim"/> is set.
+        /// </summary>
+        public bool UnsettledBeforeFollows { get; set; }
 
         /// <summary>The kinds of the pins the earlier attempt recorded itself, as the claim reads them; null for none.</summary>
         public PinsLearned? UnsettledLearned { get; set; }
@@ -1642,7 +1686,12 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread, OptedOut: OptedOut, Line: Line);
+            if (RecordedFollows is not null)
+            {
+                item.Context[FollowsDecision.Key] = RecordedFollows.DeepClone();
+            }
+
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread, OptedOut: OptedOut, Line: Line, Followed: Followed);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);
@@ -1667,6 +1716,21 @@ public partial class ProviderOpPreflightTests
                 {
                     // That attempt's claim decided on the facts as they stood then, and wrote what it decided.
                     var then = ProviderOpPreflight.Check(claimed(facts), plugins, routes, Timing);
+
+                    // That claim recorded which earlier letter the message follows, as the claimer records it, unless the
+                    // scenario says what it recorded or that its runtime composed none.
+                    if (RecordedFollows is null && !UnsettledBeforeFollows && then.Plan?.Input[FollowsDecision.Key] is JsonObject decided)
+                    {
+                        item.Context[FollowsDecision.Key] = FollowsDecision.Recorded(decided);
+                    }
+
+                    if (UnsettledBeforeFollows && then.Plan is { } composed)
+                    {
+                        var input = composed.Input.DeepClone().AsObject();
+                        input.Remove(FollowsDecision.Key);
+                        then = then with { Plan = composed with { Input = input } };
+                    }
+
                     earlier.Provenance = AttemptProvenance.AtClaim(Operation, then, plugins, routes, earlier.PublicId);
                 }
 

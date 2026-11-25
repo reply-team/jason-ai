@@ -145,6 +145,8 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
                 CultureInfo.InvariantCulture,
                 $"Dispatcher:SearchHeldStallSeconds ({options.SearchHeldStallSeconds}) is below Dispatcher:SearchHeldCadenceSeconds ({options.SearchHeldCadenceSeconds}): every held search would be stalled at its first read."));
         }
+
+        ValidateDeferredReads(failures, options);
         ValidateKind(failures, "Dispatcher:AiRole", options.AiRole);
         if (options.AiRole is { } role)
         {
@@ -158,6 +160,35 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
         }
 
         return OptionRules.Result(failures);
+    }
+
+    /// <summary>
+    /// The reads of a deferred send: a grace and two waits of a minute to a day, and the moment it is said overdue an hour
+    /// to nine days after its own, the furthest the nine reads reach with the grace and every wait at a day. An overdue
+    /// moment beyond the grace, the first wait and seven waits after the send's moment is refused: a bound chosen on how
+    /// far past its moment a send is read, so the span stays within what <see cref="Dispatch.DeferredReads.MostReads"/>
+    /// reads at the waits set would reach. The step's last read waits for any span, so the refusal is that choice, not a
+    /// span the reads could not meet.
+    /// </summary>
+    private static void ValidateDeferredReads(List<string> failures, DispatcherOptions options)
+    {
+        var before = failures.Count;
+        OptionRules.Range(failures, "Dispatcher:DeferredReadGraceSeconds", options.DeferredReadGraceSeconds, DispatcherOptions.MinimumDeferredReadSeconds, DispatcherOptions.MaximumDeferredReadSeconds);
+        OptionRules.Range(failures, "Dispatcher:DeferredReadFirstWaitSeconds", options.DeferredReadFirstWaitSeconds, DispatcherOptions.MinimumDeferredReadSeconds, DispatcherOptions.MaximumDeferredReadSeconds);
+        OptionRules.Range(failures, "Dispatcher:DeferredReadWaitSeconds", options.DeferredReadWaitSeconds, DispatcherOptions.MinimumDeferredReadSeconds, DispatcherOptions.MaximumDeferredReadSeconds);
+        OptionRules.Range(failures, "Dispatcher:DeferredReadOverdueSeconds", options.DeferredReadOverdueSeconds, DispatcherOptions.MinimumDeferredReadOverdueSeconds, DispatcherOptions.MaximumDeferredReadOverdueSeconds);
+        if (failures.Count != before)
+        {
+            return;
+        }
+
+        var reached = Dispatch.DeferredReads.Reached(options);
+        if (options.DeferredReadOverdueSeconds > reached)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatcher:DeferredReadOverdueSeconds ({options.DeferredReadOverdueSeconds}) is beyond {reached} seconds, the grace, the first wait and seven waits: a send is read no further past its moment than {Dispatch.DeferredReads.MostReads} reads at these waits reach."));
+        }
     }
 
     private static void ValidateKind(List<string> failures, string section, KindDefaults defaults)

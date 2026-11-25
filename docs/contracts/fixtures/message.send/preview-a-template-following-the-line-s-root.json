@@ -1,0 +1,49 @@
+{
+  "operation": "message.send",
+  "version": 1,
+  "case": "an email written as a template that follows the line's root: the example renders the text alone and, in place of a subject, says the message goes as a reply under that letter's subject, its own not sent and not read for names",
+  "input": {
+    "args": {
+      "channel": "email",
+      "sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "message": { "format": "email", "compose": "template", "subject": "For {{contact.custom.team}}", "body": "Hi {{contact.first_name}}, one more thought after the meetup." }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "follows": { "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA", "operation": "message.send", "reference": "email-1001", "because": "line_root" },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Send marta@example.com a message by email, from the provider's account s_12 (ann@example.com) — subject: For {{contact.custom.team}}; text: Hi {{contact.first_name}}, one more thought after the meetup.; send after: —; follows: wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA (line_root); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/args/channel": "email",
+      "/args/sender": { "external_id": "s_12", "address": "ann@example.com" },
+      "/args/message": { "format": "email", "compose": "template", "subject": "For {{contact.custom.team}}", "body": "Hi {{contact.first_name}}, one more thought after the meetup." },
+      "/args/message/compose": "template",
+      "/args/send_after": null,
+      "/follows": { "work_item": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRA", "operation": "message.send", "reference": "email-1001", "because": "line_root" }
+    },
+    "example": {
+      "subject": null,
+      "body": "Hi Marta, one more thought after the meetup.",
+      "unfilled": []
+    }
+  }
+}

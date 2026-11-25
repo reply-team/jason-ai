@@ -172,7 +172,8 @@ same key from the plugin's side: what a binding is for, and what reaches the cod
 
 `arguments` says where the plugin takes an argument that a provider offers on some of an operation's channels and
 not on others. An operation's document names such arguments under `channel_arguments` — today `send_after` on
-`message.send` and `social_invitation.send` — and a plugin that takes one lists the channels it takes it on:
+`message.send` and `social_invitation.send`, and `follows` on `message.send` — and a plugin that takes one lists the
+channels it takes it on:
 
 ```yaml
 arguments:
@@ -184,7 +185,9 @@ arguments:
 
 The claim reads the list before anything runs. Work that carries such an argument on a channel the routed plugin
 does not list is refused, `argument_unsupported`, so your code never meets an argument it would have to drop or
-ignore; work that does not carry it reaches your code as it always has. It asks for nothing a person grants, so it is
+ignore; work that does not carry it reaches your code as it always has. An argument asks something of your code only
+where its value does: `follows` written `new_thread` asks for a letter of its own, which every plugin sends, so it is
+taken whatever the list says, and your code reads the runtime's decision at the root `follows`, never the argument. The list asks for nothing a person grants, so it is
 no capability, and like `binding` the key is optional and additive: `manifest_version` stays `1`, and a runtime too
 old to read the key rejects the reload, as every package problem does, rather than send it an argument it never checked.
 
@@ -1030,6 +1033,11 @@ The runtime composes it from the work item; a plugin never sees a work item's co
   provider's own shape and already held to the schema your manifest declares under `audience_definition` (§3). The
   runtime composes it from `args.definition`, or, for an audience named by its number, from the audience the campaign
   holds; read it there and nowhere else.
+- **`follows`** appears where the operation's input schema declares it — today `message.send` — composed at the claim
+  from `args.follows` and the campaign's own earlier sends: the letter the message follows, by its work item, its
+  operation and your reference for that send, or, with all three null, a new letter, and in `because` why. Place the
+  message by it and never by `args.follows`: one with a reference goes into the thread of that send, as a reply to it,
+  or fails before anything is sent; one with none, or none at all, is a new letter.
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 

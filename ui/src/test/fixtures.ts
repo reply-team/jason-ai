@@ -82,6 +82,9 @@ import approvalApproveNeedsPageTwoApproved from '../../../docs/api/fixtures/appr
 import approvalApproveNeedsTwoFirstApproved from '../../../docs/api/fixtures/approval.approve/needs-two-first-approved.json';
 import approvalGetCardInvitation from '../../../docs/api/fixtures/approval.get/card-invitation.json';
 import approvalGetCardReply from '../../../docs/api/fixtures/approval.get/card-reply.json';
+import approvalGetCardFollow from '../../../docs/api/fixtures/approval.get/card-follow.json';
+import workitemGetCardFollowLetter from '../../../docs/api/fixtures/workitem.get/card-follow-letter.json';
+import workitemGetCardFollowParked from '../../../docs/api/fixtures/workitem.get/card-follow-parked.json';
 import approvalGetCardMessage from '../../../docs/api/fixtures/approval.get/card-message.json';
 import approvalGetCardMessageReasked from '../../../docs/api/fixtures/approval.get/card-message-reasked.json';
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
@@ -663,6 +666,7 @@ export const fixtures = {
     >,
     'approval.get/card-invitation': approvalGetCardInvitation satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-reply': approvalGetCardReply satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/card-follow': approvalGetCardFollow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-message': approvalGetCardMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-message-reasked': approvalGetCardMessageReasked satisfies Exchange<
         { approval_id: string },
@@ -1722,6 +1726,14 @@ export const fixtures = {
         WorkItem
     >,
     'workitem.get/parked-edited-send': workitemGetParkedEditedSend satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/card-follow-letter': workitemGetCardFollowLetter satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/card-follow-parked': workitemGetCardFollowParked satisfies Exchange<
         { work_item_id: string },
         WorkItem
     >,

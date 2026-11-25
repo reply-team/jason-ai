@@ -61,7 +61,7 @@
       "work_item": "wi_103"
     },
     "preview": {
-      "summary": "Send person100@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Person, thanks for the talk at the meetup.; send after: —",
+      "summary": "Send person100@example.test a message by email, from the provider's account s_12 (owner@example.test) — subject: Notes from the meetup; text: Hi Person, thanks for the talk at the meetup.; send after: —; follows: — (—); a message that follows a letter goes as a reply under that letter's subject, and its own subject is not sent",
       "highlights": {
         "/contacts/0/channels/0/value": "person100@example.test",
         "/args/channel": "email",
@@ -75,7 +75,8 @@
           "body": "Hi Person, thanks for the talk at the meetup."
         },
         "/args/message/compose": null,
-        "/args/send_after": null
+        "/args/send_after": null,
+        "/follows": null
       },
       "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
       "reach": {

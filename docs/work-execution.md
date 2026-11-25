@@ -221,8 +221,8 @@ provider then takes for a later moment.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in thirteen short steps: **expire**, **enforce**, **events**,
-**sync**, **poll**, **respond**, **bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**. Events hands one read of an account's events to a
+Each tick, the dispatcher runs one scan in fourteen short steps: **expire**, **enforce**, **events**,
+**sync**, **poll**, **respond**, **bounce**, **deferred**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**. Events hands one read of an account's events to a
 reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
 ([docs/inbound-sync.md](inbound-sync.md) is the contract). Poll follows each search a live campaign's audience is filled
@@ -238,7 +238,19 @@ the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Bounc
 was told of and, for a bounce of one of its people, queues a `message.status` read of each of the campaign's own sends
 to that person the bounce could be of, at most three; the read that finds the send bounced is what records it and, for
 a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
-`system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+`system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Deferred reads, at most once a minute, the sends a
+provider took for a moment that passed `Dispatcher:DeferredReadGraceSeconds` ago, no more than 30 days ago, and of
+which nothing yet says what became of them, and queues a `message.status` read of each where it ran:
+the first once that grace has passed, the second `Dispatcher:DeferredReadFirstWaitSeconds` after the first ended, each
+later one `Dispatcher:DeferredReadWaitSeconds` after the one before it ended, whatever it answered, until one says what
+became of the send or nine have failed, counting the reads of the send the runtime made, whichever step made them; until
+`Dispatcher:DeferredReadOverdueSeconds` after the moment has passed it makes none once eight have succeeded, so its last
+waits for that span, and after it none once nine have succeeded with one past it: under settings that stand, nine
+answered reads of its own and eighteen in all at most; and it
+makes none in a campaign while five reads the runtime made are open there, whichever step made them. The read that
+finds a send `failed` or `cancelled`, or the first that ends `Dispatcher:DeferredReadOverdueSeconds` or more after the
+moment and still finds it `queued`, says once that it did not go: `message_unsent_observed`, its state `failed`,
+`cancelled` or `overdue` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -270,7 +282,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the thirty pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the thirty-five pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -864,11 +876,17 @@ Jason's own move holds nobody either: one whose `last_activity_at` is not later 
 letter of Jason's own went into the thread — a touch of the person in the campaign, at its `accepted_for` where its
 result names one, otherwise the end of its succeeded attempt, across the campaign since a touch records no thread, or an
 answer the responder sent, a `conversation.reply` of the campaign into the line's own thread, at the end of its
-succeeded attempt. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
-went. A line whose event names the other side always holds, whatever the moments. Moments of the runtime's own record
-are compared, and nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line
-does not know"). A hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce
-step's reads are all it asks for (the register takes the address); what the line becomes is the manager's.
+succeeded attempt. A follow-up, a `message.send` whose `follows` names a work item, never explains a move: the plugin
+that places follow-ups, Reply's, does not move a thread's moment when one lands, so an answer a follow-up overtakes
+before the next read still holds the line; a `message.send` with no `follows`, or one that names no work item, and a
+touch of any other operation explain a move as any letter of Jason's own does. Only a moment that has come by the step's clock counts, and a letter a succeeded cancel names never
+went, nor did one a succeeded `message.status` of the campaign says failed or was cancelled, unless a read of it says
+it went or may have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it
+Jason's own letter. A line whose
+event names the other side always holds, whatever the moments. Moments of the runtime's own record are compared, and
+nothing the line says is read for meaning ([docs/inbound-sync.md](inbound-sync.md) §4, "What a line does not know"). A
+hard bounce neither holds nor ends a line: it is a provider event, not a reply line, and the bounce step's reads are all
+it asks for (the register takes the address); what the line becomes is the manager's.
 
 **Taking back a letter the provider holds.** A letter the provider already took for a later moment — a `message.send`
 or `social_invitation.send` that succeeded with the provider's reference, whose result says `cancelable: true`, for a
@@ -911,6 +929,72 @@ result per item in the order asked, as `campaign.remove_contacts` does, and writ
   the manager reopens only on an answer that says yes. The line is `contacts_reopened`, with the question where a run
   carried it. Touches counted before the line ended stay counted: the ceiling counts work items, never a state.
 
+**Which earlier letter a message follows.** A `message.send` is either a letter of its own or a reply in the thread of
+an earlier letter of the line, and the claim decides which, once ([`message.send`](contracts/operations/message.send.md),
+`args.follows`). What the caller writes is a wish in one of three states:
+
+- **left out**, the runtime's default: the message follows the line's root, and wherever it cannot, it is a letter of
+  its own, which says why. The default never refuses. It asks, in this order, and the first that answers decides: the
+  routed plugin does not list `follows` for the channel under its manifest's `arguments` (`not_offered`); the line
+  holds no root (`no_earlier_letter`); the root went through another plugin or binding than the message is routed to
+  (`other_account`); the root went from another sending account than the message names under `args.sender`, or either
+  says none (`other_mailbox`). Otherwise the message follows the root (`line_root`). Where the routed plugin does not
+  list `follows` for the channel, the claim reads no root at all.
+- **a work item's identifier**: that letter, named. The claim asks rows 31 to 35 of [routing](routing.md) §7 and
+  refuses the work with the first that fails, before anybody is asked to approve it: the letter is a `message.send` of
+  this campaign to the same person on the same channel, it went with the provider's reference, no succeeded
+  `message.cancel` took it back, it went through the plugin and account the message is routed to, and from the sending
+  account the message names. Otherwise the message follows it (`named`). A letter named explicitly that a read says
+  failed or was cancelled is not refused for that at the claim: it is passed to the provider, which refuses it at its
+  moment where it holds that the letter never went, and nothing is sent.
+- **`new_thread`**: a letter of its own (`asked_new_thread`). It asks nothing of the plugin, since every plugin sends a
+  letter, so it is taken whatever the manifest lists.
+
+**The line's root** is one definition: the latest `message.send` of the same campaign about the same person on the same
+channel (`args.channel`) that is a touch that counts, as the ceiling counts one (so a letter a succeeded take-back
+names is none, and neither is one a succeeded `message.status` of the campaign says failed or was cancelled, unless a
+read of it says it went or may have gone, `sent` or `unknown`; a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment,
+leave it counted), whose latest succeeded attempt returned the provider's reference for the send, and that itself
+follows no work
+item: it opened a thread of its own, by its own wish or by the runtime's decision, or was claimed before the runtime
+decided this at all. Latest is by that attempt's claim, newest first. The work being claimed is never its own root. So
+the root moves to the latest letter that opened a thread of its own, and a letter taken back, or one a read says
+failed or was cancelled and none says went or may have gone, gives way to the one before it. A root the provider failed
+or cancelled after accepting it, which no read has recorded, stays the root until a read records it; a follow-up of it
+then ends `follows_never_sent`.
+
+The decision reaches the plugin at the root of the composed input, `follows`: the letter followed, by its work item,
+its operation and the provider's reference for it, and `because`, the reason above; for a letter of its own, `because`
+alone. A composed `follows` carries a reference only where the routed plugin lists `follows` for the channel, so the
+provider's reference of a thread never reaches a plugin that does not take one. The claim records the decision in the
+item's context under the reserved key `follows`, the same less the reference, in the claim's own save, whether the
+message runs, is parked for a person or waits, and only where it changes, with one `workitem_context_updated` line as
+`system:dispatcher`; a claim that refuses the work records nothing. The key is the runtime's: a caller who names
+`context.follows` at `workitem.create` or in a `workitem.update` patch is refused as `validation_failed`, `not_allowed`
+at that field ([`docs/contracts/README.md`](contracts/README.md)).
+
+**A repeat keeps its decision.** Where the item carries an attempt that may have acted, nothing is decided again and
+none of rows 31 to 35 is asked: the repeat follows the letter its first claim recorded, with the reference read again
+from that letter, or is a letter of its own for the reason recorded. A decision taken again could change the composed
+input, and the repeat would no longer be the request the provider may already have taken, which check 23 compares; or
+a letter that went into a thread would go again as a new one. A repeat of an attempt claimed before the runtime
+decided this, which recorded nothing, composes nothing, as that attempt did not. A recorded letter whose reference
+can no longer be read composes none, and the operation's schema refuses the repeat, `input_invalid`, recorded
+`ambiguous`: a reply is never sent as a new letter. A repeat that follows a letter asks `follows` of the plugin it is
+routed to now, as a letter named does: where that plugin does not list `follows` for the channel, row 21 refuses it,
+`argument_unsupported`, recorded `ambiguous`, whatever check 23 compares, so a thread's reference never reaches a
+plugin that does not take one. The repeat reads the recorded letter and nothing else.
+
+**An approval and the letter.** A person approves the composed input, the letter it follows included (§Approvals), so
+a decision that changes between the park and the claim — the root moved, or the root's account or mailbox is no
+longer the message's — asks the person again, as any change of the input does. Only the reason a letter of its own
+gives is no part of what they decided, since it reaches nobody: an approval of a letter of its own covers a letter of
+its own whatever the reason now, so a package that comes to take `follows`, which turns `not_offered` into
+`no_earlier_letter`, or a root taken back, asks nobody again. A letter of its own turned reply, or a reply turned
+letter of its own, asks the person again. An approval whose subject carries no root `follows`, written before the
+runtime decided this, saw a letter of its own: it still covers a message the claim decides is a letter of its own,
+whatever the reason, and asks the person again for one that follows a letter, named or the line's root.
+
 ## A campaign's people, counted
 
 `jason campaign summary` (`campaign.summary`) answers, for each campaign named or every campaign not archived, in every
@@ -931,9 +1015,12 @@ the latest of what happened to them, its `text` naming the count it was. Each ro
 person has had in its campaign, `touches`, and when the last was, `last_touch_at`, null with none: a touch is counted
 exactly as the claim's ceiling of touches counts it (§Provider operations, `touch_ceiling_reached`), so the number a row
 shows is the number the ceiling stops at. A send that a succeeded `message.cancel` of the campaign took back never
-went: it is no touch, and no row's last touch either. A touch's moment, where it succeeded, is the one the provider took
-it for, its result's `accepted_for`, read in UTC as the hold reads it, else the item's finish; where it did not, the end
-of the latest attempt of it that ended classed `ambiguous`. An enroll into a provider's sequence is one touch: the steps the
+went: it is no touch, and no row's last touch either. A send a succeeded `message.status` of the campaign says failed
+or was cancelled is left out the same way, whoever asked for the read, unless a read of it says it went or may have
+gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted. A
+touch's moment, where it succeeded, is the one the provider took it for, its result's `accepted_for`, read in UTC as the
+hold reads it, else the item's finish; where it did not, the end of the latest attempt of it that ended classed
+`ambiguous`. An enroll into a provider's sequence is one touch: the steps the
 sequence sends after it are the provider's and are not seen here. An effect a person reported by hand
 (`report.submit`) is not a touch and is not counted. Work about a person is work in that campaign
 whose person they are, and a line about them a journal line of that campaign that names them. A provider's event is a
@@ -1058,7 +1145,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the thirty provider checks follow.
+existed. It is the same rule the thirty-five provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -1405,7 +1492,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since the installation's midnight; the claim holds it, with no attempt, until the installation's next midnight, and a person's `workitem.resume` or `launches.lift` lets it go sooner (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the thirty pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the thirty-five pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -1421,25 +1508,28 @@ operation that declares required arguments, carries no arguments at all, so `wor
 receives from the item — the arguments, the contact cut to the projection the operation declares, the
 campaign, the identifiers that plugin itself pinned, and the work item's own id as the idempotency key; for a read or a
 take-back of a send, the send the arguments name with its reference, for a status read or a stop of a search, the search
-with its reference, and for a search, the audience's `definition` at the root
+with its reference, for a message, the earlier letter it follows, as the claim decides it, under `follows`, and for a
+search, the audience's `definition` at the root
 ([docs/contracts/README.md](contracts/README.md)) — and validates the whole composed document against the operation's
 input schema at the claim, and a definition, which is the provider's own shape, against the schema the routed plugin
 declares for one. A plugin never sees a work item's context. A search the claim does not refuse runs under one of the
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
-([campaign manager](campaign-manager.md) §10).
+([campaign manager](campaign-manager.md) §10). A message the claim does not refuse records which earlier letter it
+follows, and why, under `context.follows` (§A person's line in a campaign).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Thirty checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, the twenty-eighth, added after it, right after the tenth, and the twenty-ninth and the thirtieth, added after that, right after the twenty-eighth:
+**Everything that can stop it is decided at the claim, before a child process exists.** Thirty-five checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, the twenty-eighth, added after it, right after the tenth, the twenty-ninth and the thirtieth, added after that, right after the twenty-eighth, and the thirty-first to the thirty-fifth, added after those, right after the fourteenth:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed → opted_out →
-line_finished → touch_ceiling_reached → contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
-search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
+line_finished → touch_ceiling_reached → contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch →
+follows_unknown → follows_reference_absent → follows_taken_back → follows_route_mismatch → follows_sender_mismatch →
+search_unknown → search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
 search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-seven are refusals and all of them are final: twenty-four are `permanent`, `input_invalid` and
+The first thirty-two are refusals and all of them are final: twenty-nine are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -1471,13 +1561,27 @@ about the person in this campaign, other than the item being claimed, and it suc
 `ambiguous`, since that attempt may have reached the person, whatever came after it and whatever became of the item —
 put back for a repeat, parked again, failed, cancelled or expired; one item is one touch at most, and a send that a
 succeeded `message.cancel` of the campaign took back counts for nothing, while a take-back refused, failed or ended
-`ambiguous` leaves it counted, since the letter may still go — one definition, which the people list counts by too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
+`ambiguous` leaves it counted, since the letter may still go; a send a succeeded `message.status` of the campaign says
+failed or was cancelled is not counted either, whoever asked for the read, unless a read of it says it went or may
+have gone (`sent` or `unknown`); a `queued` read, a read that failed and a letter the provider still holds as `queued`, however long past its moment, leave it counted — one
+definition, which the people list counts by
+too. Neither sends a notice of its own: the refusal ends the item `failed` and writes `workitem_failed` as the
 dispatcher, a default manager trigger, so the manager is woken and ends the line itself. Two touches to one person
 cannot both pass the count: the claim takes one item of a campaign at a time and none while another of its items is
 `scheduled` or `processing`, so every touch claimed before is counted by its attempts once it has left
 `processing`, and one that has not run yet is counted at its own claim. Where a later attempt of a touch found that
 nothing had been sent, the count holds it one too many: the safe side of a ceiling, since nothing the store keeps proves
 the earlier attempt did not act.
+The thirty-first to the thirty-fifth, added after those, are asked right after `send_route_mismatch`, and only of a
+message that names under `args.follows` the earlier letter it follows: they refuse a letter that is not a message of
+this campaign to the same person on the same channel (`follows_unknown`), one that has not gone with the provider's
+reference (`follows_reference_absent`), one a succeeded `message.cancel` of the campaign took back
+(`follows_taken_back`), one that went through another plugin or account than the message is routed to
+(`follows_route_mismatch`), and one that went from another sending account than the message names
+(`follows_sender_mismatch`). They are asked after every question about the person, so a person who must not be
+written to is refused as that and never as a letter named wrongly, and before the input is composed, since the input
+carries the letter's reference. A message that leaves `follows` to the runtime, or writes `new_thread`, never meets
+them, and neither does a repeat, which follows the letter its first claim recorded (§A person's line in a campaign).
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
@@ -1517,7 +1621,8 @@ the earlier act at the account whichever version of the package made it, so an u
 the repeat through.
 While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code, and so does check 27, and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
-(`docs/routing.md`). Checks 28, 29 and 30 are asked among the first of those, by their place, and are among them too. An answer that arrived and does not satisfy the
+(`docs/routing.md`). Checks 28, 29 and 30 are asked among the first of those, by their place, and are among them too. Checks 31 to 35
+stand among them by their place as well, but a repeat never asks them (§A person's line in a campaign). An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code
 the operation does not declare, or declares under another class. An answer a pattern of
 that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
@@ -1559,7 +1664,9 @@ it before it repeats anything, since a read never makes a send twice ([docs/plug
 
 **A send ends when the provider has taken it.** Its item succeeds `sent`, where the provider sent it inside the call,
 or `accepted`, where it took it for now or for the moment `send_after` names; the fact that an accepted send went is
-learned later, never from this item.
+learned later, never from this item. A send the provider took for a moment is read by the runtime itself once the
+moment has passed, and a read that finds it did not go says so once, as `message_unsent_observed`
+([docs/inbound-sync.md](inbound-sync.md) §1).
 
 ## Provider blocks
 
@@ -1738,6 +1845,10 @@ mistyped one.
 | `Dispatcher:SearchStallSeconds` | `3600` | 60..604800 | how long the reads of a search the provider does not hold may land nobody before the dispatcher calls it stalled and stops reading it; refused below `Dispatcher:SearchCadenceSeconds`, since every search whose first read lands nobody would be stalled at once ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:SearchHeldCadenceSeconds` | `3600` | 60..86400 | how long after the dispatcher's last read of a search the provider holds — `paused`, `paused_for_credits`, `paused_for_limit` — the next is due: it spends nothing until a person acts at the provider, and the ordinary cadence comes back once it moves ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:SearchHeldStallSeconds` | `604800` | 60..604800 | how long a search may stay held at the provider before the dispatcher calls it stalled, its state named, and stops reading it, so no search is read for ever; refused below `Dispatcher:SearchHeldCadenceSeconds` ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:DeferredReadGraceSeconds` | `900` | 60..86400 | how long after a deferred send's moment its first read is due ([docs/inbound-sync.md](inbound-sync.md) §1) |
+| `Dispatcher:DeferredReadFirstWaitSeconds` | `3600` | 60..86400 | how long after the first read of a deferred send ended, where it did not find what became of the send, the second is due |
+| `Dispatcher:DeferredReadWaitSeconds` | `86400` | 60..86400 | how long after each later read of a deferred send ended the next is due |
+| `Dispatcher:DeferredReadOverdueSeconds` | `604800` | 3600..777600 | how long after its moment a deferred send no read found went, failed or was cancelled is said `overdue`: the first read that ends this long after it and still finds the send waiting says so, and is its last; refused beyond the grace, the first wait and seven waits, a bound chosen on how far past its moment a send is read |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

@@ -27,7 +27,7 @@ import { startDetached } from './open-in-start.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
-import { actShown, updateAnswerOf } from './update-item.ts';
+import { actShown, pressAsks, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { childEnvironment, keptAsideOf, launcherOf, linuxPackage, mountOf, recordAppImage, updaterOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
@@ -624,8 +624,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
     // on the label the page drew and only while the item still says it. The answer carries what the person's last check
     // found, wherever it was asked from; a press from the page raises no notification, since the page says it.
-    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer()), refused);
-    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false, 'page'), refused);
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem(), updates?.said ?? null, desk.updateNewer(), desk.updateStep()), refused);
+    handle(seam, 'updates.press', origin, (label, options) => {
+        const act = actShown(desk.updateItem(), label);
+        desk.pressUpdate(act, pressAsks(act, options), 'page');
+    }, refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,

@@ -1,7 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
+import { ApiProvider } from '../../api/context';
+import { FakeApi } from '../../test/fake-api';
+import { t } from '../../platform/i18n';
 import { MessageCard } from './message-card';
 
 const card = (preview: Record<string, unknown>, reply = false) =>
@@ -22,7 +25,9 @@ describe('the message card', () => {
             'Hi Ines, thanks for the talk at the meetup.',
         ]);
         expect(
-            screen.getByText(/the sender's signature kept at the provider, and the provider's tracking/i),
+            screen.getByText(
+                /the sender's signature kept at the provider, the provider's tracking and, under a reply, the quotation of the earlier email/i,
+            ),
         ).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/as the recipient/i);
     });
@@ -83,5 +88,86 @@ describe('the message card', () => {
     it('shows nothing for an approval that is no message', () => {
         card(fixtures['approval.get/pending-with-preview'].response.preview as unknown as Record<string, unknown>);
         expect(document.querySelector('.message-card')).toBeNull();
+    });
+});
+
+describe('the message card, where the letter follows one', () => {
+    const withFollows = (follows: unknown) => ({
+        ...email,
+        highlights: { ...(email['highlights'] as Record<string, unknown>), '/follows': follows },
+    });
+
+    it('says a new letter and why, and marks no subject', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }));
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject', 'Body']);
+        expect(document.body.textContent).toMatch(
+            /A new letter: this provider's plugin does not offer a reply in a thread/,
+        );
+    });
+
+    it('says a reply goes under the followed letter, read from its recorded work item, and marks the subject as not sent', async () => {
+        const fake = new FakeApi().answer('workitem.get', 'workitem.get/card-follow-letter');
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        await waitFor(() =>
+            screen.getByText(
+                /A reply to "Notes from the meetup" of \d+ \w+( 2026)?, \d\d:\d\d, the letter this campaign's latest thread/,
+            ),
+        );
+        expect(terms()).toEqual(['From', 'To', 'Follows', 'Subject (not sent)', 'Body']);
+        expect(fake.sent('workitem.get')).toEqual({ work_item_id: 'wi_1' });
+    });
+
+    it('dates the followed letter by its send_after where it has one', async () => {
+        const letter = fixtures['workitem.get/card-follow-letter'].response;
+        const fake = new FakeApi();
+        fake.call = async () =>
+            ({
+                ...letter,
+                context: { ...letter.context, input: { ...letter.context.input, send_after: '2020-03-04T09:30:00Z' } },
+            }) as never;
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        await waitFor(() =>
+            screen.getByText(/A reply to "Notes from the meetup" of 4 Mar 2020, \d\d:\d\d, the letter/),
+        );
+    });
+
+    it('says the reply as first written where the followed letter cannot be read', async () => {
+        const fake = new FakeApi();
+        const calls: { operation: string; body: unknown }[] = [];
+        const refusals: Promise<void>[] = [];
+        fake.call = (operation, body) => {
+            calls.push({ operation, body });
+            const refused = Promise.reject(new Error('unreachable'));
+            refusals.push(refused.then(undefined, () => undefined));
+            return refused;
+        };
+        const preview = fixtures['approval.get/card-follow'].response.preview as unknown as Record<string, unknown>;
+        render(
+            <ApiProvider api={fake}>
+                <MessageCard detail={toApprovalDetail(preview)} />
+            </ApiProvider>,
+        );
+        // The words are the same before the read ends: hold them only once the followed item's read was made and refused.
+        await waitFor(() => expect(calls).toEqual([{ operation: 'workitem.get', body: { work_item_id: 'wi_1' } }]));
+        await act(async () => {
+            await refusals[0];
+        });
+        expect(document.body.textContent).toContain(t('follows.reply.unread'));
+        expect(document.body.textContent).not.toContain('Notes from the meetup" of');
+    });
+
+    it('shows nothing for a send that is not an email', () => {
+        card(withFollows({ work_item: null, operation: null, reference: null, because: 'not_offered' }), true);
+        expect(terms()).not.toContain('Follows');
     });
 });

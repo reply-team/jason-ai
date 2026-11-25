@@ -162,6 +162,14 @@ internal static partial class Account
                 exit: 2);
         }
 
+        var (follows, badFollows) = FollowsOf(line);
+        if (badFollows is not null)
+        {
+            return badFollows;
+        }
+
+        // Every send names the account it goes from, a follow-up too, as reply-cli requires: Reply would send it from the
+        // default one.
         if (line.Option(send.AccountOption) is not { } accountRaw)
         {
             return Refused("usage.id", $"No {send.AccountOption} was given.", exit: 2);
@@ -193,7 +201,7 @@ internal static partial class Account
         JsonObject? text = null;
         if (line.Option("--message") is not null || !send.TextOptional)
         {
-            var (read, refusal) = DirectTextOf(line.Option("--message"), textStdin, send);
+            var (read, refusal) = DirectTextOf(line.Option("--message"), textStdin, send, followUp: follows is not null);
             if (refusal is not null)
             {
                 return refusal;
@@ -215,9 +223,18 @@ internal static partial class Account
         var ids = new JsonObject { ["contact_id"] = contactId, [AccountKey(send)] = accountId };
 
         // The contact is held, or was just imported, by a route Reply offers; the send's own route may be one it does not.
-        if (send.Channel == "email" && !Offered(root, "send_direct_email"))
+        if (send.Channel == "email" && follows is null && !Offered(root, "send_direct_email"))
         {
             return NotOffered("send_direct_email", contactId, ids);
+        }
+
+        // A follow-up is sent by a route of its own, which a Reply that does not keep direct sends has no more than one that
+        // does not offer follow-ups.
+        if (follows is not null && !(Offered(root, "direct_send_follow_up") && Offered(root, "direct_send")))
+        {
+            // reply-cli names a follow-up route Reply does not have by a code of its own, not by the generic refusal.
+            return Refused(
+                "follows.not_available", "This Reply does not know follow-ups, so nothing was sent.", status: 404, ids: ids);
         }
 
         // A Reply that keeps direct sends reads the moment, the schedule and the key; one that does not reads none, and sends now.
@@ -232,15 +249,27 @@ internal static partial class Account
             ["text"] = text?.DeepClone(),
             ["sendAfter"] = moment is { } named ? Utc(named) : null,
             ["scheduleId"] = timedBy,
-        }.ToJsonString();
+        };
+        if (follows is not null)
+        {
+            // A repeat of a keyed follow-up under another reference is another request.
+            request["follows"] = follows;
+        }
+
+        var fingerprint = request.ToJsonString();
         if (key is not null)
         {
             Arrived(root, command, key);
         }
 
-        if (keeps && key is not null && KeptUnder(root, send, key, request, ids) is { } answered)
+        if (keeps && key is not null && KeptUnder(root, send, key, fingerprint, ids) is { } answered)
         {
             return answered;
+        }
+
+        if (follows is not null && FollowRefusal(root, follows, contactId, accountId, moment, timedBy, ids) is { } notFollowed)
+        {
+            return notFollowed;
         }
 
         if (timedBy is { } scheduleId && Untimed(root, send, scheduleId, contactId, ids) is { } untimed)
@@ -255,6 +284,11 @@ internal static partial class Account
         if (refused is not null)
         {
             return refused;
+        }
+
+        if (follows is not null && moment is null && timedBy is null && CannotPlace(root, follows, contactId, accountId, key, fingerprint, ids) is { } unplaced)
+        {
+            return unplaced;
         }
 
         if (send.Channel == "email" && MailboxAtLimit(root, accountId, contactId, keeps && key is not null && moment is null && timedBy is null, ids) is { } limited)
@@ -299,7 +333,7 @@ internal static partial class Account
                 ["activity_id"] = 70_000 + sent.Count,
                 ["sent_at"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
             };
-        return Done(keeps ? Kept(root, send, contactId, moment, timedBy, key, request, answer) : answer);
+        return Done(keeps ? Kept(root, send, contactId, accountId, moment, timedBy, key, fingerprint, answer, rendered ?? text, follows) : answer);
     }
 
     /// <summary>A send as it went, recorded in the order sends went; every send recorded so far.</summary>
@@ -550,7 +584,7 @@ internal static partial class Account
     /// The text on stdin, held to exactly the send's fields, each a string that is not blank and no longer than Reply
     /// publishes, counted in characters as the CLI counts them, so one outside the basic plane counts once.
     /// </summary>
-    private static (JsonObject? Text, Ending? Refusal) DirectTextOf(string? option, string? stdin, DirectSend send)
+    private static (JsonObject? Text, Ending? Refusal) DirectTextOf(string? option, string? stdin, DirectSend send, bool followUp = false)
     {
         if (option != "-")
         {
@@ -568,12 +602,19 @@ internal static partial class Account
             return (null, Refused("usage.message", "The message on stdin must be one JSON object.", exit: 2));
         }
 
-        if (text.Select(member => member.Key).FirstOrDefault(key => !send.Fields.Contains(key)) is { } unknown)
+        // A follow-up goes under the subject of the email it follows, so it takes none and needs none.
+        if (followUp && text.ContainsKey("subject"))
+        {
+            return (null, Refused("usage.message", "A follow-up takes no subject: it goes under the subject of the email it follows.", exit: 2));
+        }
+
+        var fields = followUp ? send.Fields.Where(field => field != "subject").ToArray() : send.Fields;
+        if (text.Select(member => member.Key).FirstOrDefault(key => !fields.Contains(key)) is { } unknown)
         {
             return (null, Refused("usage.message", $"The message has an unknown field '{unknown}'.", exit: 2));
         }
 
-        foreach (var field in send.Fields)
+        foreach (var field in fields)
         {
             if (text[field] is not JsonValue value || !value.TryGetValue<string>(out var written) || EcmaTrim(written).Length == 0)
             {

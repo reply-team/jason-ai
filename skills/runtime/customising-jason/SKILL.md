@@ -172,6 +172,7 @@ A route says which plugin performs an operation. The global route is the one eve
 uses; a campaign's own route, set with `--campaign`, is read first. A global route is written to the settings file by
 the runtime, which loads the plugins again, so the route is in force at once, and a load that refuses puts the file
 back and says why.
+An edit of a route's binding, even one that keeps the account, starts new threads for the default follow-ups of every line rooted before it: tell the person before you make one.
 `jason route list` shows what is in force. A route never falls back to another plugin: where the named plugin cannot do
 the work, the work stops, which is the safe failure, so before you route it check that the plugin performs the
 operation, in `jason plugin list`'s JSON (`--human` shortens the list), or with

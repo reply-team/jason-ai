@@ -164,8 +164,8 @@ public sealed partial class ClaimOrderDocTests
     }
 
     /// <summary>
-    /// A count as prose writes it — a numeral, a cardinal or an ordinal up to thirty, the ones past twenty hyphenated as
-    /// "twenty-five" and "twenty-fifth"; -1 for anything else.
+    /// A count as prose writes it — a numeral, a cardinal or an ordinal up to thirty-nine, the ones past twenty and thirty
+    /// hyphenated as "twenty-five" and "thirty-fifth"; -1 for anything else.
     /// </summary>
     private static int NumberWord(string word)
     {
@@ -184,16 +184,19 @@ public sealed partial class ClaimOrderDocTests
             return 30;
         }
 
-        if (lower.StartsWith("twenty-", StringComparison.Ordinal))
+        foreach (var (tens, value) in new[] { ("twenty-", 20), ("thirty-", 30) })
         {
-            var unit = lower["twenty-".Length..];
-            var past = Array.IndexOf(cardinals, unit);
-            if (past < 0)
+            if (lower.StartsWith(tens, StringComparison.Ordinal))
             {
-                past = Array.IndexOf(ordinals, unit);
-            }
+                var unit = lower[tens.Length..];
+                var past = Array.IndexOf(cardinals, unit);
+                if (past < 0)
+                {
+                    past = Array.IndexOf(ordinals, unit);
+                }
 
-            return past is > 0 and < 10 ? 20 + past : -1;
+                return past is > 0 and < 10 ? value + past : -1;
+            }
         }
 
         var cardinal = Array.IndexOf(cardinals, lower);

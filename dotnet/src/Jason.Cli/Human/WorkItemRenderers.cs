@@ -40,6 +40,12 @@ public static class WorkItemRenderers
             Line("Last error:", Error(item.LastError)),
         };
 
+        // Only for an email send the claim decided: the letter it goes under, or why it is a letter of its own.
+        if (FollowsOf(item) is { } follows)
+        {
+            lines.Add(Line("Follows:", follows));
+        }
+
         // Only while it waits: what for, how far along, and until when, which no other line says.
         if (item.Wait is { } wait)
         {
@@ -222,6 +228,13 @@ public static class WorkItemRenderers
         JsonObject arguments => RenderText.Keys(arguments),
         _ => "present",
     };
+
+    private static string? FollowsOf(WorkItemDto item) =>
+        string.Equals(item.Operation, "message.send", StringComparison.Ordinal)
+        && item.Context?["follows"] is JsonObject follows
+        && string.Equals((string?)item.Context["input"]?["channel"], "email", StringComparison.Ordinal)
+            ? ApprovalRenderers.FollowsWords(follows)
+            : null;
 
     private static string AttemptTable(IReadOnlyList<AttemptDto> attempts)
     {

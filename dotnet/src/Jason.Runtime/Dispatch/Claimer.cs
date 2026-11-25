@@ -150,7 +150,7 @@ public sealed class Claimer(
             // The decision before the record of it. Everything that can refuse a provider item is decided here,
             // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
             // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
-            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, maxTouches, ct).ConfigureAwait(false) : null;
+            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, packages, routing, maxTouches, ct).ConfigureAwait(false) : null;
             var verdict = facts is null ? null : ProviderOpPreflight.Check(facts, packages, routing, _timing);
 
             // A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences
@@ -158,6 +158,13 @@ public sealed class Claimer(
             if (verdict is { Refused: false, Plan: { } searching } && CampaignAudiences.Recorded(searching.Contract.Id))
             {
                 await AudienceAsync(db, item, searching, now, ct).ConfigureAwait(false);
+            }
+
+            // A message the claim lets through, to run now or to wait for a person, records which earlier letter it follows,
+            // and why: the decision a repeat of it keeps. One the claim refuses records nothing.
+            if (verdict is { Refused: false, Plan: { } sending } && sending.Input[FollowsDecision.Key] is JsonObject decided)
+            {
+                Follows(db, item, decided);
             }
 
             // A role its campaign has started enough of today is held, not refused: a failure would wake the manager, and a
@@ -649,9 +656,10 @@ public sealed class Claimer(
         var current = await beside.WorkItems.WithNavigation().Include(w => w.Attempts)
             .FirstAsync(w => w.Id == item.Id, ct)
             .ConfigureAwait(false);
+        var packages = plugins.Snapshot;
         var routing = routes.Snapshot;
-        var facts = await FactsAsync(beside, current, routing, lines.Current.MaxTouches, ct).ConfigureAwait(false);
-        var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
+        var facts = await FactsAsync(beside, current, packages, routing, lines.Current.MaxTouches, ct).ConfigureAwait(false);
+        var verdict = ProviderOpPreflight.Check(facts, packages, routing, _timing);
         var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
         if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
         {
@@ -902,12 +910,42 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// The message's record of which earlier letter it follows, and why, under its context's reserved key: the decision the
+    /// claim composed, less the provider's reference, which is the letter's own provenance and is read again from it. Written
+    /// and said in the chronicle only where it changes, as the dispatcher, and saved with the claim, so a claim that loses its
+    /// save to another writer records nothing.
+    /// </summary>
+    private void Follows(JasonDbContext db, WorkItem item, JsonObject composed)
+    {
+        var decided = FollowsDecision.Recorded(composed);
+        var recorded = item.Context[FollowsDecision.Key];
+        if (JsonNode.DeepEquals(recorded, decided))
+        {
+            return;
+        }
+
+        var context = item.Context.DeepClone().AsObject();
+        context[FollowsDecision.Key] = decided;
+        item.Context = context;
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.WorkItemContextUpdated,
+            campaign: null,
+            key: FollowsDecision.Key,
+            old: recorded?.DeepClone(),
+            updated: decided.DeepClone(),
+            workItem: item);
+    }
+
+    /// <summary>
     /// What the pre-flight decides on, read inside the claim transaction and nowhere else. The route is resolved
     /// first — a pure lookup over the snapshot the decision itself will use again — because whose identifiers to
     /// read is the routed plugin's question, and an item nothing routes needs no reads at all. An audience the work names
-    /// by its number is read by that number, in the work's own campaign.
+    /// by its number is read by that number, in the work's own campaign. <paramref name="packages"/> is the snapshot the
+    /// decision is then made against, so what the routed plugin takes is the same question here as there.
     /// </summary>
-    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, int maxTouches, CancellationToken ct)
+    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, PluginSnapshot packages, RouteSnapshot routing, int maxTouches, CancellationToken ct)
     {
         var campaign = item.Campaign!;
         var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
@@ -1007,6 +1045,9 @@ public sealed class Claimer(
         var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
         var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
         var line = OperationCatalog.Touches.Contains(contract.Id) ? await LineAsync(db, item, contact, maxTouches, ct).ConfigureAwait(false) : null;
+        var followed = CanonicalInput.Follows(contract)
+            ? await FollowedAsync(db, contract, item, contact, unsettled, packages.Find(pluginId), ct).ConfigureAwait(false)
+            : null;
         return new PreflightFacts(
             item,
             campaign,
@@ -1023,7 +1064,57 @@ public sealed class Claimer(
             inTheWay,
             thread,
             suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false),
-            line);
+            line,
+            followed);
+    }
+
+    /// <summary>
+    /// The earlier letter a message would follow (<see cref="FollowsDecision"/>), read only where the decision can use it: on
+    /// a repeat, the one its first claim recorded, as it stands now, since nothing is decided again; otherwise the one the
+    /// arguments name under <c>args.follows</c>, or the line's root where they leave it to the runtime and the routed
+    /// <paramref name="plugin"/> takes follows on the channel (<see cref="LineRoots"/>). None where they ask for a letter of
+    /// its own, or leave it to a plugin that takes no follows there: the decision is a letter of its own whatever the line
+    /// holds. A letter is read only in the work's own campaign, the way a send the work names is, by its latest succeeded
+    /// attempt; whether it was taken back only for a letter named at a first claim, the one decision that asks it.
+    /// </summary>
+    private static async Task<EarlierLetter?> FollowedAsync(
+        JasonDbContext db,
+        OperationContract contract,
+        WorkItem item,
+        Contact contact,
+        Attempt? unsettled,
+        LoadedPlugin? plugin,
+        CancellationToken ct)
+    {
+        var named = unsettled is not null
+            ? FollowsDecision.RecordedLetter(item)
+            : !FollowsDecision.LeftToTheRuntime(item)
+                ? FollowsDecision.NamedLetter(item)
+                : CanonicalInput.ConsumedChannel(contract, item) is { } channel && FollowsDecision.Offered(plugin, contract.Id, channel)
+                    ? await LineRoots.RootAsync(db, item.CampaignId, contact.Id, item.Id, contract.Id, channel, ct).ConfigureAwait(false)
+                    : null;
+        var letter = await ReferenceAsync(
+            db,
+            item,
+            named,
+            SendKind,
+            (made, reference, ran) => new EarlierLetter(
+                made.PublicId,
+                made.Operation,
+                made.Status,
+                reference,
+                ran?.PluginId,
+                ran?.BindingIdentity,
+                made.ContactId,
+                LineRoots.Channel(made),
+                LineRoots.Sender(made),
+                TakenBack: false),
+            ct).ConfigureAwait(false);
+
+        // A repeat asks none of the five checks, and the root is by its own definition never a letter taken back.
+        return letter is not null && unsettled is null && !FollowsDecision.LeftToTheRuntime(item)
+            ? letter with { TakenBack = await LineRoots.TakenBackAsync(db, item.CampaignId, letter.WorkItem, ct).ConfigureAwait(false) }
+            : letter;
     }
 
     /// <summary>

@@ -67,6 +67,16 @@ jason workitem review wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --review-hash sha256:3f9a0c 
   text since. A review sent with a hash the text has moved
   past is refused `review_stale`: read the send again and review what it now says.
 
+An email `message.send` that does not say `"follows": "new_thread"` goes as a reply under the line's root, by the runtime's rule, where the provider can place it: the latest letter to the person on the channel that went as a letter of its own, for whatever reason, letters sent before follow-ups existed included, which holds the provider's reference, counts as a touch and was not taken back. Before the send is claimed nothing is decided yet: the runtime composes its `follows` at the claim, which is after your run, so there is no decision for you to read. Derive the probable root yourself by that rule, from this list, and judge the text as a reply to it:
+
+```
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --order finished
+```
+
+A line's touches leave out a letter that a succeeded `message.cancel` took back, and a letter that a succeeded read (`message.status`) says failed or was cancelled, unless a read of it says it went or may have gone (`sent` or `unknown`); count the line so.
+
+Since it may go as a letter of its own, where the provider cannot place it or the mailbox or account is another, it must also read whole. The runtime has nothing further to read for this.
+
 Then complete your item with your result, as the rest of this file says.
 
 ```

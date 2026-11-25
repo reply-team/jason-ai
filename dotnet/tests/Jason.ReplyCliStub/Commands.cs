@@ -52,7 +52,7 @@ internal static class Commands
             ["inbox mark-read"] = (1, [], []),
             ["inbox mark-unread"] = (1, [], []),
             ["contact linkedin-connect"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
-            ["contact send-email"] = (0, [.. ContactOptions, "--email-account-id", "--message", .. SendOptions], []),
+            ["contact send-email"] = (0, [.. ContactOptions, "--email-account-id", "--message", "--follows", .. SendOptions], []),
             ["contact linkedin-message"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
             ["contact linkedin-inmail"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),
             ["contact linkedin-voice"] = (0, [.. ContactOptions, "--linkedin-account-id", "--message", .. SendOptions], []),

@@ -33,6 +33,8 @@ public static class ApiFixtures
     //                     approval asked again, approved (approval.approve card-message-reasked), then read by a list that
     //                     never held it (workitem.get card-message-approved, approval.list card-message-all-approved|
     //                     -item-approved|-item-all-approved).
+    //   follow-up:        approval.get card-follow (a letter that goes under the first one), workitem.get
+    //                     card-follow-parked (the follow-up) and card-follow-letter (the letter it follows).
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
     //   reply:            approval.list card-reply-pending, approval.get card-reply (a reply in a thread, which
@@ -112,6 +114,7 @@ public static class ApiFixtures
         "approval.approve/panel-doubted",
         "approval.approve/search-top-up",
         "approval.get/by-work-item",
+        "approval.get/card-follow",
         "approval.get/card-invitation",
         "approval.get/card-message",
         "approval.get/card-message-reasked",
@@ -707,6 +710,8 @@ public static class ApiFixtures
         "workitem.create/researcher-asked",
         "workitem.create/researcher-asked-plain",
         "workitem.get/awaiting",
+        "workitem.get/card-follow-letter",
+        "workitem.get/card-follow-parked",
         "workitem.get/card-invitation-parked",
         "workitem.get/card-message-approved",
         "workitem.get/card-message-parked",

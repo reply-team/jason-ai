@@ -9,7 +9,9 @@ namespace Jason.Contracts.Operations;
 /// — a custom field, the sending account's names, on LinkedIn the person's email address — is the provider's alone to
 /// fill, so it renders its fallback, or itself in brackets, and is listed.
 /// A name the input holds with no value and no fallback renders the same way and is listed, since the provider will
-/// not send the message. The rendering writes text and escapes nothing; a provider's own may differ.
+/// not send the message. The rendering writes text and escapes nothing; a provider's own may differ. A message that
+/// follows a letter goes under that letter's subject, which the input does not carry, so its own subject is not
+/// rendered and the example holds none: the summary says why, and a sentence is never shown as a subject.
 /// </summary>
 internal static class TemplateExample
 {
@@ -17,6 +19,7 @@ internal static class TemplateExample
     private const string Channel = "/args/channel";
     private const string Subject = "/args/message/subject";
     private const string Body = "/args/message/body";
+    private const string FollowedItem = "/follows/work_item";
 
     private static readonly Dictionary<(string Channel, string Name), PreviewPointer> Pointers = TemplateGrammar.Channels
         .SelectMany(channel => TemplateGrammar.Names.Select(row => (Channel: channel, row.Name, Pointer: row.On(channel))))
@@ -34,6 +37,12 @@ internal static class TemplateExample
         // The schema refused a template the standard refuses when the item was written, so a refusal here is an
         // input that never passed it, and it is shown no example rather than half of one.
         var unfilled = new List<string>();
+        if (Text(input, FollowedItem) is { Length: > 0 })
+        {
+            // The subject the arguments carry does not go, so it is neither rendered nor read for names.
+            return Render(body, input, unfilled) is { } followUp ? Example(null, followUp, unfilled) : null;
+        }
+
         var written = Text(input, Subject);
         var subject = written is null ? null : Render(written, input, unfilled);
         var text = Render(body, input, unfilled);
@@ -42,13 +51,16 @@ internal static class TemplateExample
             return null;
         }
 
-        return new JsonObject
+        return Example(subject, text, unfilled);
+    }
+
+    private static JsonObject Example(string? subject, string text, List<string> unfilled) =>
+        new()
         {
             ["subject"] = subject,
             ["body"] = text,
             ["unfilled"] = new JsonArray([.. unfilled.Select(name => (JsonNode?)name)]),
         };
-    }
 
     /// <summary>The template rendered, or null when the standard refuses it.</summary>
     private static string? Render(string template, JsonNode? input, List<string> unfilled)

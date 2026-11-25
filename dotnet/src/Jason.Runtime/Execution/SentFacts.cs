@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -18,7 +19,7 @@ namespace Jason.Runtime.Execution;
 /// the read's own result and nowhere else: a chronicle line is never forgotten, and a subject or a body is what a
 /// person wrote to a person.
 /// </remarks>
-public sealed partial class SentFacts(JournalWriter journal)
+public sealed partial class SentFacts(JournalWriter journal, LiveSettings<DispatcherOptions>? settings = null)
 {
     /// <summary>The read whose answer says whether a send went out: the only operation whose success says it.</summary>
     public const string Operation = "message.status";
