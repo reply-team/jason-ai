@@ -54,7 +54,7 @@ import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyDailyTrends, keptDailyTrends, readSettings, saveSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { replyUpdateAtStart } from './reply-update.ts';
 import { Setup } from './setup.ts';
@@ -663,10 +663,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         deb: form?.form === 'deb',
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
-        saveSettings: (next) => {
-            settings = next;
-            writeSettings(paths.settings, next);
-        },
+        saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
         // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
         environment: process.env,
         models,
@@ -837,10 +834,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                             bundleVersion: version,
                             gate: skillsGate,
                             settings,
-                            saveSettings(next) {
-                                settings = next;
-                                writeSettings(paths.settings, next);
-                            },
+                            saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
                         }),
                     machineSetup,
                     () => showStarting(window, finishWaitSentence, false),

@@ -143,6 +143,12 @@ export function writeSettings(file: string, settings: DesktopSettings): void {
     renameSync(temporary, file);
 }
 
+/** Writes the settings and only then has them held: ones that could not be written are not what the desktop goes on with. */
+export function saveSettings(file: string, next: DesktopSettings, hold: (kept: DesktopSettings) => void): void {
+    writeSettings(file, next);
+    hold(next);
+}
+
 /**
  * The page tells the desktop whether the Dashboard's daily trends are shown. Anything but true or false is refused and
  * nothing is written; the choice is written with the other settings kept beside it. Returns the settings now held.

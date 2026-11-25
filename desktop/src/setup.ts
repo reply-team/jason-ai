@@ -1371,7 +1371,7 @@ export class Setup {
             if (this.#deps.saveSettings === undefined) throw new Error('The settings are not written here.');
             this.#deps.saveSettings(minimum === null ? rest : { ...rest, replyUpdateTried: minimum });
         } catch {
-            this.#deps.log.warn('reply_start_update_unmarked', {});
+            this.#deps.log.warn(minimum === null ? 'reply_start_update_mark_left' : 'reply_start_update_unmarked', {});
             return false;
         }
         return true;

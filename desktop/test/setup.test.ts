@@ -15,7 +15,7 @@ import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { npmLine, readUpdateSwitch, replyAtWork, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
-import { parseSettings, readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
+import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import { Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
 import {
@@ -1217,7 +1217,8 @@ function startUpdate(
         mark?: string;
         environment?: Record<string, string | undefined>;
         installation?: unknown;
-        unwritable?: boolean;
+        /** Every write of the desktop's settings fails, or only one that takes the mark away. */
+        unwritable?: true | 'clearing';
     } = {},
 ): StartUpdate {
     const b = bench(t, { programs: [...(options.programs ?? ['reply', 'npm'])] });
@@ -1271,7 +1272,7 @@ function startUpdate(
         environment: options.environment ?? {},
         settings: () => kept,
         saveSettings: (next) => {
-            if (options.unwritable) throw new Error('EACCES');
+            if (options.unwritable === true || (options.unwritable === 'clearing' && next.replyUpdateTried === undefined)) throw new Error('EACCES');
             kept = next;
             writeSettings(b.paths.settings, next);
         },
@@ -1342,6 +1343,34 @@ test('settings that cannot be written run nothing, and the log says so by the li
     assert.deepEqual(npmRuns(s), []);
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update_unmarked').map((each) => each.level), ['warn']);
     assert.equal(await line(s), undefined);
+});
+
+test('a write of the desktop’s settings that failed is not held as written, so it burns no try', (t) => {
+    const b = bench(t);
+    const before: DesktopSettings = { feed: null, skillsDeployedFor: 'kept', theme: null };
+    let held = before;
+    const hold = (next: DesktopSettings) => (held = next);
+    // A file where the settings' folder belongs.
+    writeFileSync(join(b.root, 'a-file'), '');
+    assert.throws(() => saveSettings(join(b.root, 'a-file', 'settings.json'), { ...before, replyUpdateTried: replyMinimumVersion }, hold));
+    assert.equal(held, before);
+    saveSettings(b.paths.settings, { ...before, replyUpdateTried: replyMinimumVersion }, hold);
+    assert.equal(held.replyUpdateTried, replyMinimumVersion);
+    assert.deepEqual(readSettings(b.paths.settings), held);
+
+    // Both of the desktop's own places that save them for the set-up and the start do it by this.
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.equal(main.split('saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),').length - 1, 2);
+    assert.doesNotMatch(main, /settings = next;/);
+});
+
+test('a mark that could not be taken away after a success is said as that in the log, and the update is still said as made', async (t) => {
+    const s = startUpdate(t, { unwritable: 'clearing' });
+    assert.equal(await s.setup.updateReplyAtStart(), 'updated');
+    assert.equal(npmRuns(s).length, 1);
+    assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(s.log.lines.filter((each) => each.level === 'warn').map((each) => each.name), ['reply_start_update_mark_left']);
+    assert.equal(s.kept().replyUpdateTried, replyMinimumVersion);
 });
 
 test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm', async (t) => {
