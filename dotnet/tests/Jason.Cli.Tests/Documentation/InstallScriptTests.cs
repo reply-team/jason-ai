@@ -784,6 +784,8 @@ public partial class InstallScriptTests
             made.WaitOne();
         }
         '@
+        # Compiled before the window starts, so a slow compile takes nothing from the time the window is there.
+        Use-WindowsType
         [JasonProofRow.Deaf]::Start()
         $seen = try { "returned: $(@(Get-VisibleWindows @($PID)) -join '; ')" } catch { "$($_.Exception.GetBaseException().GetType().Name): $($_.Exception.GetBaseException().Message)" }
         [Console]::Out.WriteLine("a window that does not answer: $seen")
@@ -1938,7 +1940,7 @@ public partial class InstallScriptTests
         Assert.True(exit == 0, output);
         var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         string Line(string label) => said.FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
-        Assert.True(Line("bound with no table").EndsWith("did not end within 8 s", StringComparison.Ordinal), $"a run past its bound, the process table not read in its own, did not fail the step by its name:{output}");
+        Assert.True(Line("bound with no table").EndsWith("did not end within 15 s", StringComparison.Ordinal), $"a run past its bound, the process table not read in its own, did not fail the step by its name:{output}");
         Assert.True(Line("the program with no table") == "ended", $"a run past its bound, the process table not read in its own, left the program:{output}");
         Assert.Contains("Get-CimInstance Win32_Process, the whole process table, had not returned after ", stdout, StringComparison.Ordinal);
         Assert.True(Line("exit") == "3", $"a run within its bound did not give its exit code:{output}");
@@ -2021,7 +2023,7 @@ public partial class InstallScriptTests
         $script:overruns = $true
         Remove-Item -LiteralPath '@PIDFILE@' -ErrorAction SilentlyContinue
         try {
-            $null = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', "Set-Content -LiteralPath '@PIDFILE@' -Value `$PID; Start-Sleep -Seconds 120") @{} 8
+            $null = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', "Set-Content -LiteralPath '@PIDFILE@' -Value `$PID; Start-Sleep -Seconds 120") @{} 15
             [Console]::Out.WriteLine('bound with no table: not reached')
         } catch {
             [Console]::Out.WriteLine("bound with no table: $($_.Exception.Message)")
