@@ -251,7 +251,8 @@ runtime's start at logon is the machine set-up's, and no item of the menu's.
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, the version whose skills were last deployed,
-  and, only while it is making one for the agents' roles, the name of an execution profile and, once it is made, its id).
+  only while it is making one for the agents' roles the name of an execution profile and, once it is made, its id, and the
+  lowest version of the Reply CLI a start's update was last tried for, until one succeeds).
 - `<data>/desktop/mode`: what the desktop shows, one word, `live` or `demo`; a file that is missing or says anything
   else is Live, but a new installation's first start writes it as `demo` (see [the demo](#the-demo)). Both run on this
   data directory: Live is your installation, and Demo shows the page the application carries, starts no runtime and makes,

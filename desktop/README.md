@@ -161,7 +161,8 @@ one sentence that carries it, and nothing of the CLI's own words is shown or log
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
   `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
-  between its mark and the runtime's naming of the default).
+  between its mark and the runtime's naming of the default, and `reply_update_tried`, the minimum a start's update of the
+  Reply CLI was tried for, until one succeeds).
 - `<data>/desktop/machine-setup.json`: on macOS and Windows, `ran_for`, the version `jason install` last completed for,
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
