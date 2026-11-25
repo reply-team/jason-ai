@@ -189,7 +189,7 @@ public class ReleaseAndUpdateDocTests
         Assert.DoesNotContain("a last job asks the Homebrew tap", first, StringComparison.Ordinal);
 
         var page = Flat(Read());
-        Assert.Contains("`upgrade_command`, the one command it names for this installation:", page, StringComparison.Ordinal);
+        Assert.Contains("`upgrade_command`, the one command for this installation:", page, StringComparison.Ordinal);
         Assert.Contains("| updates it | `brew upgrade jason`, as `jason update check` names it for a keg |", page, StringComparison.Ordinal);
         Assert.Contains("The middle line is what `jason update check` names for a Homebrew keg; the tap no longer carries the formula, so a keg reaches a current Jason by the lines of §6 (\"Through a package manager\") that begin with `jason uninstall`.", page, StringComparison.Ordinal);
         Assert.Contains("so after a package manager's upgrade, such as `winget upgrade Reply.Jason`, it is `jason skills update`", page, StringComparison.Ordinal);

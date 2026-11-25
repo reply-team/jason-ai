@@ -38,8 +38,8 @@ after the publication is checked: the README and every page GitHub shows are rea
 describes a release that is not out, and a release run that fails leaves `main` as it was. The Homebrew tap
 holds the cask alone and moves it to the latest release on its own schedule (§6). The job that would ask it to bump the
 cask (§6) is switched off; it would wait on the cask's own macOS proof, so a red proof would hold that ask and never the
-release.
-A hotfix reaches a release by a shorter way, one pull request into `main` from a branch `hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
+release. A hotfix reaches a release by a shorter way, one pull request into `main` from a branch `hotfix/<name>` and no
+release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
 it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
 holds them assembles the release and says in one line that it publishes nothing.
 
@@ -416,7 +416,7 @@ not start — which is one of the times you most want to know what the newest ve
 answer, or 1 with an error envelope: `update_feed_unreachable` when nobody answered, `update_feed_invalid` when
 what answered was not a manifest, `update_feed_insecure` when the feed is not an address this build will fetch.
 
-The answer also names `upgrade_command`, the one command it names for this installation: `jason update apply` on
+The answer also names `upgrade_command`, the one command for this installation: `jason update apply` on
 Jason's own, and, where a package manager installed it, the command it prints for that manager —
 `brew upgrade jason` for a Homebrew keg, `winget upgrade Reply.Jason` (§6). Under a manager `--human` prints the three
 lines to type, the runtime stopped before the manager's

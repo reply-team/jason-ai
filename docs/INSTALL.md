@@ -389,10 +389,10 @@ way.
 
 Where a package manager installed Jason, it is under the same MIT licence, and the package manager owns that
 installation: it updates it and takes it off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and
-names the manager's command. An installation the older formula made moves by the lines the
-release page's §6 gives for it instead. That command is typed between `jason runtime stop` and
-`jason runtime start`, because Homebrew's upgrade removes the previous version's keg by default, the path a running
-runtime starts its plugin hosts from.
+names the manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
+upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.
+Homebrew's older formula gets no newer version from the tap: take it off as above, and install Jason Desktop by one of
+the ways here.
 
 ### By hand
 
