@@ -205,10 +205,28 @@ function Wait-Program([string] $file, [string[]] $arguments, [int] $seconds = 30
     return Wait-Started $process "$file $($arguments -join ' ')" $seconds
 }
 
+# The seconds one reading of the machine - the whole process table, the windows of one process - is given: one that has
+# not returned by then is named in seconds, not left to the step's own timeout.
+$readSeconds = 30
+
+# Every process of the machine. A reading that does not return in its bound throws a TimeoutException naming the call; with
+# -OrSay, for what only describes a failure, it is said and nothing is returned, so that the failure's own words still come.
+function Get-EveryProcess([switch] $OrSay) {
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    try { return @(Get-CimInstance -ClassName Win32_Process -OperationTimeoutSec $readSeconds) }
+    catch [Microsoft.Management.Infrastructure.CimException] {
+        if ($clock.Elapsed.TotalSeconds -lt 0.9 * $readSeconds) { throw }
+        $why = "Get-CimInstance Win32_Process, the whole process table, had not returned after $([int]$clock.Elapsed.TotalSeconds) s: $($_.Exception.Message.Trim())"
+        if (-not $OrSay) { throw [TimeoutException]::new($why) }
+        Write-Host "  $why"
+        return @()
+    }
+}
+
 # Every process the started one started, and every process of the application's folder and of jason, with its command
 # line shortened.
 function Write-ProcessTree([System.Diagnostics.Process] $process) {
-    $all = @(Get-CimInstance -ClassName Win32_Process)
+    $all = @(Get-EveryProcess -OrSay)
     $ids = @($process.Id)
     Write-Host "  the setup, process $($process.Id), ended: $($process.HasExited); the processes it started:"
     for ($at = 0; $at -lt $ids.Count; $at++) {
@@ -225,14 +243,18 @@ function Write-ProcessTree([System.Diagnostics.Process] $process) {
 
 function Write-JasonProcesses {
     Write-Host '  every process of the application folder, of jason, of the uninstaller and of Windows PowerShell:'
-    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' -or $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' })) {
+    foreach ($running in @(Get-EveryProcess -OrSay | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' -or $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' })) {
         Write-Host "    $($running.ProcessId), started by $($running.ParentProcessId): $("$($running.CommandLine)".Substring(0, [Math]::Min(300, "$($running.CommandLine)".Length)))"
-        foreach ($window in (Get-VisibleWindows @([int] $running.ProcessId))) { Write-Host "      visible window: $window" }
+        try { foreach ($window in (Get-VisibleWindows @([int] $running.ProcessId))) { Write-Host "      visible window: $window" } } catch [TimeoutException] { Write-Host "      its windows were not read: $($_.Exception.Message)" }
     }
 }
 
 # Every top-level window a process owns, visible or not, with its class and title and the text of each of its child
-# controls: what a setup that waits with no child shows, a message box naming itself. Read on a hosted runner only.
+# controls: what a setup that waits with no child shows, a message box naming itself. Read on a hosted runner only. A
+# reading is made on a thread of its own and given its bound; past it a TimeoutException names the call it stands in, and
+# that thread, which nothing can end, is left to end with this process. GetWindowText waits on a window that does not
+# answer only where the window is this process's own: another process's title is what Windows keeps of it. So no wait is
+# expected of it here, and it is bounded all the same.
 function Use-WindowsType {
     if (-not ('JasonProof.Windows' -as [type])) {
         Add-Type -Namespace JasonProof -Name Windows -MemberDefinition @'
@@ -243,35 +265,42 @@ public delegate bool EnumProc(System.IntPtr hwnd, System.IntPtr lparam);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hwnd);
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetClassName(System.IntPtr hwnd, System.Text.StringBuilder text, int count);
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetWindowText(System.IntPtr hwnd, System.Text.StringBuilder text, int count);
-public static System.Collections.Generic.List<string> Describe(uint owner) {
+static System.Collections.Generic.List<string> Within(uint owner, int milliseconds, System.Action<string[], System.Collections.Generic.List<string>> read) {
     var lines = new System.Collections.Generic.List<string>();
+    var at = new string[] { "EnumWindows" };
+    System.Exception fault = null;
+    var reader = new System.Threading.Thread(() => { try { read(at, lines); } catch (System.Exception e) { fault = e; } });
+    reader.IsBackground = true;
+    reader.Start();
+    if (!reader.Join(milliseconds)) throw new System.TimeoutException(at[0] + ", reading the windows of process " + owner + ", had not returned after " + (milliseconds / 1000) + " s");
+    if (fault != null) throw new System.InvalidOperationException("the windows of process " + owner + " could not be read: " + fault.Message, fault);
+    return lines;
+}
+public static System.Collections.Generic.List<string> Describe(uint owner, int milliseconds) { return Within(owner, milliseconds, (at, lines) => {
     EnumWindows((hwnd, _) => {
         uint pid; GetWindowThreadProcessId(hwnd, out pid);
         if (pid != owner) return true;
-        lines.Add("window " + hwnd + ": class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd) + "', visible " + IsWindowVisible(hwnd));
-        EnumChildWindows(hwnd, (child, __) => { lines.Add("  control " + child + ": class '" + ClassOf(child) + "', text '" + TextOf(child) + "', visible " + IsWindowVisible(child)); return true; }, System.IntPtr.Zero);
+        lines.Add("window " + hwnd + ": class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd, at) + "', visible " + IsWindowVisible(hwnd));
+        EnumChildWindows(hwnd, (child, __) => { lines.Add("  control " + child + ": class '" + ClassOf(child) + "', text '" + TextOf(child, at) + "', visible " + IsWindowVisible(child)); return true; }, System.IntPtr.Zero);
         return true;
     }, System.IntPtr.Zero);
-    return lines;
-}
-public static System.Collections.Generic.List<string> Visible(uint owner) {
-    var lines = new System.Collections.Generic.List<string>();
+}); }
+public static System.Collections.Generic.List<string> Visible(uint owner, int milliseconds) { return Within(owner, milliseconds, (at, lines) => {
     EnumWindows((hwnd, _) => {
         uint pid; GetWindowThreadProcessId(hwnd, out pid);
-        if (pid == owner && IsWindowVisible(hwnd)) lines.Add("class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd) + "'");
+        if (pid == owner && IsWindowVisible(hwnd)) lines.Add("class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd, at) + "'");
         return true;
     }, System.IntPtr.Zero);
-    return lines;
-}
+}); }
 static string ClassOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(256); GetClassName(hwnd, b, b.Capacity); return b.ToString(); }
-static string TextOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(1024); GetWindowText(hwnd, b, b.Capacity); return b.ToString(); }
+static string TextOf(System.IntPtr hwnd, string[] at) { var b = new System.Text.StringBuilder(1024); at[0] = "GetWindowText of window " + hwnd; GetWindowText(hwnd, b, b.Capacity); at[0] = "EnumWindows"; return b.ToString(); }
 '@
     }
 }
 
 function Write-ProcessWindows([int] $id) {
     Use-WindowsType
-    $lines = [JasonProof.Windows]::Describe([uint32] $id)
+    $lines = [JasonProof.Windows]::Describe([uint32] $id, $readSeconds * 1000)
     Write-Host "  the windows of process $($id): $($lines.Count) line(s)"
     foreach ($line in $lines) { Write-Host "    $line" }
 }
@@ -279,23 +308,31 @@ function Write-ProcessWindows([int] $id) {
 # The visible top-level windows of these processes, one line each: class and title.
 function Get-VisibleWindows([int[]] $ids) {
     Use-WindowsType
-    $lines = foreach ($id in $ids) { [JasonProof.Windows]::Visible([uint32] $id) }
+    $lines = foreach ($id in $ids) { [JasonProof.Windows]::Visible([uint32] $id, $readSeconds * 1000) }
     @($lines | Where-Object { $_ })
 }
 
 # A setup started and watched until it ends or the bound: twice a second, every visible top-level window of it and of
 # every process it started is noted, and the step given is run with the seconds gone by. What it ended with, when, and
-# every window seen.
+# every window seen. A look whose call does not return in its bound is said, with the call and how long it was given, and
+# the watch goes on to its end or its bound; it is in the result too, since what a look did not see is not proved.
 function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scriptblock] $whileRunning = $null) {
     $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
     $null = $process.Handle
+    Write-Host "  the setup started, process $($process.Id)"
     $started = Get-Date
     $seen = [System.Collections.Generic.List[string]]::new()
+    $overran = [System.Collections.Generic.List[string]]::new()
     while (-not $process.HasExited -and ((Get-Date) - $started).TotalSeconds -lt $seconds) {
-        $all = @(Get-CimInstance -ClassName Win32_Process)
-        $ids = @($process.Id)
-        for ($at = 0; $at -lt $ids.Count; $at++) { $ids += @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] } | ForEach-Object { [int] $_.ProcessId }) }
-        foreach ($window in (Get-VisibleWindows $ids)) { if (-not $seen.Contains($window)) { $seen.Add($window); Write-Host "  a window of the setup at $([int]((Get-Date) - $started).TotalSeconds) s: $window" } }
+        try {
+            $all = @(Get-EveryProcess)
+            $ids = @($process.Id)
+            for ($at = 0; $at -lt $ids.Count; $at++) { $ids += @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] -and $ids -notcontains $_.ProcessId } | ForEach-Object { [int] $_.ProcessId }) }
+            foreach ($window in (Get-VisibleWindows $ids)) { if (-not $seen.Contains($window)) { $seen.Add($window); Write-Host "  a window of the setup at $([int]((Get-Date) - $started).TotalSeconds) s: $window" } }
+        } catch [TimeoutException] {
+            $overran.Add($_.Exception.Message)
+            Write-Host "  a look at the setup overran, $([int]((Get-Date) - $started).TotalSeconds) s after its start: $($_.Exception.Message)"
+        }
         if ($whileRunning) { & $whileRunning ((Get-Date) - $started).TotalSeconds }
         Start-Sleep -Milliseconds 500
     }
@@ -304,10 +341,10 @@ function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scr
     # ended, its handle is waited for, bounded, before its exit code is read; it is never ended.
     $ended = $process.HasExited
     if ($ended -and -not $process.WaitForExit(10000)) { Write-Host "  the setup, process $($process.Id), had ended by the exit code Windows reports, and its handle was not signalled 10 s after" }
-    $result = @{ Ended = $ended; Exit = $(if ($ended) { $process.ExitCode } else { $null }); Seconds = [int]((Get-Date) - $started).TotalSeconds; Windows = @($seen) }
+    $result = @{ Ended = $ended; Exit = $(if ($ended) { $process.ExitCode } else { $null }); Seconds = [int]((Get-Date) - $started).TotalSeconds; Windows = @($seen); Overran = @($overran) }
     if (-not $ended) {
         Write-ProcessTree $process
-        Write-ProcessWindows $process.Id
+        try { Write-ProcessWindows $process.Id } catch [TimeoutException] { Write-Host "  its windows were not read: $($_.Exception.Message)" }
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     }
     return $result
@@ -316,7 +353,7 @@ function Watch-Setup([string] $file, [string[]] $arguments, [int] $seconds, [scr
 function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [int] $seconds = 300) {
     $file = $what; $arguments = @()
     if (-not $process.WaitForExit($seconds * 1000)) {
-        $all = @(Get-CimInstance -ClassName Win32_Process)
+        $all = @(Get-EveryProcess -OrSay)
         $ids = @($process.Id)
         Write-Host "$file $($arguments -join ' ') (process $($process.Id)) had not ended after $seconds seconds; the processes it started:"
         for ($at = 0; $at -lt $ids.Count; $at++) {
@@ -395,7 +432,7 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
             # others leaves none running past its bound. A process is under another only where it was created at or after
             # that one, so that one whose dead parent's id was given again to a process of ours is not taken; and this
             # PowerShell's ancestors and the runner's own processes are never taken, whatever the table says of them.
-            $all = @(Get-CimInstance -ClassName Win32_Process)
+            $all = @(Get-CimInstance -ClassName Win32_Process -OperationTimeoutSec 30)
             $byId = @{}
             foreach ($process in $all) { $byId[[int] $process.ProcessId] = $process }
             $ancestors = [System.Collections.Generic.HashSet[int]]::new()
@@ -504,11 +541,31 @@ function Read-Entry($item) {
     [pscustomobject]@{ Id = $item.GetProperty('id').GetString(); Kind = $item.GetProperty('kind').GetString(); Ts = $item.GetProperty('ts').GetRawText() }
 }
 
+# A new pwsh given the environment Windows would give it, not this job's: its process. Start-Process -UseNewEnvironment
+# can fail with "The operation completed successfully": PowerShell 7 asks Windows for the account's environment block
+# before it calls CreateProcess, and where that fails it reports an error code it never read, 0. Either way that failure
+# says no process was started - CreateProcess was not called, or it answered that it made none - so that one alone is
+# tried again, at most twice more, each said with its place. Any other failure, and the last one, throws, naming the place.
+function Start-NewShell([string] $where, [string] $command, [string] $output = '') {
+    $with = @{ FilePath = 'pwsh'; ArgumentList = @('-NoProfile', '-NonInteractive', '-Command', $command); UseNewEnvironment = $true; PassThru = $true; NoNewWindow = $true }
+    if ($output) { $with['RedirectStandardOutput'] = $output }
+    $noError = [System.ComponentModel.Win32Exception]::new(0).Message
+    for ($attempt = 1; ; $attempt++) {
+        try { return Start-Process @with }
+        catch {
+            $why = $_.Exception.Message
+            if ($attempt -ge 3 -or $_.Exception -isnot [InvalidOperationException] -or -not $why.EndsWith(": $noError", [StringComparison]::Ordinal)) { throw "$where could not be started, try ${attempt}: $why" }
+            Say "$where was not started, try $attempt of 3, and is tried again: $why"
+            Start-Sleep -Seconds 1
+        }
+    }
+}
+
 # What a terminal opened from now on finds: a new pwsh given the environment Windows would give it, not this job's.
 function Find-InNewShell([string] $command) {
     $file = Join-Path $Out "found-$([Guid]::NewGuid().ToString('N')).txt"
     $probe = "`$found = Get-Command $command -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if (`$found) { `$found.Source; & `$found.Source --version } else { 'not found' }"
-    $shell = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -PassThru -NoNewWindow -RedirectStandardOutput $file
+    $shell = Start-NewShell "a new shell looking for $command" $probe $file
     $null = $shell.Handle
     if (-not $shell.WaitForExit(120000)) { Write-JasonProcesses; Stop-Process -Id $shell.Id -Force -ErrorAction SilentlyContinue; Fail "a new shell looking for $command did not end within 120 s" }
     $lines = @(Get-Content -LiteralPath $file)
@@ -598,7 +655,7 @@ function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
 }
 
 function Get-OwnProcesses([string] $folder) {
-    @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
+    @(Get-EveryProcess | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
 }
 
 # For the reset's record: every process whose image is under the application's folder, and every uninstaller process
@@ -606,7 +663,7 @@ function Get-OwnProcesses([string] $folder) {
 # own copy), each with its command line.
 function Write-ResetProcesses([string] $resets, [string] $when) {
     $root = (Join-Path $env:LOCALAPPDATA 'Temp').TrimEnd('\') + '\'
-    $all = @(Get-CimInstance -ClassName Win32_Process)
+    $all = @(Get-EveryProcess)
     $own = @($all | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($app.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
     $uninstallers = @($all | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) })
     Add-Content -LiteralPath $resets -Value "  $when, the processes of the application's folder: $(if ($own) { ($own | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join ' | ' } else { 'none' }); the uninstaller processes: $(if ($uninstallers) { ($uninstallers | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join ' | ' } else { 'none' })"
@@ -643,7 +700,7 @@ function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the appli
     $runs = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
     $seen = [System.Collections.Generic.HashSet[int]]::new()
     foreach ($process in @($watched | Where-Object { $_ })) { if ($seen.Add([int] $process.Id)) { $runs.Add($process) } }
-    foreach ($running in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
+    foreach ($running in @(Get-CimInstance -ClassName Win32_Process -OperationTimeoutSec 30 | Where-Object { $_.Name -like 'Uninstall Jason*.exe' -or "$($_.ExecutablePath)" -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' } | Where-Object { -not $under -or "$($_.ExecutablePath)".StartsWith($under.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })) {
         $id = [int] $running.ProcessId
         if ($seen.Contains($id)) { continue }
         # The handle, taken now, keeps the exit code readable; a run that ended in between leaves nothing to wait for.
@@ -673,7 +730,7 @@ function Wait-UninstallerEnded([object[]] $watched, [string] $since = 'the appli
 # unpacks its native libraries and renames a held executable aside.
 function Get-NewShellTemporary {
     $file = Join-Path $Out "temporary-$([Guid]::NewGuid().ToString('N')).txt"
-    $shell = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', '[IO.Path]::GetTempPath()' -UseNewEnvironment -PassThru -NoNewWindow -RedirectStandardOutput $file
+    $shell = Start-NewShell 'a new shell asked for its temporary folder' '[IO.Path]::GetTempPath()' $file
     $null = $shell.Handle
     if (-not $shell.WaitForExit(60000)) { Stop-Process -Id $shell.Id -Force -ErrorAction SilentlyContinue; Fail 'a new shell asked for its temporary folder did not end within 60 s' }
     $said = ((Get-Content -LiteralPath $file -Raw) + '').Trim().TrimEnd('\')
@@ -755,7 +812,7 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     foreach ($place in @([Environment]::GetFolderPath('StartMenu'), [Environment]::GetFolderPath('Desktop'))) {
         foreach ($link in @(Get-ChildItem -LiteralPath $place -Recurse -Filter 'Jason*.lnk' -ErrorAction SilentlyContinue)) { $lines.Add("shortcut`t$($link.FullName)") }
     }
-    foreach ($process in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -match '(?i)\\jason[^\\]*\\|\\jason(\.exe)?$|\\Jason\.exe$' })) { $lines.Add("process`t$($process.ExecutablePath)") }
+    foreach ($process in @(Get-EveryProcess | Where-Object { $_.ExecutablePath -match '(?i)\\jason[^\\]*\\|\\jason(\.exe)?$|\\Jason\.exe$' })) { $lines.Add("process`t$($process.ExecutablePath)") }
     $sorted = @($lines | Sort-Object -Unique)
     Set-Content -LiteralPath $file -Value $sorted
     if ($Quiet) { return }
@@ -1679,7 +1736,7 @@ switch ($Step) {
         $file = Join-Path $Out 'uninstall-terminal.json'
         $probe = "jason uninstall --purge-data --yes | Set-Content -LiteralPath '$file'; exit `$LASTEXITCODE"
         # The shell's own process is waited for, not what it started: the waiter jason uninstall leaves outlives it by design.
-        $verb = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -PassThru -NoNewWindow
+        $verb = Start-NewShell 'a new shell running jason uninstall' $probe
         $null = $verb.Handle
         if (-not $verb.WaitForExit(300000)) { Write-JasonProcesses; Fail 'jason uninstall in a new shell did not end within 300 s' }
         Get-Content -LiteralPath $file | ForEach-Object { Write-Host $_ }
@@ -1694,7 +1751,7 @@ switch ($Step) {
         $asked = $null
         $started = Get-Date
         while (((Get-Date) - $started).TotalSeconds -lt 150 -and (Test-Path -LiteralPath $app)) {
-            foreach ($run in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' })) {
+            foreach ($run in @(Get-EveryProcess | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' })) {
                 $id = [int] $run.ProcessId
                 if (-not $runs.ContainsKey($id)) {
                     $handle = Get-Process -Id $id -ErrorAction SilentlyContinue
@@ -1716,7 +1773,7 @@ switch ($Step) {
         if ($asked) {
             Write-JasonProcesses
             Write-ProcessWindows $asked.Id
-            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Id) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
+            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Id, $readSeconds * 1000) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
             Fail-Held "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; '); its text: $($text -join ' / ')"
             Stop-Process -Id $asked.Id -Force -ErrorAction SilentlyContinue
             Wait-Until { -not (Get-Process -Id $asked.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
@@ -1896,6 +1953,7 @@ switch ($Step) {
             $said = "$name - " + $(if ($watched.Ended) { "the setup ended after $($watched.Seconds) s, exit $($watched.Exit)" } else { "the setup had not ended after $($watched.Seconds) s" }) + ", the application $(Read-Version $carried)"
             Say $said
             if ($watched.Windows.Count -gt 0) { $failures.Add("$name showed a window: $($watched.Windows -join '; ')") }
+            if ($watched.Overran.Count -gt 0) { $failures.Add("$name was not watched throughout, so that it showed no window is not proved: $($watched.Overran -join '; ')") }
             if (-not $watched.Ended) { $failures.Add("$name did not end within 150 s") }
             elseif ($expected -notcontains $watched.Exit) { $failures.Add("$name exited $($watched.Exit), not $($expected -join ' or ')") }
             return $watched
@@ -2062,8 +2120,8 @@ switch ($Step) {
             $waiterLine = "Wait-Process -Id $($verb.Id) -Timeout 600;"
             $until = (Get-Date).AddSeconds(120)
             do {
-                $waiters = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'powershell.exe' -and "$($_.CommandLine)".Contains($waiterLine) })
-                Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                $waiters = @(Get-EveryProcess | Where-Object { $_.Name -ceq 'powershell.exe' -and "$($_.CommandLine)".Contains($waiterLine) })
+                Get-EveryProcess | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
                 if ($waiters.Count -gt 0) { Start-Sleep -Milliseconds 500 }
             } while ($waiters.Count -gt 0 -and (Get-Date) -lt $until)
             Say "the leg proved nothing; the window was closed and the waiter $(if ($waiters.Count -gt 0) { 'still runs after 120 s' } else { 'has ended' }), every uninstaller run it showed ended, before it fails"
@@ -2072,13 +2130,13 @@ switch ($Step) {
         $shown = $null
         $until = (Get-Date).AddSeconds(150)
         while ((Get-Date) -lt $until -and -not $shown) {
-            $copies = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' })
+            $copies = @(Get-EveryProcess | Where-Object { $_.Name -ceq 'Uninstall Jason.exe' -and $_.CommandLine -notmatch '(^|\s)/S(\s|$)' })
             foreach ($copy in $copies) { $windows = @(Get-VisibleWindows @([int] $copy.ProcessId)); if ($windows.Count -gt 0) { $shown = @{ Process = $copy; Windows = $windows } } }
             if (-not $shown) { Start-Sleep -Milliseconds 500 }
         }
         if (-not $shown) {
             Write-Host 'every uninstaller process now:'
-            Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' } | ForEach-Object { Write-Host "  $($_.ProcessId), started by $($_.ParentProcessId): $($_.CommandLine)" }
+            Get-EveryProcess -OrSay | Where-Object { $_.Name -like 'Uninstall*' -or $_.Name -like 'Un_*' -or $_.Name -ceq 'powershell.exe' } | ForEach-Object { Write-Host "  $($_.ProcessId), started by $($_.ParentProcessId): $($_.CommandLine)" }
             Fail 'no uninstaller run without /S showed a window within 150 s of jason uninstall ending'
         }
         Say "the waiter ran the uninstaller once more without /S (process $($shown.Process.ProcessId)), and it showed: $($shown.Windows -join '; ')"

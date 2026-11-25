@@ -487,9 +487,9 @@ public partial class InstallScriptTests
         var helpers = 0;
         for (var at = 0; at < lines.Length; at++)
         {
-            if (!Regex.IsMatch(lines[at], @"\bStart-Process (?:pwsh|python)\b")) continue;
+            if (!Regex.IsMatch(lines[at], @"\bStart-Process (?:pwsh|python)\b|^(?!function ).*\bStart-NewShell\b")) continue;
             helpers++;
-            var started = Regex.Match(lines[at], @"^\s*\$(?<name>\w+) = Start-Process ");
+            var started = Regex.Match(lines[at], @"^\s*\$(?<name>\w+) = Start-(?:Process|NewShell) ");
             if (!started.Success) { wrong.Add($"line {at + 1} starts a helper and keeps no process to record or wait for: {lines[at].Trim()}"); continue; }
             var name = started.Groups["name"].Value;
             var next = at + 1 < lines.Length ? lines[at + 1] : string.Empty;
@@ -679,6 +679,117 @@ public partial class InstallScriptTests
         block = block[..(block.IndexOf("\n    }\n", StringComparison.Ordinal) + 1)];
         Assert.True(block.Contains("Stop-Process -Id $process.Id", StringComparison.Ordinal), "Watch-Setup ends the setup outside the block for a setup that did not end");
     }
+
+    /// <summary>
+    /// No reading the Windows proof makes of the whole process table, and no new shell it starts, can hang or fail unnamed.
+    /// Every whole reading of <c>Win32_Process</c> carries its own bound, and every shell given a new environment is started
+    /// by one helper. That helper, run as the proof runs it, tries a start again only where it failed with "The operation
+    /// completed successfully", which says no process was started, at most three in all, and throws by its place anything
+    /// else. The setup's watcher, run as the proof runs it over a program that ends by itself, its first reading of the
+    /// table overrunning its bound, says the call, goes on to the program's end and exit code, and gives the overrun in its
+    /// result, which fails the leg; and a description of a failure whose reading overruns still lets the failure through.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_bounds_its_readings_and_tries_a_new_shell_again_only_where_none_was_started()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's helpers run in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var whole = Regex.Matches(script, @"Get-CimInstance -ClassName Win32_Process(?! -Filter)(?<rest>[^\n]*)");
+        Assert.NotEmpty(whole);
+        Assert.All(whole, read => Assert.StartsWith(" -OperationTimeoutSec ", read.Groups["rest"].Value, StringComparison.Ordinal));
+        var helper = WindowsProofFunction(script, "Start-NewShell(");
+        Assert.Contains("UseNewEnvironment = $true", helper, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^[^#\n]*-UseNewEnvironment", script);
+        Assert.Contains("if ($watched.Overran.Count -gt 0) { $failures.Add(", script, StringComparison.Ordinal);
+
+        using var tree = new TempTree();
+        var setup = Path.Combine(tree.Root, "setup.exe");
+        File.WriteAllBytes(setup, UninstallerRunStandIn.Value);
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, ReadingsHarness
+            .Replace("@SETUP@", "'" + setup.Replace("'", "''", StringComparison.Ordinal) + "'", StringComparison.Ordinal)
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", helper + WindowsProofFunction(script, "Get-EveryProcess(") + WindowsProofFunction(script, "Write-ProcessTree(") + WindowsProofFunction(script, "Watch-Setup("), StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        string Line(string label) => said.FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
+        Assert.True(Line("twice error 0") == "started, 3 tries", $"a start that failed twice with error 0 was not made the third time:{output}");
+        Assert.True(Line("always error 0").StartsWith("a place could not be started, try 3: ", StringComparison.Ordinal) && Line("always error 0").EndsWith(", 3 tries", StringComparison.Ordinal), $"a start that always fails with error 0 was not given up by its place after three tries:{output}");
+        Assert.True(Line("another error") == "a place could not be started, try 1: This command cannot be run due to the error: Access is denied., 1 tries", $"a start that failed otherwise was tried again, or lost its words:{output}");
+        Assert.True(Line("another kind of error 0").EndsWith(", 1 tries", StringComparison.Ordinal), $"a failure of another kind with the same words was tried again:{output}");
+        Assert.True(Line("a reading").StartsWith("TimeoutException: Get-CimInstance Win32_Process, the whole process table, had not returned after ", StringComparison.Ordinal), $"a reading that overran is not named:{output}");
+        Assert.True(Line("a reading refused at once") == "CimException: refused", $"a reading that failed at once was taken for an overrun:{output}");
+        Assert.True(Line("a description") == "0 processes", $"a description whose reading overran did not go on:{output}");
+        Assert.True(Line("the watch") == "ended True, exit 7, 1 overran, its window seen", $"the watch did not go on after a look that overran, or lost it:{output}");
+        Assert.True(Line("the watch at its bound") == "ended False, overran True, the setup ended", $"a watch whose every look overran did not end at its bound, ending the setup:{output}");
+        Assert.Contains("  a look at the setup overran, ", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pwsh the readings' row runs: the settings lines of the proof's own prelude, a bound of one second, stand-ins for
+    /// what starts a process, reads the table and reads windows, and the proof's own helpers. One line per finding, its
+    /// label and what was seen, apart by a colon. The setup watched is a program with no window that sleeps and exits.
+    /// </summary>
+    private const string ReadingsHarness = """
+        @PRELUDE@
+        $readSeconds = 1
+        $app = 'C:\no-such-folder'
+        function Say([string] $line) { Write-Host $line }
+        function Write-ProcessWindows([int] $id) { throw [TimeoutException]::new('EnumWindows had not returned') }
+        function Get-VisibleWindows([int[]] $ids) { 'a window' }
+        $script:overruns = 0
+        function Get-CimInstance([string] $ClassName, [int] $OperationTimeoutSec) {
+            if ($script:overruns -le 0) { return CimCmdlets\Get-CimInstance -ClassName $ClassName -OperationTimeoutSec 30 }
+            $script:overruns--
+            if ($OperationTimeoutSec -le 0) { throw 'a reading of no bound' }
+            Start-Sleep -Milliseconds ($OperationTimeoutSec * 1000 + 100)
+            throw [Microsoft.Management.Infrastructure.CimException]::new('Timed out')
+        }
+
+        @FUNCTIONS@
+
+        function Try-Start([string] $label, [scriptblock] $stub) {
+            $script:tries = 0
+            Set-Item -Path function:script:Start-Process -Value $stub
+            $seen = try { $null = Start-NewShell 'a place' 'exit 0'; 'started' } catch { $_.Exception.Message }
+            Remove-Item -Path function:Start-Process
+            [Console]::Out.WriteLine("${label}: $seen, $script:tries tries")
+        }
+        $zero = 'This command cannot be run due to the error: ' + [System.ComponentModel.Win32Exception]::new(0).Message
+        Try-Start 'twice error 0' { $script:tries++; if ($script:tries -le 2) { throw [InvalidOperationException]::new($zero) }; 'a process' }
+        Try-Start 'always error 0' { $script:tries++; throw [InvalidOperationException]::new($zero) }
+        Try-Start 'another error' { $script:tries++; throw [InvalidOperationException]::new('This command cannot be run due to the error: Access is denied.') }
+        Try-Start 'another kind of error 0' { $script:tries++; throw [ArgumentException]::new($zero) }
+
+        $script:overruns = 1
+        $seen = try { "$(@(Get-EveryProcess).Count) processes" } catch { "$($_.Exception.GetType().Name): $($_.Exception.Message)" }
+        [Console]::Out.WriteLine("a reading: $seen")
+        $real = (Get-Item -Path function:Get-CimInstance).ScriptBlock
+        Set-Item -Path function:script:Get-CimInstance -Value { throw [Microsoft.Management.Infrastructure.CimException]::new('refused') }
+        $seen = try { "$(@(Get-EveryProcess).Count) processes" } catch { "$($_.Exception.GetType().Name): $($_.Exception.Message)" }
+        [Console]::Out.WriteLine("a reading refused at once: $seen")
+        Set-Item -Path function:script:Get-CimInstance -Value $real
+        $script:overruns = 1
+        [Console]::Out.WriteLine("a description: $(@(Get-EveryProcess -OrSay).Count) processes")
+
+        $script:overruns = 1
+        $watched = Watch-Setup @SETUP@ @('6000', '7') 60
+        [Console]::Out.WriteLine("the watch: ended $($watched.Ended), exit $($watched.Exit), $($watched.Overran.Count) overran, $(if ($watched.Windows -contains 'a window') { 'its window seen' } else { 'no window seen' })")
+        $script:overruns = 1000
+        $watched = Watch-Setup @SETUP@ @('121000', '0') 4
+        $script:overruns = 0
+        Start-Sleep -Seconds 1
+        $left = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $PID" | Where-Object { "$($_.CommandLine)".Contains('121000') })
+        [Console]::Out.WriteLine("the watch at its bound: ended $($watched.Ended), overran $($watched.Overran.Count -gt 0), the setup $(if ($left) { 'still runs' } else { 'ended' })")
+        foreach ($one in $left) { Stop-Process -Id $one.ProcessId -Force -ErrorAction SilentlyContinue }
+        exit 0
+        """;
 
     /// <summary>
     /// The Windows proof reads the machine after an uninstall only once the uninstaller it watched has ended. The uninstaller
