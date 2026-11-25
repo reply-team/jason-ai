@@ -36,9 +36,10 @@ manifest and the checksums and publishes the release at once, with the assets be
 release unless a newer one already is or the version is a release candidate. The pull request is merged into `main` only
 after the publication is checked: the README and every page GitHub shows are read from `main`, so `main` never
 describes a release that is not out, and a release run that fails leaves `main` as it was. The Homebrew tap
-holds the cask alone and moves it to each release on its own schedule (§6). The job that would ask it to bump the cask
-(§6) is switched off, and waits on the cask's own macOS proof: a red proof holds the cask's bump and never the release. A hotfix reaches a release by a shorter way, one pull request into `main` from a branch
-`hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
+holds the cask alone and moves it to the latest release on its own schedule (§6). The job that would ask it to bump the
+cask (§6) is switched off; it would wait on the cask's own macOS proof, so a red proof would hold that ask and never the
+release.
+A hotfix reaches a release by a shorter way, one pull request into `main` from a branch `hotfix/<name>` and no release branch, which [DEVELOPMENT.md](../DEVELOPMENT.md), "A hotfix", describes. The same tag pushed to any other repository that holds the workflow — a fork, a copy — builds what
 it can and publishes nothing: a copy without the signing secrets stops at the macOS and Windows jobs, and one that
 holds them assembles the release and says in one line that it publishes nothing.
 
@@ -415,7 +416,7 @@ not start — which is one of the times you most want to know what the newest ve
 answer, or 1 with an error envelope: `update_feed_unreachable` when nobody answered, `update_feed_invalid` when
 what answered was not a manifest, `update_feed_insecure` when the feed is not an address this build will fetch.
 
-The answer also names `upgrade_command`, the one command that updates this installation: `jason update apply` on
+The answer also names `upgrade_command`, the one command it names for this installation: `jason update apply` on
 Jason's own, and, where a package manager installed it, the command it prints for that manager —
 `brew upgrade jason` for a Homebrew keg, `winget upgrade Reply.Jason` (§6). Under a manager `--human` prints the three
 lines to type, the runtime stopped before the manager's
@@ -537,9 +538,10 @@ registers the manager's own entry, which stays put across its upgrades, rather t
 rest to the manager (§9).
 
 Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. The tap holds
-the cask alone and no formula, and moves the cask to each release on its own schedule. A machine may still have
-Homebrew's older formula installed and linked: it is the command line alone, without Jason Desktop, and the tap no
-longer carries it. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.
+the cask alone and no formula, and moves the cask to the latest release on its own schedule. A machine may still have
+Homebrew's older formula installed and linked: it is the command line alone, without Jason Desktop, and the tap
+carries no newer version of that formula. With a cask of the same name beside it, the formula's commands name it:
+`brew uninstall --formula jason`.
 
 On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the tap moves it to a new
 release within hours of its publication:
@@ -637,8 +639,9 @@ jason runtime start
 ```
 
 — or `winget upgrade Reply.Jason` in the middle on Windows. The middle line is what `jason update check` names for a
-Homebrew keg; the tap no longer carries the formula, so a keg reaches a current Jason by the three lines of §6, "Through
-a package manager". The runtime is stopped first because the manager knows nothing about it. On Windows, winget cannot remove the executable a running runtime holds: its upgrade fails and leaves
+Homebrew keg; the tap no longer carries the formula, so a keg reaches a current Jason by the lines of §6 ("Through
+a package manager") that begin with `jason uninstall`. The runtime is stopped first because the manager knows nothing
+about it. On Windows, winget cannot remove the executable a running runtime holds: its upgrade fails and leaves
 the old version in place. With the runtime stopped, the same upgrade replaces it and keeps the uninstall entry, its
 install location and the package directory as they were. Homebrew replaces the image behind a running runtime and
 deletes the old keg, and a running runtime starts every plugin host from its own image, so provider work fails at launch
