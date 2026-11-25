@@ -135,8 +135,8 @@ public class SendProbeIndexMigrationTests
     /// <summary>
     /// The hot reads that ask which items name a send seek the index by the send, the campaign and the operation, for each
     /// take-back and read they look for: the claim's count of touches, the line's root, the people page's touches, the line
-    /// root's question of a take-back, the hold's reading of Jason's own move, the read of the sends a provider holds and
-    /// the reads of sends the runtime made.
+    /// root's question of a take-back, the hold's reading of Jason's own move, the read of the sends a provider holds, the
+    /// same read of one of them and the reads of sends the runtime made.
     /// They take the index only because the probe compares with the send's id stripped of its column's affinity by the unary
     /// plus, which <see cref="Without_the_unary_plus_the_index_is_not_taken"/> shows.
     /// </summary>
@@ -200,6 +200,12 @@ public class SendProbeIndexMigrationTests
             Bind(
                 HeldSends.Sql, "'[\"message.send\"]'", "'2026-11-24T00:00:00Z'", "'message.cancel'", "'message.status'", "'[]'", "'[]'", "'[]'", "1",
                 "NULL", "'to_come'", "NULL", "NULL", "NULL")
+        },
+        {
+            "one held send",
+            Bind(
+                HeldSends.OneSendSql, "'[\"message.send\"]'", "'2026-11-24T00:00:00Z'", "'message.cancel'", "'message.status'", "'[]'", "'[]'", "'[]'", "1",
+                "NULL", "'passed'", "NULL", "'wi_1'", "NULL")
         },
     };
 
