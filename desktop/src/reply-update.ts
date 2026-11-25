@@ -36,9 +36,10 @@ function switchValue(value: unknown): boolean | null {
 
 /**
  * Pure: `Update:CheckEnabled` as the desktop reads it, from its own environment and the installation's settings file's text,
- * null where there is no file. The variable wins over the file, as the runtime adds its variables after its settings file;
- * neither is on, the runtime's default. A file that does not parse, a value that is not a switch, or two that differ is
- * `unread`, whatever else is said. A variable set only for a runtime started elsewhere is not in this environment.
+ * null where there is no file. False in either place turns the update off: a variable that says true does not turn on what
+ * the file turned off, though the runtime's own configuration would take the variable. Neither is on, the runtime's default.
+ * A file that does not parse, or a value in either place that is not a switch, is `unread`, whatever else is said. A
+ * variable set only for a runtime started elsewhere is not in this environment.
  */
 export function updateSwitch(env: Readonly<Record<string, string | undefined>>, text: string | null): UpdateSwitch {
     let inFile: unknown[];
@@ -50,10 +51,9 @@ export function updateSwitch(env: Readonly<Record<string, string | undefined>>, 
     const inEnvironment = Object.entries(env)
         .filter(([name, value]) => value !== undefined && name.toLowerCase().startsWith(variablePrefix) && name.slice(variablePrefix.length).replaceAll('__', ':').toLowerCase() === switchPath)
         .map(([, value]) => value);
-    const said = (inEnvironment.length > 0 ? inEnvironment : inFile).map(switchValue);
-    if (said.length === 0) return 'on';
-    if (said.some((each) => each === null || each !== said[0])) return 'unread';
-    return said[0] === true ? 'on' : 'off';
+    const said = [...inEnvironment, ...inFile].map(switchValue);
+    if (said.includes(null)) return 'unread';
+    return said.includes(false) ? 'off' : 'on';
 }
 
 /** The switch as it stands now; a settings file that is there and cannot be read is `unread`. */

@@ -623,9 +623,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   which was installed another way and is updated that way. A missing Reply CLI is never installed without a click: where npm
   is missing too, the card says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
-  installation's settings file and in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`, which wins over the
-  file. A variable set only for a runtime started elsewhere is not seen by it. A settings file that Jason Desktop cannot
-  parse, one with comments or trailing commas, which the runtime reads, among them, runs no update and uses up no try.
+  installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
+  turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A settings
+  file that Jason Desktop cannot parse, one with comments or trailing commas, which the runtime reads, among them, runs no
+  update and uses up no try.
   **Add account** offers
   Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
   daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when

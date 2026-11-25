@@ -1352,9 +1352,12 @@ test('Update:CheckEnabled false in the settings file or in the desktop’s own e
         assert.deepEqual(s.ran, [], 'nothing is asked of any program');
         assert.equal(s.kept().replyUpdateTried, undefined);
     }
-    // The variable wins over the file, in both directions.
-    const on = startUpdate(t, { installation: off, environment: { jason_update__checkenabled: 'TRUE' } });
-    assert.equal(await on.setup.updateReplyAtStart(), 'updated');
+    // False in either place turns it off: what the other says does not turn it on again, in both directions.
+    const fileOff = startUpdate(t, { installation: off, environment: { jason_update__checkenabled: 'TRUE' } });
+    assert.equal(await fileOff.setup.updateReplyAtStart(), 'off');
+    assert.deepEqual(fileOff.ran, []);
+    const bothOn = startUpdate(t, { installation: { Update: { CheckEnabled: true } }, environment: { JASON_Update__CheckEnabled: 'true' } });
+    assert.equal(await bothOn.setup.updateReplyAtStart(), 'updated');
     const turnedOff = startUpdate(t, { installation: { Update: { CheckEnabled: true } }, environment: { JASON_UPDATE__CHECKENABLED: 'False' } });
     assert.equal(await turnedOff.setup.updateReplyAtStart(), 'off');
 });
@@ -1383,13 +1386,16 @@ test('the switch is read as the runtime binds it: any case, nested or joined by 
     assert.equal(file({ 'Update:CheckEnabled': false }), 'off');
     assert.equal(file({ Update: { CheckEnabled: true } }), 'on');
     for (const odd of [0, 'no', null, {}, []]) assert.equal(file({ Update: { CheckEnabled: odd } }), 'unread', JSON.stringify(odd));
-    assert.equal(file({ Update: { CheckEnabled: true }, update: { checkEnabled: false } }), 'unread');
+    assert.equal(file({ Update: { CheckEnabled: true }, update: { checkEnabled: false } }), 'off');
     const variable = (name: string, value: string) => updateSwitch({ [name]: value }, null);
     assert.equal(variable('JASON_Update__CheckEnabled', ' false '), 'off');
     assert.equal(variable('JASON_Update:CheckEnabled', 'false'), 'off');
     assert.equal(variable('Update__CheckEnabled', 'false'), 'on');
     assert.equal(variable('JASON_Update__CheckEnabled', '0'), 'unread');
-    assert.equal(updateSwitch({ JASON_Update__CheckEnabled: 'true', JASON_UPDATE__CHECKENABLED: 'false' }, null), 'unread');
+    assert.equal(updateSwitch({ JASON_Update__CheckEnabled: 'true', JASON_UPDATE__CHECKENABLED: 'false' }, null), 'off');
+    // A value in one place that is not a switch runs nothing, whatever the other says.
+    assert.equal(updateSwitch({ JASON_Update__CheckEnabled: 'true' }, '{"Update": {"CheckEnabled": "maybe"}}'), 'unread');
+    assert.equal(updateSwitch({ JASON_Update__CheckEnabled: 'maybe' }, '{"Update": {"CheckEnabled": true}}'), 'unread');
 
     // A file that is there and cannot be read is not a missing one.
     const b = bench(t);

@@ -135,9 +135,9 @@ The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the 
 that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. An installed one below
 it is updated once a Live start, in the queue the clicks wait in and by their one npm line (`Setup.updateReplyAtStart`,
 `src/reply-update.ts`), after the machine set-up's runs have ended. `Update:CheckEnabled` is read for it by
-`updateSwitch`, in the installation's settings file and in this process's own environment, the variable first, as the
-runtime orders them; a variable set only for a runtime started elsewhere is not seen, and a file that does not parse runs
-nothing and writes no mark. The mark of the minimum tried (`reply_update_tried` in the desktop's settings) is written
+`updateSwitch`, in the installation's settings file and in this process's own environment, and `false` in either turns the
+update off; a variable set only for a runtime started elsewhere is not seen, and a file that does not parse runs nothing
+and writes no mark. The mark of the minimum tried (`reply_update_tried` in the desktop's settings) is written
 before npm starts and taken away on success. Once npm succeeded, on the click and at the start alike, the plugins are reloaded,
 and at the start the version the runtime found is read back from `jason plugin list`. npm's first line goes to the card
 (`startUpdate` in the setup state, in memory for this run) and never to the log. What the CLI prints
