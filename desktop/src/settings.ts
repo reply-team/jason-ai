@@ -39,6 +39,12 @@ export interface DesktopSettings {
      * Absent otherwise.
      */
     rolesProfilePending?: RolesMark;
+    /**
+     * The oldest Reply CLI the desktop asked for when it last tried, at a start, to update an older one
+     * (`Setup.updateReplyAtStart`): written before npm starts and taken away once the update succeeded, so a start tries once
+     * for each minimum. Absent where no try stands.
+     */
+    replyUpdateTried?: string;
 }
 
 /** The desktop's mark of a profile it is making for the agents' roles. */
@@ -49,6 +55,8 @@ export interface RolesMark {
 
 /** A profile name as the runtime takes one. */
 const profileName = /^[a-z][a-z0-9-]{0,63}$/;
+/** A version as the Reply CLI's minimum is written. */
+const plainVersion = /^[0-9]{1,6}[.][0-9]{1,6}[.][0-9]{1,6}$/;
 /** A public id as the runtime writes one: a lowercase prefix, an underscore and a ULID. */
 const publicId = /^[a-z]{2,8}_[0-9A-HJKMNP-TV-Z]{26}$/;
 
@@ -86,7 +94,7 @@ export function parseSettings(text: string | null): DesktopSettings {
     } catch {
         return { ...defaultSettings };
     }
-    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown; roles_profile_pending?: unknown };
+    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown; roles_profile_pending?: unknown; reply_update_tried?: unknown };
     const mark = rolesMarkOf(value.roles_profile_pending);
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
@@ -94,6 +102,7 @@ export function parseSettings(text: string | null): DesktopSettings {
         theme: isTheme(value.theme) ? value.theme : null,
         ...(typeof value.daily_trends === 'boolean' ? { dailyTrends: value.daily_trends } : {}),
         ...(mark === null ? {} : { rolesProfilePending: mark }),
+        ...(typeof value.reply_update_tried === 'string' && plainVersion.test(value.reply_update_tried) ? { replyUpdateTried: value.reply_update_tried } : {}),
         ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
@@ -128,9 +137,16 @@ export function writeSettings(file: string, settings: DesktopSettings): void {
     if (settings.openIn !== undefined) body.open_in = settings.openIn;
     if (settings.dailyTrends !== undefined) body.daily_trends = settings.dailyTrends;
     if (settings.rolesProfilePending !== undefined) body.roles_profile_pending = { ...settings.rolesProfilePending };
+    if (settings.replyUpdateTried !== undefined) body.reply_update_tried = settings.replyUpdateTried;
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);
+}
+
+/** Writes the settings and only then has them held: ones that could not be written are not what the desktop goes on with. */
+export function saveSettings(file: string, next: DesktopSettings, hold: (kept: DesktopSettings) => void): void {
+    writeSettings(file, next);
+    hold(next);
 }
 
 /**

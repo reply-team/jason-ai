@@ -54,8 +54,9 @@ import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyDailyTrends, keptDailyTrends, readSettings, saveSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
+import { replyUpdateAtStart } from './reply-update.ts';
 import { Setup } from './setup.ts';
 import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
@@ -662,10 +663,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         deb: form?.form === 'deb',
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
-        saveSettings: (next) => {
-            settings = next;
-            writeSettings(paths.settings, next);
-        },
+        saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
+        // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
+        environment: process.env,
         models,
         bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
@@ -834,10 +834,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                             bundleVersion: version,
                             gate: skillsGate,
                             settings,
-                            saveSettings(next) {
-                                settings = next;
-                                writeSettings(paths.settings, next);
-                            },
+                            saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
                         }),
                     machineSetup,
                     () => showStarting(window, finishWaitSentence, false),
@@ -887,6 +884,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
         log.info('window_loaded', { Origin: started.origin });
         roles.atStart();
+        // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
+        replyUpdateAtStart(runOn.mode, {
+            setUp: async () => {
+                await machineSetup?.settled();
+                await machineSetup?.afterLive();
+            },
+            update: () => setup.updateReplyAtStart(),
+            failed: () => log.warn('reply_start_update', { Outcome: 'failed' }),
+        });
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();

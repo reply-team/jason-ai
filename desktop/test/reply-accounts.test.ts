@@ -99,6 +99,7 @@ function harness(
         ...(options.open === null ? {} : { openLink: options.open ?? ((link: string) => (opened.push(link), Promise.resolve())) }),
         ...(options.copy === null ? {} : { copyLink: (link: string) => void copied.push(link) }),
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
+        environment: {},
         log: options.log ?? log,
         bundleVersion: '0.37.0',
         runtimeVersion: () => '0.37.0',

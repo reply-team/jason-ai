@@ -997,13 +997,19 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     // Only a CLI that is missing is said: the version of one that is there is nothing a person acts on.
     const cli = state.cli.found
         ? null
-        : html`<span class="meta">The Reply CLI was not found.</span> ${
-                  state.cli.install
-                      ? html`<button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
-                            Install
-                        </button>`
-                      : null
-              }`;
+        : state.cli.install
+          ? html`<span class="meta">The Reply CLI was not found.</span>
+                <button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
+                    Install
+                </button>`
+          : // Nothing installs it from here where npm is missing too: what to install, and from where, is said instead.
+            html`<div class="meta">
+                The Reply CLI was not found. It is a Node.js program installed with npm, and npm was not found on this
+                computer. Install Node.js from nodejs.org, which brings npm, then quit Jason and open it again: this
+                card will offer to install the Reply CLI.
+            </div>`;
+    // What came of the update the desktop made at its start: its own sentence, and npm's words in it, as text.
+    const startUpdate = typeof state.startUpdate === 'string' ? state.startUpdate : null;
     return html`<div class="card reply-card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="bd">
             <div class="reply-top">
@@ -1017,6 +1023,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                 ${state.cli.found ? html`<button class="${state.signedIn ? 'btn' : 'btn p'}" type="button" ${real} ${act('connect.reply')}>Sign in with Reply</button>` : null}
             </div>
             ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
+            ${startUpdate === null ? null : html`<div class="setrow start-update" role="note"><div class="grow meta">${startUpdate}</div></div>`}
             ${
                 state.cli.found && below !== null
                     ? html`<div class="setrow below-minimum">

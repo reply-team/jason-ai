@@ -720,6 +720,87 @@ describe('the Reply card, its acts', () => {
         expect(within(card.querySelector<HTMLElement>('.below-minimum')!).queryAllByRole('button')).toEqual([]);
     });
 
+    it('with neither the Reply CLI nor npm, says what to install, where, and what to do after, as text alone', async () => {
+        renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                cli: { found: false, version: null, install: null },
+                signedIn: false,
+                user: null,
+                accounts: [],
+            },
+        });
+        const card = replyCard(await openConnect());
+        const row = within(card)
+            .getByText(/The Reply CLI was not found[.]/)
+            .closest<HTMLElement>('.setrow')!;
+        expect(words(row)).toBe(
+            'The Reply CLI was not found. It is a Node.js program installed with npm, and npm was not found on this ' +
+                'computer. Install Node.js from nodejs.org, which brings npm, then quit Jason and open it again: this ' +
+                'card will offer to install the Reply CLI.',
+        );
+        expect(row.querySelectorAll('a, button')).toHaveLength(0);
+    });
+
+    it('with npm there and no Reply CLI, says it was not found and offers Install', async () => {
+        renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                cli: { found: false, version: null, install: 'reply' },
+                signedIn: false,
+                user: null,
+                accounts: [],
+            },
+        });
+        const card = replyCard(await openConnect());
+        const row = within(card)
+            .getByText(/The Reply CLI was not found[.]/)
+            .closest<HTMLElement>('.setrow')!;
+        expect(words(row)).toBe('The Reply CLI was not found. Install');
+    });
+
+    it('says what came of the update at the start in one line, as text, and nothing where the desktop says nothing', async () => {
+        const updated = 'Jason updated the Reply CLI to 0.24.0 when it started.';
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, startUpdate: updated } });
+        const outcomes = (card: HTMLElement) => Array.from(card.querySelectorAll('.start-update'), words);
+        expect(outcomes(replyCard(await openConnect()))).toEqual([updated]);
+        cleanup();
+        const failed = `Jason tried to update the Reply CLI when it started and could not: ${hostile}.`;
+        const desktop = renderConnect({
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                cli: { found: true, version: '0.21.0', install: 'reply' },
+                accounts: [],
+                belowMinimum: 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.',
+                startUpdate: failed,
+            },
+        });
+        const card = replyCard(await openConnect());
+        expect(outcomes(card)).toEqual([failed]);
+        expect(card.querySelector('img')).toBeNull();
+        // The update stays the person's to press, under the line.
+        const below = card.querySelector<HTMLElement>('.below-minimum')!;
+        expect(
+            card.querySelector('.start-update')!.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        fireEvent.click(within(below).getByRole('button', { name: 'Update' }));
+        await waitFor(() =>
+            expect(desktop.calls.filter((call) => call.name === 'setup.installProgram')).toEqual([
+                { name: 'setup.installProgram', args: ['reply'] },
+            ]),
+        );
+        cleanup();
+        // A desktop with nothing to say, and one of an earlier version, which has no such field.
+        for (const reply of [{ ...setupFound.reply, startUpdate: null }, setupFound.reply]) {
+            renderConnect({ ...setupFound, reply });
+            expect(outcomes(replyCard(await openConnect()))).toEqual([]);
+            cleanup();
+        }
+    });
+
     it('turns every act off while one is being asked for, and on again once it answers', async () => {
         const desktop = renderConnect(
             withAccounts([account('14', 'linkedin', 'cookieInvalid'), account('2', 'email', 'disconnected')]),
