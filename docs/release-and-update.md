@@ -1649,7 +1649,8 @@ alive.
 since the LaunchAgent carries `RunAtLoad`, and `enable` waits up to thirty seconds for that runtime's endpoint before it
 starts one itself; on Windows and Linux it is started as `jason runtime start` starts it. The outcome is one sentence on
 stderr, and a start that fails leaves the registration in place. Stopping a runtime today is still `jason runtime stop`,
-and where the runtime is registered the stop says on stderr that it holds until the next logon, which starts it again.
+and where the logon registration starts the runtime of the data directory the stop acted on, the stop says on stderr
+that it holds until the next logon, which starts it again.
 
 **`disable` is recorded as your word.** It writes `<data>/autostart/off.json`, the moment and the version that wrote it,
 so that nothing which turns the start at logon on by default turns it on again; on macOS launchd's own record of the label

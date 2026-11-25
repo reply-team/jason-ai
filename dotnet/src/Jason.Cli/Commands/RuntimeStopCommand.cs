@@ -2,8 +2,11 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Discovery;
+using Jason.Cli.Moving;
 using Jason.Cli.Process;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Commands;
@@ -41,18 +44,38 @@ public static class RuntimeStopCommand
         return exit;
     }
 
-    /// <summary>What a stop a person or an agent asks for says on stderr where the runtime is registered to start at logon.</summary>
+    /// <summary>What a stop a person or an agent asks for says on stderr where the logon registration starts the runtime of the data directory it stopped.</summary>
     internal const string UntilTheNextLogon =
         "It stays stopped until the next logon, which starts it again; `jason runtime autostart disable` stops that.";
 
-    /// <summary>Whether this account has the runtime registered to start at logon, as <c>runtime autostart status</c> reads it; no where that cannot be read.</summary>
+    /// <summary>
+    /// Whether the registration starts the runtime of the data directory this stop acted on, read as <c>runtime autostart
+    /// status</c> reads it; no where that cannot be read: a registration with no line, a data directory that is no path the
+    /// platform reads, or a registration the registrar cannot read. A line that names a data directory is this one's where
+    /// both lead to one folder (<see cref="FolderPaths.SameFolder"/>: a link to this folder starts this folder, and a
+    /// platform that tells cases apart is held to its own rule); a line that names none runs on the default data directory,
+    /// unless the account's own environment names another, so it is this one's only where this one is
+    /// <see cref="JasonPaths.DefaultFolder"/> in the home directory. A registration of another data directory says nothing here.
+    /// </summary>
     private static bool StartsAtLogon(CliEnvironment env)
     {
         try
         {
-            return RuntimeAutostartCommands.Registrar(env).Read().Registered;
+            var state = RuntimeAutostartCommands.Registrar(env).Read();
+            if (!state.Registered || state.Run.Count == 0)
+            {
+                return false;
+            }
+
+            var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run)
+                ?? Path.Combine(InstallationPlaces.Home(env), JasonPaths.DefaultFolder);
+            return FolderPaths.SameFolder(named, env.Paths.Root);
         }
         catch (Autostart.AutostartException)
+        {
+            return false;
+        }
+        catch (Exception unreadable) when (unreadable is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
         }
