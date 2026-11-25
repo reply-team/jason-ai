@@ -44,16 +44,17 @@ public static class RuntimeStopCommand
         return exit;
     }
 
-    /// <summary>What a stop a person or an agent asks for says on stderr where the runtime is registered to start at logon.</summary>
+    /// <summary>What a stop a person or an agent asks for says on stderr where the logon registration starts the runtime of the data directory it stopped.</summary>
     internal const string UntilTheNextLogon =
         "It stays stopped until the next logon, which starts it again; `jason runtime autostart disable` stops that.";
 
     /// <summary>
     /// Whether the registration starts the runtime of the data directory this stop acted on, read as <c>runtime autostart
-    /// status</c> reads it; no where that cannot be read. A line that names a data directory is this one's where it is the
-    /// same folder, compared as the export compares it (<see cref="FolderPaths.Same"/> over <see cref="FolderPaths.Normal"/>:
-    /// the registered text is a path as typed and nothing is followed through links, since a start at logon opens the path
-    /// as written); a line that names none runs on the default data directory, so it is this one's only where this one is
+    /// status</c> reads it; no where that cannot be read: a registration with no line, a data directory that is no path the
+    /// platform reads, or a registration the registrar cannot read. A line that names a data directory is this one's where
+    /// both lead to one folder (<see cref="FolderPaths.SameFolder"/>: a link to this folder starts this folder, and a
+    /// platform that tells cases apart is held to its own rule); a line that names none runs on the default data directory,
+    /// unless the account's own environment names another, so it is this one's only where this one is
     /// <see cref="JasonPaths.DefaultFolder"/> in the home directory. A registration of another data directory says nothing here.
     /// </summary>
     private static bool StartsAtLogon(CliEnvironment env)
@@ -61,16 +62,20 @@ public static class RuntimeStopCommand
         try
         {
             var state = RuntimeAutostartCommands.Registrar(env).Read();
-            if (!state.Registered)
+            if (!state.Registered || state.Run.Count == 0)
             {
                 return false;
             }
 
             var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run)
                 ?? Path.Combine(InstallationPlaces.Home(env), JasonPaths.DefaultFolder);
-            return FolderPaths.Same(FolderPaths.Normal(named), FolderPaths.Normal(env.Paths.Root));
+            return FolderPaths.SameFolder(named, env.Paths.Root);
         }
         catch (Autostart.AutostartException)
+        {
+            return false;
+        }
+        catch (Exception unreadable) when (unreadable is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
         }

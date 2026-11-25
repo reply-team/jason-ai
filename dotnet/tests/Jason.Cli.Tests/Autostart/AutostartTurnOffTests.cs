@@ -318,18 +318,24 @@ public class AutostartTurnOffTests
     }
 
     /// <summary>
-    /// The sentence is said only where the registration starts the runtime of the data directory the stop acted on. The
-    /// old registered row now names this directory, so it keeps its meaning; a line naming none runs on the default
-    /// directory, which a temporary root is not.
+    /// The sentence is said only where the registration starts the runtime of the data directory the stop acted on: one
+    /// naming this directory (spelt as it is, with a separator at its end, or in another case where the platform ignores
+    /// case) does, and one naming another, one naming none while this root is not the default, one with no line and one
+    /// naming a path nothing can read do not.
     /// </summary>
     [Theory]
     [InlineData("none", false)]
     [InlineData("this", true)]
     [InlineData("this-with-separator", true)]
+    [InlineData("this-recased", true)]
     [InlineData("another", false)]
     [InlineData("names-none", false)]
+    [InlineData("empty-line", false)]
+    [InlineData("empty-data-dir", false)]
+    [InlineData("nul-data-dir", false)]
     public async Task A_persons_stop_says_it_holds_until_the_next_logon_where_the_start_at_logon_stands(string registration, bool said)
     {
+        Assert.SkipWhen(registration == "this-recased" && !OperatingSystem.IsWindows(), "Only Windows reads a path without regard to case.");
         using var dir = new TempPaths();
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
         var handler = new FakeHandler(_ =>
@@ -342,6 +348,10 @@ public class AutostartTurnOffTests
         {
             "this" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root],
             "this-with-separator" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root + Path.DirectorySeparatorChar],
+            "this-recased" => [Installed, "runtime", "run", "--data-dir", dir.Paths.Root.ToUpperInvariant()],
+            "empty-line" => [],
+            "empty-data-dir" => [Installed, "runtime", "run", "--data-dir", ""],
+            "nul-data-dir" => [Installed, "runtime", "run", "--data-dir", "a b"],
             "another" => [Installed, "runtime", "run", "--data-dir", Path.Combine(dir.Paths.Root, "other")],
             "names-none" => [Installed, "runtime", "run"],
             _ => null,
@@ -356,6 +366,42 @@ public class AutostartTurnOffTests
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
 
         Assert.Equal(said, error.ToString().Contains(RuntimeStopCommand.UntilTheNextLogon, StringComparison.Ordinal));
+    }
+
+    /// <summary>A registration that names this folder through a link starts that very folder, so the stop says it.</summary>
+    [Fact]
+    public async Task A_stop_says_it_holds_where_the_registration_names_this_data_directory_through_a_link()
+    {
+        using var dir = new TempPaths();
+        var link = dir.Paths.Root + "-link";
+        try
+        {
+            Directory.CreateSymbolicLink(link, dir.Paths.Root);
+        }
+        catch (IOException refused) when (OperatingSystem.IsWindows() && refused.HResult == unchecked((int)0x80070522))
+        {
+            Assert.Skip(Installation.ManagedLayouts.NoLinkPrivilege);
+        }
+
+        try
+        {
+            dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+            var handler = new FakeHandler(_ =>
+            {
+                File.Delete(dir.Paths.DescriptorFile);
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+            });
+            var registrar = new RecordingRegistrar { State = new AutostartState(true, [Installed, "runtime", "run", "--data-dir", link], null) };
+            var (env, _, error) = Machine(dir, registrar, new FakeProcessControl(), handler);
+
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], env, Ct));
+
+            Assert.Contains(RuntimeStopCommand.UntilTheNextLogon, error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
     }
 
     /// <summary>A registration that names no data directory runs on the default one, so a stop of the default one says it.</summary>
