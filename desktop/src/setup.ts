@@ -1279,12 +1279,23 @@ export class Setup {
             if (this.#deps.programs.find('npm') === null) {
                 throw new Refused(`Installing this needs Node.js and npm, which are not on this computer. Install Node.js from ${programInstalls.node?.link}, then try again.`);
             }
-            const result = await this.#npmInstall(programId, install.npmPackage);
-            if (result.exit !== 0) throw new Refused(words(result, `npm ended with code ${result.exit}.`));
+            // A click waits its turn behind the start's update, which may have done what it asks for.
+            if (programId !== 'reply' || !(await this.#replyCurrent())) {
+                const result = await this.#npmInstall(programId, install.npmPackage);
+                if (result.exit !== 0) throw new Refused(words(result, `npm ended with code ${result.exit}.`));
+            }
             const reload = programId === 'reply' ? await this.#reloadPlugins() : null;
             this.#changed();
             if (reload !== null && reload.exit !== 0) throw this.#reloadRefused(reload);
         });
+    }
+
+    /** Whether a Reply CLI is here whose version, read again now, is at the minimum. */
+    async #replyCurrent(): Promise<boolean> {
+        if (this.#deps.programs.find('reply') === null) return false;
+        this.#versions.delete('reply');
+        const version = await this.#replyVersion();
+        return version !== null && versionAtLeast(version, replyMinimumVersion);
     }
 
     /** The one npm line of the desktop: the latest version of one of its own packages, and the version kept of it let go. */

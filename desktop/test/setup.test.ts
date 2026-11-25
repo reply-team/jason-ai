@@ -939,7 +939,7 @@ test('a missing program is installed with npm on a click, and only where npm is 
 
 test('installing or updating the Reply CLI on a click has the runtime read its plugins again; no other program does', async (t) => {
     const reloads = (b: Bench) => b.record().filter((entry) => entry.name === 'jason' && entry.args.join(' ') === 'plugin reload').length;
-    const b = bench(t, { programs: ['npm', 'reply'] });
+    const b = bench(t, { programs: ['npm', 'reply'], env: { STUB_REPLY_VERSION: '0.22.0' } });
     await setupOn(b).installProgram('reply');
     assert.deepEqual(
         b.record().filter((entry) => (entry.name === 'npm' && entry.args[0] === 'install') || (entry.name === 'jason' && entry.args[0] === 'plugin')).map((entry) => [entry.name, ...entry.args].join(' ')),
@@ -952,7 +952,7 @@ test('installing or updating the Reply CLI on a click has the runtime read its p
     assert.equal(reloads(others), 0);
 
     // npm that failed put nothing there to read again.
-    const failed = bench(t, { programs: ['npm', 'reply'] });
+    const failed = bench(t, { programs: ['npm', 'reply'], env: { STUB_REPLY_VERSION: '0.22.0' } });
     const programs: Programs = {
         find: (name) => failed.programs.find(name),
         run: (name, args, options) => (name === 'npm' ? Promise.resolve({ exit: 1, stdout: '', stderr: 'npm error code EACCES' }) : failed.programs.run(name, args, options)),
@@ -1521,11 +1521,55 @@ test('a click and the start never run npm together: the start waits in the queue
     const click = s.setup.installProgram('reply');
     const start = s.setup.updateReplyAtStart();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.deepEqual(s.ran, [installLine], 'the start has asked nothing while the click runs');
+    assert.deepEqual(s.ran, ['reply 0.22.0', installLine], 'the start has asked nothing while the click runs');
     release({ exit: 0, stdout: '', stderr: '' });
     await click;
     assert.equal(await start, 'current');
     assert.equal(npmRuns(s).length, 1);
+});
+
+test('a click made while the start’s update runs is not a second npm: in its turn it finds the CLI at the minimum, and has the runtime read its plugins again', async (t) => {
+    let release = (_: RunResult): void => undefined;
+    const held = new Promise<RunResult>((resolve) => (release = resolve));
+    const s = startUpdate(t, { npm: held });
+    let changed = 0;
+    s.setup.onChanged(() => changed++);
+    const start = s.setup.updateReplyAtStart();
+    const click = s.setup.installProgram('reply');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release({ exit: 0, stdout: '', stderr: '' });
+    assert.equal(await start, 'updated');
+    await click;
+    assert.deepEqual(npmRuns(s), [installLine]);
+    assert.equal(s.ran.filter((each) => each === 'jason plugin reload').length, 2, 'the start’s, and the click’s own');
+    assert.equal(changed, 2, 'the card is drawn again by each');
+
+    // The version is read again, never taken from an earlier read: a CLI put back to an older one since is updated.
+    let version = '0.24.0';
+    const b = bench(t, { programs: ['reply', 'npm'] });
+    const runs: string[] = [];
+    const programs: Programs = {
+        find: (name) => b.programs.find(name),
+        run: (name, args) => {
+            if (name === 'npm') runs.push(args.join(' '));
+            return Promise.resolve({ exit: 0, stdout: name === 'reply' && args[0] === '--version' ? `reply-cli ${version}` : '{}', stderr: '' });
+        },
+    };
+    const setup = new Setup({ ...setupDeps(b), programs });
+    await setup.status();
+    await setup.installProgram('reply');
+    assert.deepEqual(runs, []);
+    version = '0.22.0';
+    await setup.installProgram('reply');
+    assert.deepEqual(runs, ['install -g reply-cli']);
+    version = '';
+    await setup.installProgram('reply');
+    assert.equal(runs.length, 2, 'a CLI that says no version is updated on a click');
+
+    // A missing one is installed as before, with nothing read first.
+    const missing = startUpdate(t, { programs: ['npm'] });
+    await missing.setup.installProgram('reply');
+    assert.deepEqual(missing.ran, [installLine, 'jason plugin reload']);
 });
 
 test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for', async () => {
