@@ -137,10 +137,25 @@ public class SetupTests
     {
         var text = RenderChecks(
             new StatusCheck("plugin_package", false, CheckState.Failed, "a package is behind", null),
-            new StatusCheck("runtime", true, CheckState.Failed, "not running", "jason runtime start"));
+            new StatusCheck("runtime", true, CheckState.Failed, "not running", "jason runtime start"),
+            new StatusCheck("ui_module", false, CheckState.Failed, "a problem", null));
 
         var lines = text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.TrimEnd()).ToArray();
-        Assert.Equal(["To repair:", "  jason runtime start", "  plugin_package: see its line above."], lines[..3]);
+        Assert.Equal(["To repair:", "  jason runtime start", "  plugin_package: see its line above.", "  ui_module: see its line above."], lines.Where(line => line.Length > 0).ToArray());
+    }
+
+    /// <summary>
+    /// A required check that is not ok and has no command is named too, an unknown one included.
+    /// </summary>
+    [Fact]
+    public void Repair_block_names_a_required_unknown_check_with_no_fix()
+    {
+        var text = RenderChecks(
+            new StatusCheck("runtime", true, CheckState.Unknown, "not known", null),
+            new StatusCheck("extra", false, CheckState.Unknown, "not known", null));
+
+        var lines = text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.TrimEnd()).Where(line => line.Length > 0).ToArray();
+        Assert.Equal(["To repair:", "  runtime: see its line above."], lines);
     }
 
     /// <summary>

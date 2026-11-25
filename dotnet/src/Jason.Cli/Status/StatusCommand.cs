@@ -234,10 +234,10 @@ public static class StatusCommand
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        // A failed check with no command of its own is named, so the block never leaves it out in silence: its own
-        // line in the table says what to do.
+        // A failed check, or a required one that is not ok, with no command of its own is named, so the block never
+        // leaves it out in silence: its own line in the table says what was seen.
         var unrepaired = report.Checks
-            .Where(check => check.State == CheckState.Failed && check.Fix is null)
+            .Where(check => check.Fix is null && (check.State == CheckState.Failed || (check.Required && check.State != CheckState.Ok)))
             .Select(check => check.Name)
             .ToList();
 
