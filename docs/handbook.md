@@ -42,9 +42,11 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 >   settings, a single `GET` that identifies only the runtime's version, including its build (`Update:CheckEnabled` set
 >   to `false` turns it off).
 > - **Jason Desktop's look for a newer version**, on Windows, on macOS and from the AppImage: in Live, 30 seconds after it
->   starts and then every six hours, sooner after a failure, it reads this repository's releases on GitHub. It downloads
->   one only on your word. No setting turns the look off. With the deb, the system does it instead: the package adds
->   Jason's apt source, at `get.jasonharness.ai`, and apt reads it on the system's schedule.
+>   starts and then every six hours, sooner after a failure, it reads this repository's releases on GitHub. Each look
+>   also sends an identifier: random, made once for the installation and kept on the machine, the same each time, which
+>   Jason does not use. It downloads a newer version only on your word. No setting turns the look off. With the deb, the
+>   system does it instead: the package adds Jason's apt source, at `get.jasonharness.ai`, and apt reads it on the
+>   system's schedule.
 > - **The first start of a version of Jason Desktop**, in the Demo too, and each start after it until this has
 >   completed: where an installation is there, `jason update apply --finish` reads that version's release and brings the
 >   installed plugin packages, the UI and the skills `jason` has deployed up to it, the skills from the source they were
@@ -73,7 +75,8 @@ The reasoning behind this, and who Jason is for and who it is not for, is in [do
 > operates, which redirects them to this repository's releases; the skills come from this repository's releases on
 > GitHub directly. What that address keeps, and for how long, is in
 > [docs/responsible-use.md](responsible-use.md#update-check-and-downloads). There is no telemetry: no usage data and no
-> crash reports are sent, and the file `jason doctor` writes stays on your machine unless you send it.
+> crash reports are sent. Jason Desktop's updater does send the identifier named above at each look. The file
+> `jason doctor` writes stays on your machine unless you send it.
 
 ## Installing
 
