@@ -19,116 +19,68 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.51.0
+# Jason 0.51.1-rc.1
 
-Jason 0.51 sends a follow-up email the way a person would: as a reply in the thread of the earlier letter that opened it, under
-that letter's subject, so the person finds it in one conversation instead of two. The approval card and the terminal say
-under which letter it will land before you approve it. A letter a provider held for later and then failed or
-cancelled no longer counts as a touch, and Jason now reads a letter held for later after its moment to learn whether it
-went, and tells the campaign's manager about one that did not.
+Jason 0.51.1 is a small release. Where npm is on the computer, Jason Desktop now updates an older Reply CLI to the version
+Jason needs by itself when it starts, so an update of Jason need not leave the Reply plugin waiting for you to run npm. The
+handbook now lists what Jason asks of the network by itself.
 
-**Read this first.** Against a Reply that does not yet offer follow-ups, a follow-up is refused and nothing is sent: it
-never goes as a new letter instead. The refusal is `capability_not_offered`, naming `follows`, and until Reply offers
-a reply in a thread every email follow-up ends that way: to reach the person, propose the message again as a letter of
-its own, with `"follows": "new_thread"`. Once Reply offers it, follow-ups go as replies with nothing to change on your
-side, no update and no restart; a follow-up refused before then stays refused.
+## What is new since 0.51.0
 
-## What is new since 0.50.0
+**The Reply CLI**
 
-**Jason Desktop**
+- **Jason Desktop updates an older Reply CLI when it starts.** Where the Reply CLI installed on your computer is older than
+  Jason needs, the Reply plugin is unavailable and Connect asked you to update it. Jason Desktop now does that once by
+  itself, in the background of a start in Live, with the same npm line as the Update button. It runs nothing
+  where a plugin that runs the Reply CLI is loaded and valid, or where the runtime does not say. The Reply card says in one line what came of it. It tries once for each version Jason
+  comes to need; after that the button is yours. A missing Reply CLI is still installed only on your click, and
+  nothing of this happens in the Demo. `Update:CheckEnabled` set to `false`, in the settings file or in Jason Desktop's own
+  environment, turns it off.
+  [What it does and what turns it off](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md).
+- **The Reply card without npm says what to do.** Where neither the Reply CLI nor npm is found, the card says which program
+  to install, from where, and to open Jason again.
 
-- **A new version shows above Settings in Jason Desktop.** While a version is offered, downloading or ready, a small card above Settings says so and carries the one act of that step: Download, or Restart to install, which asks before it restarts. Not now puts an offered card away until the next start of the application.
+**The pages**
 
-**Follow-ups in the thread of the letter that opened it**
-
-- **A follow-up goes as a reply under the subject of the letter that opened the thread.** Where you do not say otherwise,
-  an email follow-up follows the earlier letter that opened the thread: the latest earlier email to that person in the campaign that went as a letter of its
-  own, held the provider's reference, counted as a touch and was not taken back. Its own subject is not sent; the
-  provider may add a quotation of the earlier letter beneath your approved text.
-- **Say otherwise when you want to.** `"follows": "new_thread"` sends a letter of its own, and a work item's id follows
-  that letter. A follow-up goes as a letter of its own, and the approval says so, where the routed plugin does not offer
-  replies in a thread, where there is no earlier letter to follow, or where the earlier letter went through another
-  account or another mailbox. A LinkedIn message follows nothing.
-- **The approval says where it lands.** The approval card has a "Follows" row, and `jason approval get --human` and
-  `jason workitem get --human` print a `Follows:` line: under which letter the email goes, or that it goes
-  as a new letter and why. The card names that letter's subject; the terminal names the letter's work item. The Subject row
-  says "(not sent)" for a reply.
-- **A follow-up that cannot go says why.** A followed letter that has not gone yet is tried again, and one held longer
-  ends the item `follows_not_sent_yet`, to be proposed again with a later `send_after`. One that will never go ends it
-  `follows_never_sent`; after a read of that letter records it as failed or cancelled it leaves the line, and the message
-  can be proposed again. Nothing is sent in any of these.
-- **The Reply plugin sends it.** The Reply plugin is now 0.20.0 and needs reply-cli 0.23.0 or later; an older reply-cli
-  makes the plugin unavailable. reply-cli is a Node program installed with npm, and the
-  plugin's README says how: [the Reply plugin](https://github.com/reply-team/jason-ai/blob/v{{version}}/plugins/reply/README.md).
-- **The skills say the same.** The manager, the copywriter, the critic and the planners write a follow-up as a reply,
-  the critic judges it against the letter it would land under, and they know what to do with the codes above. A
-  follow-up the provider could not place under its letter is never proposed again as it was: you are asked whether it
-  goes as a letter of its own.
-- **A follow-up never hides an answer.** Jason's own follow-up reaching a thread first does not stop a person's answer
-  there from being read: the answer is never missed because the follow-up got there first.
-- **A follow-up at a mailbox's daily limit.** Where Reply refuses a direct email because the mailbox has reached its
-  daily limit (`contact.dailyLimitReached`), a follow-up is held like any email from that mailbox, with nothing to set
-  up: nothing is sent, the email waits as `provider_blocked`, and every email from that mailbox waits with it until the
-  block clears, at the next midnight UTC at the latest. You are notified of the open block once. A follow-up held for
-  later that Reply could not send at that limit is read as `failed` with the same code and said once as
-  `message_unsent_observed`: nothing went, and the manager proposes it again as it was.
-
-**Letters held for later**
-
-- **A letter that did not go is told.** After a letter's moment, Jason reads it again and again, a limited number of
-  times, until it is known whether it went. It looks back thirty days from a letter's moment and reads only a few at a
-  time in each campaign. A letter the provider failed or cancelled, or still holds seven days
-  past its moment, is said once in the journal as `message_unsent_observed`, and the manager is woken. The manager is
-  told what each state means: a failed letter did not go; an overdue one may still go, so a second letter comes only
-  after cancelling it succeeds; a cancelled one is read against the thread and the person's state first.
-- **A failed or cancelled letter is no touch.** A letter the provider's own read says failed or was cancelled stops
-  counting toward the ceiling of touches, the people list and the choice of the letter a follow-up lands under, unless another read says it went or may have
-  gone (`unknown`).
+- **The handbook lists what Jason asks of the network by itself**: when, and what turns it off where something does. The
+  responsible-use page names the Reply CLI's update and an identifier that Jason Desktop's updater sends with each
+  check. Only the update above is new in what Jason does.
+  [The handbook](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/handbook.md).
+- **The README says first what Jason is and that it installs from a release,** with the walkthrough after Quick start,
+  answers to common questions, a [comparison page](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/comparison.md)
+  and an `llms.txt` for assistants.
+- **The pages and the install script's help say that the Homebrew tap holds the cask alone,** and how an installation
+  that the older formula made moves to Jason Desktop.
 
 **Speed**
 
-- **A large campaign's lists and checks are fast.** An index on the sends a campaign names takes the people list of a
-  campaign of 2,000 people from seconds to milliseconds.
+- **When Jason checks whether one letter held for later went or is overdue, it finds that letter by its own id,** instead
+  of reading through all the finished work of the installation.
 
-## Fixed since 0.50.0
+## Fixed since 0.51.0
 
-- **`jason status` says first that Jason Desktop's first start repairs the plugin package and the UI.** Between the
-  install script's end and that first start, the lines of its `plugin_package` and `ui_module` checks named only
-  `jason plugin install reply --replace` and `jason ui install`; each now names Jason Desktop's start first and the
-  command second.
+- **A click on Update now has the runtime read its plugins again.** The Reply plugin used to keep the CLI version it last
+  found, so the red line stayed after a successful update. Like any reload of plugins, this one also takes up what you
+  edited by hand since the last: routes, grants and packages.
+- **`jason status --human` names a failed check in its "To repair" block** even where the check has no command to run: the
+  line to read, in place of nothing.
+- **`jason runtime stop` says it holds until the next logon only where the logon starts this data directory.** With a
+  second data directory, the sentence was not true for the one you had stopped.
 
-## Upgrading from 0.50.0
+## Upgrading from 0.51.0
 
-- **Updating from 0.50.0.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
+- **Updating from 0.51.0.** On macOS and Windows, Jason Desktop's update item takes this version, and so does
   `jason update apply` in a terminal. On Linux, a deb takes it with the system's own updates, and an AppImage by its own
   update item or `jason update apply`. The first start of this version then sets Jason up again, as after any update.
-- **Update Jason itself, not the package alone.** A runtime older than 0.51.0 refuses the Reply plugin 0.20.0
-  (`argument_invalid`, among the arguments of `message.send`); `jason plugin install reply --replace` puts a matching
-  package back.
-- **The Reply plugin needs reply-cli 0.23.0 or later.** With an older reply-cli the whole Reply plugin is unavailable from the first reload, not only its follow-ups: update reply-cli with npm (`npm install -g reply-cli`) before or right after updating Jason. What a
-  follow-up does against a Reply that does not offer follow-ups yet is said under "Read this first" above.
-- **A letter the history already holds as failed or cancelled, by a provider's read, stops counting as a touch from this
-  release.** A person below the ceiling only by such letters may be written to again by a touch not yet claimed. Nothing
-  already refused comes back by itself.
-- **Right after the update, every send held for later within the last thirty days is read once.** An old one still
-  queued is said overdue at once, so the manager may be woken for many of them in one wave.
-- **Approvals already waiting are asked again only where the letter now goes into a thread.** An approval given
-  before this release is asked again where the follow-up would now go as a reply, and not where it goes as a letter of
-  its own. An approval still waiting from before this release says nothing of where its letter lands;
-  `jason workitem get --human` prints its `Follows:` line once the item is claimed.
-- **This version migrates the database.** Its first start writes a backup under `~/.jason/state/backups/` first, then
-  adds the index. `context.follows` on a `message.send` is now the runtime's own record and is refused when a caller
-  names it.
-- **The journal forwarder is now 1.9.0**, which can forward the new kind and needs Jason 0.51.0 or newer.
-  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release)
-  says how to put back the package an older release published.
-- **Going back.** A runtime refuses a database holding a migration it does not know (`data_newer`), so 0.50.x refuses
-  data that 0.51 has opened.
-  [Going back](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#going-back) says when
-  `jason update rollback` restores the backup the migration took.
+- **An older Reply CLI is updated at that start**, as said above, and the Reply card says what came of it. Without Jason
+  Desktop, or where npm could not, update it by hand with `npm install -g reply-cli`.
+- **This version does not migrate the database.**
 
 ## Known issues
 
+- A click on Update runs npm even where a plugin that runs the Reply CLI is loaded.
+- A quit or a switch of mode while Jason Desktop is updating the Reply CLI is not waited for: the Reply card then offers
+  Update. Where npm itself placed an older version, the card's line says the CLI was installed another way.
 - The daily ceiling of automatic sends still counts its day in UTC, while the daily limits of launches count your
   installation's own day.
 - Your own Claude Code skills, hooks and MCP servers are not loaded in a chat that runs on a key set in Jason, nor in a
