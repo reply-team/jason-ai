@@ -614,20 +614,22 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
   to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. An update, and an
-  install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once.
-  Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in the
-  background, once the runtime is up and the machine set-up has ended, with the npm line Update runs, where the version
-  could be read and is below the one Jason needs and npm is there. It runs only while no plugin that runs the Reply CLI is at
-  work: where the runtime holds one as valid, Reply's or another, or does not say, nothing is run and no try is used up. It tries once for each version Jason comes to need; after
-  that the click is yours, and it is never held back. The card says what came of it, in that run of the application only:
-  that it was updated, that it could not be, with one line of what npm printed, or that the one in use is still the old one,
-  which was installed another way and is updated that way. A missing Reply CLI is never installed without a click: where npm
-  is missing too, the card says so and where Node.js, which brings npm, comes from.
+  install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once; that reload, like any
+  reload of plugins, also takes up what was edited by hand since the last one: routes, grants and packages.
+  Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in
+  the background, once the runtime is up and the machine set-up has ended, with the npm line Update runs, where the
+  version could be read and is below the one Jason needs and npm is there. It runs only while no plugin that runs the
+  Reply CLI is at work: where the runtime holds one as valid, Reply's or another, or does not say, nothing is run and no
+  try is used up. It tries once for each version Jason comes to need; after that the click is yours, and it is never
+  held back. The card says what came of it, in that run of the application only: that it was updated, that it could not
+  be, with one line of what npm printed, or that the one in use is still the old one, which was installed another way
+  and is updated that way. A missing Reply CLI is never installed without a click: where npm is missing too, the card
+  says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
   installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
-  turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A settings
-  file that Jason Desktop cannot parse, one with comments or trailing commas, which the runtime reads, among them, runs no
-  update and uses up no try.
+  turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A
+  settings file that Jason Desktop cannot parse, one with comments or trailing commas, which the runtime reads, among
+  them, runs no update and uses up no try.
   **Add account** offers
   Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
   daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when

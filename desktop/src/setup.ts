@@ -273,7 +273,7 @@ export interface SetupDeps {
      */
     saveSettings?(next: DesktopSettings): void;
     /** The desktop's own environment, where a `JASON_` variable may set the switch of the start's update (`updateSwitch`). */
-    environment?: Readonly<Record<string, string | undefined>>;
+    environment: Readonly<Record<string, string | undefined>>;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -332,7 +332,7 @@ export type RolesOutcome =
     | 'named';
 /** The ends of `connectRoles` that leave it to the next turn: a runtime that did not answer, or no connected host. */
 const unsettling: ReadonlySet<RolesOutcome> = new Set(['settled', 'profiles_unread', 'no_host', 'default_unanswered']);
-const installLimit = 5 * 60_000;
+export const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
     try {
@@ -1307,14 +1307,16 @@ export class Setup {
     }
 
     /**
-     * An installed Reply CLI below the minimum updated with no click, asked once a Live start (`replyUpdateAtStart`), in the
-     * queue the clicks wait in: only where `Update:CheckEnabled` is not turned off as the desktop reads it (`updateSwitch`),
-     * `reply` is found, its version was read and is below the minimum, npm is found, no try of this minimum stands in the
-     * desktop's settings, and no plugin that runs it can be at work (`replyAtWork`). The mark is written before npm starts, and where it cannot be written npm is not run; it is taken
-     * away once the CLI in use is at the minimum, so a minimum is tried once and a click is never held back. A missing CLI is
-     * installed on a click alone. After npm, however it ended, the version is read again, and where npm ended well or that version is at the minimum the runtime is asked to read its plugins again;
-     * what the runtime then says it found is read back, so a CLI updated here and not where the runtime looks is not called
-     * updated. The outcome is one line of the card, in memory for this run; npm's words reach that line alone.
+     * An installed Reply CLI below the minimum updated with no click, asked once a Live start (`replyUpdateAtStart`),
+     * in the queue the clicks wait in: only where `Update:CheckEnabled` is not turned off as the desktop reads it
+     * (`updateSwitch`), `reply` is found, its version was read and is below the minimum, npm is found, no try of this
+     * minimum stands in the desktop's settings, and no plugin that runs it can be at work (`replyAtWork`). The mark is
+     * written before npm starts, and where it cannot be written npm is not run; it is taken away once the CLI in use is
+     * at the minimum, so a minimum is tried once and a click is never held back. A missing CLI is installed on a click
+     * alone. After npm, however it ended, the version is read again, and where npm ended well or that version is at the
+     * minimum the runtime is asked to read its plugins again; what the runtime then says it found is read back, so a
+     * CLI updated here and not where the runtime looks is not called updated. The outcome is one line of the card, in
+     * memory for this run; npm's words reach that line alone.
      */
     updateReplyAtStart(): Promise<StartUpdateOutcome> {
         return this.#serial(async () => {
@@ -1329,7 +1331,7 @@ export class Setup {
         this.#startUpdateLooked = true;
         const npmPackage = programInstalls.reply?.npmPackage ?? null;
         if (npmPackage === null || this.#deps.programs.find('reply') === null) return 'not_found';
-        const asked = readUpdateSwitch(this.#deps.environment ?? {}, dataLayout(this.#deps.paths.data).userSettingsFile);
+        const asked = readUpdateSwitch(this.#deps.environment, dataLayout(this.#deps.paths.data).userSettingsFile);
         if (asked !== 'on') return asked === 'off' ? 'off' : 'switch_unread';
         const before = await this.#replyVersion();
         if (before === null) return 'version_unread';

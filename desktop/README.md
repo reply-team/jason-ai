@@ -132,17 +132,18 @@ servers, providers and profiles with it; it still sets the cached search and `fe
 (`keyedFolder`) in its place, so none of the person's, as a keyed Claude Code turn loads none of theirs.
 
 The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply CLI
-that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. An installed one below
-it is updated once a Live start, in the queue the clicks wait in and by their one npm line (`Setup.updateReplyAtStart`,
-`src/reply-update.ts`), after the machine set-up's runs have ended. `Update:CheckEnabled` is read for it by
-`updateSwitch`, in the installation's settings file and in this process's own environment, and `false` in either turns the
-update off; a variable set only for a runtime started elsewhere is not seen, and a file that does not parse runs nothing
-and writes no mark. Nor is npm run while a plugin the runtime holds as valid requests `reply`, or where `jason plugin list`
-does not say (`replyAtWork`). The mark of the minimum tried (`reply_update_tried` in the desktop's settings) is written
-before npm starts and taken away on success. Once npm succeeded, on the click and at the start alike, or at the start ended badly with the CLI at the minimum, the plugins are reloaded,
-and at the start the version the runtime found is read back from `jason plugin list`. One line of npm's, the one that names its error
-where one does (`npmLine`), goes to the card
-(`startUpdate` in the setup state, in memory for this run) and never to the log. What the CLI prints
+that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. An installed one
+below it is updated once a Live start, in the queue the clicks wait in and by their one npm line
+(`Setup.updateReplyAtStart`, `src/reply-update.ts`), after the machine set-up's runs have ended. `Update:CheckEnabled`
+is read for it by `updateSwitch`, in the installation's settings file and in this process's own environment, and `false`
+in either turns the update off; a variable set only for a runtime started elsewhere is not seen, and a file that does
+not parse runs nothing and writes no mark. Nor is npm run while a plugin the runtime holds as valid requests `reply`, or
+where `jason plugin list` does not say (`replyAtWork`). The mark of the minimum tried (`reply_update_tried` in the
+desktop's settings) is written before npm starts and taken away on success. Once npm succeeded, on the click and at the
+start alike, or at the start ended badly with the CLI at the minimum, the plugins are reloaded, and at the start the
+version the runtime found is read back from `jason plugin list`. One line of npm's, the one that names its error where
+one does (`npmLine`), goes to the card (`startUpdate` in the setup state, in memory for this run) and never to the log.
+What the CLI prints
 and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
 own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link
 the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a

@@ -17,7 +17,7 @@ import { ProviderKeys } from '../src/providers.ts';
 import { npmLine, readUpdateSwitch, replyAtWork, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
-import { Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
+import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
 import {
     bundledPlugin,
     defaultRoutePlugin,
@@ -42,6 +42,7 @@ function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSetting
         cli: loggedCli(b.cli, log),
         programs: b.programs,
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
+        environment: {},
         log,
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
@@ -878,6 +879,7 @@ test('a Claude Code whose version cannot be read is held as below the floor: a n
             },
         },
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
+        environment: {},
         log: memoryLog(),
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => null,
@@ -1197,6 +1199,8 @@ interface StartUpdate {
     ran: string[];
     /** The mark in the desktop's own settings file as npm started. */
     markAtNpm: (string | undefined)[];
+    /** The time limit each npm run was given. */
+    limits: (number | undefined)[];
 }
 
 /**
@@ -1232,11 +1236,13 @@ function startUpdate(
     let reloaded = false;
     const ran: string[] = [];
     const markAtNpm: (string | undefined)[] = [];
+    const limits: (number | undefined)[] = [];
     const answer = (stdout: string): RunResult => ({ exit: 0, stdout, stderr: '' });
     const programs: Programs = {
         find: (name) => b.programs.find(name),
-        run: async (name, args) => {
+        run: async (name, args, runOptions) => {
             if (name === 'npm') {
+                limits.push(runOptions?.timeoutMs);
                 ran.push(['npm', ...args].join(' '));
                 markAtNpm.push(readSettings(b.paths.settings).replyUpdateTried);
                 const result = await (options.npm ?? answer('added 1 package'));
@@ -1279,7 +1285,7 @@ function startUpdate(
             writeSettings(b.paths.settings, next);
         },
     });
-    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm };
+    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm, limits };
 }
 
 /** What `jason plugin list` prints of plugins that each request one program, or none. */
@@ -1304,6 +1310,7 @@ test('the start updates a Reply CLI below the minimum with the click’s own npm
     assert.equal(await s.setup.updateReplyAtStart(), 'updated');
     assert.deepEqual(s.ran, ['reply 0.22.0', 'jason plugin list', installLine, 'reply 0.24.0', 'jason plugin reload', 'jason plugin list']);
     assert.equal(changed, 1, 'the page is asked to read the card again');
+    assert.deepEqual(s.limits, [installLimit], 'npm is stopped at the install’s own time limit');
     assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: 'updated' }]);
 
@@ -1333,6 +1340,11 @@ test('one try for each minimum, whatever came of it: the same one runs nothing a
     const higher = startUpdate(t, { mark: '0.22.0' });
     assert.equal(await higher.setup.updateReplyAtStart(), 'updated');
     assert.deepEqual(higher.markAtNpm, [replyMinimumVersion]);
+
+    // Compared as versions, never as text: a mark above the minimum has been tried, and 0.9.0 is below 0.23.0.
+    for (const [mark, outcome] of [['0.100.0', 'tried'], ['1.0.0', 'tried'], ['0.9.0', 'updated']] as const) {
+        assert.equal(await startUpdate(t, { mark }).setup.updateReplyAtStart(), outcome, mark);
+    }
 
     // The click is never held back by the mark.
     await same.setup.installProgram('reply');
@@ -1442,6 +1454,19 @@ test('Update:CheckEnabled false in the settings file or in the desktop’s own e
     assert.equal(await turnedOff.setup.updateReplyAtStart(), 'off');
 });
 
+test('the switch is read in the settings file the data directory’s layout names, and in no other', async (t) => {
+    for (const [config, setup, outcome] of [[true, false, 'off'], [false, true, 'updated']] as const) {
+        const s = startUpdate(t);
+        writeFileSync(join(s.b.paths.data, 'layout.json'), '{"layout":2,"written_by":"0.50.0"}');
+        for (const [folder, on] of [['config', config], ['setup', setup]] as const) {
+            mkdirSync(join(s.b.paths.data, folder), { recursive: true });
+            writeFileSync(join(s.b.paths.data, folder, 'settings.json'), JSON.stringify({ Update: { CheckEnabled: on } }));
+        }
+        assert.equal(dataLayout(s.b.paths.data).userSettingsFile, join(s.b.paths.data, 'setup', 'settings.json'));
+        assert.equal(await s.setup.updateReplyAtStart(), outcome);
+    }
+});
+
 test('a settings file the desktop cannot parse runs nothing and uses up no try, whatever the variable says; a missing one is on', async (t) => {
     for (const text of ['{ // a comment\n }', '{"Update": {"CheckEnabled": true},}', '[]', 'no', '﻿{}']) {
         for (const environment of [{}, { JASON_Update__CheckEnabled: 'true' }]) {
@@ -1484,7 +1509,7 @@ test('the switch is read as the runtime binds it: any case, nested or joined by 
     assert.equal(readUpdateSwitch({}, join(b.root, 'nothing.json')), 'on');
 });
 
-test('a failed update says the first line npm printed, on the card alone and never in the log, with Update as it was', async (t) => {
+test('a failed update says one line of npm’s, the one that names the error, on the card alone and never in the log, with Update as it was', async (t) => {
     const s = startUpdate(t, { npm: { exit: 243, stdout: 'a line of its output', stderr: '\n\u001b[31mnpm error\u001b[0m code EACCES planted-words.\nnpm error second line\n' } });
     assert.equal(await s.setup.updateReplyAtStart(), 'failed');
     const { reply } = await s.setup.status();
