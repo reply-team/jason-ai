@@ -1,5 +1,7 @@
 import { en, type MessageKey } from '../locale/en';
+import type { WorkItem } from '../api/types';
 import { t } from '../platform/i18n';
+import { when } from '../time/format';
 
 /** What an email send's root `follows` says: the letter it goes under, or why it is a letter of its own. */
 export interface FollowsWords {
@@ -42,3 +44,57 @@ export function followsSentence(follows: FollowsWords, followed: Followed | null
     }
     return t('follows.reply.unread');
 }
+
+/**
+ * What the work item of a letter that was followed says of it, in words: its subject, and its moment, which is its
+ * send_after where it has one, else when the provider accepted it. A work item's context.input is the operation's
+ * arguments themselves.
+ */
+export function followedOf(item: WorkItem): Followed {
+    return followedWords(followedFacts(item), new Date());
+}
+
+/** What a followed letter's work item holds of it: its subject and its moment as recorded, in no words yet. */
+export interface FollowedFacts {
+    subject: string | null;
+    /** The moment as the work item holds it, an ISO time; null where it holds none. */
+    at: string | null;
+}
+
+export function followedFacts(item: WorkItem): FollowedFacts {
+    const input = (item.context as { input?: { message?: { subject?: unknown }; send_after?: unknown } }).input;
+    const subject = input?.message?.subject;
+    const sendAfter = input?.send_after;
+    const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.finished_at;
+    return { subject: typeof subject === 'string' && subject ? subject : null, at: at || null };
+}
+
+/** The facts in words against the moment drawn: a moment of today drops its date, so words are made when drawn, never kept. */
+export function followedWords(facts: FollowedFacts, now: Date): Followed {
+    return {
+        subject: facts.subject,
+        moment: facts.at ? when(new Date(facts.at), now, Intl.DateTimeFormat().resolvedOptions().timeZone) : null,
+    };
+}
+
+/** What an approval of an email send shows about where it lands: the Follows row, and whether the subject is not sent. */
+export interface FollowsRow {
+    /** The row's words: where the letter goes, or why it is a letter of its own. */
+    words: string;
+    /** Whether the letter's own subject is not sent, because it goes under the followed letter's. */
+    subjectNotSent: boolean;
+}
+
+/**
+ * The Follows row, for both shells so they cannot drift apart: shown for an email send whose preview says where it
+ * goes, with the words of `followsSentence`; the subject is marked as not sent exactly where the send follows a letter.
+ * `followed` is null while that letter is unread or could not be read.
+ */
+export function followsRow(follows: FollowsWords | null, email: boolean, followed: Followed | null): FollowsRow | null {
+    if (!email || follows === null) return null;
+    return { words: followsSentence(follows, followed), subjectNotSent: follows.workItem !== null };
+}
+
+/** Whether an email send's own subject is not sent: it goes under the subject of the letter it follows. */
+export const subjectNotSent = (follows: FollowsWords | null, email: boolean): boolean =>
+    followsRow(follows, email, null)?.subjectNotSent ?? false;
