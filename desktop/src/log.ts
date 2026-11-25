@@ -45,6 +45,9 @@ export const templates = {
     roles_profile: 'The agents’ roles were looked at for a profile of their own: {Outcome}',
     program_used: 'The agents’ roles were asked to run on {Program} by default: {Outcome}',
     roles_profile_unmarked: 'The mark of a profile for the agents’ roles could not be written to the desktop’s settings, so none was made',
+    reply_start_update: 'The Reply CLI was looked at for an update at the start: {Outcome}',
+    reply_start_update_unmarked: 'The mark of an update of the Reply CLI at the start could not be written to the desktop’s settings; npm is not started without it',
+    reply_start_update_mark_left: 'The mark of an update of the Reply CLI at the start could not be taken away from the desktop’s settings after the update succeeded',
     reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',

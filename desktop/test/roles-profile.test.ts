@@ -25,6 +25,7 @@ function setupOn(b: Bench, extra: Partial<SetupDeps> = {}): Setup {
         cli: loggedCli(b.cli, log),
         programs: b.programs,
         keys: new ProviderKeys(b.paths.providerKeys, fakeBox),
+        environment: {},
         log,
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
