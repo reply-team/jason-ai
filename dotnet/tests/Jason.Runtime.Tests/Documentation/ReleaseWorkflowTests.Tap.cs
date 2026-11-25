@@ -56,7 +56,7 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
     private const string TapOffReason =
-        "Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
+        "Switched off until the tap's owner switches its bump on: the tap holds the cask alone and moves it to each release on its own schedule, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
 
     /// <summary>
     /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is
