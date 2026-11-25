@@ -433,9 +433,10 @@ words.
 
 The demo is a page: a mock of Jason at work on sample data, so you can see what Jason does before you connect anything of
 your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
-shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
-started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
-writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
+shows it as it was built. It is not an installation and has nothing to do with the runtime: the demo itself starts no
+runtime, makes no folder of an installation and reads and writes nothing of your own installation; the machine set-up and
+the start that is owed, below, which also run in Demo, are what touches your own installation. The desktop itself writes
+only its own records in your data directory (the record of the mode, the record of the machine set-up below,
 Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo its own
 process resolves no host name at all: the page runs no runtime, the desktop checks for no update (while it shows, a
 terminal's `jason update apply` reads the feed first: where the feed offers nothing newer the answer is the ordinary one,
