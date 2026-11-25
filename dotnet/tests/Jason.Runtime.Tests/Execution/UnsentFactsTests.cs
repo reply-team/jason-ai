@@ -1,3 +1,5 @@
+using System.Data.Common;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Journal;
@@ -9,7 +11,9 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Jason.Runtime.Tests.Execution;
 
@@ -19,6 +23,7 @@ namespace Jason.Runtime.Tests.Execution;
 /// failed or cancelled says so; the last read the runtime makes of a deferred send, a week or more after its moment, that
 /// still finds it waiting says it is overdue, and no read says so earlier. Nothing is said of a send the campaign's own
 /// cancel took back, and the line holds identifiers, the state, the provider's one word and moments, never its sentence.
+/// The send such a read is of is found by its own id, and answered as the text every other reader runs would answer it.
 /// </summary>
 public class UnsentFactsTests
 {
@@ -278,6 +283,135 @@ public class UnsentFactsTests
         Assert.Equal(said ? 1 : 0, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.MessageUnsentObserved, Ct));
     }
 
+    /// <summary>
+    /// Both reads of held sends a read's end decides by, the one that says overdue and the one that says it did not go, find
+    /// the send by its own id, through the unique index on it, and read no table whole: they cost what the one send costs,
+    /// however much work the installation has finished. The plan is asked of the read as it is sent, its parameters bound and
+    /// no literal in their place, since that is what SQLite plans when the runtime runs it.
+    /// </summary>
+    [Theory]
+    [InlineData("queued")]
+    [InlineData("failed")]
+    public async Task The_send_a_read_s_end_decides_by_is_found_by_its_own_id(string state)
+    {
+        using var database = new TestDatabase();
+        var reads = new HeldReads();
+        await using var db = reads.Open(database);
+        var (send, read) = await SeedAsync(db, WeekAgo);
+
+        await EndAsync(db, read, send, Answer(state, null, null), Noon, save: false);
+
+        var held = Assert.Single(reads.Sent);
+        Assert.Contains(("p11", (object)send.PublicId), held.Parameters);
+        var plan = PlanOf(database, held);
+        Assert.Equal(
+            ["SEARCH s USING INDEX ix_work_items_public_id (public_id=?)"],
+            plan.Where(step => step.StartsWith("SEARCH s ", StringComparison.Ordinal) || step.StartsWith("SCAN s", StringComparison.Ordinal)));
+        Assert.DoesNotContain(plan, step => step.StartsWith("SCAN", StringComparison.Ordinal) && !step.Contains("VIRTUAL TABLE", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The read of one send answers what the text every other reader runs answers to the same call, the same rows in the same
+    /// order, and is refused where that one is, in the same words: for every work item there is and for two ids that are
+    /// none, by both of the reads a read's end makes, under its own campaign and under every other. The sends stand on either
+    /// side of each thing the definition asks, and some as only an edit by hand leaves one: succeeded with no finish, with no
+    /// attempt, with a failed attempt after the one that succeeded, and with a context, a result or a read that is not JSON.
+    /// </summary>
+    [Fact]
+    public async Task The_read_of_one_send_answers_what_the_text_every_other_reader_runs_answers()
+    {
+        using var database = new TestDatabase();
+        var (names, campaigns) = await SeedEveryKindAsync(database);
+        var one = new HeldReads();
+        var every = new HeldReads(Bound(HeldSends.Sql));
+        await using var db = one.Open(database);
+        await using var same = every.Open(database);
+        var ids = await db.WorkItems.AsNoTracking().OrderBy(item => item.Id).Select(item => item.PublicId).ToListAsync(Ct);
+        List<string> passed = [], covered = [], refused = [], differ = [];
+
+        foreach (var id in ids.Append("wi_NOBODY").Append(ids[0].ToLowerInvariant()))
+        {
+            foreach (var campaign in campaigns)
+            {
+                (string Which, List<string> Answered, Func<JasonDbContext, Task<IReadOnlyList<HeldSend>>> Call)[] calls =
+                [
+                    ("passed", passed, context => HeldSends.ReadPassedAsync(context, Noon, since: null, Ct, campaign, id)),
+                    ("covered", covered, async context => await HeldSends.CoveredAsync(context, campaign, id, Ct) is { } found ? [found] : []),
+                ];
+                foreach (var (which, answered, call) in calls)
+                {
+                    var answer = await AnswerAsync(db, call);
+                    var expected = await AnswerAsync(same, call);
+                    var name = names.GetValueOrDefault(id, id);
+                    if (!answer.Rows.SequenceEqual(expected.Rows) || answer.Refused != expected.Refused)
+                    {
+                        differ.Add($"{name}, {which}, campaign {campaign}: {Said(answer)}, where the text every other reader runs answers {Said(expected)}");
+                    }
+
+                    answered.AddRange(answer.Rows.Select(_ => name));
+                    if (answer.Refused is not null)
+                    {
+                        refused.Add($"{name}, {which}");
+                    }
+                }
+            }
+        }
+
+        Assert.Equal([], differ);
+        Assert.All(one.Sent, read => Assert.Equal(Bound(HeldSends.OneSendSql), read.Text));
+        Assert.Equal(
+            [
+                "passed", "passed at the bound", "named by its arguments", "an invitation", "no finish", "a failed attempt after", "two attempts that succeeded",
+                "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "read queued", "context not JSON",
+            ],
+            passed);
+        Assert.Equal(
+            [
+                "passed", "passed at the bound", "to come", "named by its arguments", "an invitation", "no finish", "a failed attempt after", "two attempts that succeeded",
+                "of a paused campaign", "of another campaign", "taken back elsewhere", "nothing to take back", "gone by its cancel", "gone by a read", "read sent", "read queued",
+                "a read not JSON", "context not JSON",
+            ],
+            covered);
+        Assert.Equal(
+            [
+                "a read not JSON, passed", "context not JSON and named by its arguments, passed", "context not JSON and named by its arguments, covered",
+                "result not JSON, passed", "result not JSON, covered",
+            ],
+            refused);
+    }
+
+    /// <summary>
+    /// The text of one send is run where one send is given and nowhere else, and it differs from the text every other read
+    /// runs, the route change's, the take-back's and the deferred read step's, in the send's term alone: one definition of a
+    /// held send, and two ways to find one.
+    /// </summary>
+    [Fact]
+    public async Task The_text_of_one_send_is_run_for_one_send_and_differs_in_the_send_s_term_alone()
+    {
+        using var database = new TestDatabase();
+        var every = new HeldReads();
+        await using (var db = every.Open(database))
+        {
+            await HeldSends.ReadAsync(db, Noon, Ct);
+            await HeldSends.ReadForAsync(db, 1, [1], Noon, Ct);
+            await HeldSends.ReadPassedAsync(db, Noon, Noon - DeferredReads.LookBack, Ct, handedSince: Noon - DeferredReads.LookBack - DeferredReads.Horizon);
+            await HeldSends.ReadPassedAsync(db, Noon, since: null, Ct, campaignId: 1);
+        }
+
+        var one = new HeldReads();
+        await using (var db = one.Open(database))
+        {
+            await HeldSends.ReadPassedAsync(db, Noon, since: null, Ct, campaignId: 1, send: "wi_1");
+            await HeldSends.CoveredAsync(db, 1, "wi_1", Ct);
+        }
+
+        const string Asked = "({11} IS NULL OR s.public_id = {11})";
+        Assert.Equal([.. Enumerable.Repeat(Bound(HeldSends.Sql), 4)], every.Sent.Select(read => read.Text));
+        Assert.Equal([.. Enumerable.Repeat(Bound(HeldSends.OneSendSql), 2)], one.Sent.Select(read => read.Text));
+        Assert.Equal(2, HeldSends.Sql.Split(Asked).Length);
+        Assert.Equal(HeldSends.Sql.Replace(Asked, "s.public_id = {11}", StringComparison.Ordinal), HeldSends.OneSendSql);
+    }
+
     private static SentFacts Facts() => new(new JournalWriter(new FixedClock(Noon)));
 
     /// <summary>
@@ -313,8 +447,26 @@ public class UnsentFactsTests
         var taken = (moment ?? Noon).AddDays(-3).UtcDateTime;
         var campaign = WorkItemFactory.NewCampaign(now: taken);
         var ada = new Contact { PublicId = "cnt_ADA", FirstName = "Ada", CreatedAt = taken, UpdatedAt = taken };
-        var send = WorkItemFactory.NewProviderOp(campaign, "message.send", taken);
+        var send = Taken(campaign, moment, cancelable);
         send.Contact = ada;
+        var read = Read(campaign, send, by, Noon.UtcDateTime);
+        read.Status = WorkItemStatus.Processing;
+        db.Campaigns.Add(campaign);
+        db.Contacts.Add(ada);
+        db.WorkItems.AddRange(send, read);
+        db.Attempts.AddRange(send.Attempts);
+        await db.SaveChangesAsync(Ct);
+        return (send, read);
+    }
+
+    /// <summary>
+    /// A send of the campaign, handed over three days before <paramref name="moment"/>, taken by the provider with its
+    /// reference for it or for none, and saying it can cancel it unless <paramref name="cancelable"/> is false.
+    /// </summary>
+    private static WorkItem Taken(Campaign campaign, DateTimeOffset? moment, bool cancelable = true)
+    {
+        var taken = (moment ?? Noon).AddDays(-3).UtcDateTime;
+        var send = WorkItemFactory.NewProviderOp(campaign, "message.send", taken);
         send.Status = WorkItemStatus.Succeeded;
         send.FinishedAt = taken;
         send.Context = new JsonObject { ["input"] = new JsonObject { ["channel"] = "email" } };
@@ -328,20 +480,108 @@ public class UnsentFactsTests
                 ["cancelable"] = cancelable,
             }),
         };
-        var attempt = WorkItemFactory.NewAttempt(send, 1, AttemptStatus.Succeeded, taken);
-        attempt.FinishedAt = taken;
+        Handed(send, AttemptStatus.Succeeded);
+        return send;
+    }
+
+    /// <summary>The send's next attempt, under the account, with the provider's reference, ended at <paramref name="status"/>.</summary>
+    private static void Handed(WorkItem send, AttemptStatus status, string account = "sha256:seat")
+    {
+        var attempt = WorkItemFactory.NewAttempt(send, send.Attempts.Count + 1, status, send.CreatedAt);
+        attempt.FinishedAt = send.CreatedAt;
         attempt.Provenance = new AttemptProvenanceDto(
             "reply", "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion, "message.send", 1, null, null,
-            RouteScope.GlobalDefault, "sha256:seat",
+            RouteScope.GlobalDefault, account,
             ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["send"] = "email-1001" });
-        var read = Read(campaign, send, by, Noon.UtcDateTime);
-        read.Status = WorkItemStatus.Processing;
-        db.Campaigns.Add(campaign);
-        db.Contacts.Add(ada);
-        db.WorkItems.AddRange(send, read);
-        db.Attempts.Add(attempt);
+    }
+
+    /// <summary>
+    /// Sends of every kind the one definition of a held send tells apart, and as only an edit by hand leaves one, each by the
+    /// name the test gives it; and the rows of their campaigns: the one most are of, another, a paused and an archived one.
+    /// </summary>
+    private static async Task<(IReadOnlyDictionary<string, string> Names, IReadOnlyList<int> Campaigns)> SeedEveryKindAsync(TestDatabase database)
+    {
+        await using var db = database.Open();
+        var created = Noon.AddDays(-30).UtcDateTime;
+        Campaign mine = WorkItemFactory.NewCampaign(now: created), other = WorkItemFactory.NewCampaign(now: created);
+        var paused = WorkItemFactory.NewCampaign(status: CampaignStatus.Paused, now: created);
+        var archived = WorkItemFactory.NewCampaign(status: CampaignStatus.Archived, now: created);
+        var earlier = Noon.AddHours(-3);
+        var sends = new Dictionary<string, WorkItem>(StringComparer.Ordinal);
+
+        WorkItem Kind(string name, DateTimeOffset? moment, Campaign? of = null, bool cancelable = true)
+        {
+            var send = Taken(of ?? mine, moment, cancelable);
+            sends.Add(name, send);
+            return send;
+        }
+
+        JsonObject Outcome(WorkItem send) => send.Result!["items"]![0]!.AsObject();
+        JsonObject Arguments(WorkItem send) => send.Context["input"]!.AsObject();
+
+        Kind("passed", earlier);
+        Kind("passed at the bound", Noon);
+        Kind("to come", Noon.AddDays(2));
+        Arguments(Kind("named by its arguments", moment: null))["send_after"] = InboundSync.Instant(earlier);
+        Kind("no moment", moment: null);
+        Outcome(Kind("a moment that cannot be read", earlier))["accepted_for"] = "soon";
+        Kind("not cancellable", earlier, cancelable: false);
+        Outcome(Kind("cancelling unsaid", earlier)).Remove("cancelable");
+        Kind("an invitation", earlier).Operation = "social_invitation.send";
+        Kind("a reply", earlier).Operation = "conversation.reply";
+        Kind("failed", earlier).Status = WorkItemStatus.Failed;
+        Kind("no finish", earlier).FinishedAt = null;
+        Kind("no attempt", earlier).Attempts.Clear();
+        Kind("a failed attempt alone", earlier).Attempts.Single().Status = AttemptStatus.Failed;
+        Handed(Kind("a failed attempt after", earlier), AttemptStatus.Failed, "sha256:another");
+        Handed(Kind("two attempts that succeeded", earlier), AttemptStatus.Succeeded, "sha256:another");
+        var unreferenced = Kind("no reference", earlier).Attempts.Single();
+        unreferenced.Provenance = unreferenced.Provenance! with { ExternalIdsReturned = null };
+        var unnamed = Kind("no plugin", earlier).Attempts.Single();
+        unnamed.Provenance = unnamed.Provenance! with { PluginId = null };
+        Kind("of a paused campaign", earlier, paused);
+        Kind("of an archived campaign", earlier, archived);
+        Kind("of another campaign", earlier, other);
+        Kind("taken back", earlier);
+        Kind("taken back elsewhere", earlier);
+        Kind("nothing to take back", earlier);
+        Kind("gone by its cancel", earlier);
+        Kind("gone by a read", earlier);
+        Kind("read sent", earlier);
+        Kind("read queued", earlier);
+        Kind("a read not JSON", earlier);
+        Kind("context not JSON", earlier);
+        Kind("context not JSON and named by its arguments", moment: null);
+        Kind("result not JSON", earlier).Status = WorkItemStatus.Processing;
+        db.WorkItems.AddRange(sends.Values);
         await db.SaveChangesAsync(Ct);
-        return (send, read);
+
+        await EarlierAsync(db, sends["taken back"], earlier, ActorType.Human, operation: HeldSends.Cancel, state: null);
+        await EarlierAsync(db, sends["taken back elsewhere"], earlier, ActorType.Human, operation: HeldSends.Cancel, state: null, of: other);
+        await EarlierAsync(db, sends["nothing to take back"], earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_pending");
+        await EarlierAsync(db, sends["gone by its cancel"], earlier, ActorType.Human, operation: HeldSends.Cancel, code: "send_not_found");
+        await EarlierAsync(db, sends["gone by a read"], earlier, ActorType.System, code: "send_not_found");
+        await EarlierAsync(db, sends["read sent"], earlier, ActorType.Role, state: "sent");
+        await EarlierAsync(db, sends["read queued"], earlier, ActorType.System);
+        var read = await EarlierAsync(db, sends["a read not JSON"], ended: null, ActorType.System);
+
+        // As an edit made with the columns' own checks turned off stores it. A result is written while its item still runs,
+        // since it is frozen once the item has finished.
+        const string Cut = "{\"items\":[";
+        await db.Database.OpenConnectionAsync(Ct);
+        await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = ON;", Ct);
+        foreach (var item in new[] { sends["context not JSON"], sends["context not JSON and named by its arguments"] })
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET context_json = {Cut} WHERE public_id = {item.PublicId}", Ct);
+        }
+
+        foreach (var item in new[] { sends["result not JSON"], read })
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE work_items SET result_json = {Cut}, status = 'succeeded' WHERE public_id = {item.PublicId}", Ct);
+        }
+
+        await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = OFF;", Ct);
+        return (sends.ToDictionary(send => send.Value.PublicId, send => send.Key, StringComparer.Ordinal), [mine.Id, other.Id, paused.Id, archived.Id]);
     }
 
     /// <summary>One more read of the send under way, made by <paramref name="by"/>.</summary>
@@ -355,14 +595,21 @@ public class UnsentFactsTests
     }
 
     /// <summary>
-    /// An earlier read of the send, or another <paramref name="operation"/> naming it, made by <paramref name="by"/>: open
-    /// where <paramref name="ended"/> is null; otherwise ended then, failed with <paramref name="code"/> where one is
-    /// given, and succeeded with <paramref name="state"/> otherwise.
+    /// An earlier read of the send, or another <paramref name="operation"/> naming it, made by <paramref name="by"/> in the
+    /// send's campaign or in <paramref name="of"/>: open where <paramref name="ended"/> is null; otherwise ended then, failed
+    /// with <paramref name="code"/> where one is given, and succeeded with <paramref name="state"/> otherwise.
     /// </summary>
-    private static async Task EarlierAsync(
-        JasonDbContext db, WorkItem send, DateTimeOffset? ended, ActorType by, string? state = "queued", string? code = null, string operation = SendReads.Operation)
+    private static async Task<WorkItem> EarlierAsync(
+        JasonDbContext db,
+        WorkItem send,
+        DateTimeOffset? ended,
+        ActorType by,
+        string? state = "queued",
+        string? code = null,
+        string operation = SendReads.Operation,
+        Campaign? of = null)
     {
-        var item = Read(send.Campaign!, send, by, (ended ?? Noon).AddMinutes(-1).UtcDateTime, operation);
+        var item = Read(of ?? send.Campaign!, send, by, (ended ?? Noon).AddMinutes(-1).UtcDateTime, operation);
         if (ended is { } at)
         {
             item.FinishedAt = at.UtcDateTime;
@@ -380,6 +627,7 @@ public class UnsentFactsTests
 
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);
+        return item;
     }
 
     private static WorkItem Read(Campaign campaign, WorkItem send, ActorType by, DateTime created, string operation = SendReads.Operation)
@@ -423,4 +671,78 @@ public class UnsentFactsTests
         ["failure_code"] = code,
         ["cancelled_at"] = cancelledAt,
     };
+
+    /// <summary>What a call answers: its rows, in their order, or the words SQLite refuses it in.</summary>
+    private static async Task<(IReadOnlyList<HeldSend> Rows, string? Refused)> AnswerAsync(JasonDbContext db, Func<JasonDbContext, Task<IReadOnlyList<HeldSend>>> call)
+    {
+        try
+        {
+            return (await call(db), null);
+        }
+        catch (SqliteException refused)
+        {
+            return ([], refused.Message);
+        }
+    }
+
+    private static string Said((IReadOnlyList<HeldSend> Rows, string? Refused) answer) =>
+        answer.Refused ?? (answer.Rows.Count == 0 ? "nothing" : string.Join(" and ", answer.Rows));
+
+    /// <summary>A text of the read as EF Core sends it: each of its placeholders the parameter bound for it.</summary>
+    private static string Bound(string sql) =>
+        string.Format(CultureInfo.InvariantCulture, sql, [.. Enumerable.Range(0, 13).Select(object (n) => string.Create(CultureInfo.InvariantCulture, $"@p{n}"))]);
+
+    /// <summary>What SQLite plans for a read as it was sent, its parameters bound; one step a line.</summary>
+    private static List<string> PlanOf(TestDatabase database, HeldRead read)
+    {
+        using var connection = new SqliteConnection(JasonDbContext.ConnectionString(database.File));
+        connection.Open();
+        using var explain = connection.CreateCommand();
+        explain.CommandText = "EXPLAIN QUERY PLAN " + read.Text;
+        foreach (var (name, value) in read.Parameters)
+        {
+            explain.Parameters.AddWithValue(name, value);
+        }
+
+        using var reader = explain.ExecuteReader();
+        var plan = new List<string>();
+        while (reader.Read())
+        {
+            plan.Add(reader.GetString(reader.GetOrdinal("detail")));
+        }
+
+        return plan;
+    }
+
+    /// <summary>A read as it was sent: its text, with the line ends EF Core wrote into it taken back to the source's, and its parameters.</summary>
+    private sealed record HeldRead(string Text, IReadOnlyList<(string Name, object Value)> Parameters);
+
+    /// <summary>
+    /// Every read of held sends a context sends, with its parameters, as it is sent; where <paramref name="instead"/> is
+    /// given, that text is run in its place with the same parameters.
+    /// </summary>
+    private sealed class HeldReads(string? instead = null) : DbCommandInterceptor
+    {
+        public List<HeldRead> Sent { get; } = [];
+
+        public JasonDbContext Open(TestDatabase database) =>
+            new(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(this).Options);
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains(") AS held", StringComparison.Ordinal))
+            {
+                Sent.Add(new HeldRead(
+                    command.CommandText.ReplaceLineEndings("\n").TrimEnd(),
+                    [.. command.Parameters.Cast<DbParameter>().Select(parameter => (parameter.ParameterName, parameter.Value ?? DBNull.Value))]));
+                command.CommandText = instead ?? command.CommandText;
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 }
