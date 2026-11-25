@@ -3,6 +3,7 @@
 
 # Binary assets never get converted.
 *.png binary
+*.gif binary
 *.jpg binary
 *.ico binary
 *.pdf binary
