@@ -374,8 +374,8 @@ skills step and by `jason skills`.
 ### With a package manager
 
 On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon
-Mac, Homebrew's cask installs the same Jason Desktop, from the same release the tap has moved it to; the
-install script is the way to one the tap has not reached yet:
+Mac, Homebrew's cask installs the same Jason Desktop, and the tap moves it to a new release within hours of its
+publication:
 
 ```sh
 brew install --cask reply-team/tap/jason

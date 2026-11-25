@@ -417,7 +417,8 @@ what answered was not a manifest, `update_feed_insecure` when the feed is not an
 
 The answer also names `upgrade_command`, the one command that updates this installation: `jason update apply` on
 Jason's own, and, where a package manager installed it, the command it prints for that manager —
-`brew upgrade jason` for a Homebrew keg, `winget upgrade Reply.Jason` (§6). Under a manager `--human` prints the three lines to type, the runtime stopped before the manager's
+`brew upgrade jason` for a Homebrew keg, `winget upgrade Reply.Jason` (§6). Under a manager `--human` prints the three
+lines to type, the runtime stopped before the manager's
 upgrade and started after it, because winget cannot replace the executable a running runtime holds and Homebrew
 replaces the image a running runtime starts its plugin hosts from (§7); the field stays one command.
 
@@ -540,8 +541,8 @@ the cask alone and no formula, and moves the cask to each release on its own sch
 Homebrew's older formula installed and linked: it is the command line alone, without Jason Desktop, and the tap no
 longer carries it. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.
 
-On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the install
-script is the way to a release the tap has not reached yet:
+On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the tap moves it to a new
+release within hours of its publication:
 
 ```sh
 brew install --cask reply-team/tap/jason
@@ -635,10 +636,9 @@ brew upgrade jason
 jason runtime start
 ```
 
-— or `winget upgrade Reply.Jason` in the middle on Windows. The first line is what `jason update check` names for a
+— or `winget upgrade Reply.Jason` in the middle on Windows. The middle line is what `jason update check` names for a
 Homebrew keg; the tap no longer carries the formula, so a keg reaches a current Jason by the three lines of §6, "Through
-a package manager". The runtime is stopped first because the manager knows
-nothing about it. On Windows, winget cannot remove the executable a running runtime holds: its upgrade fails and leaves
+a package manager". The runtime is stopped first because the manager knows nothing about it. On Windows, winget cannot remove the executable a running runtime holds: its upgrade fails and leaves
 the old version in place. With the runtime stopped, the same upgrade replaces it and keeps the uninstall entry, its
 install location and the package directory as they were. Homebrew replaces the image behind a running runtime and
 deletes the old keg, and a running runtime starts every plugin host from its own image, so provider work fails at launch
@@ -825,7 +825,8 @@ is in place and its runtime is running, that group's `skills:` line says why and
 `run: jason skills update`, and whatever could not move is still recorded at the tag before, so `jason status`
 fails it and prints the same repair it always has. An update applied by a build before 0.12.0 has no such step, so
 it needs one `jason skills update` after it; from 0.12.0 on, `jason update apply` does it. A package manager's
-upgrade does not run `jason update apply`, so after a package manager's upgrade, such as `winget upgrade Reply.Jason`, it is
+upgrade does not run `jason update apply`, so after a package manager's upgrade, such as
+`winget upgrade Reply.Jason`, it is
 `jason skills update` that moves the skills.
 
 After the skills comes the UI, as `jason ui install` places it: the new release's `jason-ui.zip`, read from the

@@ -1059,7 +1059,7 @@ public partial class PageClaimsTests
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, Homebrew's cask installs the same Jason Desktop, from the same release the tap has moved it to; the install script is the way to one the tap has not reached yet:", package, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, Homebrew's cask installs the same Jason Desktop, and the tap moves it to a new release within hours of its publication:", package, StringComparison.Ordinal);
         Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
         Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", package, StringComparison.Ordinal);
         Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);

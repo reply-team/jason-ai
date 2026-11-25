@@ -178,7 +178,7 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
         Assert.Contains("jason uninstall brew uninstall --formula jason curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh", package, StringComparison.Ordinal);
         Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall --formula jason` takes the rest; the one line installs Jason Desktop, which opens the same data directory as it is.", package, StringComparison.Ordinal);
-        Assert.Contains("On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the install script is the way to a release the tap has not reached yet:", package, StringComparison.Ordinal);
+        Assert.Contains("On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the tap moves it to a new release within hours of its publication:", package, StringComparison.Ordinal);
         Assert.DoesNotContain("once the tap carries it", package, StringComparison.Ordinal);
         Assert.DoesNotContain("the formula stays at", package, StringComparison.Ordinal);
         Assert.DoesNotContain("follows the latest release", package, StringComparison.Ordinal);
