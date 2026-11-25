@@ -24,9 +24,11 @@ import {
     withWords,
 } from '../screens/attention/reasking-model';
 import { doubtWords } from '../screens/send-modes/model';
+import { t } from '../platform/i18n';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
 import { svg } from './icons';
+import { followedLetter, followsRowOf, forgetFollowed, readFollowed, subjectIsNotSent } from './followed';
 import { ageOf, searchLines, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { chatWaits } from './needs-chats';
 import { forgetHeld, heldLine, heldShown, readHeld, sightHeld } from './needs-held';
@@ -343,6 +345,7 @@ export function forgetNeeds(): void {
     acting.value = 0;
     senders.lookups.value = {};
     sending = null;
+    forgetFollowed();
     forgetHeld();
 }
 
@@ -675,6 +678,10 @@ function words(whole: Approval | undefined): Html | null {
     const edit = withdrawn(whole.id);
     const read = toApprovalDetail(whole.preview, whole.operation);
     const detail = edit === undefined ? read : withWords(read, edit.words);
+    // Where a send lands, in the words of the classic card: the letter an email follows is read once for this approval.
+    const letter = followedLetter(detail.follows);
+    if (letter !== null) void readFollowed(here().api, letter);
+    const follows = followsRowOf(detail.follows, detail.channel);
     return html`<div class="needs-words">
             ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
             ${
@@ -684,6 +691,8 @@ function words(whole: Approval | undefined): Html | null {
                     : null
             }
             ${detail.channel ? html`<div class="meta needs-channel">Channel <span>${detail.channel}</span></div>` : null}
+            ${follows === null ? null : html`<div class="meta needs-follows"><b>${t('follows.row')}</b> ${follows.words}</div>`}
+            ${follows?.subjectNotSent && detail.subject ? html`<div class="meta needs-not-sent">${t('follows.subject.not_sent')}</div>` : null}
             ${detail.subject ? html`<div class="ask-s">${detail.subject}</div>` : null}
             ${detail.body ? html`<div class="said needs-body">${detail.body}</div>` : null}
             ${
@@ -745,14 +754,14 @@ const bodyBox = (id: string, disabled: Html | null): Html =>
     html`<textarea class="inp" rows="8" data-input="needs.type" ${argsOf(`${id}:body`)} ${disabled}>${typed.get(`${id}:body`) ?? ''}</textarea>`;
 
 /** The boxes that edit a message's words, the words that moved meanwhile, and Save and Cancel. */
-function editBoxes(edit: Editing, operation: string, busy: boolean): Html {
+function editBoxes(edit: Editing, operation: string, busy: boolean, notSent: boolean): Html {
     const id = edit.id;
     const disabled = edit.saving ? html`disabled` : null;
     return html`<div class="needs-edit message-editor">
         ${
             hasSubject(heldArgs(edit.item), operation)
                 ? html`<label class="field"
-                      >Subject
+                      >${notSent ? t('follows.subject.not_sent') : 'Subject'}
                       <input
                           class="inp"
                           type="text"
@@ -805,7 +814,7 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
     const acts = reasking
         ? html`<div class="ask-a">${openChat(summary.campaign_id, summary.campaign_name)}</div>`
         : edit
-          ? editBoxes(edit, summary.operation, busy)
+          ? editBoxes(edit, summary.operation, busy, subjectIsNotSent(whole))
           : asked
             ? html`<div
                   class="note am needs-reject"

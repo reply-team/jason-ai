@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useApi } from '../../api/context';
 import type { WorkItem } from '../../api/types';
 import { channelWords, type ApprovalDetail } from '../../console/live';
-import { followsSentence, type Followed, type FollowsWords } from '../../console/follows';
-import { when } from '../../time/format';
+import { followedOf, followsRow, followsSentence, type Followed, type FollowsWords } from '../../console/follows';
+import { t } from '../../platform/i18n';
 
 /** A person's text as a text node: the framework escapes it, and the line breaks it carries are drawn by the style. */
 function Text({ value }: { value: string }) {
@@ -29,18 +29,7 @@ function Following({ follows }: { follows: FollowsWords }) {
             (item) => {
                 if (!live) return;
                 // A work item's context.input is the operation's arguments themselves.
-                const input = (item.context as { input?: { message?: { subject?: unknown }; send_after?: unknown } })
-                    .input;
-                const subject = input?.message?.subject;
-                const sendAfter = input?.send_after;
-                // The letter's own moment: its send_after where it has one, else when the provider accepted it.
-                const at = typeof sendAfter === 'string' && sendAfter ? sendAfter : item.finished_at;
-                setFollowed({
-                    subject: typeof subject === 'string' && subject ? subject : null,
-                    moment: at
-                        ? when(new Date(at), new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)
-                        : null,
-                });
+                setFollowed(followedOf(item));
             },
             () => undefined,
         );
@@ -61,6 +50,7 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
     if (!detail.body) return null;
     const email = !reply && detail.channel === channelWords('email');
     const template = detail.compose === 'template';
+    const row = followsRow(detail.follows, email, null);
     return (
         <div className="section message-card">
             <h3>The message as written</h3>
@@ -68,8 +58,8 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                 {(email || reply) && detail.from && <Row label="From">{detail.from}</Row>}
                 {(email || reply) && detail.to && <Row label="To">{detail.to}</Row>}
                 {reply && detail.channel && <Row label="Channel">{detail.channel}</Row>}
-                {email && detail.follows && (
-                    <Row label="Follows">
+                {row !== null && detail.follows && (
+                    <Row label={t('follows.row')}>
                         {detail.follows.workItem === null ? (
                             followsSentence(detail.follows, null)
                         ) : (
@@ -78,7 +68,7 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
                     </Row>
                 )}
                 {detail.subject && (
-                    <Row label={email && detail.follows?.workItem ? 'Subject (not sent)' : 'Subject'}>
+                    <Row label={row?.subjectNotSent ? t('follows.subject.not_sent') : 'Subject'}>
                         <Text value={detail.subject} />
                     </Row>
                 )}

@@ -444,6 +444,8 @@ export const en = {
     'follows.new.other_account': 'A new letter: the earlier letter went through another account.',
     'follows.new.other_mailbox': 'A new letter: the earlier letter went from another mailbox.',
     'follows.new.other': 'A new letter.',
+    'follows.row': 'Follows',
+    'follows.subject.not_sent': 'Subject (not sent)',
     'approval.from.conversation': 'the account this conversation is in',
     'approval.fact.reach': 'Reach',
     'approval.fact.reversibility': 'Reversibility',

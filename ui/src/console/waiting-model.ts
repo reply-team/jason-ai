@@ -5,6 +5,7 @@ import type { Approval, ApprovalSummary, Decision, DecisionOption, DecisionSumma
 import { reasonLabel, title } from '../screens/attention/labels';
 import { isMessage } from '../screens/attention/message-edit';
 import { ageOf, operationWords, toApprovalDetail, type SearchWords } from './live';
+import { type FollowsWords } from './follows';
 
 /** What the runtime said: its code, when it gave one, and its words. */
 export interface Said {
@@ -58,6 +59,8 @@ export interface ApprovalCard {
     from: string | null;
     channel: string | null;
     subject: string | null;
+    /** Where an email send lands, once the approval is read whole: under an earlier letter or as one of its own. */
+    follows: FollowsWords | null;
     body: string | null;
     /** What will happen, said when there is no message to show. */
     intent: string | null;
@@ -86,6 +89,7 @@ export function toApprovalCard(row: ApprovalSummary, whole: Approval | undefined
         from: detail?.from ?? null,
         channel: detail?.channel ?? null,
         subject: detail?.subject ?? null,
+        follows: detail?.follows ?? null,
         body: detail?.body ?? null,
         intent: detail && detail.subject === null && detail.body === null ? detail.intent : null,
         search: detail?.search ?? null,
