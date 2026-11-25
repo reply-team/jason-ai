@@ -94,7 +94,22 @@ internal static class HeldSends
     /// (<see cref="SendProbe"/>); the latest read's status is compared under the unary plus, so the index on the status and
     /// the finish, which would spare the sort, is not walked through the installation's finished work instead.
     /// </summary>
-    internal static readonly string Sql = $$"""
+    internal static readonly string Sql = ReadSql($"({{11}} IS NULL OR {OneSend})");
+
+    /// <summary>
+    /// The same read of one send, which is always given: <see cref="CoveredAsync"/>, and <see cref="ReadPassedAsync"/> where it
+    /// is given a send. The send is found by its own id, through the unique index on it, where <see cref="Sql"/>, which is
+    /// also run with no send given, asks of every work item that succeeded whether it is the one: so the read costs what one
+    /// send costs, however much work the installation has finished. Nothing else of the text differs, so it answers what that
+    /// one answers to the same call.
+    /// </summary>
+    internal static readonly string OneSendSql = ReadSql(OneSend);
+
+    /// <summary>The term of a read of one send: the send, by its own id.</summary>
+    private const string OneSend = "s.public_id = {11}";
+
+    /// <summary>The read, its clauses written here alone, with <paramref name="send"/> the term for which send it is of.</summary>
+    private static string ReadSql(string send) => $$"""
         SELECT Campaign, WorkItem, Operation, strftime('%Y-%m-%dT%H:%M:%fZ', Moment) AS Moment, PluginId, BindingIdentity
         FROM (
             SELECT c.public_id AS Campaign, s.public_id AS WorkItem, s.operation AS Operation, s.id AS Id, s.campaign_id AS CampaignRow,
@@ -109,7 +124,7 @@ internal static class HeldSends
               AND ({12} IS NULL OR s.finished_at >= {12})
               AND ({7} IS NULL OR s.campaign_id = {7})
               AND ({8} IS NULL OR s.contact_id IN (SELECT value FROM json_each({8})))
-              AND ({11} IS NULL OR s.public_id = {11})
+              AND {{send}}
               AND s.operation IN (SELECT value FROM json_each({0}))
               AND json_type(s.result_json, '$.items[0].cancelable') = 'true'
               AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
@@ -214,7 +229,7 @@ internal static class HeldSends
         object one = send is null ? DBNull.Value : send;
         var rows = await db.Database
             .SqlQueryRaw<HeldSendRow>(
-                Sql,
+                send is null ? Sql : OneSendSql,
                 Makers,
                 Moment(bound),
                 Cancel,
