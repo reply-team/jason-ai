@@ -558,8 +558,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
 ## Connect
 
 - **Agent hosts.** The cards detect the agent hosts (Claude Code, Codex, Gemini CLI, Antigravity CLI, Cursor CLI and GitHub Copilot CLI), `reply` and `node`. A missing program is explained with its install
-  command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
-  installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
+  command and a link, and the command runs on a click when `npm` is present, and a missing program is never installed
+  without one; an installed Reply CLI older than the one Jason needs is updated at a start (below, Reply). Node itself is
+  never installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
   sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
@@ -611,7 +612,20 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
-  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. **Add account** offers
+  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. An update, and an
+  install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once.
+  Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in the
+  background, once the runtime is up and the machine set-up has ended, with the npm line Update runs, where the version
+  could be read and is below the one Jason needs and npm is there. It tries once for each version Jason comes to need; after
+  that the click is yours, and it is never held back. The card says what came of it, in that run of the application only:
+  that it was updated, that it could not be, with the first line npm printed, or that the one in use is still the old one,
+  which was installed another way and is updated that way. A missing Reply CLI is never installed without a click: where npm
+  is missing too, the card says so and where Node.js, which brings npm, comes from.
+  `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
+  installation's settings file and in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`, which wins over the
+  file. A variable set only for a runtime started elsewhere is not seen by it. A settings file that Jason Desktop cannot
+  parse, one with comments or trailing commas, which the runtime reads, among them, runs no update and uses up no try.
+  **Add account** offers
   Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
   daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when
   it is enabled, **Resume** when it is disabled, neither at its daily limit, and **Delete**; and a row that is not in a

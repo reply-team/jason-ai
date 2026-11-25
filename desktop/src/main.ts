@@ -56,6 +56,7 @@ import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
+import { replyUpdateAtStart } from './reply-update.ts';
 import { Setup } from './setup.ts';
 import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
@@ -666,6 +667,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             settings = next;
             writeSettings(paths.settings, next);
         },
+        // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
+        environment: process.env,
         models,
         bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
@@ -887,6 +890,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
         log.info('window_loaded', { Origin: started.origin });
         roles.atStart();
+        // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
+        replyUpdateAtStart(runOn.mode, {
+            setUp: async () => {
+                await machineSetup?.settled();
+                await machineSetup?.afterLive();
+            },
+            update: () => setup.updateReplyAtStart(),
+            failed: () => log.warn('reply_start_update', { Outcome: 'failed' }),
+        });
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();

@@ -14,7 +14,8 @@ import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
-import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
+import { npmLine, readUpdateSwitch, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
+import { parseSettings, readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import { Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
 import {
@@ -25,6 +26,7 @@ import {
     parseReplyAuth,
     readReplyChannel,
     Refused,
+    replyMinimumVersion,
     serverPattern,
     withPluginConfigured,
     withReplyWired,
@@ -1182,4 +1184,316 @@ test('without the environment and home to read under, no file is read and no hos
     const b = bench(t, { programs: ['claude', 'codex'] });
     const { hosts } = await setupOn(b).status();
     for (const host of hosts) assert.deepEqual(host.ownServers, [], host.id);
+});
+
+// ---- The Reply CLI updated at the start -------------------------------------------------------------------------------
+
+interface StartUpdate {
+    b: Bench;
+    setup: Setup;
+    log: ReturnType<typeof memoryLog>;
+    kept: () => DesktopSettings;
+    /** Every npm and jason run and every version read, in the order they were asked. */
+    ran: string[];
+    /** The mark in the desktop's own settings file as npm started. */
+    markAtNpm: (string | undefined)[];
+}
+
+/**
+ * A start on a bench with a stand-in `reply` and npm: npm puts `after` in place of `before`, or ends as `npm` says, and the
+ * runtime answers `runtime` as the version it found. No npm is ever run.
+ */
+function startUpdate(
+    t: Parameters<typeof bench>[0],
+    options: {
+        before?: string | null;
+        after?: string | null;
+        npm?: RunResult | Promise<RunResult>;
+        programs?: readonly string[];
+        runtime?: string | null;
+        reload?: number;
+        mark?: string;
+        environment?: Record<string, string | undefined>;
+        installation?: unknown;
+        unwritable?: boolean;
+    } = {},
+): StartUpdate {
+    const b = bench(t, { programs: [...(options.programs ?? ['reply', 'npm'])] });
+    if (options.installation !== undefined) writeInstallationSettings(b, options.installation);
+    const log = memoryLog();
+    writeSettings(b.paths.settings, { feed: null, skillsDeployedFor: 'kept', theme: 'dark', ...(options.mark === undefined ? {} : { replyUpdateTried: options.mark }) });
+    let kept = readSettings(b.paths.settings);
+    let version = options.before === undefined ? '0.22.0' : options.before;
+    const ran: string[] = [];
+    const markAtNpm: (string | undefined)[] = [];
+    const answer = (stdout: string): RunResult => ({ exit: 0, stdout, stderr: '' });
+    const programs: Programs = {
+        find: (name) => b.programs.find(name),
+        run: async (name, args) => {
+            if (name === 'npm') {
+                ran.push(['npm', ...args].join(' '));
+                markAtNpm.push(readSettings(b.paths.settings).replyUpdateTried);
+                const result = await (options.npm ?? answer('added 1 package'));
+                if (result.exit === 0) version = options.after === undefined ? '0.24.0' : options.after;
+                return result;
+            }
+            if (name === 'reply' && args[0] === '--version') {
+                ran.push(`reply ${version ?? 'unread'}`);
+                return version === null ? { exit: 1, stdout: '', stderr: '' } : answer(`reply-cli ${version}`);
+            }
+            return answer('{}');
+        },
+    };
+    const cli = {
+        run: (args: readonly string[]): Promise<RunResult> => {
+            const verb = args.join(' ');
+            if (verb === 'plugin reload') {
+                ran.push(`jason ${verb}`);
+                return Promise.resolve({ exit: options.reload ?? 0, stdout: '{}', stderr: '' });
+            }
+            if (verb === 'plugin list') {
+                ran.push(`jason ${verb}`);
+                const found = options.runtime === undefined ? version : options.runtime;
+                return Promise.resolve(answer(JSON.stringify({ plugins: [{ id: 'reply', status: 'valid', capabilities: { exec: { requested: [{ name: 'reply', version: found, min_version: '0.23.0' }], granted: ['reply'] } } }] })));
+            }
+            return b.cli.run(args);
+        },
+    };
+    const setup = new Setup({
+        ...setupDeps(b, log),
+        cli,
+        programs,
+        environment: options.environment ?? {},
+        settings: () => kept,
+        saveSettings: (next) => {
+            if (options.unwritable) throw new Error('EACCES');
+            kept = next;
+            writeSettings(b.paths.settings, next);
+        },
+    });
+    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm };
+}
+
+const npmRuns = (s: StartUpdate) => s.ran.filter((each) => each.startsWith('npm'));
+const line = async (s: StartUpdate) => (await s.setup.status()).reply.startUpdate;
+const installLine = 'npm install -g reply-cli';
+
+test('the start updates a Reply CLI below the minimum with the click’s own npm line, reads its version again and has the runtime read its plugins again', async (t) => {
+    const s = startUpdate(t);
+    let changed = 0;
+    s.setup.onChanged(() => changed++);
+    assert.equal(await s.setup.updateReplyAtStart(), 'updated');
+    assert.deepEqual(s.ran, ['reply 0.22.0', installLine, 'reply 0.24.0', 'jason plugin reload', 'jason plugin list']);
+    assert.equal(changed, 1, 'the page is asked to read the card again');
+    assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: 'updated' }]);
+
+    // Once a start, whatever came of it.
+    assert.equal(await s.setup.updateReplyAtStart(), 'settled');
+    assert.equal(npmRuns(s).length, 1);
+});
+
+test('the mark is in the desktop’s settings before npm starts, beside what was there, and is taken away once the update succeeded', async (t) => {
+    const s = startUpdate(t);
+    await s.setup.updateReplyAtStart();
+    assert.deepEqual(s.markAtNpm, [replyMinimumVersion]);
+    assert.deepEqual(s.kept(), { feed: null, skillsDeployedFor: 'kept', theme: 'dark' });
+
+    const failed = startUpdate(t, { npm: { exit: 1, stdout: '', stderr: 'npm error code EACCES' } });
+    await failed.setup.updateReplyAtStart();
+    assert.deepEqual(failed.kept(), { feed: null, skillsDeployedFor: 'kept', theme: 'dark', replyUpdateTried: replyMinimumVersion });
+
+    // A mark that is not a version is none.
+    for (const bad of ['"soon"', '1', 'null', '"0.23"']) assert.equal(parseSettings(`{"reply_update_tried": ${bad}}`).replyUpdateTried, undefined, bad);
+});
+
+test('one try for each minimum, whatever came of it: the same one runs nothing again, a higher one tries once again', async (t) => {
+    const same = startUpdate(t, { mark: replyMinimumVersion });
+    assert.equal(await same.setup.updateReplyAtStart(), 'tried');
+    assert.deepEqual(npmRuns(same), []);
+    const higher = startUpdate(t, { mark: '0.22.0' });
+    assert.equal(await higher.setup.updateReplyAtStart(), 'updated');
+    assert.deepEqual(higher.markAtNpm, [replyMinimumVersion]);
+
+    // The click is never held back by the mark.
+    await same.setup.installProgram('reply');
+    assert.deepEqual(npmRuns(same), [installLine]);
+});
+
+test('settings that cannot be written run nothing, and the log says so by the line’s name', async (t) => {
+    const s = startUpdate(t, { unwritable: true });
+    assert.equal(await s.setup.updateReplyAtStart(), 'unmarked');
+    assert.deepEqual(npmRuns(s), []);
+    assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update_unmarked').map((each) => each.level), ['warn']);
+    assert.equal(await line(s), undefined);
+});
+
+test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm', async (t) => {
+    for (const [outcome, options] of [
+        ['current', { before: replyMinimumVersion }],
+        ['version_unread', { before: null }],
+        ['not_found', { programs: ['npm'] }],
+        ['no_npm', { programs: ['reply'] }],
+    ] as const) {
+        const s = startUpdate(t, options);
+        assert.equal(await s.setup.updateReplyAtStart(), outcome);
+        assert.deepEqual(npmRuns(s), [], outcome);
+        assert.equal(s.kept().replyUpdateTried, undefined, outcome);
+        assert.equal(s.ran.includes('jason plugin reload'), false, outcome);
+        assert.equal(await line(s), undefined, outcome);
+    }
+});
+
+test('Update:CheckEnabled false in the settings file or in the desktop’s own environment runs nothing, and uses up no try', async (t) => {
+    const off = { Update: { CheckEnabled: false } };
+    for (const options of [{ installation: off }, { environment: { JASON_Update__CheckEnabled: 'false' } }]) {
+        const s = startUpdate(t, options);
+        assert.equal(await s.setup.updateReplyAtStart(), 'off');
+        assert.deepEqual(s.ran, [], 'nothing is asked of any program');
+        assert.equal(s.kept().replyUpdateTried, undefined);
+    }
+    // The variable wins over the file, in both directions.
+    const on = startUpdate(t, { installation: off, environment: { jason_update__checkenabled: 'TRUE' } });
+    assert.equal(await on.setup.updateReplyAtStart(), 'updated');
+    const turnedOff = startUpdate(t, { installation: { Update: { CheckEnabled: true } }, environment: { JASON_UPDATE__CHECKENABLED: 'False' } });
+    assert.equal(await turnedOff.setup.updateReplyAtStart(), 'off');
+});
+
+test('a settings file the desktop cannot parse runs nothing and uses up no try, whatever the variable says; a missing one is on', async (t) => {
+    for (const text of ['{ // a comment\n }', '{"Update": {"CheckEnabled": true},}', '[]', 'no', '﻿{}']) {
+        for (const environment of [{}, { JASON_Update__CheckEnabled: 'true' }]) {
+            const s = startUpdate(t, { installation: text, environment });
+            assert.equal(await s.setup.updateReplyAtStart(), 'switch_unread', text);
+            assert.deepEqual(s.ran, [], text);
+            assert.equal(s.kept().replyUpdateTried, undefined, text);
+        }
+    }
+    const missing = startUpdate(t);
+    assert.equal(existsSync(dataLayout(missing.b.paths.data).userSettingsFile), false);
+    assert.equal(await missing.setup.updateReplyAtStart(), 'updated');
+});
+
+test('the switch is read as the runtime binds it: any case, nested or joined by a colon, true and false as words; anything else is not read', (t) => {
+    const file = (value: unknown) => updateSwitch({}, JSON.stringify(value));
+    assert.equal(updateSwitch({}, null), 'on');
+    assert.equal(file({}), 'on');
+    assert.equal(file({ Update: {} }), 'on');
+    assert.equal(file({ Update: { FeedUrl: 'https://example.test/m.json' }, Routes: { CheckEnabled: false } }), 'on');
+    assert.equal(file({ update: { checkenabled: 'False' } }), 'off');
+    assert.equal(file({ 'Update:CheckEnabled': false }), 'off');
+    assert.equal(file({ Update: { CheckEnabled: true } }), 'on');
+    for (const odd of [0, 'no', null, {}, []]) assert.equal(file({ Update: { CheckEnabled: odd } }), 'unread', JSON.stringify(odd));
+    assert.equal(file({ Update: { CheckEnabled: true }, update: { checkEnabled: false } }), 'unread');
+    const variable = (name: string, value: string) => updateSwitch({ [name]: value }, null);
+    assert.equal(variable('JASON_Update__CheckEnabled', ' false '), 'off');
+    assert.equal(variable('JASON_Update:CheckEnabled', 'false'), 'off');
+    assert.equal(variable('Update__CheckEnabled', 'false'), 'on');
+    assert.equal(variable('JASON_Update__CheckEnabled', '0'), 'unread');
+    assert.equal(updateSwitch({ JASON_Update__CheckEnabled: 'true', JASON_UPDATE__CHECKENABLED: 'false' }, null), 'unread');
+
+    // A file that is there and cannot be read is not a missing one.
+    const b = bench(t);
+    mkdirSync(join(b.root, 'a-folder'));
+    assert.equal(readUpdateSwitch({}, join(b.root, 'a-folder')), 'unread');
+    assert.equal(readUpdateSwitch({}, join(b.root, 'nothing.json')), 'on');
+});
+
+test('a failed update says the first line npm printed, on the card alone and never in the log, with Update as it was', async (t) => {
+    const s = startUpdate(t, { npm: { exit: 243, stdout: 'a line of its output', stderr: '\n\u001b[31mnpm error\u001b[0m code EACCES planted-words.\nnpm error second line\n' } });
+    assert.equal(await s.setup.updateReplyAtStart(), 'failed');
+    const { reply } = await s.setup.status();
+    assert.equal(reply.startUpdate, 'Jason tried to update the Reply CLI when it started and could not: npm error code EACCES planted-words.');
+    assert.equal(reply.cli.install, 'reply');
+    assert.notEqual(reply.belowMinimum, null);
+    assert.equal(s.ran.includes('jason plugin reload'), false, 'npm changed nothing for the runtime to read again');
+    assert.equal(JSON.stringify(s.log.lines).includes('planted-words'), false);
+
+    assert.equal(npmLine({ exit: 1, stdout: '  \r\n only output\n', stderr: ' \n' }), 'only output');
+    assert.equal(npmLine({ exit: 7, stdout: '', stderr: '' }), 'npm ended with code 7');
+    assert.equal(npmLine({ exit: 1, stdout: '', stderr: 'left‮right\tand\u0007more' }), 'left right and more');
+    assert.equal(npmLine({ exit: 1, stdout: '', stderr: 'x'.repeat(5000) }), `${'x'.repeat(200)}…`);
+});
+
+test('npm that ended well and left the old CLI in use is said as that, by the desktop’s own read or by what the runtime found', async (t) => {
+    const still = (version: string) => `Jason updated the Reply CLI when it started, but the one in use is still ${version}: it was installed another way. Update it the way you installed it.`;
+    const own = startUpdate(t, { after: '0.22.0' });
+    assert.equal(await own.setup.updateReplyAtStart(), 'still_old');
+    assert.equal(await line(own), still('0.22.0'));
+    assert.equal(own.kept().replyUpdateTried, replyMinimumVersion, 'tried once for this minimum');
+
+    const runtime = startUpdate(t, { runtime: '0.22.5' });
+    assert.equal(await runtime.setup.updateReplyAtStart(), 'still_old');
+    assert.equal(await line(runtime), still('0.22.5'));
+
+    // The runtime's list is taken at its word only after a reload it made; what it says nothing of leaves the desktop's read.
+    const refused = startUpdate(t, { runtime: '0.22.5', reload: 1 });
+    assert.equal(await refused.setup.updateReplyAtStart(), 'updated');
+    assert.equal(refused.ran.filter((each) => each === 'jason plugin list').length, 0);
+    const silent = startUpdate(t, { runtime: null });
+    assert.equal(await silent.setup.updateReplyAtStart(), 'updated');
+    assert.equal(runtimeReplyVersion('not JSON'), null);
+    assert.equal(runtimeReplyVersion('{"plugins":[{"id":"slack","capabilities":{"exec":null}}]}'), null);
+
+    const unsaid = startUpdate(t, { after: null });
+    assert.equal(await unsaid.setup.updateReplyAtStart(), 'failed');
+    assert.equal(await line(unsaid), `Jason tried to update the Reply CLI when it started and could not: ${versionUnsaid}.`);
+});
+
+test('the outcome is this run’s alone, and a failure is no longer said once the CLI in use is at the minimum', async (t) => {
+    const s = startUpdate(t, { npm: { exit: 1, stdout: '', stderr: 'npm error code EACCES' } });
+    await s.setup.updateReplyAtStart();
+    assert.equal(typeof (await line(s)), 'string');
+    // The next start of the application: nothing of it is kept but the mark.
+    assert.equal((await new Setup({ ...setupDeps(s.b, memoryLog(), s.kept()) }).status()).reply.startUpdate, undefined);
+
+    let exit = 1;
+    const healed = startUpdate(t, {
+        get npm(): RunResult {
+            return { exit, stdout: '', stderr: exit === 0 ? '' : 'npm error code EACCES' };
+        },
+    });
+    await healed.setup.updateReplyAtStart();
+    assert.equal(typeof (await line(healed)), 'string');
+    exit = 0;
+    await healed.setup.installProgram('reply');
+    assert.equal(await line(healed), undefined);
+});
+
+test('a click and the start never run npm together: the start waits in the queue the click waits in, and finds the CLI updated', async (t) => {
+    let release = (_: RunResult): void => undefined;
+    const held = new Promise<RunResult>((resolve) => (release = resolve));
+    const s = startUpdate(t, { npm: held });
+    const click = s.setup.installProgram('reply');
+    const start = s.setup.updateReplyAtStart();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(s.ran, [installLine], 'the start has asked nothing while the click runs');
+    release({ exit: 0, stdout: '', stderr: '' });
+    await click;
+    assert.equal(await start, 'current');
+    assert.equal(npmRuns(s).length, 1);
+});
+
+test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for', async () => {
+    const calls: string[] = [];
+    let ended = (): void => undefined;
+    const deps = (setUp: () => Promise<void>, update: () => Promise<unknown>) => ({
+        setUp: () => (calls.push('set-up'), setUp()),
+        update: () => (calls.push('update'), update()),
+        failed: () => void calls.push('failed'),
+    });
+    const turn = () => new Promise((resolve) => setImmediate(resolve));
+    replyUpdateAtStart('demo', deps(() => Promise.resolve(), () => Promise.resolve()));
+    await turn();
+    assert.deepEqual(calls, []);
+    replyUpdateAtStart('live', deps(() => new Promise((resolve) => (ended = resolve)), () => Promise.resolve()));
+    await turn();
+    assert.deepEqual(calls, ['set-up']);
+    ended();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update']);
+    // A set-up that failed has ended too; a failure of the update is told and stops nothing.
+    calls.length = 0;
+    replyUpdateAtStart('live', deps(() => Promise.reject(new Error('set-up')), () => Promise.reject(new Error('update'))));
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update', 'failed']);
 });
