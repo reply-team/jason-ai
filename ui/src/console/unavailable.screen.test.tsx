@@ -21,7 +21,7 @@ import { unavailablePlugins } from './unavailable';
 // asks for, and the global route to it.
 
 const sentence =
-    "Reply (reply) is unavailable, so its work does not run: 'reply' reports 0.22.0; the manifest asks for 0.23.0 or later. Install 'reply' 0.23.0 or later where the runtime can see it and run `jason plugin reload`.";
+    "Reply (reply) is unavailable, so its work does not run: 'reply' reports 0.23.0; the manifest asks for 0.23.2 or later. Install 'reply' 0.23.2 or later where the runtime can see it and run `jason plugin reload`.";
 
 function api(plugins: FixtureName[], routes: FixtureName = 'route.list/card-accounts-reply'): FakeApi {
     return nothingWaitsInChats(new FakeApi())

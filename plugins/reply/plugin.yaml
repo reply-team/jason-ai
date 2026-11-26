@@ -42,9 +42,11 @@ capabilities:
         # by a code of their own, `email.limit_reached`, a mailbox that cannot send as `email.sending_disabled`, and a
         # send's bounce on `reply direct-send get`, from 0.22.0 — and a direct email sent as a follow-up in the thread of
         # an earlier one (`--follows`), with a code of its own for each refusal of it and the email it follows printed on
-        # `reply direct-send get`, from 0.23.0. This package makes no raw call. A reload runs the version command and
-        # refuses an older one.
-        min_version: 0.23.0
+        # `reply direct-send get`, from 0.23.0 — and the sign-in kept when a token refresh fails for a passing reason (a
+        # 429, a 5xx, a timeout or a network error), one refresh at a time across the processes the runtime starts
+        # together and, on Windows, a credentials file another program holds for a few seconds waited for, from 0.23.2.
+        # This package makes no raw call. A reload runs the version command and refuses an older one.
+        min_version: 0.23.2
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak

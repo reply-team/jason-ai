@@ -49,7 +49,7 @@ public class CardAccountsReplyExchangesTests
     [Fact]
     public async Task The_reply_package_is_listed_unavailable_while_its_cli_is_older_than_it_asks_for()
     {
-        using var account = new ReplyAccount().WithCliVersion("0.22.0");
+        using var account = new ReplyAccount().WithCliVersion("0.23.0");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, prepare: paths => TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId)), clock: new FixedClock(new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero)));
 
@@ -59,7 +59,7 @@ public class CardAccountsReplyExchangesTests
         var problem = Assert.Single(listed["problems"]!.AsArray())!;
         Assert.Equal("executable_incompatible", (string?)problem["code"]);
         Assert.Equal(
-            "'reply' reports 0.22.0; the manifest asks for 0.23.0 or later. Install 'reply' 0.23.0 or later where the runtime can see it and run `jason plugin reload`.",
+            "'reply' reports 0.23.0; the manifest asks for 0.23.2 or later. Install 'reply' 0.23.2 or later where the runtime can see it and run `jason plugin reload`.",
             (string?)problem["message"]);
     }
 }

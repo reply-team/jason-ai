@@ -16,13 +16,15 @@ namespace Jason.ReplyCliStub;
 /// <c>details.limit</c>, a mailbox that cannot send direct emails at all as <c>email.sending_disabled</c> at 403, and
 /// whether a send bounced, its kind and its moment, on <c>direct-send get</c>, from 0.22.0; and the first that sends a
 /// direct email as a follow-up in the thread of an earlier one, <c>contact send-email --follows</c>, with a code of its own
-/// for each refusal of it, and prints the email a send follows on <c>direct-send get</c>, from 0.23.0. It is named once,
-/// here; the tests hold the package's manifest, its README and its changelog to it, so moving the release is this line and
-/// the sentences they read.
+/// for each refusal of it, and prints the email a send follows on <c>direct-send get</c>, from 0.23.0; and the first that
+/// keeps the sign-in when a token refresh fails for a passing reason, lets one process at a time refresh it, and on Windows
+/// waits a few seconds for a credentials file another program holds, from 0.23.2, which this stand-in, refreshing no
+/// token, has nothing of. It is named once, here; the tests hold the package's manifest, its README and its changelog to
+/// it, so moving the release is this line and the sentences they read.
 /// </summary>
 public static partial class ReplyCliRelease
 {
-    public const string Version = "0.23.0";
+    public const string Version = "0.23.2";
 
     /// <summary>
     /// The User-Agent this release sends to Reply: <c>reply-cli/&lt;version&gt;</c>, with the program named by
