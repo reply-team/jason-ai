@@ -73,11 +73,12 @@ import type { DesktopSettings, RolesMark } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
-    defaultRoutePlugin,
     hasBinding,
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
+    readGlobalDefault,
+    readReplyAuth,
     readReplyChannel,
     replyChannels,
     type ReplyChannel,
@@ -85,6 +86,7 @@ import {
     pluginRuntimes,
     programInstalls,
     replyMinimumVersion,
+    replyPluginValid,
     Refused,
     versionAtLeast,
     versionIn,
@@ -162,6 +164,13 @@ export interface HostState {
     runsRoles: string | null;
 }
 
+/**
+ * A fact of the Reply card that was asked and could not be read: `version`, the Reply CLI's, where `reply --version` said
+ * none; `auth`, its sign-in, where `reply auth status` did not answer; `route`, whether Jason uses that sign-in, where the
+ * runtime gave no plugin list or no route list.
+ */
+export type ReplyFact = 'version' | 'auth' | 'route';
+
 export interface ReplyState {
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
@@ -183,6 +192,12 @@ export interface ReplyState {
      * no failure.
      */
     pendingUnread: ReplyChannel[];
+    /**
+     * What was asked and could not be read, in the card's order, as closed words. Each leaves its own member as a page of
+     * an earlier version draws it: the version null with `belowMinimum` set, so no act is offered; not signed in, so no
+     * account is asked for; not wired.
+     */
+    notRead: ReplyFact[];
     /**
      * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the sentence that says
      * so; the card then offers no act. Null otherwise.
@@ -658,7 +673,7 @@ export class Setup {
         const runtimeVersion = this.#deps.runtimeVersion();
         return {
             hosts: [...programHosts, ...providerHosts],
-            reply: await this.#reply(answered.get('reply')?.valid ?? false, listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null),
+            reply: await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
             versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null, this.#deps.deb ?? false),
@@ -700,15 +715,19 @@ export class Setup {
         return (await this.#rolesDefault())?.host ?? null;
     }
 
-    /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
-    async #reply(valid: boolean, runtimeVersion: string | null): Promise<ReplyState> {
+    /**
+     * Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. `valid` is null where the
+     * runtime gave no plugin list, which leaves whether Jason uses the sign-in unread, as a route list that did not answer.
+     */
+    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], belowMinimum: null };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null };
         }
-        const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
-        const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
+        const route = valid === true ? readGlobalDefault(await this.#deps.cli.run(['route', 'list'])) : null;
+        const wired = route?.plugin === 'reply';
+        const routeUnread = valid === null || (valid && route === null);
         const version = await this.#replyVersion();
         // Older than the card's acts need, the CLI is offered the update, is not asked for its accounts, and the card
         // offers no act.
@@ -718,7 +737,9 @@ export class Setup {
             this.#startUpdate !== null && (this.#startUpdate.updated || !current || (runtimeVersion !== null && !versionAtLeast(runtimeVersion, replyMinimumVersion)))
                 ? this.#startUpdate.said
                 : null;
-        const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
+        // A sign-in that could not be read is named, and is no sign-in: no account is asked for.
+        const authRead = readReplyAuth(await this.#run('reply', 'auth status', ['auth', 'status', '--json']));
+        const auth = authRead ?? { signedIn: false, user: null, profile: null };
         const accounts: ReplyAccount[] = [];
         const absent: ReplyChannel[] = [];
         const unread: ReplyChannel[] = [];
@@ -754,6 +775,7 @@ export class Setup {
             unread,
             pending,
             pendingUnread,
+            notRead: [...(version === null ? ['version' as const] : []), ...(authRead === null ? ['auth' as const] : []), ...(routeUnread ? ['route' as const] : [])],
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
             ...(startUpdate === null ? {} : { startUpdate }),
         };

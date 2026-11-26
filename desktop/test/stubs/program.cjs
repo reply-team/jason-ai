@@ -17,9 +17,25 @@ const sandboxCheck = name === 'codex' && args[0] === 'sandbox';
 record(naming ? `${name}-naming` : sandboxCheck ? 'codex-sandbox' : name, args, stdin);
 const said = args.join(' ');
 
-if (process.env.STUB_HANG === name) {
-    // A program that never answers, whatever it was asked, and ends at the first signal: what a runner's time limit is
-    // for. Its id is written to the file STUB_HANG_PID names, so a test can see it has gone.
+// An ending a test names as JSON: {"print": <result>} on stdout and exit 0; {"code": <code>, "exit"?} as the Reply CLI's
+// error line on stderr and exit 1 (2 for a usage.* code); or {"exit", "stdout"?, "stderr"?} as it is.
+function answer(given) {
+    if (given.print !== undefined) {
+        process.stdout.write(JSON.stringify(given.print) + String.fromCharCode(10));
+    } else if (given.code !== undefined) {
+        process.stderr.write(JSON.stringify({ error: { code: given.code, title: 'Words of the CLI that the desktop never shows.', ...(given.error ?? {}) } }) + String.fromCharCode(10));
+        process.exitCode = given.exit ?? (given.code.startsWith('usage.') ? 2 : 1);
+    } else {
+        process.stdout.write(given.stdout ?? '');
+        process.stderr.write(given.stderr ?? '');
+        process.exitCode = given.exit ?? 0;
+    }
+}
+
+if (process.env.STUB_HANG === name || process.env.STUB_HANG === `${name} ${said}`) {
+    // A program that never answers, whatever it was asked (STUB_HANG=<name>) or asked that one thing (STUB_HANG=<name>
+    // <arguments>), and ends at the first signal: what a runner's time limit is for. Its id is written to the file
+    // STUB_HANG_PID names, so a test can see it has gone.
     if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
     setInterval(() => undefined, 60000);
 } else if (sandboxCheck) {
@@ -96,8 +112,14 @@ if (process.env.STUB_HANG === name) {
 } else if (said === '--version' && name === 'codex' && process.env.STUB_CODEX_VERSION) {
     // What Codex says of its version, as `codex-cli <version>`.
     process.stdout.write(`codex-cli ${process.env.STUB_CODEX_VERSION}\n`);
+} else if (said === '--version' && name === 'reply' && process.env.STUB_REPLY_VERSION_ENDS) {
+    // A Reply CLI that does not say its version, as STUB_REPLY_VERSION_ENDS names the ending.
+    answer(JSON.parse(process.env.STUB_REPLY_VERSION_ENDS));
 } else if (said === '--version') {
     process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.23.2'}\n` :'10.9.2\n');
+} else if (name === 'reply' && said === 'auth status --json' && process.env.STUB_REPLY_AUTH_STATUS) {
+    // A read of the sign-in that ended as STUB_REPLY_AUTH_STATUS names it.
+    answer(JSON.parse(process.env.STUB_REPLY_AUTH_STATUS));
 } else if (name === 'reply' && said === 'auth status --json') {
     // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
     const signedIn = process.env.STUB_REPLY_SIGNED_IN === 'yes';
@@ -136,19 +158,12 @@ if (process.env.STUB_HANG === name) {
     const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--force') ? '_FORCE' : ''}`;
     const perChannel = verb === 'PENDING' && args[2] === '--channel' ? process.env[`${key}_${(args[3] ?? '').toUpperCase()}`] : undefined;
     const named = perChannel || process.env[key];
-    const answer = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
-    if (answer === null) {
+    const given = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
+    if (given === null) {
         process.stderr.write(`the stub reply does not answer ${said}\n`);
         process.exitCode = 2;
-    } else if (answer.print !== undefined) {
-        process.stdout.write(JSON.stringify(answer.print) + String.fromCharCode(10));
-    } else if (answer.code !== undefined) {
-        process.stderr.write(JSON.stringify({ error: { code: answer.code, title: 'Words of the CLI that the desktop never shows.', ...(answer.error ?? {}) } }) + String.fromCharCode(10));
-        process.exitCode = answer.exit ?? (answer.code.startsWith('usage.') ? 2 : 1);
     } else {
-        process.stdout.write(answer.stdout ?? '');
-        process.stderr.write(answer.stderr ?? '');
-        process.exitCode = answer.exit ?? 0;
+        answer(given);
     }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
     // STUB_REPLY_SKILLS_FAIL=yes makes the install fail before it writes anything.

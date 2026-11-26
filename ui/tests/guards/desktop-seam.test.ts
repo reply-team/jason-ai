@@ -101,6 +101,7 @@ const reply = {
     unread: true,
     pending: true,
     pendingUnread: true,
+    notRead: true,
     belowMinimum: true,
     startUpdate: true,
 } as const satisfies Record<keyof DesktopReply, true>;
@@ -219,6 +220,7 @@ describe('the desktop seam', () => {
             'unread',
             'pending',
             'pendingUnread',
+            'notRead',
             'belowMinimum',
             'startUpdate',
         ]);

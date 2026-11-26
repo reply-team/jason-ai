@@ -997,6 +997,13 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     // Below the Reply CLI the acts need, the card says so and offers no act.
     const below = typeof state.belowMinimum === 'string' ? state.belowMinimum : null;
     const offering = state.signedIn && state.cli.found && below === null;
+    // What the desktop asked and could not read is said as that, never as a state; an earlier desktop sends no such word.
+    const notRead = Array.isArray(state.notRead) ? state.notRead : [];
+    const wiredWords = notRead.includes('route')
+        ? 'Whether Jason uses this sign-in could not be read'
+        : state.wired
+          ? 'Jason uses this sign-in'
+          : 'Jason does not use it yet';
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
@@ -1031,38 +1038,44 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
             ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${startUpdate === null ? null : html`<div class="setrow start-update" role="note"><div class="grow meta">${startUpdate}</div></div>`}
             ${
-                state.cli.found && below !== null
-                    ? html`<div class="setrow below-minimum">
-                          <div class="grow meta">${below}</div>
-                          ${
-                              state.cli.install
-                                  ? html`<button
-                                        class="btn sm"
-                                        type="button"
-                                        ${real}
-                                        ${act('connect.install', state.cli.install)}
-                                    >
-                                        Update
-                                    </button>`
-                                  : null
-                          }
+                state.cli.found && notRead.includes('version')
+                    ? html`<div class="setrow version-unread">
+                          <div class="grow meta">The Reply CLI’s version could not be read. Check again.</div>
+                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
                       </div>`
-                    : null
+                    : state.cli.found && below !== null
+                      ? html`<div class="setrow below-minimum">
+                            <div class="grow meta">${below}</div>
+                            ${
+                                state.cli.install
+                                    ? html`<button
+                                          class="btn sm"
+                                          type="button"
+                                          ${real}
+                                          ${act('connect.install', state.cli.install)}
+                                      >
+                                          Update
+                                      </button>`
+                                    : null
+                            }
+                        </div>`
+                      : null
             }
             ${
                 // Without the Reply CLI nothing was asked of the sign-in, so nothing is said of it.
                 state.cli.found
                     ? html`<div class="setrow reply-state">
-                              <div class="grow">
-                                  ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
-                                  ${
-                                      state.signedIn
-                                          ? html`<span class="meta"
-                                                >${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span
-                                            >`
-                                          : null
-                                  }
-                              </div>
+                              ${
+                                  notRead.includes('auth')
+                                      ? html`<div class="grow">The Reply sign-in could not be read. Check again.</div>
+                                            <button class="btn sm" type="button" ${act('connect.check')}>
+                                                Check again
+                                            </button>`
+                                      : html`<div class="grow">
+                                            ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
+                                            ${state.signedIn ? html`<span class="meta">${wiredWords}</span>` : null}
+                                        </div>`
+                              }
                           </div>
                           <div class="reply-key">
                               ${secret('reply', 'Or paste a Reply API key')}

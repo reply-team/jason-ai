@@ -58,10 +58,22 @@ if (args[0] === 'status') {
         process.stderr.write('No runtime answered.\n');
         process.exit(3);
     }
+    // =unreachable answers as the CLI does where no runtime answers: its envelope on stdout, exit 3; =garbage with what
+    // is no list.
+    if (process.env.STUB_PLUGIN_LIST_FAILS === 'unreachable') {
+        print({ error: { code: 'runtime_unreachable', message: 'No runtime answered.', retryable: true } });
+        process.exit(3);
+    }
+    if (process.env.STUB_PLUGIN_LIST_FAILS === 'garbage') {
+        process.stdout.write('not json\n');
+        process.exit(0);
+    }
     const granted = (http, env) => ({ exec: null, http: { requested: [], granted: http }, env: { requested: [], granted: env }, api: null, subscriptions: null });
+    // STUB_REPLY_PLUGIN=<status> lists the Reply plugin in that state; =absent lists none.
+    const replyStatus = process.env.STUB_REPLY_PLUGIN || 'valid';
     print({
         plugins: [
-            { id: 'reply', status: 'valid', capabilities: granted([], []) },
+            ...(replyStatus === 'absent' ? [] : [{ id: 'reply', status: replyStatus, capabilities: granted([], []) }]),
             { id: 'slack', status: 'valid', capabilities: granted(['slack.com'], ['SLACK_PROXY']) },
             { id: 'ntfy', status: 'invalid', capabilities: granted([], []) },
         ],
@@ -80,6 +92,20 @@ if (args[0] === 'status') {
     process.stderr.write('The release could not be reached.\n');
     process.exit(1);
 } else if (verb === 'route list') {
+    // STUB_ROUTE_LIST=unreachable answers as the CLI does where no runtime answers, =refused as one that refused, and
+    // =garbage with what is no list.
+    if (process.env.STUB_ROUTE_LIST === 'unreachable') {
+        print({ error: { code: 'runtime_unreachable', message: 'No runtime answered.', retryable: true } });
+        process.exit(3);
+    }
+    if (process.env.STUB_ROUTE_LIST === 'refused') {
+        print({ error: { code: 'internal_error', message: 'The runtime could not answer.', retryable: true } });
+        process.exit(1);
+    }
+    if (process.env.STUB_ROUTE_LIST === 'garbage') {
+        process.stdout.write('not json\n');
+        process.exit(0);
+    }
     // The global default is the one the settings file holds, as the runtime's reload froze it.
     let settings = {};
     try {

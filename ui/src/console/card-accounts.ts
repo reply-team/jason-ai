@@ -95,26 +95,53 @@ function replyFacts(part: Part<DesktopReply>): Html {
     const accounts = Array.isArray(reply.accounts) ? reply.accounts : [];
     const absent = Array.isArray(reply.absent) ? reply.absent : [];
     const unread = Array.isArray(reply.unread) ? reply.unread : [];
+    // Without the Reply CLI nothing was asked of Reply: that is all it says.
+    if (!reply.cli.found) return html`<div class="card-line"><span>The Reply CLI was not found.</span></div>`;
+    const below = typeof reply.belowMinimum === 'string' ? reply.belowMinimum : null;
+    // What the desktop asked and could not read; a desktop of an earlier version sends no such word.
+    const notRead = Array.isArray(reply.notRead) ? reply.notRead : [];
+    // The desktop asks for the lists only of a Reply CLI that is signed in and at the minimum; elsewhere no count.
+    const listed = reply.signedIn && below === null;
     return html`<div class="card-line">
-            ${reply.cli.found ? null : html`<span>The Reply CLI was not found.</span>`}
-            <span
-                >${reply.signedIn ? html`Signed in to Reply as <b>${reply.user ?? ''}</b>` : 'Not signed in to Reply'}</span
-            >
-            <span class="meta"
-                >${
-                    reply.wired
-                        ? 'The runtime’s Reply plugin uses this sign-in'
-                        : 'The runtime’s Reply plugin does not use a Reply sign-in yet'
-                }</span
-            >
-            <span class="meta"
-                >${
-                    unread.length === 0
-                        ? accountsWord(accounts.length)
-                        : `${accountsWord(accounts.length)} listed; ${unread.map(channelOf).join(' and ')} not read`
-                }</span
-            >
+            ${
+                notRead.includes('auth')
+                    ? null
+                    : html`<span
+                          >${reply.signedIn ? html`Signed in to Reply as <b>${reply.user ?? ''}</b>` : 'Not signed in to Reply'}</span
+                      >`
+            }
+            ${
+                notRead.includes('route')
+                    ? null
+                    : html`<span class="meta"
+                          >${
+                              reply.wired
+                                  ? 'The runtime’s Reply plugin uses this sign-in'
+                                  : 'The runtime’s Reply plugin does not use a Reply sign-in yet'
+                          }</span
+                      >`
+            }
+            ${
+                listed
+                    ? html`<span class="meta"
+                          >${
+                              unread.length === 0
+                                  ? accountsWord(accounts.length)
+                                  : `${accountsWord(accounts.length)} listed; ${unread.map(channelOf).join(' and ')} not read`
+                          }</span
+                      >`
+                    : below !== null && !notRead.includes('version')
+                      ? html`<span class="meta">${below}</span>`
+                      : null
+            }
         </div>
+        ${notRead.includes('version') ? html`<div class="ask-w">The Reply CLI’s version could not be read.</div>` : null}
+        ${notRead.includes('auth') ? html`<div class="ask-w">The Reply sign-in could not be read.</div>` : null}
+        ${
+            notRead.includes('route')
+                ? html`<div class="ask-w">Whether the runtime’s Reply plugin uses this sign-in could not be read.</div>`
+                : null
+        }
         ${
             accounts.length === 0
                 ? null

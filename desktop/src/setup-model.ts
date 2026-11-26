@@ -452,12 +452,35 @@ export function parseReplyAuth(stdout: string): { signedIn: boolean; user: strin
     }
 }
 
-/** The plugin `jason route list` names as the global default, or null for none or an answer it cannot read. */
-export function defaultRoutePlugin(stdout: string): string | null {
+/**
+ * The sign-in as `reply auth status --json` answered it, or null where it did not answer. reply-cli 0.23.2 prints its
+ * object, with `authenticated`, and ends 0 for a credential and 1 for none (src/commands/auth.ts); every failure ends
+ * before it prints, with its error line on stderr alone: a profile it does not know (`usage.profile`, exit 2), a
+ * credential store it cannot read (`store.read`, `store.corrupt`, exit 1). A time limit is exit -1.
+ */
+export function readReplyAuth(result: { exit: number; stdout: string }): { signedIn: boolean; user: string | null; profile: string | null } | null {
+    if (result.exit !== 0 && result.exit !== 1) return null;
     try {
-        const raw = JSON.parse(stdout) as { global?: { default?: { plugin_id?: unknown } | null } };
-        const plugin = raw.global?.default?.plugin_id;
-        return typeof plugin === 'string' ? plugin : null;
+        const raw: unknown = JSON.parse(result.stdout);
+        if (typeof raw !== 'object' || raw === null || typeof (raw as { authenticated?: unknown }).authenticated !== 'boolean') return null;
+    } catch {
+        return null;
+    }
+    return parseReplyAuth(result.stdout);
+}
+
+/**
+ * The plugin `jason route list` names as the global default, null for none; or null for the whole where the list was
+ * not read: an exit other than 0 (3 where no runtime answered, 1 where it refused, -1 at the time limit), or an answer
+ * without `global.default`, which the runtime prints as null where no default is set.
+ */
+export function readGlobalDefault(result: { exit: number; stdout: string }): { plugin: string | null } | null {
+    if (result.exit !== 0) return null;
+    try {
+        const raw = JSON.parse(result.stdout) as { global?: { default?: { plugin_id?: unknown } | null } } | null;
+        const fallback = raw?.global?.default;
+        if (fallback === null) return { plugin: null };
+        return typeof fallback?.plugin_id === 'string' ? { plugin: fallback.plugin_id } : null;
     } catch {
         return null;
     }
@@ -599,5 +622,20 @@ export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
         answered.set(plugin.id, { valid: plugin.status === 'valid', grants });
     }
     return answered;
+}
+
+/**
+ * Whether the runtime holds Jason's Reply plugin valid, as `jason plugin list` answered: false for one it lists in another
+ * state or does not list; null where it gave no list (an exit other than 0, or no `plugins` list printed).
+ */
+export function replyPluginValid(result: { exit: number; stdout: string }): boolean | null {
+    if (result.exit !== 0) return null;
+    try {
+        const raw = JSON.parse(result.stdout) as { plugins?: unknown } | null;
+        if (!Array.isArray(raw?.plugins)) return null;
+    } catch {
+        return null;
+    }
+    return pluginRuntimes(result.stdout).get('reply')?.valid ?? false;
 }
 
