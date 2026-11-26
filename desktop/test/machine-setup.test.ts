@@ -760,7 +760,7 @@ test('Live’s start is tried once more after the set-up ends where it failed wh
     }, { state: { state: 'running' }, settled: async () => void (said.push('settled'), (settledNow = true)) }, async () => void said.push('said'));
     assert.deepEqual(said, ['said', 'settled']);
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    assert.ok(main.includes('                    machineSetup,\n                    () => showStarting(window, finishWaitSentence, false),\n                ),'));
+    assert.ok(main.includes('                        machineSetup,\n                        () => showStarting(window, finishWaitSentence, false),\n                    ),'));
     assert.match(finishWaitSentence, /^Waiting for the set-up to finish updating this installation/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, { state: { state: 'idle' }, settled: async () => undefined }), /refused/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, null), /refused/);
@@ -1182,6 +1182,6 @@ test('the runtime’s start at logon is no item of the Jason menu or the tray, a
     assert.equal(desk.includes('Start the Runtime at Logon'), false, 'the item is gone from the menu and the tray');
     assert.equal(/readAutostart|autostartOn|deps.autostart/.test(desk), false, 'and so is its handler, and the read it drew from');
     assert.ok(desk.includes("label: 'Open Jason at Login'"), 'the desktop’s own item stays');
-    assert.ok(source('main.ts').includes('        runtimeVersion = started.runtimeVersion;\n        // A new installation, brought up: the machine set-up once more'));
+    assert.ok(source('main.ts').includes('            runtimeVersion = started.runtimeVersion;\n            // A new installation, brought up: the machine set-up once more'));
     assert.ok(source('main.ts').includes('void machineSetup?.afterLive();'));
 });
