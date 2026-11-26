@@ -130,10 +130,12 @@ if (process.env.STUB_HANG === name) {
     // The account verbs as the Reply CLI ends them under --json: the result on stdout and exit 0, a refusal as one line
     // {"error":{...}} on stderr and exit 1 (2 for a usage.* code), exit 3 for a write whose outcome it does not know. The
     // answer is named per verb by STUB_REPLY_ACCOUNT_<VERB>, with _FORCE where --force was passed: {"print": <result>}, {"code": <code>, "exit"?}, or {"exit", "stdout"?, "stderr"?} as it is.
-    // `pending` lists nothing when none is named.
+    // `pending` may be answered per channel by STUB_REPLY_ACCOUNT_PENDING_<CHANNEL>, read before the verb's own answer, and
+    // lists nothing when none is named.
     const verb = (args[1] ?? '').toUpperCase();
     const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--force') ? '_FORCE' : ''}`;
-    const named = process.env[key];
+    const perChannel = verb === 'PENDING' && args[2] === '--channel' ? process.env[`${key}_${(args[3] ?? '').toUpperCase()}`] : undefined;
+    const named = perChannel || process.env[key];
     const answer = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
     if (answer === null) {
         process.stderr.write(`the stub reply does not answer ${said}\n`);
