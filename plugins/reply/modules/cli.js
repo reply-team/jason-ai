@@ -338,6 +338,7 @@ function ended(answer, request) {
 
   if (said !== null) {
     observed.cli_code = said.code;
+    observed.cli_title = typeof said.title === "string" ? said.title : undefined;
     observed.status = said.status;
     observed.provider_code = said.reply_code;
     observed.provider_detail = said.detail;

@@ -3,6 +3,15 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.20.1
+
+- A failure's trace carries the CLI's own sentence for the ending (`cli_title`) beside its code and the status. A refusal
+  reply-cli makes of an item in Reply's answer, at status 200, says which step Reply refused there and nowhere else:
+  "Reply did not import the contact." is a refusal of the import a send makes first, for a person Reply holds nobody
+  for, and not of the send, and Reply's own code and sentence are in the trace only where Reply's item gave one and the
+  CLI passed it on. The row of `reply.refused` and the message of a refusal this version has no word for now say so,
+  where they promised Reply's code and sentence every time.
+
 ## 0.20.0
 
 - Needs reply-cli 0.23.0 or newer, the release that sends a direct email as a follow-up in the thread of an earlier one,

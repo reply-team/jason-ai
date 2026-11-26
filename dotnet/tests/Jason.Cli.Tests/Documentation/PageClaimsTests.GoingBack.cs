@@ -54,7 +54,8 @@ public partial class PageClaimsTests
     /// 0.49 places: the journal forwarder's 1.8.0, which 0.50 places for the kinds of a person's line it writes, and its
     /// 1.9.0, which the release after 0.50 places for a send that did not go, and Reply's 0.19.1, which 0.50 places for a
     /// reply's text written as the person it reaches reads it, and its 0.20.0, which the release after 0.50 places for a
-    /// message sent into the thread of the email it follows. A package a later release placed is data in the data
+    /// message sent into the thread of the email it follows, and its 0.20.1, which the release after 0.51.1 places for the
+    /// CLI's own sentence in a refusal's trace. A package a later release placed is data in the data
     /// directory that no release after 0.49 has opened, as the section's steps say of every such data, and a package that
     /// moves in a later release is appended here.
     /// </summary>
@@ -64,6 +65,7 @@ public partial class PageClaimsTests
         ("journal-forwarder", "1.9.0 sha256:51db65380756347c600f018304c558c3b81152b415df51da10424cec46708a01"),
         ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
         ("reply", "0.20.0 sha256:89579c646fef5f4f9b18818347fc3a9625337beae89c1a35cd8600dbaf2c926c"),
+        ("reply", "0.20.1 sha256:5d4f6eb11405763a5e6724d055133025dc38fd4acfa8f75893b10db6f313a7d5"),
     ];
 
     /// <summary>

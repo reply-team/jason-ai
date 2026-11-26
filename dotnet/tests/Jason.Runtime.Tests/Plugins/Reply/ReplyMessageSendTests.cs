@@ -1126,6 +1126,59 @@ public partial class ReplyMessageSendTests
     }
 
     /// <summary>
+    /// The send's own import of a person Reply holds nobody for is refused in an item of Reply's answer: reply-cli 0.23.0
+    /// prints <c>reply.refused</c> at status 200 with its own sentence and, when Reply's item gave none, no code or
+    /// sentence of Reply's. This is the line it printed for such a refusal. The trace keeps the CLI's sentence beside its
+    /// code and the status, which is the one word that says the import was refused and not the letter, and the message
+    /// promises Reply's own words only where the CLI passed them on.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_import_keeps_the_cli_s_own_sentence_in_the_trace()
+    {
+        using var account = new ReplyAccount().WithSender(12, "email", "Ann Owner", Mailbox);
+        account.Prints(
+            "contact send-email", 1, string.Empty,
+            """{"error":{"status":200,"code":"reply.refused","title":"Reply did not import the contact.","ids":{"email_account_id":12}}}""");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email")));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("reply.refused", (string?)error.Details!["cli_code"]);
+        Assert.Equal("Reply did not import the contact.", (string?)error.Details!["cli_title"]);
+        Assert.Equal(200, (int?)error.Details!["status"]);
+        Assert.False(error.Details!.AsObject().ContainsKey("provider_code"));
+        Assert.False(error.Details!.AsObject().ContainsKey("provider_detail"));
+        Assert.Contains("Reply's own code and sentence where the CLI passed them on", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["account list", "contact find", "contact send-email"], Lines(account));
+        Assert.Empty(account.Sent);
+    }
+
+    /// <summary>
+    /// A refusal the CLI read from Reply's own answer keeps Reply's code and sentence in the trace, as before, and the
+    /// CLI's own sentence beside them.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_in_reply_s_words_keeps_them_and_the_cli_s_sentence_in_the_trace()
+    {
+        using var account = ByEmail();
+        account.Refuses(
+            "contact send-email", "reply.refused", status: 400, replyCode: "contact.notSupported", detail: "The contact cannot be emailed.",
+            ids: new JsonObject { ["contact_id"] = 1001, ["email_account_id"] = 12 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("email", pinned: "1001")));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Equal("contact.notSupported", (string?)error.Details!["provider_code"]);
+        Assert.Equal("The contact cannot be emailed.", (string?)error.Details!["provider_detail"]);
+        Assert.Equal("The stand-in was told to refuse this.", (string?)error.Details!["cli_title"]);
+        Assert.Equal(400, (int?)error.Details!["status"]);
+    }
+
+    /// <summary>
     /// On LinkedIn the person is named by the consumed profile alone, as the runtime keys it, and imported keyed by it; an
     /// InMail needs no connection, so it reaches a person nobody held a moment before.
     /// </summary>
