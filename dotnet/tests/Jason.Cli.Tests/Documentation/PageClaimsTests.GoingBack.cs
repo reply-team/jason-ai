@@ -55,9 +55,9 @@ public partial class PageClaimsTests
     /// 1.9.0, which the release after 0.50 places for a send that did not go, and Reply's 0.19.1, which 0.50 places for a
     /// reply's text written as the person it reaches reads it, and its 0.20.0, which the release after 0.50 places for a
     /// message sent into the thread of the email it follows, and its 0.20.1, which the release after 0.51.1 places for the
-    /// CLI's own sentence in a refusal's trace. A package a later release placed is data in the data
-    /// directory that no release after 0.49 has opened, as the section's steps say of every such data, and a package that
-    /// moves in a later release is appended here.
+    /// CLI's own sentence in a refusal's trace and the reply-cli 0.23.2 it needs. A package a later release placed is data
+    /// in the data directory that no release after 0.49 has opened, as the section's steps say of every such data, and a
+    /// package that moves in a later release is appended here.
     /// </summary>
     private static readonly (string Plugin, string Line)[] PackagesAfter049 =
     [
@@ -65,7 +65,7 @@ public partial class PageClaimsTests
         ("journal-forwarder", "1.9.0 sha256:51db65380756347c600f018304c558c3b81152b415df51da10424cec46708a01"),
         ("reply", "0.19.1 sha256:3d462c58f6826657cfa331c2522d40c29c5ef3dfa8e1ca81acbd12820fc11491"),
         ("reply", "0.20.0 sha256:89579c646fef5f4f9b18818347fc3a9625337beae89c1a35cd8600dbaf2c926c"),
-        ("reply", "0.20.1 sha256:5d4f6eb11405763a5e6724d055133025dc38fd4acfa8f75893b10db6f313a7d5"),
+        ("reply", "0.20.1 sha256:69a18b3c20ffa0e8212c2dc84b1d7309a2a35cc262d3d72f66919668bcc30c5e"),
     ];
 
     /// <summary>

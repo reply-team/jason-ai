@@ -5,6 +5,13 @@ absorbed by a release of this package alone.
 
 ## 0.20.1
 
+- Needs reply-cli 0.23.2 or newer, the release that keeps the sign-in when a token refresh fails for a passing reason (a
+  429, a 5xx, a timeout or a network error), lets one process at a time refresh it, and on Windows waits a few seconds
+  for a credentials file another program holds. Jason runs several `reply` commands at once, most of all right after it
+  starts, and an older reply-cli signed the person out on any refresh that failed, two of them refreshing one expired
+  sign-in together among them. With an older reply-cli the reload refuses the program, `executable_incompatible`, and
+  the package is `unavailable` until reply-cli is updated (`npm install -g reply-cli`), which Jason Desktop tries once
+  as it starts where npm is on the computer; the other packages load as before.
 - A failure's trace carries the CLI's own sentence for the ending (`cli_title`) beside its code and the status. A refusal
   reply-cli makes of an item in Reply's answer, at status 200, says which step Reply refused there and nowhere else:
   "Reply did not import the contact." is a refusal of the import a send makes first, for a person Reply holds nobody

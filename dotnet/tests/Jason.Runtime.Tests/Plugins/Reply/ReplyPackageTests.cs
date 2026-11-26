@@ -217,6 +217,15 @@ public class ReplyPackageTests
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md"));
         Assert.Contains($"**Version {ReplyCliRelease.Version} or newer.**", readme, StringComparison.Ordinal);
 
+        // The README and the manifest say what that release brings; the manifest names it last in its account of releases.
+        Assert.Contains(
+            $"{ReplyCliRelease.Version} is the release that keeps the sign-in when a token refresh fails for a passing reason",
+            Flat(readme),
+            StringComparison.Ordinal);
+        var yaml = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "plugin.yaml"));
+        var manifest = Flat(yaml.Replace("#", " ", StringComparison.Ordinal));
+        Assert.Contains($", from {ReplyCliRelease.Version}. This package makes no raw call.", manifest, StringComparison.Ordinal);
+
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));
@@ -1670,27 +1679,34 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The changelog opens with 0.20.1: a failure's trace carries the CLI's own sentence beside its code and the status, a
-    /// refusal at status 200 is one of an item of Reply's answer, the import a send makes first among them, and Reply's own
-    /// code and sentence are promised only where the CLI passed them on.
+    /// The changelog opens with 0.20.1: the package needs the reply-cli the stand-in answers as, the first that keeps the
+    /// sign-in through a token refresh that fails for a passing reason, and the section says what a person with an older one
+    /// sees and does; a failure's trace carries the CLI's own sentence beside its code and the status, a refusal at status
+    /// 200 is one of an item of Reply's answer, the import a send makes first among them, and Reply's own code and sentence
+    /// are promised only where the CLI passed them on.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_20_1_the_cli_s_own_sentence_in_the_trace()
+    public void The_changelog_opens_with_0_20_1_the_reply_cli_it_needs_and_the_cli_s_own_sentence_in_the_trace()
     {
         var section = Flat(ChangelogSection(0));
 
         Assert.StartsWith(" ## 0.20.1 ", section, StringComparison.Ordinal);
         Assert.All(
-            new[] { "`cli_title`", "status 200", "Reply did not import the contact.", "where Reply's item gave one", "`reply.refused`" },
+            new[]
+            {
+                $"Needs reply-cli {ReplyCliRelease.Version} or newer", "a token refresh fails for a passing reason",
+                "one process at a time", "on Windows", "`executable_incompatible`", "`unavailable`", "npm install -g reply-cli",
+                "`cli_title`", "status 200", "Reply did not import the contact.", "where Reply's item gave one", "`reply.refused`",
+            },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.StartsWith(" ## 0.20.0 ", Flat(ChangelogSection(1)), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The changelog keeps 0.20.0: the package needs the reply-cli the stand-in answers as, the first that sends a
-    /// direct email as a follow-up in the thread of an earlier one; a message that follows an earlier email goes into its
-    /// thread with its body alone, each refusal of it has a code of its own and none is sent as a letter of its own, and
-    /// the section says which runtime admits the manifest's <c>follows</c>.
+    /// The changelog keeps 0.20.0: the package needed reply-cli 0.23.0, the first that sends a direct email as a follow-up
+    /// in the thread of an earlier one; a message that follows an earlier email goes into its thread with its body alone,
+    /// each refusal of it has a code of its own and none is sent as a letter of its own, and the section says which runtime
+    /// admits the manifest's <c>follows</c>.
     /// </summary>
     [Fact]
     public void The_changelog_keeps_0_20_0_a_follow_up_in_the_thread_of_the_email_it_follows()
@@ -1701,7 +1717,7 @@ public class ReplyPackageTests
         Assert.All(
             new[]
             {
-                $"Needs reply-cli {ReplyCliRelease.Version} or newer", "`reply contact send-email --follows`",
+                "Needs reply-cli 0.23.0 or newer", "`reply contact send-email --follows`",
                 "`executable_incompatible`", "`unavailable`", "npm install -g reply-cli", "`--follows`", "its body alone on stdin",
                 "`Re: `", "never sent as a letter of its own", "`follows_not_found`", "`follows_never_sent`",
                 "`follows_not_sent_yet`", "`follows_not_placed`", "`capability_not_offered`", "`new_thread`",

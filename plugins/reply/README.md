@@ -78,8 +78,13 @@ trace, the key and the moment included.
   Where `npm install -g` is refused with `EACCES`, npm's global prefix is a directory this account does not own:
   install it under a prefix of the account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin`
   on the search path the runtime sees, as "A runtime that can find it" below says.
-- **Version 0.23.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
-  the answer. 0.23.0 is the release that sends a direct email as a follow-up in the thread of an earlier one, `reply
+- **Version 0.23.2 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+  the answer. 0.23.2 is the release that keeps the sign-in when a token refresh fails for a passing reason, a 429, a
+  5xx, a timeout or a network error, lets one process at a time refresh it, and on Windows waits a few seconds for a
+  credentials file another program holds, such as a virus scan or a backup. Jason runs several `reply` commands at
+  once, most of all right after it starts, and an older CLI signed you out on any refresh that failed, two of them
+  refreshing one expired sign-in together among them.
+  0.23.0 is the release that sends a direct email as a follow-up in the thread of an earlier one, `reply
   contact send-email --follows`, with a code of its own for each refusal of it, and prints the email a send follows on
   `reply direct-send get`; 0.22.0 the one that prints a mailbox's two limits on a direct email by a code of their own,
   `email.limit_reached`, with which limit under `details.limit`, a mailbox that cannot send direct emails at all as

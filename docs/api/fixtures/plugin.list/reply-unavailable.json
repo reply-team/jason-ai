@@ -74,8 +74,8 @@
               {
                 "name": "reply",
                 "path": "<bin>/reply",
-                "version": "0.22.0",
-                "min_version": "0.23.0",
+                "version": "0.23.0",
+                "min_version": "0.23.2",
                 "launch": null
               }
             ],
@@ -119,7 +119,7 @@
           {
             "code": "executable_incompatible",
             "path": "capabilities.exec.executables[0].name",
-            "message": "'reply' reports 0.22.0; the manifest asks for 0.23.0 or later. Install 'reply' 0.23.0 or later where the runtime can see it and run `jason plugin reload`."
+            "message": "'reply' reports 0.23.0; the manifest asks for 0.23.2 or later. Install 'reply' 0.23.2 or later where the runtime can see it and run `jason plugin reload`."
           }
         ],
         "audience_definition": {
@@ -526,7 +526,7 @@
             {
               "code": "executable_incompatible",
               "path": "capabilities.exec.executables[0].name",
-              "message": "'reply' reports 0.22.0; the manifest asks for 0.23.0 or later. Install 'reply' 0.23.0 or later where the runtime can see it and run `jason plugin reload`."
+              "message": "'reply' reports 0.23.0; the manifest asks for 0.23.2 or later. Install 'reply' 0.23.2 or later where the runtime can see it and run `jason plugin reload`."
             }
           ]
         }
