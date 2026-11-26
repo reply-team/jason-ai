@@ -205,6 +205,13 @@ export interface ReplyState {
     belowMinimum: string | null;
     /** What came of the update of the Reply CLI at this start of the application, as one sentence; absent where none was made. */
     startUpdate?: string | null;
+    /**
+     * Where the check of the Reply CLI that this start of the application makes stands, as a word: `pending` from the
+     * start until it ends, `ended` once its update was made, whatever came of it, once the desktop decided to make none,
+     * or once it waits no longer for the machine set-up, the update still to come. The page is told when it ends, and
+     * holds the Reply plugin's line back in the mode strip until then. Always sent; optional as the page reads it.
+     */
+    startCheck?: 'pending' | 'ended';
 }
 
 /**
@@ -487,6 +494,10 @@ export class Setup {
     #startUpdateLooked = false;
     /** What came of the start's update, in this run alone; null where none was made. */
     #startUpdate: { updated: boolean; said: string } | null = null;
+    /**
+     * Whether the start's check of the Reply CLI has ended in this run; until then the strip holds Reply's line back.
+     */
+    #startCheckEnded = false;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -723,7 +734,7 @@ export class Setup {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() };
         }
         const route = valid === true ? readGlobalDefault(await this.#deps.cli.run(['route', 'list'])) : null;
         const wired = route?.plugin === 'reply';
@@ -778,7 +789,12 @@ export class Setup {
             notRead: [...(version === null ? ['version' as const] : []), ...(authRead === null ? ['auth' as const] : []), ...(routeUnread ? ['route' as const] : [])],
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
             ...(startUpdate === null ? {} : { startUpdate }),
+            startCheck: this.#startCheck(),
         };
+    }
+
+    #startCheck(): 'pending' | 'ended' {
+        return this.#startCheckEnded ? 'ended' : 'pending';
     }
 
     /**
@@ -1354,10 +1370,32 @@ export class Setup {
      */
     updateReplyAtStart(): Promise<StartUpdateOutcome> {
         return this.#serial(async () => {
-            const outcome = await this.#updateReplyAtStart();
-            this.#deps.log.info('reply_start_update', { Outcome: outcome });
-            return outcome;
+            const said = this.#startUpdate;
+            try {
+                const outcome = await this.#updateReplyAtStart();
+                this.#deps.log.info('reply_start_update', { Outcome: outcome });
+                return outcome;
+            } finally {
+                // Where the check had already ended, by the bound on the machine set-up, a sentence set now is told anew.
+                if (!this.#endStartCheck() && this.#startUpdate !== said) this.#changed();
+            }
         });
+    }
+
+    /**
+     * Ends the start's check of the Reply CLI before its update ends: a start that asks for none, or one that waits no longer
+     * for the machine set-up (`replyStartCheck`). An update that comes after it still runs.
+     */
+    endStartCheck(): void {
+        this.#endStartCheck();
+    }
+
+    /** The start's check of the Reply CLI has ended: the page is told once. False where it had already ended. */
+    #endStartCheck(): boolean {
+        if (this.#startCheckEnded) return false;
+        this.#startCheckEnded = true;
+        this.#changed();
+        return true;
     }
 
     async #updateReplyAtStart(): Promise<StartUpdateOutcome> {
@@ -1399,7 +1437,6 @@ export class Setup {
 
     #startUpdateEnded<Ended extends 'updated' | 'still_old' | 'failed'>(outcome: Ended, sentence: string): Ended {
         this.#startUpdate = { updated: outcome === 'updated', said: sentence };
-        this.#changed();
         return outcome;
     }
 

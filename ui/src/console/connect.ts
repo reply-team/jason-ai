@@ -17,7 +17,7 @@ import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
 import { signInSentence } from './live';
-import { here, messageOf, setup, setupBusy, setupError } from './state';
+import { here, messageOf, setup, setupBusy, setupError, setupReadFailed } from './state';
 
 // Connect: what the desktop found and set up, and the acts that set the rest up. The desktop does each act; the card
 // says where things stand afterwards, from what `setup.status()` answers.
@@ -614,8 +614,10 @@ export async function reload(): Promise<void> {
     try {
         const status = await here().desktop.setup.status();
         setup.value = { ...status, hosts: withModels(status.hosts) };
+        setupReadFailed.value = false;
     } catch (error) {
         setupError.value = messageOf(error);
+        setupReadFailed.value = true;
     } finally {
         reading -= 1;
     }

@@ -14,7 +14,7 @@ import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
-import { npmLine, readUpdateSwitch, replyAtWork, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
+import { npmLine, readUpdateSwitch, replyAtWork, replyStartCheck, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
@@ -721,7 +721,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.23.2', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.23.2', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: 'pending' });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -730,6 +730,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     const absent = await setupOn(missing).status();
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
     assert.deepEqual(absent.reply.notRead, [], 'without the Reply CLI nothing was asked, so nothing was not read');
+    assert.equal(absent.reply.startCheck, 'pending', 'the start’s check of it has not ended, whatever the CLI');
 
     const read = async (env: Record<string, string>, routes: unknown = { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } }) => {
         const each = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', ...env } });
@@ -1328,6 +1329,8 @@ interface StartUpdate {
     markAtNpm: (string | undefined)[];
     /** The time limit each npm run was given. */
     limits: (number | undefined)[];
+    /** How often the page was asked to read the setup again. */
+    told: () => number;
 }
 
 /**
@@ -1412,7 +1415,9 @@ function startUpdate(
             writeSettings(b.paths.settings, next);
         },
     });
-    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm, limits };
+    let told = 0;
+    setup.onChanged(() => told++);
+    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm, limits, told: () => told };
 }
 
 /** What `jason plugin list` prints of plugins that each request one program, or none. */
@@ -1428,9 +1433,14 @@ function pluginList(plugins: { id: string; status: string; program: string | nul
 
 const npmRuns = (s: StartUpdate) => s.ran.filter((each) => each.startsWith('npm'));
 const line = async (s: StartUpdate) => (await s.setup.status()).reply.startUpdate;
+/**
+ * Where the start's check of the Reply CLI stands as the page reads it, and how often the page was told of a change.
+ */
+const checked = async (s: StartUpdate) => ({ check: (await s.setup.status()).reply.startCheck, told: s.told() });
+const ended = { check: 'ended', told: 1 };
 const installLine = 'npm install -g reply-cli';
 
-test('the start updates a Reply CLI below the minimum with the click’s own npm line, reads its version again and has the runtime read its plugins again', async (t) => {
+test('the start updates a Reply CLI below the minimum with the click’s own npm line, reads its version again and has the runtime read its plugins again; its check is not ended from the start until then', async (t) => {
     const s = startUpdate(t);
     let changed = 0;
     s.setup.onChanged(() => changed++);
@@ -1440,10 +1450,26 @@ test('the start updates a Reply CLI below the minimum with the click’s own npm
     assert.deepEqual(s.limits, [installLimit], 'npm is stopped at the install’s own time limit');
     assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: 'updated' }]);
+    assert.deepEqual(await checked(s), ended);
 
     // Once a start, whatever came of it.
     assert.equal(await s.setup.updateReplyAtStart(), 'settled');
     assert.equal(npmRuns(s).length, 1);
+    assert.deepEqual(await checked(s), ended, 'nothing more to tell');
+
+    // The page reads the check as not ended from the desktop's start, before anything is decided, and while npm runs.
+    let finish!: (result: RunResult) => void;
+    const slow = startUpdate(t, { npm: new Promise<RunResult>((resolve) => (finish = resolve)) });
+    assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
+    const updating = slow.setup.updateReplyAtStart();
+    for (let waited = 0; npmRuns(slow).length === 0; waited++) {
+        assert.ok(waited < 400, 'npm was asked');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
+    finish({ exit: 0, stdout: 'added 1 package', stderr: '' });
+    assert.equal(await updating, 'updated');
+    assert.deepEqual(await checked(slow), ended);
 });
 
 test('the mark is in the desktop’s settings before npm starts, beside what was there, and is taken away once the update succeeded', async (t) => {
@@ -1455,6 +1481,7 @@ test('the mark is in the desktop’s settings before npm starts, beside what was
     const failed = startUpdate(t, { npm: { exit: 1, stdout: '', stderr: 'npm error code EACCES' } });
     await failed.setup.updateReplyAtStart();
     assert.deepEqual(failed.kept(), { feed: null, skillsDeployedFor: 'kept', theme: 'dark', replyUpdateTried: replyMinimumVersion });
+    assert.deepEqual(await checked(failed), ended, 'a failed update ends the check');
 
     // A mark that is not a version is none.
     for (const bad of ['"soon"', '1', 'null', '"0.23"']) assert.equal(parseSettings(`{"reply_update_tried": ${bad}}`).replyUpdateTried, undefined, bad);
@@ -1464,6 +1491,7 @@ test('one try for each minimum, whatever came of it: the same one runs nothing a
     const same = startUpdate(t, { mark: replyMinimumVersion });
     assert.equal(await same.setup.updateReplyAtStart(), 'tried');
     assert.deepEqual(npmRuns(same), []);
+    assert.deepEqual(await checked(same), ended);
     const higher = startUpdate(t, { mark: '0.23.0' });
     assert.equal(await higher.setup.updateReplyAtStart(), 'updated');
     assert.deepEqual(higher.markAtNpm, [replyMinimumVersion]);
@@ -1484,6 +1512,7 @@ test('settings that cannot be written run nothing, and the log says so by the li
     assert.deepEqual(npmRuns(s), []);
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update_unmarked').map((each) => each.level), ['warn']);
     assert.equal(await line(s), undefined);
+    assert.deepEqual(await checked(s), ended);
 });
 
 test('a write of the desktop’s settings that failed is not held as written, so it burns no try', (t) => {
@@ -1514,7 +1543,7 @@ test('a mark that could not be taken away after a success is said as that in the
     assert.equal(s.kept().replyUpdateTried, replyMinimumVersion);
 });
 
-test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm', async (t) => {
+test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm; the check ends all the same', async (t) => {
     for (const [outcome, options] of [
         ['current', { before: replyMinimumVersion }],
         ['version_unread', { before: null }],
@@ -1527,7 +1556,29 @@ test('nothing is run and nothing is marked for a CLI at the minimum, one whose v
         assert.equal(s.kept().replyUpdateTried, undefined, outcome);
         assert.equal(s.ran.includes('jason plugin reload'), false, outcome);
         assert.equal(await line(s), undefined, outcome);
+        assert.deepEqual(await checked(s), ended, outcome);
     }
+
+    // The check ended before the update, by a start that asked for none or by the bound on the machine set-up: it ends
+    // once and is told once; an update that runs after it still runs, and its sentence is told to the page.
+    const early = startUpdate(t);
+    early.setup.endStartCheck();
+    early.setup.endStartCheck();
+    assert.deepEqual(await checked(early), ended);
+    assert.equal(await early.setup.updateReplyAtStart(), 'updated');
+    assert.equal(npmRuns(early).length, 1);
+    assert.equal(await line(early), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(await checked(early), { check: 'ended', told: 2 });
+    // An update after it that sets no sentence tells nothing more.
+    const quiet = startUpdate(t, { before: replyMinimumVersion });
+    quiet.setup.endStartCheck();
+    assert.equal(await quiet.setup.updateReplyAtStart(), 'current');
+    assert.deepEqual(await checked(quiet), ended);
+
+    // An update that throws ends it too.
+    const thrown = startUpdate(t, { npm: { then: (_done: unknown, fail: (error: Error) => void) => fail(new Error('npm could not be started')) } as unknown as Promise<RunResult> });
+    await assert.rejects(thrown.setup.updateReplyAtStart(), /npm could not be started/);
+    assert.deepEqual(await checked(thrown), ended);
 });
 
 test('npm never replaces the Reply CLI while a plugin that runs it can be at work: a valid one that requests it, or an unread list, runs nothing and uses up no try', async (t) => {
@@ -1551,6 +1602,7 @@ test('npm never replaces the Reply CLI while a plugin that runs it can be at wor
         assert.equal(s.ran.includes('jason plugin reload'), false, listed.stdout);
         assert.equal(await line(s), undefined, listed.stdout);
         assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: outcome }]);
+        assert.deepEqual(await checked(s), ended, listed.stdout);
     }
     // The ordinary case: the one plugin that requests it is not valid, and a valid one runs another program, or none.
     const ordinary = startUpdate(t, { listed: said(pluginList([{ ...older, status: 'unavailable' }, { id: 'slack', status: 'valid', program: null }, { id: 'own', status: 'valid', program: 'crm-cli' }])) });
@@ -1570,6 +1622,7 @@ test('Update:CheckEnabled false in the settings file or in the desktop’s own e
         assert.equal(await s.setup.updateReplyAtStart(), 'off');
         assert.deepEqual(s.ran, [], 'nothing is asked of any program');
         assert.equal(s.kept().replyUpdateTried, undefined);
+        assert.deepEqual(await checked(s), ended);
     }
     // False in either place turns it off: what the other says does not turn it on again, in both directions.
     const fileOff = startUpdate(t, { installation: off, environment: { jason_update__checkenabled: 'TRUE' } });
@@ -1601,6 +1654,7 @@ test('a settings file the desktop cannot parse runs nothing and uses up no try, 
             assert.equal(await s.setup.updateReplyAtStart(), 'switch_unread', text);
             assert.deepEqual(s.ran, [], text);
             assert.equal(s.kept().replyUpdateTried, undefined, text);
+            assert.deepEqual(await checked(s), ended, text);
         }
     }
     const missing = startUpdate(t);
@@ -1690,6 +1744,7 @@ test('npm that ended well and left the old CLI in use is said as that, by the de
     assert.equal(await own.setup.updateReplyAtStart(), 'still_old');
     assert.equal(await line(own), still('0.22.0'));
     assert.equal(own.kept().replyUpdateTried, replyMinimumVersion, 'tried once for this minimum');
+    assert.deepEqual(await checked(own), ended);
 
     const runtime = startUpdate(t, { runtime: '0.22.5' });
     assert.equal(await runtime.setup.updateReplyAtStart(), 'still_old');
@@ -1787,27 +1842,103 @@ test('a click made while the start’s update runs is not a second npm: in its t
     assert.deepEqual(missing.ran, [installLine, 'jason plugin reload']);
 });
 
-test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for', async () => {
+test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for; the check ends at the latest at the bound on the set-up, or when the start is over unasked', async (t) => {
     const calls: string[] = [];
     let ended = (): void => undefined;
-    const deps = (setUp: () => Promise<void>, update: () => Promise<unknown>) => ({
+    let bound = (): void => undefined;
+    const slept: number[] = [];
+    const deps = (setUp: () => Promise<void>, update: () => Promise<unknown>, end: () => void = () => void calls.push('end')) => ({
         setUp: () => (calls.push('set-up'), setUp()),
         update: () => (calls.push('update'), update()),
         failed: () => void calls.push('failed'),
+        end,
+        waitMs: 30_000,
+        sleep: (ms: number) => (slept.push(ms), new Promise<void>((resolve) => (bound = resolve))),
     });
     const turn = () => new Promise((resolve) => setImmediate(resolve));
-    replyUpdateAtStart('demo', deps(() => Promise.resolve(), () => Promise.resolve()));
+    const demo = replyStartCheck('demo', deps(() => Promise.resolve(), () => Promise.resolve()));
+    demo.ask();
     await turn();
-    assert.deepEqual(calls, []);
-    replyUpdateAtStart('live', deps(() => new Promise((resolve) => (ended = resolve)), () => Promise.resolve()));
+    assert.deepEqual(calls, ['end'], 'nothing is asked or waited for, and the check ends');
+    demo.over();
+    assert.deepEqual(calls, ['end']);
+    calls.length = 0;
+    const live = replyStartCheck('live', deps(() => new Promise((resolve) => (ended = resolve)), () => Promise.resolve()));
+    live.ask();
     await turn();
     assert.deepEqual(calls, ['set-up']);
+    assert.deepEqual(slept, [30_000], 'the set-up is waited for at most the bound handed in');
     ended();
     await turn();
     assert.deepEqual(calls, ['set-up', 'update']);
+    // The set-up ended within the bound: the update ends the check, and the bound passing later ends nothing; nor does
+    // the start being over, the update asked.
+    bound();
+    await turn();
+    live.over();
+    assert.deepEqual(calls, ['set-up', 'update']);
+    // The bound is on the set-up alone: passing while the update still runs, it ends nothing; the update's own end does.
+    calls.length = 0;
+    let updated = (): void => undefined;
+    replyStartCheck('live', deps(() => Promise.resolve(), () => new Promise<void>((resolve) => (updated = resolve)))).ask();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update']);
+    bound();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update'], 'the bound passing while the update runs ends nothing');
+    updated();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update']);
+
+    // A start over with no ask, whichever way it went: the check ends.
+    calls.length = 0;
+    replyStartCheck('live', deps(() => Promise.resolve(), () => Promise.resolve())).over();
+    await turn();
+    assert.deepEqual(calls, ['end']);
+
+    // A set-up that has not ended at the bound: the check ends there, the update not asked; once the set-up ends the
+    // update runs, and its sentence is told to the page.
+    const s = startUpdate(t);
+    const late = replyStartCheck('live', deps(() => new Promise((resolve) => (ended = resolve)), () => s.setup.updateReplyAtStart(), () => s.setup.endStartCheck()));
+    late.ask();
+    await turn();
+    assert.deepEqual(await checked(s), { check: 'pending', told: 0 });
+    bound();
+    await turn();
+    assert.deepEqual(await checked(s), { check: 'ended', told: 1 });
+    assert.deepEqual(npmRuns(s), []);
+    ended();
+    for (let waited = 0; s.told() < 2; waited++) {
+        assert.ok(waited < 400, 'the update ran and told the page');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.deepEqual(npmRuns(s), [installLine]);
+    assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(await checked(s), { check: 'ended', told: 2 });
+
     // A set-up that failed has ended too; a failure of the update is told and stops nothing.
     calls.length = 0;
-    replyUpdateAtStart('live', deps(() => Promise.reject(new Error('set-up')), () => Promise.reject(new Error('update'))));
+    replyStartCheck('live', deps(() => Promise.reject(new Error('set-up')), () => Promise.reject(new Error('update')))).ask();
     await turn();
     assert.deepEqual(calls, ['set-up', 'update', 'failed']);
+
+    // The start holds it so: the check is made with the Setup, asked once the window has loaded, and over in one finally
+    // that every later exit of the start passes, the copy that could not be made, no jason carried and a throw among them.
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    const made = main.indexOf('const replyCheck = replyStartCheck(runOn.mode, {');
+    const opened = main.indexOf('    try {', made);
+    const over = main.indexOf('    } finally {\n        replyCheck.over();\n    }', made);
+    const at = (text: string) => main.indexOf(text, opened);
+    assert.ok(main.indexOf('const setup = new Setup({') < made && made < opened && opened < over, 'made after the Setup, then the try');
+    // What it is handed: the Setup's own end of the check, the start's own bound on the set-up, and a timer.
+    const handed = main.slice(made, opened);
+    for (const argument of ['end: () => setup.endStartCheck(),', 'waitMs: liveWaitMs,', 'sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),']) {
+        assert.ok(handed.includes(argument), `the start hands it ${argument}`);
+    }
+    for (const exit of ["await showStarting(window, 'Starting Jason…', false);", 'if (uncopied !== null) {', 'if (version === null) {', "log.info('window_loaded'", 'replyCheck.ask();', '} catch (error) {']) {
+        assert.ok(at(exit) > opened && at(exit) < over, `${exit} is inside the try the finally closes`);
+    }
+    assert.equal(main.split('replyCheck.ask();').length - 1, 1);
+    assert.equal(main.split('replyCheck.over();').length - 1, 1);
+    assert.ok(at('replyCheck.ask();') > at("log.info('window_loaded'"));
 });

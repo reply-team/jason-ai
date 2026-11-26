@@ -1,10 +1,23 @@
 import type { ReactNode } from 'react';
 import { t } from '../platform/i18n';
 import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
-import { here } from './state';
+import { here, mounted, setup, setupReadFailed } from './state';
 import { unavailablePlugins } from './unavailable';
 
 const modes: readonly Mode[] = ['demo', 'live'];
+
+/**
+ * Whether the Reply plugin's line waits: the desktop updates a Reply CLI below the minimum itself as it starts and has
+ * the runtime load its plugins again, so the line would ask for what is being done. It waits while the desktop's state
+ * says that check has not ended, and before that state is first read, the plugins being read sooner. A read of the
+ * state that failed, a desktop of an earlier version, which says nothing of the check, and a strip with no desktop
+ * behind it hold nothing back.
+ */
+function replyWaits(): boolean {
+    if (!mounted() || setupReadFailed.value) return false;
+    const state = setup.value;
+    return state === null || state.reply.startCheck === 'pending';
+}
 
 /**
  * The strip at the head of the column right of the sidebar, over every panel, in both modes: 38 pixels high, and the
@@ -20,10 +33,12 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * In Live, a plugin a route names that the runtime holds back is said there as an alert, by the name the Accounts card
  * gives it and the runtime's own problem text with its repair, and its link goes to Accounts: one line for each of up to
  * two, one line counting more. It stands while the cause does and nothing closes it; the demo's runtime is not the
- * person's installation, so the demo never says it.
+ * person's installation, so the demo never says it. Reply's own waits while the desktop's start may still be updating
+ * the Reply CLI itself (`replyWaits`).
  */
 function Unavailable() {
-    const shown = unavailablePlugins.value;
+    const waits = replyWaits();
+    const shown = unavailablePlugins.value.filter((each) => !(waits && each.id === 'reply'));
     if (shown.length === 0) return null;
     const accounts = (
         <button type="button" className="mode-strip-link" onClick={() => here().dock.page({ screen: 'accounts' })}>
