@@ -618,8 +618,15 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   accounts stay in every case. A channel that was read and holds no account and no link still waiting shows no line:
   the card says what it could not read, never that a channel is empty. The list is read again when the window takes the
   focus back, at most once in 30 seconds.
+  The same goes for what the card reads before the lists. A sign-in it could not read is said as that ("The Reply
+  sign-in could not be read.") with **Check again**, in place of the sign-in: the card says "Not signed in" only where
+  the Reply CLI answers that it holds no credential, and asks for no account either way. Where it could not read
+  whether Jason uses the sign-in, the runtime giving no list of its plugins or of its routes, it says that, never that
+  Jason does not use it.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
-  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. An update, and an
+  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. A Reply CLI whose
+  version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**, never
+  as one below it, and the card offers no **Update** and no act. An update, and an
   install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once; that reload, like any
   reload of plugins, also takes up what was edited by hand since the last one: routes, grants and packages.
   Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in

@@ -505,6 +505,9 @@ export interface DesktopReplyAccount {
 /** A channel Reply lists accounts for. */
 export type DesktopReplyChannel = 'email' | 'linkedin';
 
+/** A fact of the Reply connection the desktop reads: the Reply CLI's version, its sign-in, and whether Jason uses that. */
+export type DesktopReplyFact = 'version' | 'auth' | 'route';
+
 /** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
@@ -529,6 +532,12 @@ export interface DesktopReply {
      * A channel the Reply CLI says has none is not named.
      */
     pendingUnread: DesktopReplyChannel[];
+    /**
+     * What the desktop asked and could not read, as closed words: the Reply CLI's version (`belowMinimum` is then still
+     * set, so a page that reads no such word offers no act), its sign-in (`signedIn` is then false), and whether the
+     * runtime's Reply plugin uses that sign-in (`wired` is then false).
+     */
+    notRead: DesktopReplyFact[];
     /**
      * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the desktop's sentence
      * naming the update; the card then offers no act. Null otherwise.

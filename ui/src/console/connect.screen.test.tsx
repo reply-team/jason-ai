@@ -402,7 +402,7 @@ describe('the Reply card, its acts', () => {
         expect(card().querySelector('input[type="password"]:not([aria-label="Or paste a Reply API key"])')).toBeNull();
     });
 
-    it('draws the card as a recommended service, one sentence, the sign-in, and a key field with its button', async () => {
+    it('draws the card as a recommended service, one sentence, the sign-in or that it could not be read, and a key field with its button', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } });
         const connect = await openConnect();
         const card = replyCard(connect);
@@ -420,15 +420,60 @@ describe('the Reply card, its acts', () => {
         expect(within(card).getByRole('button', { name: 'Use key' })).toBeTruthy();
         expect(within(card).queryByRole('button', { name: 'Connect' })).toBeNull();
         expect(within(card).getByRole('link', { name: 'Manage accounts in Reply' })).toBeTruthy();
+        cleanup();
+
+        // A sign-in the desktop could not read is said as that, in the sign-in's place, with Check again in its row:
+        // neither "Not signed in" nor "Signed in as". The sign-in and the key field stay, signing in no longer the card's
+        // first act, since nothing says it is needed; no act on an account is offered.
+        const signedOut = { ...setupFound.reply, signedIn: false, user: null, accounts: [] };
+        const desktop = renderConnect({ ...setupFound, reply: { ...signedOut, notRead: ['auth'] } });
+        const unread = replyCard(await openConnect());
+        const row = unread.querySelector<HTMLElement>('.reply-state')!;
+        expect(words(row.querySelector('.grow')!)).toBe('The Reply sign-in could not be read.');
+        expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
+        expect(words(unread)).not.toMatch(/not signed in|signed in as|uses this sign-in|does not use it yet/i);
+        expect(within(unread).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
+        expect(within(unread).getByPlaceholderText('Or paste a Reply API key')).toBeTruthy();
+        expect(within(unread).queryByRole('button', { name: 'Add account' })).toBeNull();
+        const reads = statusReads(desktop);
+        fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
+        await waitFor(() => expect(statusReads(desktop)).toBe(reads + 1));
+        cleanup();
+
+        // A desktop of an earlier version sends no such word: its card says "Not signed in", as it did.
+        const older: Partial<DesktopSetup['reply']> = { ...signedOut };
+        delete older.notRead;
+        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
+        expect(words(replyCard(await openConnect()).querySelector('.reply-state')!)).toBe('Not signed in');
     });
 
-    it('keeps who is signed in beside the same card', async () => {
+    it('keeps who is signed in beside the same card, and whether Jason uses that sign-in or that it could not be read', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
         const card = replyCard(await openConnect());
         expect(words(card)).toContain('Signed in as ann@example.test');
         expect(words(card)).toContain('Jason uses this sign-in');
         expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
+        cleanup();
+
+        // Whether Jason uses it: read as not, said as not; not read, said as that, never as either.
+        const used = (card: HTMLElement) => words(card.querySelector('.reply-state .meta')!);
+        const signedIn = { ...setupFound.reply, signedIn: true, user: 'ann@example.test', wired: false };
+        renderConnect({ ...setupFound, reply: signedIn });
+        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
+        cleanup();
+        renderConnect({ ...setupFound, reply: { ...signedIn, notRead: ['route'] } });
+        const unread = replyCard(await openConnect());
+        expect(used(unread)).toBe('Whether Jason uses this sign-in could not be read');
+        expect(words(unread)).toContain('Signed in as ann@example.test');
+        expect(words(unread)).not.toContain('Jason does not use it yet');
+        cleanup();
+
+        // A desktop of an earlier version sends no such word: not wired is said as it was.
+        const older: Partial<DesktopSetup['reply']> = { ...signedIn };
+        delete older.notRead;
+        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
+        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
     });
 
     it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {
@@ -711,7 +756,7 @@ describe('the Reply card, its acts', () => {
         ]);
     });
 
-    it('below the Reply CLI the acts need, says so once, offers the desktop’s update and no act', async () => {
+    it('below the Reply CLI the acts need, says so once, offers the desktop’s update and no act; with its version not read, says that and offers Check again alone', async () => {
         const below = 'Managing Reply accounts here needs the Reply CLI 0.22.0 or later: update the Reply CLI.';
         const desktop = renderConnect({
             ...setupFound,
@@ -725,6 +770,7 @@ describe('the Reply card, its acts', () => {
         const connect = await openConnect();
         const card = () => replyCard(connect);
         expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([`${below} Update`]);
+        expect(card().querySelector('.version-unread')).toBeNull();
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
         expect(words(card())).not.toContain('Reply CLI 0.21.0');
         expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
@@ -736,6 +782,40 @@ describe('the Reply card, its acts', () => {
                 { name: 'setup.installProgram', args: ['reply'] },
             ]),
         );
+        cleanup();
+
+        // A version the desktop could not read: said as that with Check again, in place of the sentence below the
+        // minimum and its Update, which it still sends for a page of an earlier version; no act is offered.
+        const unreadVersion = {
+            ...setupFound.reply,
+            cli: { found: true, version: null, install: 'reply' },
+            accounts: [account('2', 'email', 'disconnected')],
+            belowMinimum: below,
+        };
+        const asked = renderConnect({ ...setupFound, reply: { ...unreadVersion, notRead: ['version'] } });
+        const again = await openConnect();
+        const unread = () => replyCard(again);
+        const row = unread().querySelector<HTMLElement>('.version-unread')!;
+        expect(words(row.querySelector('.grow')!)).toBe('The Reply CLI’s version could not be read.');
+        expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
+        expect(unread().querySelector('.below-minimum')).toBeNull();
+        expect(words(unread())).not.toContain('or later');
+        expect(within(unread()).queryByRole('button', { name: 'Update' })).toBeNull();
+        expect(within(unread()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(buttonsOf(rowOf(unread, 'Account 2'))).toEqual([]);
+        const reads = statusReads(asked);
+        fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
+        await waitFor(() => expect(statusReads(asked)).toBe(reads + 1));
+        expect(asked.calls.filter((call) => call.name === 'setup.installProgram')).toEqual([]);
+        cleanup();
+
+        // A desktop of an earlier version sends no such word: its card says the sentence below the minimum, as it did.
+        const older: Partial<DesktopSetup['reply']> = { ...unreadVersion };
+        delete older.notRead;
+        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
+        expect(Array.from(replyCard(await openConnect()).querySelectorAll('.below-minimum'), words)).toEqual([
+            `${below} Update`,
+        ]);
     });
 
     it('below the minimum with no npm to update with, says so and offers no button', async () => {

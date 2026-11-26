@@ -161,6 +161,7 @@ export const setupFound: DesktopSetup = {
         unread: [],
         pending: [],
         pendingUnread: [],
+        notRead: [],
         belowMinimum: null,
     },
     runtimeVersion: '0.34.0',

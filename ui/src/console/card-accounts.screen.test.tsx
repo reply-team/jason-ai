@@ -223,21 +223,67 @@ describe('the accounts card', () => {
         }
     });
 
-    it('says when Reply is not signed in, and has no table of accounts', async () => {
+    it('says when Reply is not signed in, or that the sign-in or the plugin’s use of it could not be read, and nothing of either without the Reply CLI; no count where no list was asked', async () => {
         const out: DesktopSetup = {
             ...setupFound,
             reply: { ...setupFound.reply, signedIn: false, user: null, wired: false, accounts: [] },
         };
-        renderConsole([setUp(turn())], stubDesktop(out));
+        const desktop = stubDesktop(out);
+        renderConsole([setUp(turn())], desktop);
         const pane = await openChat('Sending');
         const provider = fromReply(await read(pane));
-        expect(words(provider)).toContain('Not signed in to Reply');
-        expect(words(provider)).toContain('The runtime’s Reply plugin does not use a Reply sign-in yet');
-        expect(words(provider)).toContain('No accounts');
+        const facts = (part: HTMLElement) => [...part.querySelectorAll('.card-line > *')].map(words);
+        const warned = (part: HTMLElement) => [...part.querySelectorAll('.ask-w')].map(words);
+        // Signed out, no list was asked: no count, not even "No accounts".
+        expect(facts(provider)).toEqual([
+            'Not signed in to Reply',
+            'The runtime’s Reply plugin does not use a Reply sign-in yet',
+        ]);
         expect(provider.querySelector('table')).toBeNull();
+
+        // Each answer below is read on Refresh, as the card reads again, until it says what that answer alone says.
+        const again = async (reply: DesktopSetup['reply'], says: string) => {
+            desktop.setup.status = () => Promise.resolve({ ...setupFound, reply });
+            fireEvent.click(within(card(pane)).getByRole('button', { name: 'Refresh' }));
+            return waitFor(() => {
+                const part = fromReply(card(pane));
+                expect(words(part)).toContain(says);
+                return part;
+            });
+        };
+        // A sign-in that could not be read: said in the card's voice, never as "Not signed in to Reply", and nothing of the
+        // plugin's use of it, as on Connect; no count.
+        const authUnread = await again({ ...out.reply, notRead: ['auth'] }, 'The Reply sign-in could not be read.');
+        expect(facts(authUnread)).toEqual([]);
+        expect(warned(authUnread)).toEqual(['The Reply sign-in could not be read.']);
+        // Signed in, the lists asked and empty, and whether the plugin uses the sign-in not read: said so, never as "does
+        // not use"; "No accounts" stays, an answer that was read.
+        const routeUnread = await again(
+            { ...setupFound.reply, user: 'owner@example.test', wired: false, accounts: [], notRead: ['route'] },
+            'Whether',
+        );
+        expect(facts(routeUnread)).toEqual(['Signed in to Reply as owner@example.test', 'No accounts']);
+        expect(warned(routeUnread)).toEqual([
+            'Whether the runtime’s Reply plugin uses this sign-in could not be read.',
+        ]);
+        // Without the Reply CLI nothing was asked: it says only that.
+        const missing = await again(
+            { ...out.reply, cli: { found: false, version: null, install: 'reply' } },
+            'not found',
+        );
+        expect(facts(missing)).toEqual(['The Reply CLI was not found.']);
+        expect(warned(missing)).toEqual([]);
+        // A desktop of an earlier version sends no such word: signed out is said as it was, with no count.
+        const older: Partial<DesktopSetup['reply']> = { ...out.reply };
+        delete older.notRead;
+        const said = await again(older as DesktopSetup['reply'], 'Not signed in to Reply');
+        expect(facts(said)).toEqual([
+            'Not signed in to Reply',
+            'The runtime’s Reply plugin does not use a Reply sign-in yet',
+        ]);
     });
 
-    it('says which channels Reply did not list, and why', async () => {
+    it('says which channels Reply did not list, and why; and why it asked for no list: a Reply CLI below the minimum in the desktop’s own sentence, one whose version could not be read in its own', async () => {
         const partly: DesktopSetup = {
             ...setupFound,
             reply: {
@@ -249,7 +295,8 @@ describe('the accounts card', () => {
                 ],
             },
         };
-        renderConsole([setUp(turn())], stubDesktop(partly));
+        const desktop = stubDesktop(partly);
+        renderConsole([setUp(turn())], desktop);
         const pane = await openChat('Sending');
         const provider = fromReply(await read(pane));
         expect(
@@ -258,6 +305,56 @@ describe('the accounts card', () => {
         expect(within(provider).getByText('Email accounts could not be read from Reply.')).toBeTruthy();
         // The count is of what Reply listed, and says which channel was not read.
         expect(words(provider)).toContain('1 account listed; Email not read');
+
+        const below = 'Managing Reply accounts here needs the Reply CLI 0.23.2 or later: update the Reply CLI.';
+        const belowState: DesktopSetup = {
+            ...setupFound,
+            reply: {
+                ...setupFound.reply,
+                cli: { found: true, version: '0.22.0', install: 'reply' },
+                accounts: [],
+                belowMinimum: below,
+            },
+        };
+        const facts = (part: HTMLElement) => [...part.querySelectorAll('.card-line > *')].map(words);
+        const warned = (part: HTMLElement) => [...part.querySelectorAll('.ask-w')].map(words);
+        // Below the minimum, the lists were not asked: the desktop's sentence stands where the count would, as text.
+        desktop.setup.status = () => Promise.resolve(belowState);
+        fireEvent.click(within(card(pane)).getByRole('button', { name: 'Refresh' }));
+        const asked = await waitFor(() => {
+            const part = fromReply(card(pane));
+            expect(words(part)).toContain(below);
+            return part;
+        });
+        expect(facts(asked)).toEqual([
+            'Signed in to Reply as person@example.test',
+            'The runtime’s Reply plugin uses this sign-in',
+            below,
+        ]);
+        expect(warned(asked)).toEqual([]);
+        expect(asked.querySelectorAll('button')).toHaveLength(0);
+
+        // A version that could not be read: said in the card's voice, never as below the minimum; no count.
+        desktop.setup.status = () =>
+            Promise.resolve({
+                ...belowState,
+                reply: {
+                    ...belowState.reply,
+                    cli: { found: true, version: null, install: 'reply' },
+                    notRead: ['version'],
+                },
+            });
+        fireEvent.click(within(card(pane)).getByRole('button', { name: 'Refresh' }));
+        const unread = await waitFor(() => {
+            const part = fromReply(card(pane));
+            expect(warned(part)).toEqual(['The Reply CLI’s version could not be read.']);
+            return part;
+        });
+        expect(facts(unread)).toEqual([
+            'Signed in to Reply as person@example.test',
+            'The runtime’s Reply plugin uses this sign-in',
+        ]);
+        expect(words(unread)).not.toContain('or later');
     });
 
     it('is drawn in the Feed and reads once there', async () => {
