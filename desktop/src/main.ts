@@ -56,7 +56,7 @@ import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, saveSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
-import { replyUpdateAtStart } from './reply-update.ts';
+import { replyStartCheck } from './reply-update.ts';
 import { Setup } from './setup.ts';
 import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
@@ -797,135 +797,140 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models.close();
     });
 
-    await showStarting(window, 'Starting Jason…', false);
-    if (uncopied !== null) {
-        desk.notStarted();
-        await showStarting(window, uncopied, true);
-        return;
-    }
-    if (version === null) {
-        desk.notStarted();
-        await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
-        return;
-    }
-
-    // The machine set-up this start runs, where it runs one, is waited for at most `liveWaitMs` before the installation is
-    // brought up, the window saying meanwhile what is being done. Past it Live goes on and the routine is left to end; a
-    // runtime it stops then, of a command-line install it retires, is started again from the carried jason by the set-up
-    // itself (`machine-setup.ts`), as one it stops in time is.
-    if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
-    await machineSetup?.settledWithin(liveWaitMs);
-
-    let replyUpdateAsked = false;
+    // The start's check of the Reply CLI: the page holds the Reply plugin's line until it ends. It is asked once the window
+    // has loaded, and every way the start ends without that ask ends it (`replyStartCheck`).
+    const replyCheck = replyStartCheck(runOn.mode, {
+        setUp: async () => {
+            await machineSetup?.settled();
+            await machineSetup?.afterLive();
+        },
+        update: () => setup.updateReplyAtStart(),
+        failed: () => log.warn('reply_start_update', { Outcome: 'failed' }),
+        end: () => setup.endStartCheck(),
+        waitMs: liveWaitMs,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    });
     try {
-        // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
-        // refuses a runtime's start until that step has started one (`startAfterSetup`). Where an update still holds the
-        // start, the set-up's or a terminal's, it is asked again, bounded, and never settled as a failed start
-        // (`startPastUpdate`).
-        const started = await startPastUpdate(
-            () =>
-                startAfterSetup(
-                    () =>
-                        startInstallation({
-                            cli,
-                            paths,
-                            log,
-                            programs,
-                            bundle,
-                            bundleVersion: version,
-                            gate: skillsGate,
-                            settings,
-                            saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
+        await showStarting(window, 'Starting Jason…', false);
+        if (uncopied !== null) {
+            desk.notStarted();
+            await showStarting(window, uncopied, true);
+            return;
+        }
+        if (version === null) {
+            desk.notStarted();
+            await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
+            return;
+        }
+
+        // The machine set-up this start runs, where it runs one, is waited for at most `liveWaitMs` before the installation is
+        // brought up, the window saying meanwhile what is being done. Past it Live goes on and the routine is left to end; a
+        // runtime it stops then, of a command-line install it retires, is started again from the carried jason by the set-up
+        // itself (`machine-setup.ts`), as one it stops in time is.
+        if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
+        await machineSetup?.settledWithin(liveWaitMs);
+
+        try {
+            // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
+            // refuses a runtime's start until that step has started one (`startAfterSetup`). Where an update still holds the
+            // start, the set-up's or a terminal's, it is asked again, bounded, and never settled as a failed start
+            // (`startPastUpdate`).
+            const started = await startPastUpdate(
+                () =>
+                    startAfterSetup(
+                        () =>
+                            startInstallation({
+                                cli,
+                                paths,
+                                log,
+                                programs,
+                                bundle,
+                                bundleVersion: version,
+                                gate: skillsGate,
+                                settings,
+                                saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
+                            }),
+                        machineSetup,
+                        () => showStarting(window, finishWaitSentence, false),
+                    ),
+                {
+                    holds: (error) =>
+                        updateHolds(error, machineSetup?.state ?? null, {
+                            busy: (failed) => failed instanceof UpdateBusy,
+                            refusedData: (failed) => failed instanceof LayoutRefused || failed instanceof DataNewerRefused,
                         }),
-                    machineSetup,
-                    () => showStarting(window, finishWaitSentence, false),
-                ),
-            {
-                holds: (error) =>
-                    updateHolds(error, machineSetup?.state ?? null, {
-                        busy: (failed) => failed instanceof UpdateBusy,
-                        refusedData: (failed) => failed instanceof LayoutRefused || failed instanceof DataNewerRefused,
-                    }),
-                busy: (failed) => failed instanceof UpdateBusy,
-                waiting: () => showStarting(window, updateWaitSentence, false),
-                sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-                now: () => Date.now(),
-            },
-        );
-        runtimeVersion = started.runtimeVersion;
-        // A new installation, brought up: the machine set-up once more, which registers the runtime's start at logon where
-        // the run at this start found no installation to register it for (`afterLive`).
-        void machineSetup?.afterLive();
-        // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
-        // it carries, which `jason update` refuses to change.
-        if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
-        offerPackageRestart();
-        // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
-        const kept = readWindowPairing(paths.windowPairing);
-        const { cleared } = await loadWindow(
-            { cleared: kept.cleared, found: earlierPageWasFound },
-            {
-                cli,
-                clearSession: async () => {
-                    await session.defaultSession.clearStorageData();
-                    await session.defaultSession.clearCache();
+                    busy: (failed) => failed instanceof UpdateBusy,
+                    waiting: () => showStarting(window, updateWaitSentence, false),
+                    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+                    now: () => Date.now(),
                 },
-                remove: (folder) => rmSync(folder, { recursive: true, force: true }),
-                electron: paths.electron,
-                log,
-            },
-            () => window.loadURL(started.link),
-        );
-        if (cleared !== kept.cleared) {
-            try {
-                writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
-            } catch (error) {
-                log.warn('page_storage_clear_failed', { Step: 'record', Code: (error as { code?: string }).code ?? 'unknown' });
+            );
+            runtimeVersion = started.runtimeVersion;
+            // A new installation, brought up: the machine set-up once more, which registers the runtime's start at logon where
+            // the run at this start found no installation to register it for (`afterLive`).
+            void machineSetup?.afterLive();
+            // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
+            // it carries, which `jason update` refuses to change.
+            if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
+            offerPackageRestart();
+            // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
+            const kept = readWindowPairing(paths.windowPairing);
+            const { cleared } = await loadWindow(
+                { cleared: kept.cleared, found: earlierPageWasFound },
+                {
+                    cli,
+                    clearSession: async () => {
+                        await session.defaultSession.clearStorageData();
+                        await session.defaultSession.clearCache();
+                    },
+                    remove: (folder) => rmSync(folder, { recursive: true, force: true }),
+                    electron: paths.electron,
+                    log,
+                },
+                () => window.loadURL(started.link),
+            );
+            if (cleared !== kept.cleared) {
+                try {
+                    writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
+                } catch (error) {
+                    log.warn('page_storage_clear_failed', { Step: 'record', Code: (error as { code?: string }).code ?? 'unknown' });
+                }
+            }
+            log.info('window_loaded', { Origin: started.origin });
+            roles.atStart();
+            // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
+            replyCheck.ask();
+            settleStart(rollback, app.getVersion(), true, log);
+            repairer.pairedWith(readText(paths.runFile));
+            begin();
+        } catch (error) {
+            desk.notStarted();
+            const step = error instanceof StartFailed ? error.step : 'load';
+            const exit = error instanceof StartFailed ? error.exit : -1;
+            log.error('window_load_failed', { Step: step, Exit: exit });
+            // An update that still held the start past the bound settles nothing: the version is neither kept nor refused, and
+            // the next start decides.
+            if (error instanceof StillUpdating) {
+                log.warn('start_left_to_update', { Seconds: updateWaitMs / 1000 });
+                if (current !== null) await showStarting(current, error.message, true);
+            } else {
+                // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
+                // offered, since an older version knows that directory no better.
+                const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
+                const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
+                const said = error instanceof Error ? error.message : String(error);
+                const notice = failedStartNotice(
+                    said,
+                    layoutRefused,
+                    kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile, version: kept.fromVersion } : { copy: kept.directory },
+                    aside ?? applicationFolder(process.platform, process.execPath),
+                    process.platform,
+                );
+                if (current !== null) await showStarting(current, notice, true);
             }
         }
-        log.info('window_loaded', { Origin: started.origin });
-        roles.atStart();
-        // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
-        replyUpdateAsked = true;
-        replyUpdateAtStart(runOn.mode, {
-            setUp: async () => {
-                await machineSetup?.settled();
-                await machineSetup?.afterLive();
-            },
-            update: () => setup.updateReplyAtStart(),
-            failed: () => log.warn('reply_start_update', { Outcome: 'failed' }),
-        });
-        settleStart(rollback, app.getVersion(), true, log);
-        repairer.pairedWith(readText(paths.runFile));
-        begin();
-    } catch (error) {
-        desk.notStarted();
-        // Where no update of the Reply CLI was asked at this start, a page a later Reload shows holds nothing back for
-        // it.
-        if (!replyUpdateAsked) setup.skipStartUpdate();
-        const step = error instanceof StartFailed ? error.step : 'load';
-        const exit = error instanceof StartFailed ? error.exit : -1;
-        log.error('window_load_failed', { Step: step, Exit: exit });
-        // An update that still held the start past the bound settles nothing: the version is neither kept nor refused, and
-        // the next start decides.
-        if (error instanceof StillUpdating) {
-            log.warn('start_left_to_update', { Seconds: updateWaitMs / 1000 });
-            if (current !== null) await showStarting(current, error.message, true);
-        } else {
-            // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
-            // offered, since an older version knows that directory no better.
-            const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
-            const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
-            const said = error instanceof Error ? error.message : String(error);
-            const notice = failedStartNotice(
-                said,
-                layoutRefused,
-                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile, version: kept.fromVersion } : { copy: kept.directory },
-                aside ?? applicationFolder(process.platform, process.execPath),
-                process.platform,
-            );
-            if (current !== null) await showStarting(current, notice, true);
-        }
+    } finally {
+        replyCheck.over();
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {

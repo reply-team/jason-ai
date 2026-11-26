@@ -14,7 +14,7 @@ import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import { ProviderKeys } from '../src/providers.ts';
-import { npmLine, readUpdateSwitch, replyAtWork, replyUpdateAtStart, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
+import { npmLine, readUpdateSwitch, replyAtWork, replyStartCheck, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
@@ -1555,14 +1555,21 @@ test('nothing is run and nothing is marked for a CLI at the minimum, one whose v
         assert.deepEqual(await checked(s), ended, outcome);
     }
 
-    // A start that asks for no update at all, one that failed before the page could be shown: the check ends at once,
-    // and a later ask runs nothing.
-    const failedStart = startUpdate(t);
-    failedStart.setup.skipStartUpdate();
-    assert.deepEqual(await checked(failedStart), ended);
-    assert.equal(await failedStart.setup.updateReplyAtStart(), 'settled');
-    assert.deepEqual(npmRuns(failedStart), []);
-    assert.deepEqual(await checked(failedStart), ended);
+    // The check ended before the update, by a start that asked for none or by the bound on the machine set-up: it ends
+    // once and is told once; an update that runs after it still runs, and its sentence is told to the page.
+    const early = startUpdate(t);
+    early.setup.endStartCheck();
+    early.setup.endStartCheck();
+    assert.deepEqual(await checked(early), ended);
+    assert.equal(await early.setup.updateReplyAtStart(), 'updated');
+    assert.equal(npmRuns(early).length, 1);
+    assert.equal(await line(early), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(await checked(early), { check: 'ended', told: 2 });
+    // An update after it that sets no sentence tells nothing more.
+    const quiet = startUpdate(t, { before: replyMinimumVersion });
+    quiet.setup.endStartCheck();
+    assert.equal(await quiet.setup.updateReplyAtStart(), 'current');
+    assert.deepEqual(await checked(quiet), ended);
 
     // An update that throws ends it too.
     const thrown = startUpdate(t, { npm: { then: (_done: unknown, fail: (error: Error) => void) => fail(new Error('npm could not be started')) } as unknown as Promise<RunResult> });
@@ -1831,27 +1838,86 @@ test('a click made while the start’s update runs is not a second npm: in its t
     assert.deepEqual(missing.ran, [installLine, 'jason plugin reload']);
 });
 
-test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for', async () => {
+test('in Live the update is asked for once the machine set-up has ended; in the demo nothing is asked or waited for; the check ends at the latest at the bound on the set-up, or when the start is over unasked', async (t) => {
     const calls: string[] = [];
     let ended = (): void => undefined;
-    const deps = (setUp: () => Promise<void>, update: () => Promise<unknown>) => ({
+    let bound = (): void => undefined;
+    const slept: number[] = [];
+    const deps = (setUp: () => Promise<void>, update: () => Promise<unknown>, end: () => void = () => void calls.push('end')) => ({
         setUp: () => (calls.push('set-up'), setUp()),
         update: () => (calls.push('update'), update()),
         failed: () => void calls.push('failed'),
+        end,
+        waitMs: 30_000,
+        sleep: (ms: number) => (slept.push(ms), new Promise<void>((resolve) => (bound = resolve))),
     });
     const turn = () => new Promise((resolve) => setImmediate(resolve));
-    replyUpdateAtStart('demo', deps(() => Promise.resolve(), () => Promise.resolve()));
+    const demo = replyStartCheck('demo', deps(() => Promise.resolve(), () => Promise.resolve()));
+    demo.ask();
     await turn();
-    assert.deepEqual(calls, []);
-    replyUpdateAtStart('live', deps(() => new Promise((resolve) => (ended = resolve)), () => Promise.resolve()));
+    assert.deepEqual(calls, ['end'], 'nothing is asked or waited for, and the check ends');
+    demo.over();
+    assert.deepEqual(calls, ['end']);
+    calls.length = 0;
+    const live = replyStartCheck('live', deps(() => new Promise((resolve) => (ended = resolve)), () => Promise.resolve()));
+    live.ask();
     await turn();
     assert.deepEqual(calls, ['set-up']);
+    assert.deepEqual(slept, [30_000], 'the set-up is waited for at most the bound handed in');
     ended();
     await turn();
     assert.deepEqual(calls, ['set-up', 'update']);
+    // The set-up ended within the bound: the update ends the check, and the bound passing later ends nothing; nor does
+    // the start being over, the update asked.
+    bound();
+    await turn();
+    live.over();
+    assert.deepEqual(calls, ['set-up', 'update']);
+
+    // A start over with no ask, whichever way it went: the check ends.
+    calls.length = 0;
+    replyStartCheck('live', deps(() => Promise.resolve(), () => Promise.resolve())).over();
+    await turn();
+    assert.deepEqual(calls, ['end']);
+
+    // A set-up that has not ended at the bound: the check ends there, the update not asked; once the set-up ends the
+    // update runs, and its sentence is told to the page.
+    const s = startUpdate(t);
+    const late = replyStartCheck('live', deps(() => new Promise((resolve) => (ended = resolve)), () => s.setup.updateReplyAtStart(), () => s.setup.endStartCheck()));
+    late.ask();
+    await turn();
+    assert.deepEqual(await checked(s), { check: 'pending', told: 0 });
+    bound();
+    await turn();
+    assert.deepEqual(await checked(s), { check: 'ended', told: 1 });
+    assert.deepEqual(npmRuns(s), []);
+    ended();
+    for (let waited = 0; s.told() < 2; waited++) {
+        assert.ok(waited < 400, 'the update ran and told the page');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.deepEqual(npmRuns(s), [installLine]);
+    assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
+    assert.deepEqual(await checked(s), { check: 'ended', told: 2 });
+
     // A set-up that failed has ended too; a failure of the update is told and stops nothing.
     calls.length = 0;
-    replyUpdateAtStart('live', deps(() => Promise.reject(new Error('set-up')), () => Promise.reject(new Error('update'))));
+    replyStartCheck('live', deps(() => Promise.reject(new Error('set-up')), () => Promise.reject(new Error('update')))).ask();
     await turn();
     assert.deepEqual(calls, ['set-up', 'update', 'failed']);
+
+    // The start holds it so: the check is made with the Setup, asked once the window has loaded, and over in one finally
+    // that every later exit of the start passes, the copy that could not be made, no jason carried and a throw among them.
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    const made = main.indexOf('const replyCheck = replyStartCheck(runOn.mode, {');
+    const opened = main.indexOf('    try {', made);
+    const over = main.indexOf('    } finally {\n        replyCheck.over();\n    }', made);
+    const at = (text: string) => main.indexOf(text, opened);
+    assert.ok(main.indexOf('const setup = new Setup({') < made && made < opened && opened < over, 'made after the Setup, then the try');
+    for (const exit of ["await showStarting(window, 'Starting Jason…', false);", 'if (uncopied !== null) {', 'if (version === null) {', "log.info('window_loaded'", 'replyCheck.ask();', '} catch (error) {']) {
+        assert.ok(at(exit) > opened && at(exit) < over, `${exit} is inside the try the finally closes`);
+    }
+    assert.equal(main.split('replyCheck.ask();').length - 1, 1);
+    assert.equal(main.split('replyCheck.over();').length - 1, 1);
+    assert.ok(at('replyCheck.ask();') > at("log.info('window_loaded'"));
 });

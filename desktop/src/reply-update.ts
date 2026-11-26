@@ -152,16 +152,45 @@ export interface ReplyUpdateMomentDeps {
     setUp(): Promise<void>;
     update(): Promise<unknown>;
     failed(): void;
+    /** Ends the start's check of the Reply CLI before the update ends it; an update that comes after still runs. */
+    end(): void;
+    /** How long the check waits for the machine set-up, from the ask: the start's own bound on it. */
+    waitMs: number;
+    sleep(ms: number): Promise<void>;
+}
+
+/** The start's check of the Reply CLI, from the making of the desktop's setup to the end of the start. */
+export interface ReplyStartCheck {
+    /** Once the window has loaded: the update is asked for in the background. */
+    ask(): void;
+    /** The start is over, whichever way it went: where the update was not asked, the check ends. */
+    over(): void;
 }
 
 /**
- * The start, once the runtime is up and the window loaded: in Live alone, once the machine set-up has ended, the update is
- * asked for in the background. In the demo nothing is asked or read. Nothing it meets stops the start; a failure is only told.
+ * The start's check of the Reply CLI. Asked in Live, once the runtime is up and the window loaded, the update is asked for
+ * in the background once the machine set-up has ended; the check ends with the update, or where the set-up has not ended
+ * within `waitMs` of the ask, then, the update still asked once the set-up ends. In the demo nothing is asked or waited
+ * for and the check ends. A start over without an ask ends it. Nothing it meets stops the start; a failure is only told.
  */
-export function replyUpdateAtStart(mode: Mode, deps: ReplyUpdateMomentDeps): void {
-    if (mode !== 'live') return;
-    void (async () => {
-        await deps.setUp().catch(() => undefined);
-        await deps.update();
-    })().catch(() => deps.failed());
+export function replyStartCheck(mode: Mode, deps: ReplyUpdateMomentDeps): ReplyStartCheck {
+    let asked = false;
+    return {
+        ask() {
+            asked = true;
+            if (mode !== 'live') return void deps.end();
+            let setUp = false;
+            void deps.sleep(deps.waitMs).then(() => {
+                if (!setUp) deps.end();
+            });
+            void (async () => {
+                await deps.setUp().catch(() => undefined);
+                setUp = true;
+                await deps.update();
+            })().catch(() => deps.failed());
+        },
+        over() {
+            if (!asked) deps.end();
+        },
+    };
 }

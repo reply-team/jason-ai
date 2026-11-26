@@ -207,8 +207,9 @@ export interface ReplyState {
     startUpdate?: string | null;
     /**
      * Where the check of the Reply CLI that this start of the application makes stands, as a word: `pending` from the
-     * start until it ends, `ended` once its update was made, whatever came of it, or once the desktop decided to make
-     * none. The page is told when it ends, and holds the Reply plugin's line back in the mode strip until then.
+     * start until it ends, `ended` once its update was made, whatever came of it, once the desktop decided to make none,
+     * or once it waits no longer for the machine set-up, the update still to come. The page is told when it ends, and
+     * holds the Reply plugin's line back in the mode strip until then.
      */
     startCheck: 'pending' | 'ended';
 }
@@ -1369,29 +1370,32 @@ export class Setup {
      */
     updateReplyAtStart(): Promise<StartUpdateOutcome> {
         return this.#serial(async () => {
+            const said = this.#startUpdate;
             try {
                 const outcome = await this.#updateReplyAtStart();
                 this.#deps.log.info('reply_start_update', { Outcome: outcome });
                 return outcome;
             } finally {
-                this.#endStartCheck();
+                // Where the check had already ended, by the bound on the machine set-up, a sentence set now is told anew.
+                if (!this.#endStartCheck() && this.#startUpdate !== said) this.#changed();
             }
         });
     }
 
     /**
-     * A start that asks for no update of the Reply CLI, one that failed before its page was shown: the check ends now.
+     * Ends the start's check of the Reply CLI before its update ends: a start that asks for none, or one that waits no longer
+     * for the machine set-up (`replyStartCheck`). An update that comes after it still runs.
      */
-    skipStartUpdate(): void {
-        this.#startUpdateLooked = true;
+    endStartCheck(): void {
         this.#endStartCheck();
     }
 
-    /** The start's check of the Reply CLI has ended, whatever came of it: the page is told once. */
-    #endStartCheck(): void {
-        if (this.#startCheckEnded) return;
+    /** The start's check of the Reply CLI has ended: the page is told once. False where it had already ended. */
+    #endStartCheck(): boolean {
+        if (this.#startCheckEnded) return false;
         this.#startCheckEnded = true;
         this.#changed();
+        return true;
     }
 
     async #updateReplyAtStart(): Promise<StartUpdateOutcome> {
