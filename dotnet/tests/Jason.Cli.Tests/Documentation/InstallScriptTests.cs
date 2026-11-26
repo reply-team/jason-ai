@@ -487,9 +487,9 @@ public partial class InstallScriptTests
         var helpers = 0;
         for (var at = 0; at < lines.Length; at++)
         {
-            if (!Regex.IsMatch(lines[at], @"\bStart-Process (?:pwsh|python)\b")) continue;
+            if (!Regex.IsMatch(lines[at], @"\bStart-Process (?:pwsh|python)\b|^(?!function ).*\bStart-NewShell\b")) continue;
             helpers++;
-            var started = Regex.Match(lines[at], @"^\s*\$(?<name>\w+) = Start-Process ");
+            var started = Regex.Match(lines[at], @"^\s*\$(?<name>\w+) = Start-(?:Process|NewShell) ");
             if (!started.Success) { wrong.Add($"line {at + 1} starts a helper and keeps no process to record or wait for: {lines[at].Trim()}"); continue; }
             var name = started.Groups["name"].Value;
             var next = at + 1 < lines.Length ? lines[at + 1] : string.Empty;
@@ -681,6 +681,199 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// No reading the Windows proof makes of the whole process table, and no new shell it starts, can hang or fail unnamed.
+    /// Every reading of <c>Win32_Process</c> carries its own bound, a reading of windows is bounded too - here over a window
+    /// of this row's own, off the screen, whose thread answers nothing - no walk over the processes a program started goes
+    /// round a table with a cycle, as an id given again makes one, and every shell given a new environment is started
+    /// by one helper. That helper, run as the proof runs it, tries a start again only where it failed with "The operation
+    /// completed successfully", which says no process was started, at most three in all, and throws by its place anything
+    /// else. The setup's watcher, run as the proof runs it over a program that ends by itself, its first reading of the
+    /// table overrunning its bound, says the call, goes on to the program's end and exit code, and gives the overrun in its
+    /// result, which fails the leg of the silent setups it was watched for; the wait for an uninstaller names the call; and a
+    /// description of a failure whose reading overruns still lets the failure through.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void The_Windows_proof_bounds_its_readings_and_tries_a_new_shell_again_only_where_none_was_started()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows proof's helpers run in the PowerShell 7 the proof runs on Windows only.");
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var reads = Regex.Matches(script, @"Get-CimInstance -ClassName Win32_Process(?<rest>[^\n]*)");
+        Assert.True(reads.Count >= 7, $"Test-InstallationWindows.ps1 reads Win32_Process in {reads.Count} place(s); the row reads too few to mean anything.");
+        Assert.All(reads, read => Assert.Matches("^(?: -Filter \"[^\"]*\")? -OperationTimeoutSec [0-9$]", read.Groups["rest"].Value));
+        Assert.Matches(@"\$text = @\(Read-WindowWords \$asked\.Id\)\n\s+Fail-Held [^\n]+\n\s+Stop-Process -Id \$asked\.Id ", WindowsProofStep(script, "UninstallFromTerminal"));
+        var helper = WindowsProofFunction(script, "Start-NewShell(");
+        Assert.Contains("UseNewEnvironment = $true", helper, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^[^#\n]*-UseNewEnvironment", script);
+        var legs = WindowsProofStep(script, "SilentUpdateLegs");
+        var leg = legs[legs.IndexOf("        function Test-Leg(", StringComparison.Ordinal)..];
+        leg = leg[..(leg.IndexOf("\n        }\n", StringComparison.Ordinal) + "\n        }\n".Length)];
+        // The type's own text closes braces at the line's start, so it is taken up to the function after it.
+        var typeAt = script.IndexOf("\nfunction Use-WindowsType {", StringComparison.Ordinal);
+        var type = script[typeAt..script.IndexOf("\nfunction Write-ProcessWindows(", typeAt, StringComparison.Ordinal)] + "\n";
+        string[] functions = ["Start-NewShell(", "Get-EveryProcess(", "Get-StartedBy(", "Write-ProcessTree(", "Wait-Started(", "Wait-UninstallerEnded(", "Write-ProcessWindows(", "Get-VisibleWindows(", "Read-WindowWords(", "Watch-Setup("];
+
+        using var tree = new TempTree();
+        var setup = Path.Combine(tree.Root, "setup.exe");
+        File.WriteAllBytes(setup, UninstallerRunStandIn.Value);
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, ReadingsHarness
+            .Replace("@SETUP@", "'" + setup.Replace("'", "''", StringComparison.Ordinal) + "'", StringComparison.Ordinal)
+            .Replace("@PRELUDE@", WindowsProofSettings(script), StringComparison.Ordinal)
+            .Replace("@FUNCTIONS@", type + string.Concat(functions.Select(name => WindowsProofFunction(script, name))) + leg, StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
+        var output = "\n" + stdout + stderr;
+        TestContext.Current.TestOutputHelper?.WriteLine(output);
+        Assert.True(exit == 0, output);
+        var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        string Line(string label) => said.FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
+        Assert.True(Line("twice error 0") == "started, 3 tries", $"a start that failed twice with error 0 was not made the third time:{output}");
+        Assert.True(Line("always error 0").StartsWith("a place could not be started, try 3: ", StringComparison.Ordinal) && Line("always error 0").EndsWith(", 3 tries", StringComparison.Ordinal), $"a start that always fails with error 0 was not given up by its place after three tries:{output}");
+        Assert.True(Line("another error") == "a place could not be started, try 1: This command cannot be run due to the error: Access is denied., 1 tries", $"a start that failed otherwise was tried again, or lost its words:{output}");
+        Assert.True(Line("another kind of error 0").EndsWith(", 1 tries", StringComparison.Ordinal), $"a failure of another kind with the same words was tried again:{output}");
+        Assert.True(Line("a reading").StartsWith("TimeoutException: Get-CimInstance Win32_Process, the whole process table, had not returned after ", StringComparison.Ordinal), $"a reading that overran is not named:{output}");
+        Assert.True(Line("a reading refused at once") == "CimException: refused", $"a reading that failed at once was taken for an overrun:{output}");
+        Assert.True(Line("a description") == "0 processes", $"a description whose reading overran did not go on:{output}");
+        Assert.True(Line("the watch") == "ended True, exit 7, 1 overran, its window seen", $"the watch did not go on after a look that overran, or lost it:{output}");
+        Assert.True(Line("the watch at its bound") == "ended False, overran True, the setup ended", $"a watch whose every look overran did not end at its bound, ending the setup:{output}");
+        Assert.Contains("  a look at the setup overran, ", stdout, StringComparison.Ordinal);
+        Assert.Matches("^TimeoutException: GetWindowText of window [0-9]+, reading the windows of process [0-9]+, had not returned after 1 s$", Line("a window that does not answer"));
+        Assert.Matches(@"^\(its windows were not read: .*GetWindowText of window [0-9]+, ", Line("its words"));
+        Assert.True(Line("the tree of a cycle") == "2 listed", $"the tree of a table with a cycle is not each process once:{output}");
+        Assert.True(Line("a wait over a cycle") == "the program had not ended after 1 seconds", $"a wait's bound over a table with a cycle does not fail by its own sentence:{output}");
+        Assert.True(Line("a watch over a cycle") == "ended True, exit 3, 0 overran", $"a watch over a table with a cycle does not go on to the setup's end:{output}");
+        Assert.True(Line("a wait for an uninstaller").StartsWith("Get-CimInstance Win32_Process, the whole process table, had not returned after ", StringComparison.Ordinal), $"a wait for an uninstaller whose reading overran does not name the call:{output}");
+        Assert.True(Line("a leg watched throughout") == "0 failures", $"a leg watched throughout, that did as expected, failed:{output}");
+        Assert.True(Line("a leg not watched throughout").StartsWith("1 failures, a leg was not watched throughout, so that it showed no window is not proved: Get-CimInstance Win32_Process, ", StringComparison.Ordinal), $"a leg whose watch overran did not fail by it alone:{output}");
+    }
+
+    /// <summary>
+    /// The pwsh the readings' row runs: the settings lines of the proof's own prelude, a bound of one second, stand-ins for
+    /// what starts a process, reads the table and reads windows, and the proof's own helpers. One line per finding, its
+    /// label and what was seen, apart by a colon. The setup watched is a program with no window that sleeps and exits.
+    /// </summary>
+    private const string ReadingsHarness = """
+        @PRELUDE@
+        $readSeconds = 1
+        $app = 'C:\no-such-folder'
+        function Say([string] $line) { Write-Host $line }
+        function Fail([string] $why) { throw $why }
+        $script:overruns = 0
+        $script:table = $null
+        function Get-CimInstance([string] $ClassName, [int] $OperationTimeoutSec) {
+            if ($script:table) { return $script:table }
+            if ($script:overruns -le 0) { return CimCmdlets\Get-CimInstance -ClassName $ClassName -OperationTimeoutSec 30 }
+            $script:overruns--
+            if ($OperationTimeoutSec -le 0) { throw 'a reading of no bound' }
+            Start-Sleep -Milliseconds ($OperationTimeoutSec * 1000 + 100)
+            throw [Microsoft.Management.Infrastructure.CimException]::new('Timed out')
+        }
+
+        @FUNCTIONS@
+
+        Add-Type -Namespace JasonProofRow -Name Deaf -MemberDefinition @'
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern System.IntPtr CreateWindowEx(uint extended, string type, string name, uint style, int x, int y, int width, int height, System.IntPtr parent, System.IntPtr menu, System.IntPtr instance, System.IntPtr data);
+        public static void Start() {
+            var made = new System.Threading.ManualResetEvent(false);
+            var thread = new System.Threading.Thread(() => { CreateWindowEx(0x08000080, "STATIC", "deaf", 0x90000000, -32000, -32000, 10, 10, System.IntPtr.Zero, System.IntPtr.Zero, System.IntPtr.Zero, System.IntPtr.Zero); made.Set(); new System.Threading.AutoResetEvent(false).WaitOne(15000); });
+            thread.SetApartmentState(System.Threading.ApartmentState.MTA);
+            thread.IsBackground = true;
+            thread.Start();
+            made.WaitOne();
+        }
+        '@
+        # Compiled before the window starts, so a slow compile takes nothing from the time the window is there.
+        Use-WindowsType
+        [JasonProofRow.Deaf]::Start()
+        $seen = try { "returned: $(@(Get-VisibleWindows @($PID)) -join '; ')" } catch { "$($_.Exception.GetBaseException().GetType().Name): $($_.Exception.GetBaseException().Message)" }
+        [Console]::Out.WriteLine("a window that does not answer: $seen")
+        $seen = try { @(Read-WindowWords $PID) -join ' / ' } catch { "threw: $($_.Exception.Message)" }
+        [Console]::Out.WriteLine("its words: $seen")
+        function Write-ProcessWindows([int] $id) { throw [TimeoutException]::new('EnumWindows had not returned') }
+        $script:windows = @('a window')
+        function Get-VisibleWindows([int[]] $ids) { $script:windows }
+
+        function Try-Start([string] $label, [scriptblock] $stub) {
+            $script:tries = 0
+            Set-Item -Path function:script:Start-Process -Value $stub
+            $seen = try { $null = Start-NewShell 'a place' 'exit 0'; 'started' } catch { $_.Exception.Message }
+            Remove-Item -Path function:Start-Process
+            [Console]::Out.WriteLine("${label}: $seen, $script:tries tries")
+        }
+        $zero = 'This command cannot be run due to the error: ' + [System.ComponentModel.Win32Exception]::new(0).Message
+        Try-Start 'twice error 0' { $script:tries++; if ($script:tries -le 2) { throw [InvalidOperationException]::new($zero) }; 'a process' }
+        Try-Start 'always error 0' { $script:tries++; throw [InvalidOperationException]::new($zero) }
+        Try-Start 'another error' { $script:tries++; throw [InvalidOperationException]::new('This command cannot be run due to the error: Access is denied.') }
+        Try-Start 'another kind of error 0' { $script:tries++; throw [ArgumentException]::new($zero) }
+
+        $script:overruns = 1
+        $seen = try { "$(@(Get-EveryProcess).Count) processes" } catch { "$($_.Exception.GetType().Name): $($_.Exception.Message)" }
+        [Console]::Out.WriteLine("a reading: $seen")
+        $real = (Get-Item -Path function:Get-CimInstance).ScriptBlock
+        Set-Item -Path function:script:Get-CimInstance -Value { throw [Microsoft.Management.Infrastructure.CimException]::new('refused') }
+        $seen = try { "$(@(Get-EveryProcess).Count) processes" } catch { "$($_.Exception.GetType().Name): $($_.Exception.Message)" }
+        [Console]::Out.WriteLine("a reading refused at once: $seen")
+        Set-Item -Path function:script:Get-CimInstance -Value $real
+        $script:overruns = 1
+        [Console]::Out.WriteLine("a description: $(@(Get-EveryProcess -OrSay).Count) processes")
+
+        $script:overruns = 1
+        $watched = Watch-Setup @SETUP@ @('6000', '7') 60
+        [Console]::Out.WriteLine("the watch: ended $($watched.Ended), exit $($watched.Exit), $($watched.Overran.Count) overran, $(if ($watched.Windows -contains 'a window') { 'its window seen' } else { 'no window seen' })")
+        $script:overruns = 1000
+        $watched = Watch-Setup @SETUP@ @('121000', '0') 4
+        $script:overruns = 0
+        Start-Sleep -Seconds 1
+        $left = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $PID" | Where-Object { "$($_.CommandLine)".Contains('121000') })
+        [Console]::Out.WriteLine("the watch at its bound: ended $($watched.Ended), overran $($watched.Overran.Count -gt 0), the setup $(if ($left) { 'still runs' } else { 'ended' })")
+        foreach ($one in $left) { Stop-Process -Id $one.ProcessId -Force -ErrorAction SilentlyContinue }
+
+        $script:overruns = 1
+        $seen = try { Wait-UninstallerEnded @() -under $app; 'returned' } catch { $_.Exception.Message }
+        [Console]::Out.WriteLine("a wait for an uninstaller: $seen")
+
+        # A table with a cycle: the program, one it started, one that one started, and the program again under the last. A
+        # walk that goes round it reads past any use: the table then ends it, and it is said.
+        $script:reads = 0
+        function New-Row([int] $id, [int] $under) {
+            $row = [pscustomobject]@{ ProcessId = $id; Under = $under; Name = 'row'; CommandLine = "row $id"; ExecutablePath = '' }
+            $row | Add-Member -MemberType ScriptProperty -Name ParentProcessId -Value { if ((++$script:reads) -gt 5000) { return 0 }; $this.Under } -PassThru
+        }
+        function Get-Round { if ($script:reads -gt 5000) { ', a walk without end' } }
+        function Set-Cycle([int] $id) { $script:reads = 0; $script:table = @((New-Row $id 1000000012), (New-Row 1000000011 $id), (New-Row 1000000012 1000000011)) }
+        $program = Start-Process -FilePath @SETUP@ -ArgumentList '8000', '0' -PassThru
+        $null = $program.Handle
+        Set-Cycle $program.Id
+        $seen = try { "$(@(Write-ProcessTree $program 6>&1 | Where-Object { "$_" -match ', started by ' }).Count) listed" } catch { $_.Exception.Message }
+        [Console]::Out.WriteLine("the tree of a cycle: $seen$(Get-Round)")
+        Set-Cycle $program.Id
+        $seen = try { $null = Wait-Started $program 'the program' 1; 'returned' } catch { "$($_.Exception.Message)".Trim() -replace ' +', ' ' }
+        [Console]::Out.WriteLine("a wait over a cycle: $seen$(Get-Round)")
+        # The watch's own setup is known once it started, so the cycle is made around it as it is first asked for.
+        $script:table = $null
+        $first = (Get-Item -Path function:Get-EveryProcess).ScriptBlock
+        Set-Item -Path function:script:Get-EveryProcess -Value { Set-Cycle $process.Id; $script:table }
+        $seen = try { $watched = Watch-Setup @SETUP@ @('2000', '3') 30; "ended $($watched.Ended), exit $($watched.Exit), $($watched.Overran.Count) overran" } catch { $_.Exception.Message }
+        [Console]::Out.WriteLine("a watch over a cycle: $seen$(Get-Round)")
+        Set-Item -Path function:script:Get-EveryProcess -Value $first
+        $script:table = $null
+
+        $script:windows = @()
+        $new = @SETUP@
+        $carried = 'a carried jason'
+        function Read-Version([string] $jason) { '0.0.0' }
+        foreach ($made in 0, 1) {
+            $failures = [System.Collections.Generic.List[string]]::new()
+            $script:overruns = $made
+            $null = Test-Leg 'a leg' @('4000', '3') @(3)
+            [Console]::Out.WriteLine("a leg $(if ($made) { 'not ' })watched throughout: $($failures.Count) failures$(if ($failures.Count) { ', ' + ($failures -join ' | ') })")
+        }
+        exit 0
+        """;
+
+    /// <summary>
     /// The Windows proof reads the machine after an uninstall only once the uninstaller it watched has ended. The uninstaller
     /// removes the application's folder before it has finished - its Installed apps entry goes after - so a reading taken
     /// when the folder goes races it, and a key listed can be gone when it is read. After every wait for the application's
@@ -819,7 +1012,7 @@ public partial class InstallScriptTests
             .Replace("@OUTSIDE@", Quoted(outside), StringComparison.Ordinal)
             .Replace("@STARTED@", Quoted(started), StringComparison.Ordinal)
             .Replace("@KEYS@", Quoted(tree.NewDirectory("keys")), StringComparison.Ordinal)
-            .Replace("@FUNCTIONS@", Function("Wait-UninstallerEnded(") + Function("Get-JasonUninstallEntries {"), StringComparison.Ordinal));
+            .Replace("@FUNCTIONS@", Function("Get-EveryProcess(") + Function("Wait-UninstallerEnded(") + Function("Get-JasonUninstallEntries {"), StringComparison.Ordinal));
 
         int exit;
         string stdout, stderr;
@@ -894,6 +1087,7 @@ public partial class InstallScriptTests
         $outside = @OUTSIDE@
         $started = @STARTED@
         $uninstallKeys = @KEYS@
+        $readSeconds = 30
         $all = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
         $case = ''
         function Say([string] $line) { [Console]::Out.WriteLine("$case said: $line") }
@@ -1738,7 +1932,7 @@ public partial class InstallScriptTests
             .Replace("@NORMAL@", Quoted(Path.Combine(tree.Root, "kept-within.txt")), StringComparison.Ordinal)
             .Replace("@BOUNDED@", Quoted(Path.Combine(tree.Root, "kept-at-bound.txt")), StringComparison.Ordinal)
             .Replace("@PIDFILE@", Path.Combine(tree.Root, "started.txt").Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal)
-            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Fail(") + WindowsProofFunction(script, "Invoke-Program("), StringComparison.Ordinal));
+            .Replace("@FUNCTIONS@", WindowsProofFunction(script, "Fail(") + WindowsProofFunction(script, "Get-EveryProcess(") + WindowsProofFunction(script, "Invoke-Program("), StringComparison.Ordinal));
 
         var (exit, stdout, stderr) = Pwsh(new Dictionary<string, string>(), "-File", harness);
         var output = "\n" + stdout + stderr;
@@ -1746,6 +1940,9 @@ public partial class InstallScriptTests
         Assert.True(exit == 0, output);
         var said = stdout.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         string Line(string label) => said.FirstOrDefault(line => line.StartsWith(label + ": ", StringComparison.Ordinal))?[(label.Length + 2)..] ?? $"(no line '{label}')";
+        Assert.True(Line("bound with no table").EndsWith("did not end within 15 s", StringComparison.Ordinal), $"a run past its bound, the process table not read in its own, did not fail the step by its name:{output}");
+        Assert.True(Line("the program with no table") == "ended", $"a run past its bound, the process table not read in its own, left the program:{output}");
+        Assert.Contains("Get-CimInstance Win32_Process, the whole process table, had not returned after ", stdout, StringComparison.Ordinal);
         Assert.True(Line("exit") == "3", $"a run within its bound did not give its exit code:{output}");
         Assert.True(Line("kept") == "one|two", $"a run within its bound did not keep every line it said:{output}");
         Assert.True(Line("bound").EndsWith("did not end within 15 s", StringComparison.Ordinal), $"a run past its bound did not fail the step at the bound:{output}");
@@ -1772,7 +1969,10 @@ public partial class InstallScriptTests
         $Out = @OUT@
         function Write-JasonProcesses { Write-Host '  (the machine''s own processes are not named by this row)' }
         function Start-Sleeper { Start-Process -FilePath pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 120' -PassThru -NoNewWindow }
+        $readSeconds = 30
+        $script:overruns = $false
         function Get-CimInstance {
+            if ($script:overruns) { Start-Sleep -Milliseconds ($readSeconds * 1000 + 100); throw [Microsoft.Management.Infrastructure.CimException]::new('Timed out') }
             $real = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process)
             $program = @($real | Where-Object { $_.ParentProcessId -eq $PID -and "$($_.CommandLine)".Contains('said before the bound') }) | Select-Object -First 1
             foreach ($process in $real) {
@@ -1816,6 +2016,23 @@ public partial class InstallScriptTests
         while ($started -gt 0 -and [DateTime]::UtcNow -lt $until -and (Get-Process -Id $started -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 200 }
         [Console]::Out.WriteLine("kept at the bound: $(@(Get-Content -LiteralPath $bounded -ErrorAction SilentlyContinue) -join '|')")
         [Console]::Out.WriteLine("the process the program started: $(if ($started -le 0) { 'never started' } elseif (Get-Process -Id $started -ErrorAction SilentlyContinue) { 'still running' } else { 'ended' })")
+        if ($started -gt 0) { Stop-Process -Id $started -Force -ErrorAction SilentlyContinue }
+        # The same bound where the table itself is not read in its bound: the program's own process is ended all the same,
+        # and the helper started before it is left alone.
+        $readSeconds = 1
+        $script:overruns = $true
+        Remove-Item -LiteralPath '@PIDFILE@' -ErrorAction SilentlyContinue
+        try {
+            $null = Invoke-Program 'pwsh' @('-NoProfile', '-NonInteractive', '-Command', "Set-Content -LiteralPath '@PIDFILE@' -Value `$PID; Start-Sleep -Seconds 120") @{} 15
+            [Console]::Out.WriteLine('bound with no table: not reached')
+        } catch {
+            [Console]::Out.WriteLine("bound with no table: $($_.Exception.Message)")
+        }
+        $started = 0
+        if (Test-Path -LiteralPath '@PIDFILE@') { $started = [int] "$(Get-Content -LiteralPath '@PIDFILE@' -Raw)".Trim() }
+        $until = [DateTime]::UtcNow.AddSeconds(10)
+        while ($started -gt 0 -and [DateTime]::UtcNow -lt $until -and (Get-Process -Id $started -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 200 }
+        [Console]::Out.WriteLine("the program with no table: $(if ($started -le 0) { 'never started' } elseif (Get-Process -Id $started -ErrorAction SilentlyContinue) { 'still running' } else { 'ended' })")
         if ($started -gt 0) { Stop-Process -Id $started -Force -ErrorAction SilentlyContinue }
         Write-Left 'the feed server' $server
         Write-Left 'a stranger under a reused id' $stranger

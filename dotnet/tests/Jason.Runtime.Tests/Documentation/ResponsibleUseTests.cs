@@ -123,9 +123,12 @@ public sealed partial class ResponsibleUseTests
     /// The SHA-256 of the page's <c>## Data</c> and <c>## Your responsibilities</c> sections, from the first heading to
     /// the end of the second section, exactly as they stand. They were read against sections 7 and 8 of the accepted
     /// Jason Runtime Licence and differ from them only in framing, so a change of one word in either is a change to text
-    /// legal read. Have the new wording read again first, then put its digest here.
+    /// legal read. Have the new wording read again first, then put its digest here. The paragraph on the update of the
+    /// Reply CLI that Jason Desktop makes at its start, the sentence on the identifier its updater sends and the words on
+    /// which downloads go to the address were added or changed since; their wording was read and cleared before its
+    /// digest was put here.
     /// </summary>
-    private const string ReadSections = "56c23ef3025ee24481f2203257ada5fa6c7b4cbcfb18e79d5334be8c6259985a";
+    private const string ReadSections = "bc65c7bdc1370126385938b0f693a020de815a56aff0af7db541656b60d549c3";
 
     /// <summary>The two sections that carry the earlier licence's words are held whole, not by the sentences quoted above.</summary>
     [Fact]

@@ -12,25 +12,32 @@ from the requests described below the runtime sends no telemetry, usage data or 
 
 ### Update check and downloads
 
-Unless you switch it off (by setting `Update:CheckEnabled` to `false`), the running runtime asks whether a newer
-version exists five minutes after it starts and then once a day; both intervals can be configured, and a check you or
-your agent ask for (`jason update check`) is the same request. That check, and the downloads you request to install or
-update the runtime, go to an address operated by ReplyApp Inc., which redirects them to GitHub. The update check
-identifies only the runtime's version, including its build, and a download only the file requested, and the `ref` of
-the link you followed where it carries one; like any web server, that address also receives your IP address, the time
-of the request and the standard headers of the program that makes it. ReplyApp Inc. uses these records only to operate
-and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not
-combine them with any other data. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them.
-That address counts the downloads and install-page reads it answers by day, file, the `ref` the followed link names
-and the kind of program that asked (a browser, a command-line or agent fetcher, or a crawler), and keeps nothing of
-the person in those counts. After the redirect, and when you install skills, which are fetched from GitHub directly,
-GitHub's terms and privacy statement apply.
+Unless you switch it off (by setting `Update:CheckEnabled` to `false`), the running runtime asks whether a newer version
+exists five minutes after it starts and then once a day; both intervals can be configured, and a check you or your agent
+ask for (`jason update check`) is the same request. That check, and the downloads that install or update the runtime,
+whether you request them or Jason Desktop or the system's package updates make them, go to an address operated by
+ReplyApp Inc., which redirects them to GitHub. The update check identifies only the runtime's version, including its
+build, and a download only the file requested, and the `ref` of the link you followed where it carries one; like any web
+server, that address also receives your IP address, the time of the request and the standard headers of the program that
+makes it. ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in aggregate,
+keeps them for no longer than 31 days, and does not combine them with any other data. ReplyApp Inc.'s privacy policy
+(<https://reply.io/privacy-policy/>) applies to them. That address counts the downloads and install-page reads it
+answers by day, file, the `ref` the followed link names and the kind of program that asked (a browser, a command-line or
+agent fetcher, or a crawler), and keeps nothing of the person in those counts. After the redirect, and when you install
+skills, which are fetched from GitHub directly, GitHub's terms and privacy statement apply.
 
 Jason Desktop's own updater ([desktop.md](desktop.md)) is a request of its own, apart from the runtime's: it reads the latest
 release's update feed (`latest.yml`, `latest-mac.yml` or `latest-linux.yml`) from this repository's releases on GitHub
 directly, not through ReplyApp Inc.'s address, on a schedule of its own, and downloads an update only when you say so.
 GitHub's terms and privacy statement apply to those requests, and GitHub, like any web server, receives your IP address,
-the time of the request and the standard headers of the program that makes it.
+the time of the request and the standard headers of the program that makes it. Each check also sends an identifier:
+random, made once for the installation and kept on the machine, the same at each check; Jason does not use it.
+
+When its start finds an installed Reply CLI older than its release needs, and npm on this computer, Jason Desktop runs
+`npm install -g reply-cli` without a click, unless `Update:CheckEnabled` is `false` in the installation's settings file
+or in Jason Desktop's own environment (a settings file it cannot read stops it too): npm then downloads the package from
+the registry it is set to use, whose own terms and privacy statement apply, and which, like any web server, receives
+your IP address and the standard headers of npm's requests.
 
 ### Your providers and AI agents
 

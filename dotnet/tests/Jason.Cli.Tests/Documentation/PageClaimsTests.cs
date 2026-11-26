@@ -1059,7 +1059,7 @@ public partial class PageClaimsTests
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, Homebrew's cask installs the same Jason Desktop, from the same release, once the tap carries it; until then the install script is the way:", package, StringComparison.Ordinal);
+        Assert.Contains("On macOS, Windows and Linux the route is the install script above, which installs Jason Desktop. On an Apple silicon Mac, Homebrew's cask installs the same Jason Desktop, and the tap moves it to a new release within hours of its publication:", package, StringComparison.Ordinal);
         Assert.Contains("brew install --cask reply-team/tap/jason", package, StringComparison.Ordinal);
         Assert.Contains("If Homebrew says the Xcode licence has not been accepted, run `sudo xcodebuild -license accept`, or open Xcode once, then the install line again.", package, StringComparison.Ordinal);
         Assert.Contains("If Homebrew says the tap is not trusted, run `brew trust reply-team/tap` once, then the install line again. Open Jason once from Applications: its first start sets up the terminal command and the skills, as the disk image does, and Jason updates itself. `brew uninstall --zap --cask jason` takes it off with what Jason set up; the data directory and the harness root stay.", package, StringComparison.Ordinal);
@@ -1654,6 +1654,59 @@ public partial class PageClaimsTests
         Assert.True(sentence is not null, "Before Quick start, no paragraph of the README says Jason is used from a release.");
         Assert.Contains("built", sentence, StringComparison.Ordinal);
         Assert.Contains("release", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A reader or an agent that lands on the README learns in the first paragraph under the centred header what Jason is
+    /// and that it installs from a release, with the way to start one link away.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_readme_s_first_paragraph_says_what_Jason_is_and_that_it_installs_from_a_release()
+    {
+        var readme = Page("README.md");
+        var header = readme.IndexOf("\n</div>\n", StringComparison.Ordinal);
+        Assert.True(header > 0, "the README has no centred header.");
+        var first = Flat(readme[header..].Split("\n\n").Select(block => block.Trim()).First(block => block.Length > 0 && block is not "</div>" and not "---"));
+
+        Assert.Contains("(#quick-start)", first, StringComparison.Ordinal);
+        Assert.Contains("from a release", first, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Quick start is within the first screen: it begins within the first sixty lines, and nothing between the centred
+    /// header and it is an image or an HTML block, so a walkthrough is placed after the install and never above it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_readme_s_quick_start_is_in_its_first_sixty_lines_with_no_image_above_it()
+    {
+        var lines = Page("README.md").Split('\n');
+        var quickStart = Array.IndexOf(lines, "## Quick start");
+        Assert.True(quickStart >= 0 && quickStart < 60, $"The README's \"## Quick start\" is at line {quickStart + 1}, not within the first 60.");
+
+        var header = Array.IndexOf(lines, "</div>");
+        Assert.True(header >= 0 && header < quickStart, "the README has no centred header above Quick start.");
+        var between = lines[(header + 1)..quickStart];
+        Assert.True(
+            between.All(line => !line.Contains("![", StringComparison.Ordinal) && !line.Contains("<img", StringComparison.Ordinal) && !line.Contains("<div", StringComparison.Ordinal)),
+            "Between the centred header and Quick start the README has an image or an HTML block.");
+    }
+
+    /// <summary>
+    /// The file for assistants opens its key facts with the install, and says Jason is used from a release.
+    /// </summary>
+    [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
+    public void The_llms_file_opens_its_key_facts_with_the_install_from_a_release()
+    {
+        var lines = Page("llms.txt").Split('\n');
+        var facts = Array.IndexOf(lines, "Key facts:");
+        Assert.True(facts >= 0, "llms.txt has no \"Key facts:\".");
+        var first = lines.Skip(facts + 1).First(line => line.StartsWith("- ", StringComparison.Ordinal));
+
+        Assert.StartsWith("- Install:", first, StringComparison.Ordinal);
+        Assert.Contains("from a release", first, StringComparison.Ordinal);
     }
 
     /// <summary>

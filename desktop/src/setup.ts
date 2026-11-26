@@ -94,6 +94,7 @@ import {
     type PluginValues,
     type ReplyAccount,
 } from './setup-model.ts';
+import { npmLine, readUpdateSwitch, replyAtWork, runtimeReplyVersion, startUpdateSentences, versionUnsaid } from './reply-update.ts';
 
 /** What a turn runs in, by the mode a chat's record keeps, where that is another mode, and the desktop's sentence why. */
 export type TurnSteps = Partial<Record<ChatMode, { mode: ChatMode; why: string }>>;
@@ -180,6 +181,8 @@ export interface ReplyState {
      * so; the card then offers no act. Null otherwise.
      */
     belowMinimum: string | null;
+    /** What came of the update of the Reply CLI at this start of the application, as one sentence; absent where none was made. */
+    startUpdate?: string | null;
 }
 
 /**
@@ -269,6 +272,8 @@ export interface SetupDeps {
      * being made for the roles (`connectRoles`). Absent, no mark can be written, and no profile is made.
      */
     saveSettings?(next: DesktopSettings): void;
+    /** The desktop's own environment, where a `JASON_` variable may set the switch of the start's update (`updateSwitch`). */
+    environment: Readonly<Record<string, string | undefined>>;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -327,7 +332,7 @@ export type RolesOutcome =
     | 'named';
 /** The ends of `connectRoles` that leave it to the next turn: a runtime that did not answer, or no connected host. */
 const unsettling: ReadonlySet<RolesOutcome> = new Set(['settled', 'profiles_unread', 'no_host', 'default_unanswered']);
-const installLimit = 5 * 60_000;
+export const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
     try {
@@ -427,6 +432,16 @@ function refusal(refused: string, reread = false): ReplyRefusal {
     return { refused, code: null, offer: null, reread };
 }
 
+/**
+ * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
+ * run, since it was looked at already, `reply` was not found, the switch is off or could not be read, the version was not
+ * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
+ * or the runtime did not say (`plugins_unread`), or the mark could not be written.
+ */
+export type StartUpdateOutcome =
+    | 'updated' | 'still_old' | 'failed'
+    | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';
+
 export class Setup {
     #deps: SetupDeps;
     #listeners = new Set<() => void>();
@@ -446,6 +461,10 @@ export class Setup {
     #unread = new Map<string, UnreadKind>();
     /** Claude Code's version as the last listing read it (`handedClaudeVersion`); undefined before one read it. */
     #handedClaude: string | null | undefined = undefined;
+    /** Whether the start's update of the Reply CLI was looked at in this run: once, whatever came of it. */
+    #startUpdateLooked = false;
+    /** What came of the start's update, in this run alone; null where none was made. */
+    #startUpdate: { updated: boolean; said: string } | null = null;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -632,7 +651,7 @@ export class Setup {
         const runtimeVersion = this.#deps.runtimeVersion();
         return {
             hosts: [...programHosts, ...providerHosts],
-            reply: await this.#reply(answered.get('reply')?.valid ?? false),
+            reply: await this.#reply(answered.get('reply')?.valid ?? false, listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
             versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null, this.#deps.deb ?? false),
@@ -675,7 +694,7 @@ export class Setup {
     }
 
     /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
-    async #reply(valid: boolean): Promise<ReplyState> {
+    async #reply(valid: boolean, runtimeVersion: string | null): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
@@ -687,6 +706,11 @@ export class Setup {
         // Older than the card's acts need, the CLI is offered the update, is not asked for its accounts, and the card
         // offers no act.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
+        // What came of the start's update, but a failure only while a CLI below the minimum is still in use, here or by the runtime.
+        const startUpdate =
+            this.#startUpdate !== null && (this.#startUpdate.updated || !current || (runtimeVersion !== null && !versionAtLeast(runtimeVersion, replyMinimumVersion)))
+                ? this.#startUpdate.said
+                : null;
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
         const accounts: ReplyAccount[] = [];
         const absent: ReplyChannel[] = [];
@@ -719,6 +743,7 @@ export class Setup {
             unread,
             pending,
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
+            ...(startUpdate === null ? {} : { startUpdate }),
         };
     }
 
@@ -1241,7 +1266,12 @@ export class Setup {
         });
     }
 
-    /** Runs the npm install of a missing program, on a person's click only, and only where npm is there. */
+    /**
+     * Runs the npm install of a program, on a person's click, and only where npm is there. The one program the desktop also
+     * updates with no click is an installed Reply CLI below the minimum, at its start (`updateReplyAtStart`). Once the Reply
+     * CLI was installed or updated, the runtime is asked to read its plugins again: its Reply plugin holds the CLI it last
+     * found to the version its manifest asks for, and says the old one until then.
+     */
     installProgram(programId: unknown): Promise<void> {
         return this.#serial(async () => {
             const install = isProgramName(programId) ? programInstalls[programId] : undefined;
@@ -1249,12 +1279,107 @@ export class Setup {
             if (this.#deps.programs.find('npm') === null) {
                 throw new Refused(`Installing this needs Node.js and npm, which are not on this computer. Install Node.js from ${programInstalls.node?.link}, then try again.`);
             }
-            const result = await this.#run('npm', 'install', ['install', '-g', install.npmPackage], { timeoutMs: installLimit });
-            this.#deps.log.info('program_installed', { Program: programId, Exit: result.exit });
-            this.#versions.delete(programId);
-            if (result.exit !== 0) throw new Refused(words(result, `npm ended with code ${result.exit}.`));
+            // A click waits its turn behind the start's update, which may have done what it asks for.
+            if (programId !== 'reply' || !(await this.#replyCurrent())) {
+                const result = await this.#npmInstall(programId, install.npmPackage);
+                if (result.exit !== 0) throw new Refused(words(result, `npm ended with code ${result.exit}.`));
+            }
+            const reload = programId === 'reply' ? await this.#reloadPlugins() : null;
             this.#changed();
+            if (reload !== null && reload.exit !== 0) throw this.#reloadRefused(reload);
         });
+    }
+
+    /** Whether a Reply CLI is here whose version, read again now, is at the minimum. */
+    async #replyCurrent(): Promise<boolean> {
+        if (this.#deps.programs.find('reply') === null) return false;
+        this.#versions.delete('reply');
+        const version = await this.#replyVersion();
+        return version !== null && versionAtLeast(version, replyMinimumVersion);
+    }
+
+    /** The one npm line of the desktop: the latest version of one of its own packages, and the version kept of it let go. */
+    async #npmInstall(program: ProgramName, npmPackage: string): Promise<RunResult> {
+        const result = await this.#run('npm', 'install', ['install', '-g', npmPackage], { timeoutMs: installLimit });
+        this.#deps.log.info('program_installed', { Program: program, Exit: result.exit });
+        this.#versions.delete(program);
+        return result;
+    }
+
+    /**
+     * An installed Reply CLI below the minimum updated with no click, asked once a Live start (`replyUpdateAtStart`),
+     * in the queue the clicks wait in: only where `Update:CheckEnabled` is not turned off as the desktop reads it
+     * (`updateSwitch`), `reply` is found, its version was read and is below the minimum, npm is found, no try of this
+     * minimum stands in the desktop's settings, and no plugin that runs it can be at work (`replyAtWork`). The mark is
+     * written before npm starts, and where it cannot be written npm is not run; it is taken away once the CLI in use is
+     * at the minimum, so a minimum is tried once and a click is never held back. A missing CLI is installed on a click
+     * alone. After npm, however it ended, the version is read again, and where npm ended well or that version is at the
+     * minimum the runtime is asked to read its plugins again; what the runtime then says it found is read back, so a
+     * CLI updated here and not where the runtime looks is not called updated. The outcome is one line of the card, in
+     * memory for this run; npm's words reach that line alone.
+     */
+    updateReplyAtStart(): Promise<StartUpdateOutcome> {
+        return this.#serial(async () => {
+            const outcome = await this.#updateReplyAtStart();
+            this.#deps.log.info('reply_start_update', { Outcome: outcome });
+            return outcome;
+        });
+    }
+
+    async #updateReplyAtStart(): Promise<StartUpdateOutcome> {
+        if (this.#startUpdateLooked) return 'settled';
+        this.#startUpdateLooked = true;
+        const npmPackage = programInstalls.reply?.npmPackage ?? null;
+        if (npmPackage === null || this.#deps.programs.find('reply') === null) return 'not_found';
+        const asked = readUpdateSwitch(this.#deps.environment, dataLayout(this.#deps.paths.data).userSettingsFile);
+        if (asked !== 'on') return asked === 'off' ? 'off' : 'switch_unread';
+        const before = await this.#replyVersion();
+        if (before === null) return 'version_unread';
+        if (versionAtLeast(before, replyMinimumVersion)) return 'current';
+        if (this.#deps.programs.find('npm') === null) return 'no_npm';
+        const tried = this.#deps.settings().replyUpdateTried;
+        if (tried !== undefined && versionAtLeast(tried, replyMinimumVersion)) return 'tried';
+        // npm replaces the CLI's files under whatever runs it: nothing is run while a plugin the runtime holds as valid may, nor
+        // where the runtime does not say.
+        const running = await this.#deps.cli.run(['plugin', 'list']);
+        const atWork = running.exit === 0 ? replyAtWork(running.stdout) : null;
+        if (atWork !== false) return atWork === null ? 'plugins_unread' : 'in_use';
+        if (!this.#markReplyTried(replyMinimumVersion)) return 'unmarked';
+
+        const result = await this.#npmInstall('reply', npmPackage);
+        // npm that ended badly, or was stopped at its time limit, may have put the new CLI in place before it did.
+        const version = await this.#replyVersion();
+        if (result.exit !== 0 && (version === null || !versionAtLeast(version, replyMinimumVersion))) {
+            return this.#startUpdateEnded('failed', startUpdateSentences.failed(npmLine(result)));
+        }
+        const reload = await this.#reloadPlugins();
+        // Said of the CLI the runtime's reload found; a reload it did not make answers with the one it found before.
+        const listed = reload.exit === 0 ? await this.#deps.cli.run(['plugin', 'list']) : null;
+        const found = listed !== null && listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null;
+        if (version === null) return this.#startUpdateEnded('failed', startUpdateSentences.failed(versionUnsaid));
+        const old = [version, found].find((each) => each !== null && !versionAtLeast(each, replyMinimumVersion));
+        if (old !== undefined && old !== null) return this.#startUpdateEnded('still_old', startUpdateSentences.stillOld(old));
+        this.#markReplyTried(null);
+        return this.#startUpdateEnded('updated', startUpdateSentences.updated(version));
+    }
+
+    #startUpdateEnded<Ended extends 'updated' | 'still_old' | 'failed'>(outcome: Ended, sentence: string): Ended {
+        this.#startUpdate = { updated: outcome === 'updated', said: sentence };
+        this.#changed();
+        return outcome;
+    }
+
+    /** Writes the mark of the start's update, or takes it away; false where it could not be written. */
+    #markReplyTried(minimum: string | null): boolean {
+        const { replyUpdateTried: _, ...rest } = this.#deps.settings();
+        try {
+            if (this.#deps.saveSettings === undefined) throw new Error('The settings are not written here.');
+            this.#deps.saveSettings(minimum === null ? rest : { ...rest, replyUpdateTried: minimum });
+        } catch {
+            this.#deps.log.warn(minimum === null ? 'reply_start_update_mark_left' : 'reply_start_update_unmarked', {});
+            return false;
+        }
+        return true;
     }
 
     /**

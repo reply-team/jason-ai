@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you write about or build on Jason AI GTM Harness, please cite it as below."
+type: software
+title: "Jason AI GTM Harness"
+abstract: >-
+  An open-source AI SDR by Reply.io that runs inside the AI agent you already use
+  (Claude Code, Codex, Cursor CLI, GitHub Copilot CLI, Gemini CLI or Antigravity CLI).
+  A durable local runtime with nine specialist roles plans a line of contact for each
+  person, writes and sends cold email and LinkedIn messages through a provider, reads
+  the replies and follows up, with every message waiting for a person's approval until
+  that person chooses otherwise.
+authors:
+  - name: "ReplyApp Inc."
+    website: "https://reply.io"
+repository-code: "https://github.com/reply-team/jason-ai"
+url: "https://reply.io/harness"
+license: MIT
+keywords:
+  - ai-sdr
+  - cold-email
+  - lead-generation
+  - sales-automation
+  - outbound
+  - claude-code
+  - codex
+  - ai-agent
+  - human-in-the-loop
+  - local-first

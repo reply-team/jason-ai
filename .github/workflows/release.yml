@@ -1976,9 +1976,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
           if ($env:EVENT -eq 'push') { Write-Host "v$env:VERSION is published." } else { Write-Host "The draft of v$env:VERSION is made." }
 
-  # Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the
-  # last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository
-  # holds it at the release's tag, is the tap's to run. The last clause of its condition is what switches it off.
+  # Switched off: the tap moves its cask to the latest release by itself, on its own six-hour
+  # schedule, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the
+  # release's tag, is the tap's to run. The last clause of its condition is what switches it off.
   #
   # Asks the tap to bump its cask once a tag's release is published and the cask's own proof passed: after the release
   # job and proof-macos-cask succeeded, never after either failed or was skipped, so a red proof of the cask holds the

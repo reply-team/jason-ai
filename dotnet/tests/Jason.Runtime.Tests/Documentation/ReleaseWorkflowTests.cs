@@ -1738,7 +1738,7 @@ public partial class ReleaseWorkflowTests
             .Single(job => JobSteps((YamlMappingNode)job.Value).Any(step => Scalar(step, "run") is { } run && Regex.IsMatch(Code(run), @"\bgh\s+release\s+create\b")))
             .Key.ToString();
 
-    /// <summary>The job that asks the tap to bump its formula: the one whose step sends the tap's token.</summary>
+    /// <summary>The job that asks the tap to bump its cask: the one whose step sends the tap's token.</summary>
     private static YamlMappingNode TapJob()
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");

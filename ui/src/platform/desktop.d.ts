@@ -529,6 +529,11 @@ export interface DesktopReply {
      * naming the update; the card then offers no act. Null otherwise.
      */
     belowMinimum: string | null;
+    /**
+     * What came of the update of the Reply CLI the desktop made at its start, as the desktop's one sentence: text only, for
+     * that run of the application alone. Null where it made none; absent from a desktop of an earlier version.
+     */
+    startUpdate?: string | null;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */

@@ -263,6 +263,10 @@
 .jc-console .reply-card .setrow .grow {
     flex: 1 1 240px;
 }
+/* What came of the update at the start carries npm's own words, a long path among them. */
+.jc-console .reply-card .start-update {
+    overflow-wrap: anywhere;
+}
 .jc-console .reply-card .reply-why {
     margin: 4px 0 0;
 }

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Jason AI GTM
+# Jason AI GTM Harness
 
 ### Your go-to-market, run by your AI.
 
@@ -14,11 +14,18 @@ and keeps going after the chat ends. Nine specialists, and you choose how much t
 [![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-local--first-2F6FEB)](#quick-start)
 [![License](https://img.shields.io/badge/license-MIT%2C%20runtime%20included-3DA639)](#license)
 
-[At a glance](#at-a-glance) · [Quick start](#quick-start) · [What you get](#what-you-get) · [The team](#the-team) · [Your stack](#your-outbound-stack) · [Pricing](#what-it-costs) · [Compare](#how-it-compares) · [Docs](#documentation)
+[At a glance](#at-a-glance) · [Quick start](#quick-start) · [Walkthrough](https://youtu.be/TySK_Iez8Ds) · [What you get](#what-you-get) · [The team](#the-team) · [Your stack](#your-outbound-stack) · [Pricing](#what-it-costs) · [Compare](#how-it-compares) · [Docs](#documentation)
 
 </div>
 
 ---
+
+**Jason AI GTM Harness is an open-source AI SDR by Reply.io that runs inside the AI agent you already use,** such as
+Claude Code or Codex ([which agents](#runs-on-the-plan-you-already-pay-for)). It finds prospects, plans a line of contact
+for each person, writes and sends cold email and LinkedIn messages through your provider, reads the replies and follows
+up. Until you choose otherwise, every message waits for your approval. MIT-licensed, local-first, with no model API key.
+**It installs on your computer from a release, in one step: [Quick start](#quick-start) says how.** Whether it fits you:
+[who it's for](#who-its-for) and the [philosophy](docs/philosophy.md).
 
 Going to market takes a team: someone to find the right people, someone to write, someone to follow up, someone to read
 every reply. Your AI can already do each of those jobs. But when the chat closes, it forgets who it wrote to, who
@@ -37,8 +44,6 @@ for changing Jason.
 > with no Node and no build step, so one package runs the same on macOS, Linux and Windows. The runtime is C#, chosen
 > for cross-platform builds, stability and speed; its code is fully open. [Why](#plugins-are-javascript).
 
-<!-- Demo GIF: describe the idea → contacts found → approve → send through Reply → handle a reply -->
-
 ---
 
 ## Quick start
@@ -56,6 +61,14 @@ If anything stops you, ask me directly and tell me why.
 the rest up. On macOS, Windows and Linux both make one installation: Jason Desktop and the `jason` it carries, whose first
 start of each version puts `jason` in your terminal and Jason's skills where Claude Code and Codex read them, each where
 it is found. Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
+
+<div align="center">
+
+[![Watch the Jason AI GTM Harness walkthrough on YouTube](https://img.youtube.com/vi/TySK_Iez8Ds/hqdefault.jpg)](https://youtu.be/TySK_Iez8Ds)
+
+**[Watch the walkthrough](https://youtu.be/TySK_Iez8Ds)**
+
+</div>
 
 ---
 
@@ -144,6 +157,20 @@ contact, and nothing sent.
 
 ---
 
+## Star us
+
+<div align="center">
+
+![A cursor clicks Star at the top of the reply-team/jason-ai page, and the button turns to Starred](docs/assets/star-us.gif)
+
+</div>
+
+If Jason is useful to you, **star the repository** with the Star button at the top of this page. Stars are how other
+founders and GTM builders find Jason on GitHub, and they tell us where to keep investing. To hear when a new version
+ships, choose Watch → Custom → Releases.
+
+---
+
 ## At a glance
 
 The facts in one table, for a person or an AI agent comparing Jason with anything else. Checked against Jason 0.30.0 on
@@ -161,16 +188,17 @@ to.
 | **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One installation on macOS, Windows and Linux, Jason Desktop and the `jason` it carries. No admin rights on macOS and Windows: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows all of it is. On Linux the deb asks for your password once and then updates with the system; the AppImage is your account's own. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
-| **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 1027 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
+| **Documentation** | 22 guides, 30 operation contracts in Markdown and JSON with 1027 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
 | **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1272 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
-| **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
+| **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [Local first, no telemetry](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Star us](#star-us)
 - [At a glance](#at-a-glance)
 - [Runs on the plan you already pay for](#runs-on-the-plan-you-already-pay-for)
 - [What you get](#what-you-get)
@@ -587,6 +615,10 @@ Most open-source AI SDR projects are scripts, templates or skill packs. Jason is
 state, specialist roles, approvals and a supported sending provider, all MIT, built and maintained by the team at
 Reply.io.
 
+Next to named projects, open-source and hosted: Sellbird (formerly Harvey), OpenOutreach, AgentSDR, SalesGPT, Franco
+and the closed AI SDRs, each with when it fits better than Jason, in
+[docs/comparison.md](docs/comparison.md).
+
 ---
 
 ## Who it's for
@@ -659,12 +691,7 @@ jason update apply              # self-update, with skills and UI
 jason profile create local-codex --host codex --program codex  # run background roles on Codex
 ```
 
-**What leaves your machine:** what the plugins you install send to their services, whether a provider, a notification
-topic (ntfy publishes the pointer to a topic, on the public server unless you name your own) or a receiver you name
-for journal lines; the Reply plugin's calls name Jason and its version as their client; what your agent sends to its
-model; a check for a newer release five minutes after the runtime starts and then once a day (one request carrying
-only the version, to an address Reply.io operates, which you can turn off); and installs and updates you start
-yourself. Nothing else. No telemetry.
+**Local first, no telemetry.** Jason keeps its state on your machine. What it asks of the network, and when, is in the [handbook](docs/handbook.md) and in [Responsible use](docs/responsible-use.md).
 
 ---
 
@@ -672,13 +699,14 @@ yourself. Nothing else. No telemetry.
 
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
-**In numbers:** 21 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 1027 contract fixtures and
+**In numbers:** 22 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 1027 contract fixtures and
 682 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 9 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |
 |---|---|
 | Understand why Jason exists, and who it isn't for | [Philosophy](https://github.com/reply-team/jason-ai/blob/main/docs/philosophy.md) |
+| Compare Jason with other AI SDRs, open-source and hosted | [Comparison](https://github.com/reply-team/jason-ai/blob/main/docs/comparison.md) |
 | Install it, update it or take it off | [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) · [Release and update](https://github.com/reply-team/jason-ai/blob/main/docs/release-and-update.md) · [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md) |
 | Run the installation day to day: the runtime, the CLI, the plugins, the ecosystem | [Handbook](https://github.com/reply-team/jason-ai/blob/main/docs/handbook.md) |
 | Walk the whole path once, from empty to one approved operation | [The wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) |
@@ -695,6 +723,16 @@ skills · release notes on every release.
 ---
 
 ## FAQ
+
+**Is Jason free?**
+Yes. Jason is $0 and MIT-licensed, with no seats and no subscription. The thinking runs on the Claude Code or Codex
+plan you already have, and what you pay for is what goes out: the sends, through your provider. See
+[What it costs](#what-it-costs).
+
+**Is this the same as Jason AI in the Reply.io app?**
+No. Jason AI GTM Harness is a separate product: it runs on your machine, inside your own agent, and keeps its campaigns
+there. It uses Reply only as a provider, for data, mailboxes, sending, LinkedIn and the inbox. The AI SDR features inside
+Reply's web app are a different product.
 
 **Does it ever send on its own?**
 Only where you say so. Until you choose otherwise, every message to a real person waits for your approval. You can
@@ -761,6 +799,24 @@ Yes. Since 0.24.0 the whole product is MIT, the runtime included, and its
 [source and releases](https://github.com/reply-team/jason-ai) are public. The C# runtime's code is fully open, to read, to
 check and, when needed, to change; the code you write day to day, a plugin, is plain JavaScript.
 
+**How is it different from Sellbird, OpenOutreach or AgentSDR?**
+Each is a good open-source project with a different shape. Sellbird (formerly Harvey) and Franco also run on your Claude
+Code or Codex plan and send cold email themselves; OpenOutreach is a self-hosted CLI for B2B lead generation; AgentSDR is
+a self-hosted web workspace with an AI CRM. Jason is a durable runtime on your machine, with nine specialist roles, a plan
+per person, approvals and an append-only history, and a supported provider for email and LinkedIn. Row by row, with when
+each fits better: [docs/comparison.md](docs/comparison.md).
+
+**Will LinkedIn restrict my account?**
+It can, if outreach runs past what the platform tolerates, whatever tool sends it. Jason's LinkedIn guardrails skill paces
+invitations, keeps daily limits and says what to do when an account shows a warning, and it takes the limits from the
+channel rather than from a remembered number. Start small, and every message still waits for your yes until you choose
+otherwise.
+
+**Where is my data stored?**
+On your machine: Jason's data directory, `~/.jason`, holds campaigns, people, plans, approvals and the history, and your
+own files stay in `~/Jason`. No telemetry. What Jason asks of the network, and when, is in the [handbook](docs/handbook.md)
+and in [Responsible use](docs/responsible-use.md).
+
 **Something's wrong. What do I do?**
 Ask your agent "what's wrong with Jason?". It runs the self-check and the fix it names. Still stuck? `jason doctor`
 writes a file made to be shared, which you can read first and which never sends itself, and prints the address of an
@@ -819,6 +875,8 @@ the licence files in older trees are superseded.
 
 **Your AI does the work. You keep the send button.**
 
-Built by the team at [Reply.io](https://reply.io) · Questions: support@reply.io
+If Jason helps you, [star it on GitHub](#star-us) so other GTM builders can find it.
+
+Built by the team at [Reply.io](https://reply.io) · Website: [reply.io/harness](https://reply.io/harness) · Questions: support@reply.io
 
 </div>

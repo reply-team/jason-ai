@@ -4,7 +4,7 @@ using static Jason.Runtime.Tests.Documentation.Workflows;
 namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
-/// The Homebrew tap: once a tag's release is published, a job of its own would ask the tap to bump its formula, with the
+/// The Homebrew tap: once a tag's release is published, a job of its own would ask the tap to bump its cask, with the
 /// one token it holds. The job is switched off, by the last clause of its condition, with its reason beside it; its step
 /// is still held here, with <c>Invoke-WebRequest</c> standing in, so that it comes back as it was.
 /// </summary>
@@ -56,10 +56,10 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>The sentence beside the tap's job that says why it is switched off.</summary>
     private const string TapOffReason =
-        "Switched off until the tap's owner takes the cask into the tap and switches its bump on: the formula stays at the last 0.48 release it carries, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
+        "Switched off: the tap moves its cask to the latest release by itself, on its own six-hour schedule, and the cask's bump, which renders .github/cask/jason.rb.template as this repository holds it at the release's tag, is the tap's to run.";
 
     /// <summary>
-    /// No release asks the tap to bump its formula: the tap's job runs under a condition whose last clause is
+    /// No release asks the tap to bump its cask: the tap's job runs under a condition whose last clause is
     /// <c>false</c>, joined to the rest by <c>&amp;&amp;</c>, so no event, input or repository runs it, and the comment
     /// above the job begins with the reason. The workflow's head says the job is switched off and no longer that a last
     /// job asks the tap.

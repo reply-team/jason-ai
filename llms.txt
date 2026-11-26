@@ -1,0 +1,41 @@
+# Jason AI GTM Harness
+
+> Jason AI GTM Harness is an open-source AI SDR by Reply.io that runs inside the AI agent you already use, such as Claude Code or Codex. It finds prospects, plans a line of contact for each person, writes and sends cold email and LinkedIn messages through your provider, reads the replies and follows up. Until you choose otherwise, every message waits for your approval. MIT-licensed, the runtime included; local-first; no model API key.
+
+Key facts:
+
+- Install: Jason is used from a release; nothing in this repository is built or cloned to use it. An agent installs it by following https://get.jasonharness.ai/install; a person starts under Quick start in the README.
+- Category: AI SDR, outbound sales automation, cold email and LinkedIn outreach, AI GTM agent.
+- Maker: ReplyApp Inc. (Reply.io). Website: https://reply.io/harness. Source: https://github.com/reply-team/jason-ai
+- Not the same product as the AI SDR features inside the Reply.io web app. Jason runs on your machine, inside your own agent, and uses Reply only as a provider for data, mailboxes, sending, LinkedIn and the inbox.
+- Price: Jason is $0, with no seats. The thinking runs on the agent plan you already have (Claude Pro, Max or Ultra for Claude Code; your Codex plan). You pay your provider for what you send.
+- How it works: a durable runtime on your machine keeps campaigns, people, per-person plans, approvals and an append-only history. Nine specialist roles (planner, researcher, copywriter, personalizer, critic, responder, analyst, deliverability, campaign manager) run in your agent. Plugins, in plain JavaScript, reach providers and channels.
+- Channels: email and LinkedIn through Reply, with SMS and call steps inside Reply sequences; Gmail, Microsoft 365 and SMTP mailboxes through Reply; any other provider or channel through a plugin.
+- Safety: every operation that reaches a real person waits for a person's approval until a person records otherwise; the do-not-contact list never relaxes; no telemetry.
+- Platforms: macOS, Windows and Linux, one installation (Jason Desktop and the `jason` command line). Status: alpha.
+
+## Start here
+
+- [README](https://github.com/reply-team/jason-ai/blob/main/README.md): what Jason is, quick start, pricing, FAQ
+- [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md): installing, updating and removing Jason
+- [How Jason compares](https://github.com/reply-team/jason-ai/blob/main/docs/comparison.md): next to Sellbird (formerly Harvey), Franco, OpenOutreach, AgentSDR, SalesGPT, closed AI SDRs and sequencers
+- [Philosophy](https://github.com/reply-team/jason-ai/blob/main/docs/philosophy.md): why Jason exists, and who it is not for
+
+## Using it
+
+- [Handbook](https://github.com/reply-team/jason-ai/blob/main/docs/handbook.md): the runtime, the CLI and the plugins day to day
+- [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md): which agent host runs the background roles
+- [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md): the business, runtime and role skills
+- [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md): what leaves your machine, and what stays your job
+
+## Building on it
+
+- [Plugin guide](https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md): connect a provider or add a channel
+- [Operation contracts](https://github.com/reply-team/jason-ai/blob/main/docs/contracts/README.md): the published, machine-readable contracts
+- [Runtime API](https://github.com/reply-team/jason-ai/blob/main/docs/runtime-api.md): the local API the CLI, Jason Desktop and agents use
+- [Architecture](https://github.com/reply-team/jason-ai/blob/main/docs/architecture.md): how the pieces fit
+
+## Optional
+
+- [Release notes](https://github.com/reply-team/jason-ai/blob/main/RELEASE-NOTES.md)
+- [Trademarks](https://github.com/reply-team/jason-ai/blob/main/TRADEMARKS.md)

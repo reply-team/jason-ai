@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
+import type { DesktopReply, DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
 
 // The seam is the whole of what the page may ask of the desktop, and the desktop's main process is written to it. A
 // member added or dropped is a change of the seam, so each object below names exactly the members of its part:
@@ -90,6 +90,19 @@ const status = {
     plugins: true,
     settingsRefused: true,
 } as const satisfies Record<keyof DesktopSetup, true>;
+// And what it says of the Reply connection, the optional line about the update at the start among it.
+const reply = {
+    cli: true,
+    signedIn: true,
+    user: true,
+    wired: true,
+    accounts: true,
+    absent: true,
+    unread: true,
+    pending: true,
+    belowMinimum: true,
+    startUpdate: true,
+} as const satisfies Record<keyof DesktopReply, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -101,13 +114,14 @@ const held: [
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
+    Exactly<keyof typeof reply, keyof DesktopReply>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
@@ -193,6 +207,18 @@ describe('the desktop seam', () => {
             'versionsDiffer',
             'plugins',
             'settingsRefused',
+        ]);
+        expect(Object.keys(reply)).toEqual([
+            'cli',
+            'signedIn',
+            'user',
+            'wired',
+            'accounts',
+            'absent',
+            'unread',
+            'pending',
+            'belowMinimum',
+            'startUpdate',
         ]);
     });
 });

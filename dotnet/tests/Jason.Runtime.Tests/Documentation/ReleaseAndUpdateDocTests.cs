@@ -160,13 +160,13 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// Homebrew's formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop, so no release
-    /// asks the tap to bump it any more: the page says the formula stays at the last 0.48 release it carries, that the one
-    /// line is the way to 0.49 on a Mac, and how an installation Homebrew made reaches it, the data directory kept.
+    /// Homebrew's formula installs the command line alone, and from 0.49.0 Jason on a Mac is Jason Desktop: the page says
+    /// the tap holds the cask alone and moves it to each release on its own schedule, that the one line is the way to 0.49
+    /// on a Mac, and how an installation Homebrew made reaches it, the data directory kept.
     /// Section 1 no longer says a last job asks the tap.
     /// </summary>
     [Fact]
-    public void The_page_says_the_formula_stays_at_the_last_0_48_release_and_a_homebrew_install_moves_by_the_one_line()
+    public void The_page_says_the_tap_holds_the_cask_alone_and_a_homebrew_install_moves_by_the_one_line()
     {
         var installing = Section(Read(), "## 6. Installing");
         var start = installing.IndexOf("### Through a package manager\n", StringComparison.Ordinal);
@@ -174,16 +174,25 @@ public class ReleaseAndUpdateDocTests
         var end = installing.IndexOf("\n### ", start + 1, StringComparison.Ordinal);
         var package = Flat(end < 0 ? installing[start..] : installing[start..end]);
 
-        Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. Its formula installs the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is Jason Desktop, so the formula stays at the last 0.48 release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds nothing newer. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.", package, StringComparison.Ordinal);
+        Assert.Contains("Homebrew installs from the tap `reply-team/tap`, kept in the repository `reply-team/homebrew-tap`. The tap holds the cask alone and no formula, and moves the cask to the latest release on its own schedule. A machine may still have Homebrew's older formula installed and linked: it is the command line alone, without Jason Desktop, and the tap carries no newer version of that formula. With a cask of the same name beside it, the formula's commands name it: `brew uninstall --formula jason`.", package, StringComparison.Ordinal);
         Assert.Contains("The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason Desktop, and on Linux, from 0.49.1, Jason Desktop as well. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:", package, StringComparison.Ordinal);
         Assert.Contains("jason uninstall brew uninstall --formula jason curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh", package, StringComparison.Ordinal);
         Assert.Contains("`jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data directory, and leaves the rest to Homebrew (§9); `brew uninstall --formula jason` takes the rest; the one line installs Jason Desktop, which opens the same data directory as it is.", package, StringComparison.Ordinal);
+        Assert.Contains("On an Apple silicon Mac the tap's cask is Jason Desktop's Homebrew door, and the tap moves it to a new release within hours of its publication:", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("once the tap carries it", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("the formula stays at", package, StringComparison.Ordinal);
         Assert.DoesNotContain("follows the latest release", package, StringComparison.Ordinal);
         Assert.DoesNotContain("asks the tap to bump it at once", package, StringComparison.Ordinal);
 
         var first = Flat(Section(Read(), "## 1. What a release is"));
-        Assert.Contains("A release no longer asks the Homebrew tap to bump its formula (§6). The job that would ask it to bump the cask (§6) is switched off until the tap carries the cask, and waits on the cask's own macOS proof: a red proof holds the cask's bump and never the release.", first, StringComparison.Ordinal);
+        Assert.Contains("The Homebrew tap holds the cask alone and moves it to the latest release on its own schedule (§6). The job that would ask it to bump the cask (§6) is switched off; it would wait on the cask's own macOS proof, so a red proof would hold that ask and never the release.", first, StringComparison.Ordinal);
         Assert.DoesNotContain("a last job asks the Homebrew tap", first, StringComparison.Ordinal);
+
+        var page = Flat(Read());
+        Assert.Contains("`upgrade_command`, the one command for this installation:", page, StringComparison.Ordinal);
+        Assert.Contains("| updates it | `brew upgrade jason`, as `jason update check` names it for a keg |", page, StringComparison.Ordinal);
+        Assert.Contains("The middle line is what `jason update check` names for a Homebrew keg; the tap no longer carries the formula, so a keg reaches a current Jason by the lines of §6 (\"Through a package manager\") that begin with `jason uninstall`.", page, StringComparison.Ordinal);
+        Assert.Contains("so after a package manager's upgrade, such as `winget upgrade Reply.Jason`, it is `jason skills update`", page, StringComparison.Ordinal);
     }
 
     /// <summary>
