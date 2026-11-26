@@ -629,9 +629,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   try is used up. It tries once for each version Jason comes to need; after that the click is yours, and it is never
   held back. The card says what came of it, in that run of the application only: that it was updated, that it could not
   be, with one line of what npm printed, or that the one in use is still the old one, which was installed another way
-  and is updated that way. Where the Reply CLI is not found, the card says only that, and nothing of a sign-in, which
-  only the Reply CLI can read. A missing Reply CLI is never installed without a click: where npm is missing too, the
-  card says so and where Node.js, which brings npm, comes from.
+  and is updated that way. Where the Reply CLI is not found, the card says that it was not found, and nothing of a
+  sign-in, which only the Reply CLI can read. A missing Reply CLI is never installed without a click: where npm is
+  missing too, the card says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
   installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
   turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A
