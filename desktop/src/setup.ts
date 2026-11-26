@@ -56,6 +56,7 @@ import {
     deleteArguments,
     limitsArguments,
     pendingArguments,
+    pendingNoneCodes,
     readDailyLimit,
     readDone,
     readLink,
@@ -178,7 +179,8 @@ export interface ReplyState {
     pending: ReplyCliPending[];
     /**
      * The channels that were listed and whose links made and not used yet could not be read: the read did not end done,
-     * or printed no list. The channel's accounts stay; one the CLI says has none is no failure.
+     * or printed no list. The channel's accounts stay; the CLI saying the channel has none here (`pendingNoneCodes`) is
+     * no failure.
      */
     pendingUnread: ReplyChannel[];
     /**
@@ -729,10 +731,12 @@ export class Setup {
                 if (read.kind === 'listed') accounts.push(...read.accounts);
                 else (read.kind === 'absent' ? absent : unread).push(channel);
             }
-            // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its channel.
+            // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its
+            // channel, unless the CLI's refusal says the channel has none here.
             for (const channel of replyChannels) {
                 if (absent.includes(channel) || unread.includes(channel)) continue;
                 const ending = replyCliEnding(await this.#run('reply', 'account pending', pendingArguments(channel), { timeoutMs: replyActLimitMs }));
+                if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
                 const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
                 if (rows === null) pendingUnread.push(channel);
                 else pending.push(...rows.filter((row) => row.channel === channel));

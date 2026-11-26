@@ -655,7 +655,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   what is; nothing is repeated by itself. The card lists the links made and not used yet under their channel, with
   Waiting or Expired and their expiry; such a link is not shown again, so adding the account again makes a new one.
   They are read for each channel whose accounts were listed, and a read of them that fails says so ("Email links still
-  waiting could not be read.") and offers **Check again**; the channel's accounts stay.
+  waiting could not be read.") and offers **Check again**; the channel's accounts stay. A Reply that issues no such
+  links, or a plan or role that does not include them, shows no line.
   Finishing a connection happens on Reply's side, so the card learns of it by **Check now**, **Check again** or a focus.
   Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the card links to.
   The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden

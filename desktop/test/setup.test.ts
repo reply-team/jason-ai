@@ -749,9 +749,20 @@ test('the Reply card keeps three outcomes per channel: listed, not in the plan o
         assert.deepEqual(await read(email, 'refused', end), { ids: ['e1'], absent: ['linkedin'], unread: [], pendingUnread: ['email'] }, why);
         assert.deepEqual(await read('network', linkedin, end), { ids: ['l1'], absent: [], unread: ['email'], pendingUnread: ['linkedin'] }, why);
     }
-    // The CLI saying it has none for a channel is no failure, nor is a list of none.
-    for (const end of [{ print: { items: [], supported: false, unsupported_channels: ['email', 'linkedin'] } }, { print: { items: [], supported: true, unsupported_channels: [] } }]) {
-        assert.deepEqual(await read(email, linkedin, end), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: [] }, JSON.stringify(end));
+    // The CLI saying it has none for a channel is no failure, nor is a list of none: a channel it says is unsupported, a
+    // Reply that issues no such links (reply-cli 0.23.0's email_link.not_available, exit 1), a plan or role that does
+    // not include them (access.feature_unavailable, exit 1).
+    const none = [
+        { print: { items: [], supported: false, unsupported_channels: ['email', 'linkedin'] } },
+        { print: { items: [], supported: true, unsupported_channels: [] } },
+        { code: 'email_link.not_available' },
+        { code: 'access.feature_unavailable' },
+    ];
+    for (const end of none) {
+        const why = JSON.stringify(end);
+        assert.deepEqual(await read(email, linkedin, end), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: [] }, why);
+        assert.deepEqual(await read(email, 'refused', end), { ids: ['e1'], absent: ['linkedin'], unread: [], pendingUnread: [] }, why);
+        assert.deepEqual(await read('network', linkedin, end), { ids: ['l1'], absent: [], unread: ['email'], pendingUnread: [] }, why);
     }
 });
 
