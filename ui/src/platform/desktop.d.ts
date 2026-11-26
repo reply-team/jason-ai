@@ -525,6 +525,11 @@ export interface DesktopReply {
      */
     pending: DesktopReplyPending[];
     /**
+     * The channels that were listed and whose links made and not used yet could not be read; the channel's accounts stay.
+     * A channel the Reply CLI says has none is not named.
+     */
+    pendingUnread: DesktopReplyChannel[];
+    /**
      * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the desktop's sentence
      * naming the update; the card then offers no act. Null otherwise.
      */

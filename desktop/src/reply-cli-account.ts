@@ -15,6 +15,7 @@ export type ReplyCliProvider = 'gmail' | 'office365';
 /** The codes the desktop does something with; every other code is shown by the code alone. */
 export const replyCliCodes = {
     emailLinkProviderRequired: 'email_link.provider_required',
+    emailLinkNotAvailable: 'email_link.not_available',
     emailAccountNotFound: 'email_account.not_found',
     emailAccountLimitReached: 'email_account.limit_reached',
     emailAccountNoFreeMailboxSlots: 'email_account.no_free_mailbox_slots',
@@ -51,6 +52,12 @@ export function reconnectArguments(channel: ReplyCliChannel, id: string): string
 
 /** `account pending`, one channel at a time, as the accounts are listed. */
 export const pendingArguments = (channel: ReplyCliChannel): string[] => ['account', 'pending', '--channel', channel, json];
+
+/**
+ * The refusals of `account pending` that say a channel has no such links here, not that they could not be read: a Reply
+ * that issues no one-mailbox email links, and a plan or role that does not include them.
+ */
+export const pendingNoneCodes: ReadonlySet<string> = new Set([replyCliCodes.emailLinkNotAvailable, replyCliCodes.accessFeatureUnavailable]);
 
 /** `account limits <id> --channel email`: read without `--daily`, set with it. */
 export const limitsArguments = (id: string, daily?: number): string[] =>
