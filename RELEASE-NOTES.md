@@ -19,7 +19,7 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.51.1-rc.1
+# Jason 0.51.1
 
 Jason 0.51.1 is a small release. Where npm is on the computer, Jason Desktop now updates an older Reply CLI to the version
 Jason needs by itself when it starts, so an update of Jason need not leave the Reply plugin waiting for you to run npm. The
