@@ -551,9 +551,10 @@ export interface DesktopReply {
     /**
      * Where the desktop's check of the Reply CLI at its start stands: `pending` until it has ended, `ended` once its
      * update was made, whatever came of it, once the desktop decided to make none, or once it waits no longer for the
-     * machine set-up, the update still to come. The desktop says when it ends (`onChanged`).
+     * machine set-up, the update still to come. The desktop says when it ends (`onChanged`). Absent from a desktop of an
+     * earlier version.
      */
-    startCheck: 'pending' | 'ended';
+    startCheck?: 'pending' | 'ended';
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */

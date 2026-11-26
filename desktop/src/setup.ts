@@ -209,9 +209,9 @@ export interface ReplyState {
      * Where the check of the Reply CLI that this start of the application makes stands, as a word: `pending` from the
      * start until it ends, `ended` once its update was made, whatever came of it, once the desktop decided to make none,
      * or once it waits no longer for the machine set-up, the update still to come. The page is told when it ends, and
-     * holds the Reply plugin's line back in the mode strip until then.
+     * holds the Reply plugin's line back in the mode strip until then. Always sent; optional as the page reads it.
      */
-    startCheck: 'pending' | 'ended';
+    startCheck?: 'pending' | 'ended';
 }
 
 /**
@@ -793,7 +793,7 @@ export class Setup {
         };
     }
 
-    #startCheck(): ReplyState['startCheck'] {
+    #startCheck(): 'pending' | 'ended' {
         return this.#startCheckEnded ? 'ended' : 'pending';
     }
 

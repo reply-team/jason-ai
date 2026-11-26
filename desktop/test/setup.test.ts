@@ -730,6 +730,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     const absent = await setupOn(missing).status();
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
     assert.deepEqual(absent.reply.notRead, [], 'without the Reply CLI nothing was asked, so nothing was not read');
+    assert.equal(absent.reply.startCheck, 'pending', 'the start’s check of it has not ended, whatever the CLI');
 
     const read = async (env: Record<string, string>, routes: unknown = { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } }) => {
         const each = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', ...env } });
@@ -1461,7 +1462,10 @@ test('the start updates a Reply CLI below the minimum with the click’s own npm
     const slow = startUpdate(t, { npm: new Promise<RunResult>((resolve) => (finish = resolve)) });
     assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
     const updating = slow.setup.updateReplyAtStart();
-    while (npmRuns(slow).length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    for (let waited = 0; npmRuns(slow).length === 0; waited++) {
+        assert.ok(waited < 400, 'npm was asked');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
     finish({ exit: 0, stdout: 'added 1 package', stderr: '' });
     assert.equal(await updating, 'updated');

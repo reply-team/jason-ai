@@ -138,19 +138,28 @@ describe('A routed plugin the runtime holds back, in the mode strip', () => {
         await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`, otherLine]));
         forget();
 
-        // A read of the state that failed holds nothing, the first or one after the check was told.
-        const failing = chatDesktop(checkAt('pending'));
-        failing.setup.status = () => Promise.reject(new Error('The desktop could not answer.'));
-        await renderConsole('live', api(['plugin.list/reply-unavailable']), failing, false);
-        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
-        forget();
+        // An act the desktop refused says so on Connect, and is no failed read: the line stays held. A read of the state
+        // that failed holds nothing, one after the check was told or the first; a read that answers after it holds again
+        // while it says the check has not ended.
         const later = chatDesktop(checkAt('pending'));
         await renderConsole('live', api(['plugin.list/reply-unavailable']), later);
         await waitFor(() => expect(unavailablePlugins.value).toHaveLength(1));
         expect(said()).toEqual([]);
+        flush(() => {
+            setupError.value = 'The desktop refused that.';
+        });
+        expect(said()).toEqual([]);
         later.setup.status = () => Promise.reject(new Error('The desktop could not answer.'));
         flush(() => later.changed());
         await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
+        forget();
+        const failing = chatDesktop(checkAt('pending'));
+        failing.setup.status = () => Promise.reject(new Error('The desktop could not answer.'));
+        await renderConsole('live', api(['plugin.list/reply-unavailable']), failing, false);
+        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
+        failing.setup.status = () => Promise.resolve(checkAt('pending'));
+        flush(() => failing.changed());
+        await waitFor(() => expect(said()).toEqual([]));
         forget();
 
         // A desktop of an earlier version sends no such word: the line is said once its state is read.
