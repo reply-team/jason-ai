@@ -100,6 +100,7 @@ const reply = {
     absent: true,
     unread: true,
     pending: true,
+    pendingUnread: true,
     belowMinimum: true,
     startUpdate: true,
 } as const satisfies Record<keyof DesktopReply, true>;
@@ -217,6 +218,7 @@ describe('the desktop seam', () => {
             'absent',
             'unread',
             'pending',
+            'pendingUnread',
             'belowMinimum',
             'startUpdate',
         ]);

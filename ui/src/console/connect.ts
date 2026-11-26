@@ -94,8 +94,10 @@ const cap = (text: string): string => {
 };
 
 /**
- * The one line for each channel the desktop did not list, from its two lists of closed words: the channels the CLI says
- * are not in the plan or role, then the channels that could not be read. Only the card's own sentences, never the CLI's.
+ * The one line for each channel the desktop did not wholly read, from its lists of closed words: the channels the CLI
+ * says are not in the plan or role, the channels that could not be read, then the listed channels whose links still
+ * waiting could not be read. A channel read and empty has none: an error is said, an empty state is not. Only the
+ * card's own sentences, never the CLI's.
  */
 const unlisted = (state: DesktopSetup['reply']): string[] => [
     ...(Array.isArray(state.absent) ? state.absent : []).map(
@@ -103,6 +105,10 @@ const unlisted = (state: DesktopSetup['reply']): string[] => [
     ),
     ...(Array.isArray(state.unread) ? state.unread : []).map(
         (channel) => `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} accounts could not be read. Check again.`,
+    ),
+    ...(Array.isArray(state.pendingUnread) ? state.pendingUnread : []).map(
+        (channel) =>
+            `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} links still waiting could not be read. Check again.`,
     ),
 ];
 
@@ -1043,21 +1049,22 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                       </div>`
                     : null
             }
-            <div class="setrow reply-state">
-                <div class="grow">
-                    ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
-                    ${
-                        state.signedIn
-                            ? html`<span class="meta"
-                                  >${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span
-                              >`
-                            : null
-                    }
-                </div>
-            </div>
             ${
+                // Without the Reply CLI nothing was asked of the sign-in, so nothing is said of it.
                 state.cli.found
-                    ? html`<div class="reply-key">
+                    ? html`<div class="setrow reply-state">
+                              <div class="grow">
+                                  ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
+                                  ${
+                                      state.signedIn
+                                          ? html`<span class="meta"
+                                                >${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span
+                                            >`
+                                          : null
+                                  }
+                              </div>
+                          </div>
+                          <div class="reply-key">
                               ${secret('reply', 'Or paste a Reply API key')}
                               <button class="btn" type="button" ${real} ${act('connect.replyKey')}>Use key</button>
                           </div>

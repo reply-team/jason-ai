@@ -177,6 +177,11 @@ export interface ReplyState {
      */
     pending: ReplyCliPending[];
     /**
+     * The channels that were listed and whose links made and not used yet could not be read: the read did not end done,
+     * or printed no list. The channel's accounts stay; one the CLI says has none is no failure.
+     */
+    pendingUnread: ReplyChannel[];
+    /**
      * Where the Reply CLI is older than the one the account acts and Jason's Reply plugin need, the sentence that says
      * so; the card then offers no act. Null otherwise.
      */
@@ -698,7 +703,7 @@ export class Setup {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], belowMinimum: null };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
@@ -716,6 +721,7 @@ export class Setup {
         const absent: ReplyChannel[] = [];
         const unread: ReplyChannel[] = [];
         const pending: ReplyCliPending[] = [];
+        const pendingUnread: ReplyChannel[] = [];
         if (auth.signedIn && current) {
             // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
             for (const channel of replyChannels) {
@@ -723,12 +729,13 @@ export class Setup {
                 if (read.kind === 'listed') accounts.push(...read.accounts);
                 else (read.kind === 'absent' ? absent : unread).push(channel);
             }
-            // The links made and not used yet, for each channel that was listed; a read that fails lists none.
+            // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its channel.
             for (const channel of replyChannels) {
                 if (absent.includes(channel) || unread.includes(channel)) continue;
                 const ending = replyCliEnding(await this.#run('reply', 'account pending', pendingArguments(channel), { timeoutMs: replyActLimitMs }));
                 const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
-                pending.push(...(rows ?? []).filter((row) => row.channel === channel));
+                if (rows === null) pendingUnread.push(channel);
+                else pending.push(...rows.filter((row) => row.channel === channel));
             }
         }
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
@@ -742,6 +749,7 @@ export class Setup {
             absent,
             unread,
             pending,
+            pendingUnread,
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
             ...(startUpdate === null ? {} : { startUpdate }),
         };

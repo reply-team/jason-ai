@@ -698,7 +698,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.23.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.23.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], belowMinimum: null });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -708,28 +708,50 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
 });
 
-test('the Reply card keeps three outcomes per channel: listed, not in the plan or role, and could not be read', async (t) => {
+test('the Reply card keeps three outcomes per channel: listed, not in the plan or role, and could not be read; and of a listed one, whether its links still waiting could be read', async (t) => {
     const email = JSON.stringify([{ id: 'e1', channel: 'email', name: 'Sales', address: 'sales@example.test', reply_status: 'connected' }]);
     const linkedin = JSON.stringify([{ id: 'l1', channel: 'linkedin', name: 'Ada', address: '', reply_status: 'enabled' }]);
-    const read = async (emailEnd: string, linkedinEnd: string) => {
-        const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: emailEnd, STUB_REPLY_ACCOUNTS_LINKEDIN: linkedinEnd } });
+    const read = async (emailEnd: string, linkedinEnd: string, pendingEnd?: object) => {
+        const env: Record<string, string> = { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: emailEnd, STUB_REPLY_ACCOUNTS_LINKEDIN: linkedinEnd };
+        if (pendingEnd !== undefined) env['STUB_REPLY_ACCOUNT_PENDING'] = JSON.stringify(pendingEnd);
+        const b = bench(t, { programs: ['reply'], env });
         const log = memoryLog();
         const { reply } = await setupOn(b, log).status();
         const logged = JSON.stringify(log.lines);
         assert.equal(logged.includes('never shown'), false, 'nothing of the CLI error text is logged');
-        return { ids: reply.accounts.map((each) => each.id), absent: reply.absent, unread: reply.unread };
+        return { ids: reply.accounts.map((each) => each.id), absent: reply.absent, unread: reply.unread, pendingUnread: reply.pendingUnread };
     };
 
-    assert.deepEqual(await read(email, linkedin), { ids: ['e1', 'l1'], absent: [], unread: [] });
+    assert.deepEqual(await read(email, linkedin), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: [] });
     for (const [channel, other, otherId] of [['linkedin', email, 'e1'], ['email', linkedin, 'l1']] as const) {
         const ended = (end: string) => (channel === 'linkedin' ? [other, end] as const : [end, other] as const);
         // reply-cli 0.20.0 answers access.feature_unavailable, exit 1, for the plan or role lacking the channel.
-        assert.deepEqual(await read(...ended('refused')), { ids: [otherId], absent: [channel], unread: [] });
+        assert.deepEqual(await read(...ended('refused')), { ids: [otherId], absent: [channel], unread: [], pendingUnread: [] });
         // Every other ending is only that it could not be read: a network failure, an expired sign-in, an exit
         // nobody explained, an answer that is no list.
         for (const end of ['network', 'expired', 'unexplained', 'garbage']) {
-            assert.deepEqual(await read(...ended(end)), { ids: [otherId], absent: [], unread: [channel] }, end);
+            assert.deepEqual(await read(...ended(end)), { ids: [otherId], absent: [], unread: [channel], pendingUnread: [] }, end);
         }
+    }
+
+    // A read of the links still waiting that does not end done, or prints no list, names its channel, and only a channel
+    // whose accounts were listed: its accounts stay. The stand-in answers both channels' reads alike.
+    const failed = [
+        { code: 'reply.unavailable' },
+        { code: 'outcome.unknown', exit: 3 },
+        { exit: 7, stderr: 'something nobody explained' },
+        { exit: 0, stdout: 'not json' },
+        { print: { supported: true, unsupported_channels: [] } },
+    ];
+    for (const end of failed) {
+        const why = JSON.stringify(end);
+        assert.deepEqual(await read(email, linkedin, end), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: ['email', 'linkedin'] }, why);
+        assert.deepEqual(await read(email, 'refused', end), { ids: ['e1'], absent: ['linkedin'], unread: [], pendingUnread: ['email'] }, why);
+        assert.deepEqual(await read('network', linkedin, end), { ids: ['l1'], absent: [], unread: ['email'], pendingUnread: ['linkedin'] }, why);
+    }
+    // The CLI saying it has none for a channel is no failure, nor is a list of none.
+    for (const end of [{ print: { items: [], supported: false, unsupported_channels: ['email', 'linkedin'] } }, { print: { items: [], supported: true, unsupported_channels: [] } }]) {
+        assert.deepEqual(await read(email, linkedin, end), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: [] }, JSON.stringify(end));
     }
 });
 

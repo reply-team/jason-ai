@@ -245,9 +245,13 @@ describe('the Reply card', () => {
 });
 
 describe('the Reply card, a channel it did not list', () => {
-    const with_ = (absent: DesktopReplyChannel[], unread: DesktopReplyChannel[]): DesktopSetup => ({
+    const with_ = (
+        absent: DesktopReplyChannel[],
+        unread: DesktopReplyChannel[],
+        pendingUnread: DesktopReplyChannel[] = [],
+    ): DesktopSetup => ({
         ...setupFound,
-        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread },
+        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread, pendingUnread },
     });
     const noted = (card: HTMLElement) => Array.from(card.querySelectorAll('.acct-none'), words);
 
@@ -278,9 +282,37 @@ describe('the Reply card, a channel it did not list', () => {
         ]);
     });
 
-    it('says nothing when both channels were listed', async () => {
+    it('says a listed channel whose links still waiting could not be read in its own line, its accounts staying', async () => {
+        const card = replyCard((renderConnect(with_([], ['linkedin'], ['email'])), await openConnect()));
+        expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
+        expect(noted(card)).toEqual([
+            'LinkedIn accounts could not be read. Check again.',
+            'Email links still waiting could not be read. Check again.',
+        ]);
+        cleanup();
+        const linkedin = replyCard((renderConnect(with_([], [], ['linkedin'])), await openConnect()));
+        expect(noted(linkedin)).toEqual(['LinkedIn links still waiting could not be read. Check again.']);
+        expect(within(linkedin).getByRole('button', { name: 'Check again' })).toBeTruthy();
+    });
+
+    it('says nothing when both channels were listed, an empty one included, nor from a desktop that sends no word of the links still waiting', async () => {
         renderConnect(withAccounts([account('em1', 'email', 'connected')]));
         expect((await openConnect()).querySelector('.acct-none')).toBeNull();
+        cleanup();
+        // As seen on a live account: both channels read, both empty, no link waiting. An empty state is not drawn.
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, accounts: [], pending: [] } });
+        const empty = replyCard(await openConnect());
+        expect(empty.querySelector('.acct-group')).toBeNull();
+        expect(empty.querySelector('.acct-none')).toBeNull();
+        expect(words(empty)).not.toContain('has no');
+        expect(words(empty)).not.toContain('could not be read');
+        cleanup();
+        const older: Partial<DesktopSetup['reply']> = { ...setupFound.reply };
+        delete older.pendingUnread;
+        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
+        const card = replyCard(await openConnect());
+        expect(rows(card)).toEqual([['Email', 'Sales inbox', 'Connected']]);
+        expect(card.querySelector('.acct-none')).toBeNull();
     });
 });
 
@@ -741,6 +773,9 @@ describe('the Reply card, its acts', () => {
                 'card will offer to install the Reply CLI.',
         );
         expect(row.querySelectorAll('a, button')).toHaveLength(0);
+        // Nothing was asked of the sign-in, so nothing is said of it.
+        expect(card.querySelector('.reply-state')).toBeNull();
+        expect(words(card)).not.toMatch(/signed in/i);
     });
 
     it('with npm there and no Reply CLI, says it was not found and offers Install', async () => {
@@ -759,6 +794,8 @@ describe('the Reply card, its acts', () => {
             .getByText(/The Reply CLI was not found[.]/)
             .closest<HTMLElement>('.setrow')!;
         expect(words(row)).toBe('The Reply CLI was not found. Install');
+        expect(card.querySelector('.reply-state')).toBeNull();
+        expect(words(card)).not.toMatch(/signed in/i);
     });
 
     it('says what came of the update at the start in one line, as text, and nothing where the desktop says nothing', async () => {
