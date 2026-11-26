@@ -402,9 +402,12 @@ export function versionAtLeast(found: string, wanted: string): boolean {
 
 /**
  * The oldest Reply CLI the Reply card's acts use: the one Jason's Reply plugin needs, so the card never calls Reply
- * ready while the plugin is unavailable. The account verbs the acts run are from 0.21.0.
+ * ready while the plugin is unavailable. The account verbs the acts run are from 0.21.0. 0.23.2 keeps the sign-in when a
+ * token refresh fails for a passing reason, lets one process at a time refresh it, and on Windows waits a few seconds for
+ * a credentials file another program holds: Jason runs several `reply` commands at once, most of all as it starts, and an
+ * older CLI signed the person out on any refresh that failed, two of them refreshing one expired sign-in among them.
  */
-export const replyMinimumVersion = '0.23.0';
+export const replyMinimumVersion = '0.23.2';
 
 /** The channels `reply account list --channel` takes, read one at a time, in the order the card shows them. */
 export const replyChannels = ['email', 'linkedin'] as const;

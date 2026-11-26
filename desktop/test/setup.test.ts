@@ -698,7 +698,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.23.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.23.2', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -756,7 +756,7 @@ test('a Reply CLI older than the one Jason’s Reply plugin requires is offered 
     const { reply } = await setupOn(b).status();
     assert.deepEqual(reply.cli, { found: true, version: '0.11.0', install: 'reply' });
     assert.deepEqual(reply.accounts, []);
-    assert.equal(reply.belowMinimum, 'Managing Reply accounts here needs the Reply CLI 0.23.0 or later: update the Reply CLI.');
+    assert.equal(reply.belowMinimum, 'Managing Reply accounts here needs the Reply CLI 0.23.2 or later: update the Reply CLI.');
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.equal(asked.some((said) => said.startsWith('account list')), false, 'that version has no account command');
 
@@ -1337,11 +1337,11 @@ test('one try for each minimum, whatever came of it: the same one runs nothing a
     const same = startUpdate(t, { mark: replyMinimumVersion });
     assert.equal(await same.setup.updateReplyAtStart(), 'tried');
     assert.deepEqual(npmRuns(same), []);
-    const higher = startUpdate(t, { mark: '0.22.0' });
+    const higher = startUpdate(t, { mark: '0.23.0' });
     assert.equal(await higher.setup.updateReplyAtStart(), 'updated');
     assert.deepEqual(higher.markAtNpm, [replyMinimumVersion]);
 
-    // Compared as versions, never as text: a mark above the minimum has been tried, and 0.9.0 is below 0.23.0.
+    // Compared as versions, never as text: a mark above the minimum has been tried, and 0.9.0 is below 0.23.2.
     for (const [mark, outcome] of [['0.100.0', 'tried'], ['1.0.0', 'tried'], ['0.9.0', 'updated']] as const) {
         assert.equal(await startUpdate(t, { mark }).setup.updateReplyAtStart(), outcome, mark);
     }
