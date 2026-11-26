@@ -2289,8 +2289,9 @@ export function fail(operation, observed, learned) {
     call: observed.call,
     status: observed.status,
     cli_code: observed.cli_code,
-    // The CLI's own sentence for the ending, which names the step Reply refused where its code alone does not: "Reply did
-    // not import the contact." is a refusal of the import a send makes first, not of the send.
+    // The CLI's title for the ending: its own sentence on a work command's refusal, which names the step Reply refused where
+    // the code alone does not ("Reply did not import the contact." is a refusal of the import a send makes first, not of
+    // the send), and Reply's own problem title where the CLI passes an error of Reply's through as it is.
     cli_title: observed.cli_title === undefined ? undefined : describe(observed.cli_title),
     provider_code: observed.provider_code,
     // Reply's own sentence, where the CLI passed one on: "Invalid data" is the only sign that a first name was missing.
