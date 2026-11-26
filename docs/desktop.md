@@ -615,7 +615,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   The card lists the Reply account's mailboxes and its LinkedIn accounts, each channel read on its own, so an account
   without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
-  accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
+  accounts stay in every case. A channel that was read and holds no account and no link still waiting shows no line:
+  the card says what it could not read, never that a channel is empty. The list is read again when the window takes the
+  focus back, at most once in 30 seconds.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
   to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. An update, and an
   install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once; that reload, like any
@@ -627,8 +629,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   try is used up. It tries once for each version Jason comes to need; after that the click is yours, and it is never
   held back. The card says what came of it, in that run of the application only: that it was updated, that it could not
   be, with one line of what npm printed, or that the one in use is still the old one, which was installed another way
-  and is updated that way. A missing Reply CLI is never installed without a click: where npm is missing too, the card
-  says so and where Node.js, which brings npm, comes from.
+  and is updated that way. Where the Reply CLI is not found, the card says only that, and nothing of a sign-in, which
+  only the Reply CLI can read. A missing Reply CLI is never installed without a click: where npm is missing too, the
+  card says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
   installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
   turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A
@@ -651,6 +654,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   or resume until it is reconnected. An answer that leaves the account's state unknown reads the list again and shows
   what is; nothing is repeated by itself. The card lists the links made and not used yet under their channel, with
   Waiting or Expired and their expiry; such a link is not shown again, so adding the account again makes a new one.
+  They are read for each channel whose accounts were listed, and a read of them that fails says so ("Email links still
+  waiting could not be read.") and offers **Check again**; the channel's accounts stay.
   Finishing a connection happens on Reply's side, so the card learns of it by **Check now**, **Check again** or a focus.
   Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the card links to.
   The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
