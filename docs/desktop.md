@@ -329,8 +329,10 @@ work does not run, and the runtime's own problem with the repair, with a link to
 line each; more are counted in one line. It is read as the window opens and again whenever the plugins are loaded
 again, and it goes by itself once the plugin can run; nothing closes it while the cause stands. A plugin no route names
 is never said there, and [the demo](#the-demo) never says it. The Reply plugin's line waits while Jason Desktop, as it
-starts, may still be updating the Reply CLI itself and having the runtime load its plugins again ([Connect](#connect)),
-since it would ask for what is being done: it is said once that check has ended, where the plugin is still held back.
+starts, checks the version of the Reply CLI and updates one below the version Jason needs, having the runtime load its
+plugins again ([Connect](#connect)), since the line would ask for what is being done; it is said once that check has
+ended, where the plugin is still held back. The wait is bounded: where the machine set-up the update waits for has not
+ended within 30 seconds of the window opening, the line waits no longer, and the update still runs once it has.
 
 ## Open in
 
