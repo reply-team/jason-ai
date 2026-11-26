@@ -1877,6 +1877,18 @@ test('in Live the update is asked for once the machine set-up has ended; in the 
     await turn();
     live.over();
     assert.deepEqual(calls, ['set-up', 'update']);
+    // The bound is on the set-up alone: passing while the update still runs, it ends nothing; the update's own end does.
+    calls.length = 0;
+    let updated = (): void => undefined;
+    replyStartCheck('live', deps(() => Promise.resolve(), () => new Promise<void>((resolve) => (updated = resolve)))).ask();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update']);
+    bound();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update'], 'the bound passing while the update runs ends nothing');
+    updated();
+    await turn();
+    assert.deepEqual(calls, ['set-up', 'update']);
 
     // A start over with no ask, whichever way it went: the check ends.
     calls.length = 0;
@@ -1918,6 +1930,11 @@ test('in Live the update is asked for once the machine set-up has ended; in the 
     const over = main.indexOf('    } finally {\n        replyCheck.over();\n    }', made);
     const at = (text: string) => main.indexOf(text, opened);
     assert.ok(main.indexOf('const setup = new Setup({') < made && made < opened && opened < over, 'made after the Setup, then the try');
+    // What it is handed: the Setup's own end of the check, the start's own bound on the set-up, and a timer.
+    const handed = main.slice(made, opened);
+    for (const argument of ['end: () => setup.endStartCheck(),', 'waitMs: liveWaitMs,', 'sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),']) {
+        assert.ok(handed.includes(argument), `the start hands it ${argument}`);
+    }
     for (const exit of ["await showStarting(window, 'Starting Jason…', false);", 'if (uncopied !== null) {', 'if (version === null) {', "log.info('window_loaded'", 'replyCheck.ask();', '} catch (error) {']) {
         assert.ok(at(exit) > opened && at(exit) < over, `${exit} is inside the try the finally closes`);
     }
