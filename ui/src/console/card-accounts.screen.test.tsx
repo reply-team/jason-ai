@@ -307,7 +307,7 @@ describe('the accounts card', () => {
         expect(words(provider)).toContain('1 account listed; Email not read');
 
         const below = 'Managing Reply accounts here needs the Reply CLI 0.23.2 or later: update the Reply CLI.';
-        const older: DesktopSetup = {
+        const belowState: DesktopSetup = {
             ...setupFound,
             reply: {
                 ...setupFound.reply,
@@ -319,7 +319,7 @@ describe('the accounts card', () => {
         const facts = (part: HTMLElement) => [...part.querySelectorAll('.card-line > *')].map(words);
         const warned = (part: HTMLElement) => [...part.querySelectorAll('.ask-w')].map(words);
         // Below the minimum, the lists were not asked: the desktop's sentence stands where the count would, as text.
-        desktop.setup.status = () => Promise.resolve(older);
+        desktop.setup.status = () => Promise.resolve(belowState);
         fireEvent.click(within(card(pane)).getByRole('button', { name: 'Refresh' }));
         const asked = await waitFor(() => {
             const part = fromReply(card(pane));
@@ -337,8 +337,12 @@ describe('the accounts card', () => {
         // A version that could not be read: said in the card's voice, never as below the minimum; no count.
         desktop.setup.status = () =>
             Promise.resolve({
-                ...older,
-                reply: { ...older.reply, cli: { found: true, version: null, install: 'reply' }, notRead: ['version'] },
+                ...belowState,
+                reply: {
+                    ...belowState.reply,
+                    cli: { found: true, version: null, install: 'reply' },
+                    notRead: ['version'],
+                },
             });
         fireEvent.click(within(card(pane)).getByRole('button', { name: 'Refresh' }));
         const unread = await waitFor(() => {

@@ -535,7 +535,7 @@ export interface DesktopReply {
     /**
      * What the desktop asked and could not read, as closed words: the Reply CLI's version (`belowMinimum` is then still
      * set, so a page that reads no such word offers no act), its sign-in (`signedIn` is then false), and whether the
-     * runtime's Reply plugin uses that sign-in (`wired` is then false). Absent from a desktop of an earlier version.
+     * runtime's Reply plugin uses that sign-in (`wired` is then false).
      */
     notRead: DesktopReplyFact[];
     /**

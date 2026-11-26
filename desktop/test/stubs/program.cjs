@@ -32,10 +32,9 @@ function answer(given) {
     }
 }
 
-if (process.env.STUB_HANG === name || process.env.STUB_HANG === `${name} ${said}`) {
-    // A program that never answers, whatever it was asked (STUB_HANG=<name>) or asked that one thing (STUB_HANG=<name>
-    // <arguments>), and ends at the first signal: what a runner's time limit is for. Its id is written to the file
-    // STUB_HANG_PID names, so a test can see it has gone.
+if (process.env.STUB_HANG === name) {
+    // A program that never answers, whatever it was asked, and ends at the first signal: what a runner's time limit is
+    // for. Its id is written to the file STUB_HANG_PID names, so a test can see it has gone.
     if (process.env.STUB_HANG_PID) writeFileSync(process.env.STUB_HANG_PID, String(process.pid));
     setInterval(() => undefined, 60000);
 } else if (sandboxCheck) {
