@@ -104,6 +104,7 @@ const reply = {
     notRead: true,
     belowMinimum: true,
     startUpdate: true,
+    startCheck: true,
 } as const satisfies Record<keyof DesktopReply, true>;
 
 const held: [
@@ -223,6 +224,7 @@ describe('the desktop seam', () => {
             'notRead',
             'belowMinimum',
             'startUpdate',
+            'startCheck',
         ]);
     });
 });

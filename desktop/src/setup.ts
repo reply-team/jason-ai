@@ -205,6 +205,12 @@ export interface ReplyState {
     belowMinimum: string | null;
     /** What came of the update of the Reply CLI at this start of the application, as one sentence; absent where none was made. */
     startUpdate?: string | null;
+    /**
+     * Where the check of the Reply CLI that this start of the application makes stands, as a word: `pending` from the
+     * start until it ends, `ended` once its update was made, whatever came of it, or once the desktop decided to make
+     * none. The page is told when it ends, and holds the Reply plugin's line back in the mode strip until then.
+     */
+    startCheck: 'pending' | 'ended';
 }
 
 /**
@@ -487,6 +493,10 @@ export class Setup {
     #startUpdateLooked = false;
     /** What came of the start's update, in this run alone; null where none was made. */
     #startUpdate: { updated: boolean; said: string } | null = null;
+    /**
+     * Whether the start's check of the Reply CLI has ended in this run; until then the strip holds Reply's line back.
+     */
+    #startCheckEnded = false;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
 
@@ -723,7 +733,7 @@ export class Setup {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() };
         }
         const route = valid === true ? readGlobalDefault(await this.#deps.cli.run(['route', 'list'])) : null;
         const wired = route?.plugin === 'reply';
@@ -778,7 +788,12 @@ export class Setup {
             notRead: [...(version === null ? ['version' as const] : []), ...(authRead === null ? ['auth' as const] : []), ...(routeUnread ? ['route' as const] : [])],
             belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
             ...(startUpdate === null ? {} : { startUpdate }),
+            startCheck: this.#startCheck(),
         };
+    }
+
+    #startCheck(): ReplyState['startCheck'] {
+        return this.#startCheckEnded ? 'ended' : 'pending';
     }
 
     /**
@@ -1354,10 +1369,29 @@ export class Setup {
      */
     updateReplyAtStart(): Promise<StartUpdateOutcome> {
         return this.#serial(async () => {
-            const outcome = await this.#updateReplyAtStart();
-            this.#deps.log.info('reply_start_update', { Outcome: outcome });
-            return outcome;
+            try {
+                const outcome = await this.#updateReplyAtStart();
+                this.#deps.log.info('reply_start_update', { Outcome: outcome });
+                return outcome;
+            } finally {
+                this.#endStartCheck();
+            }
         });
+    }
+
+    /**
+     * A start that asks for no update of the Reply CLI, one that failed before its page was shown: the check ends now.
+     */
+    skipStartUpdate(): void {
+        this.#startUpdateLooked = true;
+        this.#endStartCheck();
+    }
+
+    /** The start's check of the Reply CLI has ended, whatever came of it: the page is told once. */
+    #endStartCheck(): void {
+        if (this.#startCheckEnded) return;
+        this.#startCheckEnded = true;
+        this.#changed();
     }
 
     async #updateReplyAtStart(): Promise<StartUpdateOutcome> {
@@ -1399,7 +1433,6 @@ export class Setup {
 
     #startUpdateEnded<Ended extends 'updated' | 'still_old' | 'failed'>(outcome: Ended, sentence: string): Ended {
         this.#startUpdate = { updated: outcome === 'updated', said: sentence };
-        this.#changed();
         return outcome;
     }
 

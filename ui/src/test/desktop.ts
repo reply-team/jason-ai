@@ -163,6 +163,7 @@ export const setupFound: DesktopSetup = {
         pendingUnread: [],
         notRead: [],
         belowMinimum: null,
+        startCheck: 'ended',
     },
     runtimeVersion: '0.34.0',
     bundleVersion: '0.34.0',

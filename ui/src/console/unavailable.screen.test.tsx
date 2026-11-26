@@ -6,14 +6,15 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { chatDesktop, journalLine, stubStream, type StubStream } from '../test/desktop';
+import type { DesktopSetup } from '../platform/desktop';
+import { chatDesktop, journalLine, setupFound, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { ModeStrip } from './mode-strip';
-import { chats, conversations, lines, setup } from './state';
+import { chats, conversations, lines, setup, setupError, setupReadFailed } from './state';
 import { unavailablePlugins } from './unavailable';
 
 // A plugin a route names that the runtime holds back is said in the mode strip, in Live: read as the console starts and
@@ -34,8 +35,18 @@ function api(plugins: FixtureName[], routes: FixtureName = 'route.list/card-acco
         .answer('plugin.list', ...plugins);
 }
 
-async function renderConsole(kept: 'live' | 'demo', fake: FakeApi): Promise<StubStream> {
-    const desktop = chatDesktop();
+/** The desktop's state with its start's check of the Reply CLI where it stands. */
+const checkAt = (startCheck: 'pending' | 'ended'): DesktopSetup => ({
+    ...setupFound,
+    reply: { ...setupFound.reply, startCheck },
+});
+
+async function renderConsole(
+    kept: 'live' | 'demo',
+    fake: FakeApi,
+    desktop: StubDesktop = chatDesktop(),
+    read = true,
+): Promise<StubStream> {
     desktop.modeKept = kept;
     await loadMode(desktop);
     watch(fake);
@@ -50,18 +61,30 @@ async function renderConsole(kept: 'live' | 'demo', fake: FakeApi): Promise<Stub
     );
     const stream = stubStream();
     render(<Console api={fake} desktop={desktop} stream={stream.stream} />);
-    await waitFor(() => expect(setup.value).not.toBeNull());
+    if (read) await waitFor(() => expect(setup.value).not.toBeNull());
     return stream;
 }
 
 const strip = () => screen.getByRole('region', { name: 'Mode bar' });
 const alerts = () => within(strip()).queryAllByRole('alert');
+const said = () => alerts().map((each) => each.textContent);
+
+/** A console gone, and what it read forgotten, for the next one a row draws. */
+function forget(): void {
+    cleanup();
+    setup.value = null;
+    setupError.value = null;
+    setupReadFailed.value = false;
+    unavailablePlugins.value = [];
+}
 
 beforeEach(() => {
     chats.value = {};
     conversations.value = [];
     lines.value = [];
     setup.value = null;
+    setupError.value = null;
+    setupReadFailed.value = false;
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -75,7 +98,7 @@ afterEach(() => {
 });
 
 describe('A routed plugin the runtime holds back, in the mode strip', () => {
-    it('is said in Live as an alert, by the Accounts card’s name and the runtime’s problem with its repair', async () => {
+    it('is said in Live as an alert, by the Accounts card’s name and the runtime’s problem with its repair; Reply’s own only once the desktop’s start check of the Reply CLI has ended, another’s at every moment', async () => {
         await renderConsole('live', api(['plugin.list/reply-unavailable']));
         const alert = await waitFor(() => {
             const [only, ...rest] = alerts();
@@ -88,6 +111,63 @@ describe('A routed plugin the runtime holds back, in the mode strip', () => {
         await waitFor(() => expect(route.value).toEqual({ screen: 'accounts' }));
         expect(within(alert).getAllByRole('button')).toHaveLength(1);
         expect(alerts()).toHaveLength(1);
+        forget();
+
+        // A start still checking its Reply CLI: Reply's line is held before the desktop's state is read and while it
+        // says the check has not ended, a line for another plugin is said throughout, and once the check has ended with
+        // the plugin still held back, Reply's is said, after the state is read again.
+        const other = { id: 'tool', label: 'tool', problem: 'Problem.' };
+        const otherLine = 'tool is unavailable, so its work does not run: Problem. Accounts';
+        let answer: (state: DesktopSetup) => void = () => undefined;
+        const starting = chatDesktop(checkAt('pending'));
+        starting.setup.status = () => new Promise((resolve) => (answer = resolve));
+        await renderConsole('live', api(['plugin.list/reply-unavailable']), starting, false);
+        await waitFor(() => expect(unavailablePlugins.value.map((each) => each.id)).toEqual(['reply']));
+        expect(setup.value).toBeNull();
+        expect(said()).toEqual([]);
+        flush(() => {
+            unavailablePlugins.value = [...unavailablePlugins.value, other];
+        });
+        expect(said()).toEqual([otherLine]);
+        flush(() => answer(checkAt('pending')));
+        await waitFor(() => expect(setup.value?.reply.startCheck).toBe('pending'));
+        expect(said()).toEqual([otherLine]);
+        flush(() => starting.changed());
+        expect(said()).toEqual([otherLine]);
+        flush(() => answer(checkAt('ended')));
+        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`, otherLine]));
+        forget();
+
+        // A read of the state that failed holds nothing, the first or one after the check was told.
+        const failing = chatDesktop(checkAt('pending'));
+        failing.setup.status = () => Promise.reject(new Error('The desktop could not answer.'));
+        await renderConsole('live', api(['plugin.list/reply-unavailable']), failing, false);
+        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
+        forget();
+        const later = chatDesktop(checkAt('pending'));
+        await renderConsole('live', api(['plugin.list/reply-unavailable']), later);
+        await waitFor(() => expect(unavailablePlugins.value).toHaveLength(1));
+        expect(said()).toEqual([]);
+        later.setup.status = () => Promise.reject(new Error('The desktop could not answer.'));
+        flush(() => later.changed());
+        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
+        forget();
+
+        // A desktop of an earlier version sends no such word: the line is said once its state is read.
+        const older: Partial<DesktopSetup['reply']> = { ...setupFound.reply };
+        delete older.startCheck;
+        await renderConsole(
+            'live',
+            api(['plugin.list/reply-unavailable']),
+            chatDesktop({ ...setupFound, reply: older as DesktopSetup['reply'] }),
+        );
+        await waitFor(() => expect(said()).toEqual([`${sentence} Accounts`]));
+        forget();
+
+        // A strip with no desktop behind it holds nothing, at once.
+        unavailablePlugins.value = [{ id: 'reply', label: 'Reply (reply)', problem: 'Problem.' }];
+        render(<ModeStrip />);
+        expect(said()).toEqual(['Reply (reply) is unavailable, so its work does not run: Problem. Accounts']);
     });
 
     it('is not said where no route names the plugin', async () => {
@@ -104,7 +184,7 @@ describe('A routed plugin the runtime holds back, in the mode strip', () => {
         expect(alerts()).toEqual([]);
     });
 
-    it('is read again on a plugins_reloaded line, and goes by itself once the plugin is available', async () => {
+    it('is read again on a plugins_reloaded line, and goes by itself once the plugin is available; never said at all where the desktop’s own start update mends it', async () => {
         const fake = api(['plugin.list/reply-unavailable', 'plugin.list/card-accounts-reply']);
         const stream = await renderConsole('live', fake);
         await waitFor(() => expect(alerts()).toHaveLength(1));
@@ -118,6 +198,26 @@ describe('A routed plugin the runtime holds back, in the mode strip', () => {
         flush(() => stream.send(journalLine({ id: 'jrn_reload', kind: 'plugins_reloaded' })));
         await waitFor(() => expect(alerts()).toEqual([]));
         expect(fake.calls.filter((each) => each.operation === 'plugin.list')).toHaveLength(2);
+        forget();
+
+        // A start whose own update of the Reply CLI mends the plugin: the line is never said, from the page's first
+        // read through the reload to the check's end.
+        const mending = chatDesktop(checkAt('pending'));
+        const mended = api(['plugin.list/reply-unavailable', 'plugin.list/card-accounts-reply']);
+        const again = await renderConsole('live', mended, mending);
+        await waitFor(() => expect(unavailablePlugins.value.map((each) => each.id)).toEqual(['reply']));
+        expect(alerts()).toEqual([]);
+        flush(() => {
+            again.open();
+            again.send(journalLine({ id: 'jrn_mended', kind: 'plugins_reloaded' }));
+        });
+        await waitFor(() => expect(mended.calls.filter((each) => each.operation === 'plugin.list')).toHaveLength(2));
+        await waitFor(() => expect(unavailablePlugins.value).toEqual([]));
+        expect(alerts()).toEqual([]);
+        mending.setup.status = () => Promise.resolve(checkAt('ended'));
+        flush(() => mending.changed());
+        await waitFor(() => expect(setup.value?.reply.startCheck).toBe('ended'));
+        expect(alerts()).toEqual([]);
     });
 });
 

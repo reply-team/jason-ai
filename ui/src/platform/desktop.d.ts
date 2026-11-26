@@ -548,6 +548,12 @@ export interface DesktopReply {
      * that run of the application alone. Null where it made none; absent from a desktop of an earlier version.
      */
     startUpdate?: string | null;
+    /**
+     * Where the desktop's check of the Reply CLI at its start stands: `pending` until it has ended, `ended` once its
+     * update was made, whatever came of it, or once the desktop decided to make none. The desktop says when it ends
+     * (`onChanged`).
+     */
+    startCheck: 'pending' | 'ended';
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */

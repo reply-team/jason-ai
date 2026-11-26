@@ -721,7 +721,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.23.2', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.23.2', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: 'pending' });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -1328,6 +1328,8 @@ interface StartUpdate {
     markAtNpm: (string | undefined)[];
     /** The time limit each npm run was given. */
     limits: (number | undefined)[];
+    /** How often the page was asked to read the setup again. */
+    told: () => number;
 }
 
 /**
@@ -1412,7 +1414,9 @@ function startUpdate(
             writeSettings(b.paths.settings, next);
         },
     });
-    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm, limits };
+    let told = 0;
+    setup.onChanged(() => told++);
+    return { b, setup, log, kept: () => readSettings(b.paths.settings), ran, markAtNpm, limits, told: () => told };
 }
 
 /** What `jason plugin list` prints of plugins that each request one program, or none. */
@@ -1428,9 +1432,14 @@ function pluginList(plugins: { id: string; status: string; program: string | nul
 
 const npmRuns = (s: StartUpdate) => s.ran.filter((each) => each.startsWith('npm'));
 const line = async (s: StartUpdate) => (await s.setup.status()).reply.startUpdate;
+/**
+ * Where the start's check of the Reply CLI stands as the page reads it, and how often the page was told of a change.
+ */
+const checked = async (s: StartUpdate) => ({ check: (await s.setup.status()).reply.startCheck, told: s.told() });
+const ended = { check: 'ended', told: 1 };
 const installLine = 'npm install -g reply-cli';
 
-test('the start updates a Reply CLI below the minimum with the click’s own npm line, reads its version again and has the runtime read its plugins again', async (t) => {
+test('the start updates a Reply CLI below the minimum with the click’s own npm line, reads its version again and has the runtime read its plugins again; its check is not ended from the start until then', async (t) => {
     const s = startUpdate(t);
     let changed = 0;
     s.setup.onChanged(() => changed++);
@@ -1440,10 +1449,23 @@ test('the start updates a Reply CLI below the minimum with the click’s own npm
     assert.deepEqual(s.limits, [installLimit], 'npm is stopped at the install’s own time limit');
     assert.equal(await line(s), 'Jason updated the Reply CLI to 0.24.0 when it started.');
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: 'updated' }]);
+    assert.deepEqual(await checked(s), ended);
 
     // Once a start, whatever came of it.
     assert.equal(await s.setup.updateReplyAtStart(), 'settled');
     assert.equal(npmRuns(s).length, 1);
+    assert.deepEqual(await checked(s), ended, 'nothing more to tell');
+
+    // The page reads the check as not ended from the desktop's start, before anything is decided, and while npm runs.
+    let finish!: (result: RunResult) => void;
+    const slow = startUpdate(t, { npm: new Promise<RunResult>((resolve) => (finish = resolve)) });
+    assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
+    const updating = slow.setup.updateReplyAtStart();
+    while (npmRuns(slow).length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(await checked(slow), { check: 'pending', told: 0 });
+    finish({ exit: 0, stdout: 'added 1 package', stderr: '' });
+    assert.equal(await updating, 'updated');
+    assert.deepEqual(await checked(slow), ended);
 });
 
 test('the mark is in the desktop’s settings before npm starts, beside what was there, and is taken away once the update succeeded', async (t) => {
@@ -1455,6 +1477,7 @@ test('the mark is in the desktop’s settings before npm starts, beside what was
     const failed = startUpdate(t, { npm: { exit: 1, stdout: '', stderr: 'npm error code EACCES' } });
     await failed.setup.updateReplyAtStart();
     assert.deepEqual(failed.kept(), { feed: null, skillsDeployedFor: 'kept', theme: 'dark', replyUpdateTried: replyMinimumVersion });
+    assert.deepEqual(await checked(failed), ended, 'a failed update ends the check');
 
     // A mark that is not a version is none.
     for (const bad of ['"soon"', '1', 'null', '"0.23"']) assert.equal(parseSettings(`{"reply_update_tried": ${bad}}`).replyUpdateTried, undefined, bad);
@@ -1464,6 +1487,7 @@ test('one try for each minimum, whatever came of it: the same one runs nothing a
     const same = startUpdate(t, { mark: replyMinimumVersion });
     assert.equal(await same.setup.updateReplyAtStart(), 'tried');
     assert.deepEqual(npmRuns(same), []);
+    assert.deepEqual(await checked(same), ended);
     const higher = startUpdate(t, { mark: '0.23.0' });
     assert.equal(await higher.setup.updateReplyAtStart(), 'updated');
     assert.deepEqual(higher.markAtNpm, [replyMinimumVersion]);
@@ -1484,6 +1508,7 @@ test('settings that cannot be written run nothing, and the log says so by the li
     assert.deepEqual(npmRuns(s), []);
     assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update_unmarked').map((each) => each.level), ['warn']);
     assert.equal(await line(s), undefined);
+    assert.deepEqual(await checked(s), ended);
 });
 
 test('a write of the desktop’s settings that failed is not held as written, so it burns no try', (t) => {
@@ -1514,7 +1539,7 @@ test('a mark that could not be taken away after a success is said as that in the
     assert.equal(s.kept().replyUpdateTried, replyMinimumVersion);
 });
 
-test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm', async (t) => {
+test('nothing is run and nothing is marked for a CLI at the minimum, one whose version was not read, a missing one, or with no npm; the check ends all the same', async (t) => {
     for (const [outcome, options] of [
         ['current', { before: replyMinimumVersion }],
         ['version_unread', { before: null }],
@@ -1527,7 +1552,22 @@ test('nothing is run and nothing is marked for a CLI at the minimum, one whose v
         assert.equal(s.kept().replyUpdateTried, undefined, outcome);
         assert.equal(s.ran.includes('jason plugin reload'), false, outcome);
         assert.equal(await line(s), undefined, outcome);
+        assert.deepEqual(await checked(s), ended, outcome);
     }
+
+    // A start that asks for no update at all, one that failed before the page could be shown: the check ends at once,
+    // and a later ask runs nothing.
+    const failedStart = startUpdate(t);
+    failedStart.setup.skipStartUpdate();
+    assert.deepEqual(await checked(failedStart), ended);
+    assert.equal(await failedStart.setup.updateReplyAtStart(), 'settled');
+    assert.deepEqual(npmRuns(failedStart), []);
+    assert.deepEqual(await checked(failedStart), ended);
+
+    // An update that throws ends it too.
+    const thrown = startUpdate(t, { npm: { then: (_done: unknown, fail: (error: Error) => void) => fail(new Error('npm could not be started')) } as unknown as Promise<RunResult> });
+    await assert.rejects(thrown.setup.updateReplyAtStart(), /npm could not be started/);
+    assert.deepEqual(await checked(thrown), ended);
 });
 
 test('npm never replaces the Reply CLI while a plugin that runs it can be at work: a valid one that requests it, or an unread list, runs nothing and uses up no try', async (t) => {
@@ -1551,6 +1591,7 @@ test('npm never replaces the Reply CLI while a plugin that runs it can be at wor
         assert.equal(s.ran.includes('jason plugin reload'), false, listed.stdout);
         assert.equal(await line(s), undefined, listed.stdout);
         assert.deepEqual(s.log.lines.filter((each) => each.name === 'reply_start_update').map((each) => each.fields), [{ Outcome: outcome }]);
+        assert.deepEqual(await checked(s), ended, listed.stdout);
     }
     // The ordinary case: the one plugin that requests it is not valid, and a valid one runs another program, or none.
     const ordinary = startUpdate(t, { listed: said(pluginList([{ ...older, status: 'unavailable' }, { id: 'slack', status: 'valid', program: null }, { id: 'own', status: 'valid', program: 'crm-cli' }])) });
@@ -1570,6 +1611,7 @@ test('Update:CheckEnabled false in the settings file or in the desktop’s own e
         assert.equal(await s.setup.updateReplyAtStart(), 'off');
         assert.deepEqual(s.ran, [], 'nothing is asked of any program');
         assert.equal(s.kept().replyUpdateTried, undefined);
+        assert.deepEqual(await checked(s), ended);
     }
     // False in either place turns it off: what the other says does not turn it on again, in both directions.
     const fileOff = startUpdate(t, { installation: off, environment: { jason_update__checkenabled: 'TRUE' } });
@@ -1601,6 +1643,7 @@ test('a settings file the desktop cannot parse runs nothing and uses up no try, 
             assert.equal(await s.setup.updateReplyAtStart(), 'switch_unread', text);
             assert.deepEqual(s.ran, [], text);
             assert.equal(s.kept().replyUpdateTried, undefined, text);
+            assert.deepEqual(await checked(s), ended, text);
         }
     }
     const missing = startUpdate(t);
@@ -1690,6 +1733,7 @@ test('npm that ended well and left the old CLI in use is said as that, by the de
     assert.equal(await own.setup.updateReplyAtStart(), 'still_old');
     assert.equal(await line(own), still('0.22.0'));
     assert.equal(own.kept().replyUpdateTried, replyMinimumVersion, 'tried once for this minimum');
+    assert.deepEqual(await checked(own), ended);
 
     const runtime = startUpdate(t, { runtime: '0.22.5' });
     assert.equal(await runtime.setup.updateReplyAtStart(), 'still_old');

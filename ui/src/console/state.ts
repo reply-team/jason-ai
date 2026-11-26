@@ -20,6 +20,8 @@ export const setup = signal<DesktopSetup | null>(null);
 /** What the desktop is doing for a Connect card, in a few words; null while it does nothing. */
 export const setupBusy = signal<string | null>(null);
 export const setupError = signal<string | null>(null);
+/** Whether the last read of the desktop's setup failed, beside `setupError`, which an act's refusal sets too. */
+export const setupReadFailed = signal(false);
 
 /** The chats the console has open, by the id of the conversation the desktop keeps for each. */
 export const chats = signal<Readonly<Record<string, Chat>>>({});
@@ -118,3 +120,6 @@ export function here(): Console {
     if (!current) throw new Error('The console is not mounted.');
     return current;
 }
+
+/** Whether a console is mounted, and so a desktop behind it; false for a part drawn on its own. */
+export const mounted = (): boolean => current !== null;

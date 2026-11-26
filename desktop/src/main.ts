@@ -816,6 +816,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
     await machineSetup?.settledWithin(liveWaitMs);
 
+    let replyUpdateAsked = false;
     try {
         // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
         // refuses a runtime's start until that step has started one (`startAfterSetup`). Where an update still holds the
@@ -885,6 +886,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         log.info('window_loaded', { Origin: started.origin });
         roles.atStart();
         // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
+        replyUpdateAsked = true;
         replyUpdateAtStart(runOn.mode, {
             setUp: async () => {
                 await machineSetup?.settled();
@@ -898,6 +900,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         begin();
     } catch (error) {
         desk.notStarted();
+        // Where no update of the Reply CLI was asked at this start, a page a later Reload shows holds nothing back for
+        // it.
+        if (!replyUpdateAsked) setup.skipStartUpdate();
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
