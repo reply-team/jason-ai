@@ -1679,11 +1679,12 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The changelog opens with 0.20.1: the package needs the reply-cli the stand-in answers as, the first that keeps the
-    /// sign-in through a token refresh that fails for a passing reason, and the section says what a person with an older one
-    /// sees and does; a failure's trace carries the CLI's own sentence beside its code and the status, a refusal at status
-    /// 200 is one of an item of Reply's answer, the import a send makes first among them, and Reply's own code and sentence
-    /// are promised only where the CLI passed them on.
+    /// The changelog opens with 0.20.1: the package needs the reply-cli the stand-in answers as, the first that both keeps
+    /// the sign-in through a token refresh that fails for a passing reason, from 0.23.1, and on Windows waits a few seconds
+    /// for a credentials file another program holds, and the section says what a person with an older one sees and does; a
+    /// failure's trace carries the CLI's own sentence beside its code and the status, a refusal at status 200 is one of an
+    /// item of Reply's answer, the import a send makes first among them, and Reply's own code and sentence are promised
+    /// only where the CLI passed them on.
     /// </summary>
     [Fact]
     public void The_changelog_opens_with_0_20_1_the_reply_cli_it_needs_and_the_cli_s_own_sentence_in_the_trace()
