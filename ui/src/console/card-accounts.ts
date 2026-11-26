@@ -111,7 +111,7 @@ function replyFacts(part: Part<DesktopReply>): Html {
                       >`
             }
             ${
-                notRead.includes('route')
+                notRead.includes('route') || notRead.includes('auth')
                     ? null
                     : html`<span class="meta"
                           >${

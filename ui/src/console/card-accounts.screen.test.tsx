@@ -251,9 +251,10 @@ describe('the accounts card', () => {
                 return part;
             });
         };
-        // A sign-in that could not be read: said in the card's voice, never as "Not signed in to Reply"; no count.
+        // A sign-in that could not be read: said in the card's voice, never as "Not signed in to Reply", and nothing of the
+        // plugin's use of it, as on Connect; no count.
         const authUnread = await again({ ...out.reply, notRead: ['auth'] }, 'The Reply sign-in could not be read.');
-        expect(facts(authUnread)).toEqual(['The runtime’s Reply plugin does not use a Reply sign-in yet']);
+        expect(facts(authUnread)).toEqual([]);
         expect(warned(authUnread)).toEqual(['The Reply sign-in could not be read.']);
         // Signed in, the lists asked and empty, and whether the plugin uses the sign-in not read: said so, never as "does
         // not use"; "No accounts" stays, an answer that was read.

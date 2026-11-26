@@ -1033,14 +1033,14 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                         and your LinkedIn account to it, and Jason sends from them once you approve.
                     </p>
                 </div>
-                ${state.cli.found ? html`<button class="${state.signedIn ? 'btn' : 'btn p'}" type="button" ${real} ${act('connect.reply')}>Sign in with Reply</button>` : null}
+                ${state.cli.found ? html`<button class="${state.signedIn || notRead.includes('auth') ? 'btn' : 'btn p'}" type="button" ${real} ${act('connect.reply')}>Sign in with Reply</button>` : null}
             </div>
             ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${startUpdate === null ? null : html`<div class="setrow start-update" role="note"><div class="grow meta">${startUpdate}</div></div>`}
             ${
                 state.cli.found && notRead.includes('version')
                     ? html`<div class="setrow version-unread">
-                          <div class="grow meta">The Reply CLI’s version could not be read. Check again.</div>
+                          <div class="grow meta">The Reply CLI’s version could not be read.</div>
                           <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
                       </div>`
                     : state.cli.found && below !== null
@@ -1067,7 +1067,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                     ? html`<div class="setrow reply-state">
                               ${
                                   notRead.includes('auth')
-                                      ? html`<div class="grow">The Reply sign-in could not be read. Check again.</div>
+                                      ? html`<div class="grow">The Reply sign-in could not be read.</div>
                                             <button class="btn sm" type="button" ${act('connect.check')}>
                                                 Check again
                                             </button>`

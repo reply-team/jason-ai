@@ -423,15 +423,16 @@ describe('the Reply card, its acts', () => {
         cleanup();
 
         // A sign-in the desktop could not read is said as that, in the sign-in's place, with Check again in its row:
-        // neither "Not signed in" nor "Signed in as". The sign-in and the key field stay; no act on an account is offered.
+        // neither "Not signed in" nor "Signed in as". The sign-in and the key field stay, signing in no longer the card's
+        // first act, since nothing says it is needed; no act on an account is offered.
         const signedOut = { ...setupFound.reply, signedIn: false, user: null, accounts: [] };
         const desktop = renderConnect({ ...setupFound, reply: { ...signedOut, notRead: ['auth'] } });
         const unread = replyCard(await openConnect());
         const row = unread.querySelector<HTMLElement>('.reply-state')!;
-        expect(words(row.querySelector('.grow')!)).toBe('The Reply sign-in could not be read. Check again.');
+        expect(words(row.querySelector('.grow')!)).toBe('The Reply sign-in could not be read.');
         expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
         expect(words(unread)).not.toMatch(/not signed in|signed in as|uses this sign-in|does not use it yet/i);
-        expect(within(unread).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
+        expect(within(unread).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
         expect(within(unread).getByPlaceholderText('Or paste a Reply API key')).toBeTruthy();
         expect(within(unread).queryByRole('button', { name: 'Add account' })).toBeNull();
         const reads = statusReads(desktop);
@@ -795,7 +796,7 @@ describe('the Reply card, its acts', () => {
         const again = await openConnect();
         const unread = () => replyCard(again);
         const row = unread().querySelector<HTMLElement>('.version-unread')!;
-        expect(words(row.querySelector('.grow')!)).toBe('The Reply CLI’s version could not be read. Check again.');
+        expect(words(row.querySelector('.grow')!)).toBe('The Reply CLI’s version could not be read.');
         expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
         expect(unread().querySelector('.below-minimum')).toBeNull();
         expect(words(unread())).not.toContain('or later');
