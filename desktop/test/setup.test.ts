@@ -1143,8 +1143,9 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     assert.deepEqual((await seen())['default'], { last: { user: 'ada@example.test', team: { id: '6', name: 'Made-up Six' } }, change: null });
     assert.deepEqual(b.world().profiles, { default: { team_id: 6 }, spare: {} }, 'the note is never written into the Reply CLI’s files');
     assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false, 'nor into the installation’s settings');
-    // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote.
-    const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3] } });
+    // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote, and
+    // writes nothing over it, though it read another pin.
+    const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3, 6] } });
     let release: () => void = () => undefined;
     let holding = false;
     const slow: Programs = {
@@ -1162,12 +1163,14 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     holding = true;
     const older = looks.status();
     await new Promise((resolve) => setTimeout(resolve, 500));
+    writeFileSync(overlapping.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...overlapping.world(), profiles: { default: { team_id: 6 } } }));
     looks.announceChange();
     const newer = (await looks.status()).accounts?.accounts[0];
     release();
     const late = (await older).accounts?.accounts[0];
-    const adaNoName = { user: 'ada@example.test', team: { id: '3', name: '' } };
-    assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [adaNoName, adaNoName, null]);
+    const ada6 = { user: 'ada@example.test', team: { id: '6', name: '' } };
+    assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [ada6, ada6, 'team']);
+    assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6 }] });
     // A sign-in the Reply CLI holds no login for, a browser's of a login in several teams on a profile that pins none, cannot
     // be named before it has a team: on an account noted as another sign-in, that is the change said, with no team and
     // nothing listed, and no pin is written before it is known who signed in. Keep it picks its team afresh, by Choose,
@@ -1293,6 +1296,20 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
         { team: refusedCard?.team, change: refusedCard?.change, unread: refusedCard?.unread, notRead: refusedCard?.notRead, lists: replyRuns(refusedUnread).filter((run) => run.startsWith('--profile web account list')).length },
         { team: bea5.team, change: null, unread: ['email', 'linkedin'], notRead: ['teams'], lists: 2 },
     );
+    // A team picked afresh is set aside no longer once it is bound, though who signed in could not be read then: the next
+    // look takes the pin, and writes no pin again.
+    const keptUnread = replyBench(t, { ...room, credentials: { web: { login: dee, unnamed: true } } }, { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
+    mkdirSync(dirname(keptUnread.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(keptUnread.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', ...bea5 }] }));
+    const keeping = new Setup({ ...setupDeps(keptUnread), confirm: () => Promise.resolve(true) });
+    assert.equal((await keeping.status()).accounts?.accounts.find((one) => one.name === 'web')?.change, 'unknown');
+    assert.deepEqual(await keeping.keepChange(web), { done: true });
+    const bindings = () => replyRuns(keptUnread).filter((run) => run.startsWith('--profile web team use'));
+    for (const look of ['the look after Keep it', 'the next look']) {
+        const card = (await keeping.status()).accounts?.accounts.find((one) => one.name === 'web');
+        assert.deepEqual({ user: card?.user, team: card?.team?.id, notRead: card?.notRead, bindings: bindings() }, { user: null, team: '7', notRead: ['login'], bindings: ['--profile web team use 7 --json'] }, look);
+    }
+    assert.equal(readFileSync(keptUnread.paths.replyAccountNotes, 'utf8').includes('"web"'), false, 'nothing noted, and no team set aside');
     // A look that began before a sign-in on the card does not count as its check: the next look still checks it.
     const racing = replyBench(t, { ...room, credentials: { web: bea } });
     writeInstallationSettings(racing, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
