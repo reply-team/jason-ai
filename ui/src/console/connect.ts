@@ -256,7 +256,10 @@ const signInWords = (signIn: DesktopReplySignIn): Html =>
 function noteView(view: AccountView, place: Place, real: Html | null): Html | null {
     const last = view.lastSignIn;
     if (last === null || view.authUnread) return null;
-    if (!view.signedIn) return html`<div class="setrow meta acct-last">Last signed in as ${signInWords(last)}.</div>`;
+    if (!view.signedIn)
+        return html`<div class="setrow meta acct-last">
+            <div class="grow">Last signed in as ${signInWords(last)}.</div>
+        </div>`;
     if (!view.changed || view.user === null || view.team === null || !keepsChange()) return null;
     return html`<div class="note am acct-changed" role="note">
         <div>
@@ -1561,6 +1564,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                       </div>`
             }
         </div>
+        ${noteView(view, place, asks)}
         ${
             view.signedIn
                 ? null
@@ -1570,7 +1574,6 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                       </div>
                       <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>`
         }
-        ${noteView(view, place, asks)}
         ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
         ${choosing ? teamChoice(view.teams!, place, asks) : null}
         ${(choosing ? [] : grouped(view.senders, view.pending)).map(

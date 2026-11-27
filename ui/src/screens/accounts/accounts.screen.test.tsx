@@ -755,7 +755,7 @@ describe('Reply accounts, one card per profile', () => {
         const page = await openAccounts('.reply-account');
         const card = (name: string) => cardOf(page, `Reply account ${name}`);
         expect(words(card('outbound').querySelector('.reply-state')!)).toBe('Not signed in');
-        expect(words(card('outbound').querySelector('.acct-last')!)).toBe(
+        expect(words(card('outbound').querySelector('.reply-state + .acct-last')!)).toBe(
             'Last signed in as ada@example.test in Made-up Three.',
         );
         // Nothing noted, or nothing changed: no line and no notice.
