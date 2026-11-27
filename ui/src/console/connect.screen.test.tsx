@@ -458,7 +458,9 @@ describe('the Reply card, its acts', () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
         const card = replyCard(await openConnect());
         expect(words(card.querySelector('.reply-state')!)).toBe('Signed in as ann@example.test');
-        expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
+        // Another login is another Reply account: a signed-in card offers no sign-in, by the browser or by a key.
+        expect(within(card).queryByRole('button', { name: 'Sign in with Reply' })).toBeNull();
+        expect(within(card).queryByPlaceholderText('Or paste a Reply API key')).toBeNull();
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
         cleanup();
 
@@ -519,12 +521,13 @@ describe('the Reply card, its acts', () => {
         const wrapped = (member: string, said: string) =>
             `Error invoking remote method 'jason:setup.${member}': Error: ${said}`;
         const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
-        const ada = replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test' });
-        const bea = replyAccount('outbound', { signedIn: true, user: 'bea@example.test' });
+        // Two accounts not signed in, each of which offers the key.
+        const ada = replyAccount('default', { default: true });
+        const bea = replyAccount('outbound');
         const first = withReplyAccounts(setupFound, [ada, bea]);
-        // The default moved to another account, signed in as the same person.
+        // The default moved to the other account, which is not signed in either.
         const moved = withReplyAccounts(setupFound, [
-            { ...bea, default: true, user: 'ada@example.test' },
+            { ...bea, default: true },
             { ...ada, default: false },
         ]);
         const desktop = renderConnect(first);
@@ -860,7 +863,6 @@ describe('the Reply card, its acts', () => {
         expect(card().querySelector('.version-unread')).toBeNull();
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
         expect(words(card())).not.toContain('Reply CLI 0.21.0');
-        expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         expect(within(card()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
         fireEvent.click(within(card()).getByRole('button', { name: 'Update' }));
@@ -1119,7 +1121,10 @@ describe('the Reply card, its acts', () => {
             </>,
         );
         expect(heldDialog()).toBeNull();
-        // So does a key's refusal said on it: drawn again, the card says nothing of it.
+        // So does a key's refusal said on it, on a card not signed in, which is the one that offers the key: drawn again,
+        // the card says nothing of it.
+        desktop.status = { ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } };
+        setup.value = desktop.status;
         const both = (
             <>
                 <div className="one">

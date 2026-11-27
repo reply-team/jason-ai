@@ -112,16 +112,22 @@ describe('The Connect panel in the demo', () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
-        for (const name of ['Sign in with Reply', 'Use key', 'Connect a mailbox or LinkedIn'])
-            expect(button(card, name).disabled).toBe(true);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(true);
         const acts = within(rowOf(card)).getAllByRole('button') as HTMLButtonElement[];
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
         for (const each of acts) expect(each.disabled).toBe(true);
-        for (const each of [...acts, button(card, 'Connect a mailbox or LinkedIn'), button(card, 'Sign in with Reply')])
-            fireEvent.click(each);
+        for (const each of [...acts, button(card, 'Connect a mailbox or LinkedIn')]) fireEvent.click(each);
         expect(card.querySelector('.add-account')).toBeNull();
+        cleanup();
+        // A card not signed in offers the sign-in, turned off the same way.
+        const signedOut = await renderAt('demo', 'Connect', { signedIn: false, user: null, accounts: [] });
+        const out = replyCard();
+        for (const name of ['Sign in with Reply', 'Use key']) expect(button(out, name).disabled).toBe(true);
+        fireEvent.click(button(out, 'Sign in with Reply'));
         expect(
-            desktop.calls.filter((each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply'),
+            [...desktop.calls, ...signedOut.calls].filter(
+                (each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply',
+            ),
         ).toEqual([]);
     });
 
@@ -214,8 +220,7 @@ describe('The same screens in Live', () => {
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
-        for (const name of ['Sign in with Reply', 'Use key', 'Connect a mailbox or LinkedIn'])
-            expect(button(card, name).disabled).toBe(false);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(false);
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);
         fireEvent.click(button(card, 'Connect a mailbox or LinkedIn'));

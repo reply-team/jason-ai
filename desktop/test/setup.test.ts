@@ -791,7 +791,15 @@ test('a sign-in signs in the account its card names: its key on standard input, 
     from = b.record().length;
     // No account named, as a page of an earlier version asks: the default account, here none, so the profile default.
     await setup.connectReply();
-    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', '--profile default auth login --json', 'skills install adapter --project --agent codex']);
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', '--profile default auth status --json', '--profile default auth login --json', 'skills install adapter --project --agent codex']);
+    // A Reply account signed in, as the Reply CLI says just before, is signed in nobody else: another login is another Reply
+    // account, or a sign-out first. A page of an earlier version, which still offers the sign-in, is told so too.
+    const signedInAlready = 'This Reply account is signed in already, so nobody was signed in: sign it out first, or add another Reply account.';
+    from = b.record().length;
+    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message === signedInAlready);
+    await assert.rejects(setup.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'default' }), (error: unknown) => error instanceof Refused && error.message === signedInAlready);
+    assert.equal(runsAfter(b, from, 'reply').some((run) => run.includes('login')), false);
+    assert.deepEqual(b.world().credentials, { default: 'ada@example.test' });
     from = b.record().length;
     // A route that names a team beside the profile is the profile's: the sign-in names the profile alone.
     await setup.connectReply({ type: 'reply', name: 'routed-only' });

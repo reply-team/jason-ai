@@ -342,7 +342,13 @@ describe('Reply accounts, one card per profile', () => {
         );
         fireEvent.click(within(bea()).getByRole('button', { name: 'Make the link' }));
         await answered(/The link opened in your browser\./);
-        fireEvent.click(within(bea()).getByRole('button', { name: 'Sign in with Reply' }));
+        // A signed-in card offers no sign-in, by the browser or by a key: another login is another Reply account.
+        expect(within(bea()).queryByRole('button', { name: 'Sign in with Reply' })).toBeNull();
+        expect(within(bea()).queryByPlaceholderText('Or paste a Reply API key')).toBeNull();
+        expect(within(bea()).queryByRole('button', { name: 'Use key' })).toBeNull();
+        fireEvent.click(
+            within(cardOf(page, 'Reply account routed-only')).getByRole('button', { name: 'Sign in with Reply' }),
+        );
         await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
         fireEvent.input(
             within(cardOf(page, 'Reply account routed-only')).getByPlaceholderText('Or paste a Reply API key'),
@@ -365,7 +371,7 @@ describe('Reply accounts, one card per profile', () => {
             ['setup.replyDelete', 'email', 'm_2', undefined, outbound],
             ['setup.replyConnect', 'email', { provider: 'gmail' }, outbound],
             ['setup.replyConnect', 'linkedin', { name: 'Made-up Dee' }, outbound],
-            ['setup.connectReply', outbound],
+            ['setup.connectReply', { type: 'reply', name: 'routed-only' }],
             ['setup.connectReplyWithKey', 'made-up-key', { type: 'reply', name: 'routed-only' }],
         ]);
     });
@@ -468,7 +474,15 @@ describe('Reply accounts, one card per profile', () => {
     });
 
     it('says a sign-in’s or a key’s refusal on the card of the account it was asked for, in the desktop’s words without the window’s wrapper, and keeps it until a read shows that account’s sign-in changed, or the next act', async () => {
-        const desktop = inDesktop(three);
+        // `outbound` not signed in, so its card offers the key.
+        const [ada, signedIn, routedOnly] = three.accounts!.accounts as [
+            DesktopAccount,
+            DesktopAccount,
+            DesktopAccount,
+        ];
+        const bea: DesktopAccount = { ...signedIn, signedIn: false, user: null, team: null, notRead: [], senders: [] };
+        const start = withReplyAccounts(setupFound, [ada, bea, routedOnly]);
+        const desktop = inDesktop(start);
         const wrapped = (member: string, words: string) =>
             `Error invoking remote method 'jason:setup.${member}': Error: ${words}`;
         const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
@@ -476,7 +490,6 @@ describe('Reply accounts, one card per profile', () => {
             'Signed in, but Jason’s Reply plugin could not be placed or loaded. The update feed at http://127.0.0.1:9/manifest.json could not be reached.';
         desktop.refuse.set('setup.connectReplyWithKey', wrapped('connectReplyWithKey', keyRefused));
         desktop.refuse.set('setup.connectReply', wrapped('connectReply', notPlaced));
-        const [ada, bea, routedOnly] = three.accounts!.accounts as [DesktopAccount, DesktopAccount, DesktopAccount];
         const page = await openAccounts('.reply-account');
         const card = (name: string) => cardOf(page, `Reply account ${name}`);
         const useKey = (name: string) => {
@@ -492,7 +505,7 @@ describe('Reply accounts, one card per profile', () => {
             return line === null ? null : words(line);
         };
         let landEarlier: (state: DesktopSetup) => void = () => undefined;
-        let earlierState = three;
+        let earlierState = start;
         // Each step, then the refusal each card says; the section says none.
         const steps: [string, () => Promise<void>, Record<'default' | 'outbound' | 'routed-only', string | null>][] = [
             [
@@ -548,7 +561,7 @@ describe('Reply accounts, one card per profile', () => {
             [
                 'a read that shows that account’s sign-in changed: signed out in a terminal',
                 async () => {
-                    desktop.status = three;
+                    desktop.status = start;
                     checkAgain();
                 },
                 { default: null, outbound: null, 'routed-only': null },

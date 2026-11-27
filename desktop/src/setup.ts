@@ -1269,8 +1269,9 @@ export class Setup {
     /**
      * The account a sign-in is for, as the last read listed it, with its profile in the Reply CLI: a profile only a route
      * names is made there first (`reply profile add`), and only where the CLI, asked again now, does not hold it, since an
-     * add of a name it holds would replace that profile's settings without a word. With no account named and none listed,
-     * as a page of an earlier version asks, the refusal says why there is none.
+     * add of a name it holds would replace that profile's settings without a word. An account the Reply CLI, asked now,
+     * says is signed in is refused: another login is another Reply account, or a sign-out first. With no account named and
+     * none listed, as a page of an earlier version asks, the refusal says why there is none.
      */
     async #signingIn(named: unknown): Promise<AccountRef> {
         const account = this.#accountOf(named);
@@ -1286,6 +1287,8 @@ export class Setup {
         if (!profiles.available.includes(account.name)) {
             const added = await this.#writingConfig(() => this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']));
             if (added.exit !== 0) throw new Refused(accountSentences.profileNotMade);
+        } else if (readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']))?.signedIn === true) {
+            throw new Refused(accountSentences.signedInAlready);
         }
         return { type: account.type, name: account.name };
     }

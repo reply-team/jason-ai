@@ -1412,11 +1412,15 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                       </div>`
             }
         </div>
-        <div class="reply-key">
-            ${secret(keyField(place), 'Or paste a Reply API key')}
-            <button class="btn" type="button" ${real} ${act('connect.replyKey', place)}>Use key</button>
-        </div>
-        <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>
+        ${
+            view.signedIn
+                ? null
+                : html`<div class="reply-key">
+                          ${secret(keyField(place), 'Or paste a Reply API key')}
+                          <button class="btn" type="button" ${real} ${act('connect.replyKey', place)}>Use key</button>
+                      </div>
+                      <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>`
+        }
         ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
         ${choosing ? teamChoice(view.teams!, place, asks) : null}
         ${(choosing ? [] : grouped(view.senders, view.pending)).map(
@@ -1472,16 +1476,21 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
         ${shown !== null ? dialogView(shown, asks) : null}`;
 }
 
-/** "Sign in with Reply" for the card's account: the card's first act where nothing says it is signed in or unread. */
-const signInButton = (view: AccountView, place: Place, real: Html | null): Html =>
-    html`<button
-        class="${view.signedIn || view.authUnread ? 'btn' : 'btn p'}"
-        type="button"
-        ${real}
-        ${act('connect.reply', place)}
-    >
-        Sign in with Reply
-    </button>`;
+/**
+ * "Sign in with Reply" for the card's account, only while it is not signed in, since another login is another Reply
+ * account: the card's first act where its sign-in was read, a plain one where it could not be.
+ */
+const signInButton = (view: AccountView, place: Place, real: Html | null): Html | null =>
+    view.signedIn
+        ? null
+        : html`<button
+              class="${view.authUnread ? 'btn' : 'btn p'}"
+              type="button"
+              ${real}
+              ${act('connect.reply', place)}
+          >
+              Sign in with Reply
+          </button>`;
 
 /**
  * The one Reply card drawn outside the Accounts page, on the Connect panel and in a chat: what Reply is, the Reply CLI's

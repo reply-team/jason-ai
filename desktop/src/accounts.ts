@@ -199,6 +199,7 @@ export const accountSentences = {
     badAccount: 'That is not a Reply account the desktop listed.',
     profilesUnread: 'The Reply accounts could not be read, so nobody was signed in.',
     profileNotMade: 'The Reply CLI did not make the profile, so nobody was signed in.',
+    signedInAlready: 'This Reply account is signed in already, so nobody was signed in: sign it out first, or add another Reply account.',
     cliMissing: 'The Reply CLI was not found, so nobody was signed in.',
     routesUnread: 'Which Reply account is the default could not be read, so nothing was changed.',
     defaultExists: 'Jason has a default already, and Jason Desktop does not move it, so nothing was changed.',
