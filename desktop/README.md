@@ -33,7 +33,7 @@ that a person needs.
 | Choose a team for a Reply account whose sign-in can act in more than one and whose profile pins none, on the card's ask | `reply --profile <name> auth status --json`, a team pinned by then refused, then `reply --profile <name> team use <id> --json`, only for a team the account's last read offered, with no box; a refusal said as the desktop's sentence and the detail, else the title, of the error the Reply CLI prints |
 | Add a Reply account, on the Reply section's ask | a name refused before anything runs where it is empty after trimming, longer than 64 characters, begins with a hyphen, holds a control character or a line break, or is `default`; `reply profile list --json`, a name it holds refused; `reply profile add <name> --json`, with no other argument |
 | Sign a Reply account out, on its card's ask | after the person's yes in the main process's box, `reply --profile <name> auth logout --json`; no route written |
-| Remove a Reply account whose profile the Reply CLI holds, never `default`, on its card's ask | after the person's yes in the main process's box, `reply profile delete <name> --yes --json`, then its note taken out of `<data>/desktop/reply-account-notes.json`; no route written |
+| Remove a Reply account whose profile the Reply CLI holds, never `default`, on its card's ask | `jason route list` and `reply profile list --json`, a profile a route naming no profile follows as the Reply CLI's current one refused; after the person's yes in the main process's box, `reply profile delete <name> --yes --json`, then its note taken out of `<data>/desktop/reply-account-notes.json`; no route written |
 | Keep a change of a Reply account's login or team, on its card's ask | nothing run: the account as the last read found it written into `<data>/desktop/reply-account-notes.json` |
 
 A listing of `Setup.status` asked while one is being read is answered by that read, unless a change ended since it
@@ -144,43 +144,41 @@ servers, providers and profiles with it; it still sets the cached search and `fe
 
 A Reply account's card acts on its senders by the Reply CLI's `account` verbs, run as that card's account, and on the
 account by its sign-in, **Sign out** (`reply auth logout`), **Remove** (`reply profile delete`), **Choose** (`reply team
-use`), **Keep it** (the desktop's own note) and **Make default** (`jason route set --global`); the Reply section adds one
-with **Add Reply account** (`reply profile add`). The writes of the Reply CLI's profiles (`team use`, `profile add`,
-`profile delete`) go one at a time, since the CLI rewrites its configuration whole, and each makes the read it depends on
-again in its own turn, just before it runs: `auth status` before a `team use` (a pin found then is left as it is),
-`profile list` before a `profile add` (a name found then is not added). What is left is the CLI's own: a change a
-terminal makes between that read and the CLI's write, or while the CLI rewrites the file, is not seen, and that write
-can undo it. The cards offer
-them only from the Reply CLI that has them (`replyMinimumVersion`); below it the Reply section says to update the Reply
-CLI and no account is drawn. An installed one
-below it is updated once a Live start, in the queue the clicks wait in and by their one npm line
-(`Setup.updateReplyAtStart`, `src/reply-update.ts`), after the machine set-up's runs have ended. `Update:CheckEnabled`
-is read for it by `updateSwitch`, in the installation's settings file and in this process's own environment, and `false`
-in either turns the update off; a variable set only for a runtime started elsewhere is not seen, and a file that does
-not parse runs nothing and writes no mark. Nor is npm run while a plugin the runtime holds as valid requests `reply`, or
-where `jason plugin list` does not say (`replyAtWork`). The mark of the minimum tried (`reply_update_tried` in the
-desktop's settings) is written before npm starts and taken away on success. Once npm succeeded, on the click and at the
-start alike, or at the start ended badly with the CLI at the minimum, the plugins are reloaded, and at the start the
-version the runtime found is read back from `jason plugin list`. One line of npm's, the one that names its error where
-one does (`npmLine`), goes to the card (`startUpdate` in the setup state, in memory for this run) and never to the log.
-What the CLI prints
-and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's
-own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link
-the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a
-host name, no user, port or anything but printable ASCII) and hands it to the system browser through the navigation
-lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one account,
-writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or
-copied, when it stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put
-into an error. A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the
-main process that names the sender as the list does, and a sign-out and a removal in one that names the Reply account in
-typographic quotes (a connect and a reconnect make a link and ask nothing, and so do Add Reply account, Make default,
-Choose and Keep it). Cancel is focused in every box; no window to ask on is a no, a box whose window is hidden or closed is
-closed and read as a no, and
-`delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it, for the ask it
-answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A Reply that makes no
-one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing else. A refusal is
-one sentence of the desktop's, chosen by the CLI's code; a code the desktop does not act on, known or not, is said by
-one sentence that carries it, and nothing of the CLI's own words is shown or logged.
+use`), **Keep it** (the desktop's own note) and **Make default** (`jason route set --global`); the Reply section adds
+one with **Add Reply account** (`reply profile add`). One act on a Reply account runs at a time, the sign-ins and Make
+default among them, and one asked while another runs is refused. The writes of the Reply CLI's profiles (`team use`,
+`profile add`, `profile delete`) go one at a time, since the CLI rewrites its configuration whole, and each makes the
+read it depends on again in its own turn, just before it runs: `auth status` before a `team use` (a pin found then is
+left as it is), `profile list` before a `profile add` (a name found then is not added). What is left is the CLI's own: a
+change a terminal makes between that read and the CLI's write, or while the CLI rewrites the file, is not seen, and that
+write can undo it. The cards offer them only from the Reply CLI that has them (`replyMinimumVersion`); below it the
+Reply section says to update the Reply CLI and no account is drawn. An installed one below it is updated once a Live
+start, in the queue the clicks wait in and by their one npm line (`Setup.updateReplyAtStart`, `src/reply-update.ts`),
+after the machine set-up's runs have ended. `Update:CheckEnabled` is read for it by `updateSwitch`, in the
+installation's settings file and in this process's own environment, and `false` in either turns the update off; a
+variable set only for a runtime started elsewhere is not seen, and a file that does not parse runs nothing and writes no
+mark. Nor is npm run while a plugin the runtime holds as valid requests `reply`, or where `jason plugin list` does not
+say (`replyAtWork`). The mark of the minimum tried (`reply_update_tried` in the desktop's settings) is written before
+npm starts and taken away on success. Once npm succeeded, on the click and at the start alike, or at the start ended
+badly with the CLI at the minimum, the plugins are reloaded, and at the start the version the runtime found is read back
+from `jason plugin list`. One line of npm's, the one that names its error where one does (`npmLine`), goes to the card
+(`startUpdate` in the setup state, in memory for this run) and never to the log. What the CLI prints and the codes it
+ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the CLI's own tests
+(`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`. A link the CLI
+makes for connecting or reconnecting an account is the person's secret: the main process checks it (https, a host name,
+no user, port or anything but printable ASCII) and hands it to the system browser through the navigation lock's one way
+out, or, where the page asked for a copy and the link is one that expires and connects one account, writes it to the
+clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or copied, when it stops
+working and its pending entry; the CLI's output for these verbs is never logged, recorded or put into an error. A
+limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process that
+names the sender as the list does, and a sign-out and a removal in one that names the Reply account in typographic
+quotes (a connect and a reconnect make a link and ask nothing, and so do Add Reply account, Make default, Choose and
+Keep it). Cancel is focused in every box; no window to ask on is a no, a box whose window is hidden or closed is closed
+and read as a no, and `delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it,
+for the ask it answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A
+Reply that makes no one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing
+else. A refusal is one sentence of the desktop's, chosen by the CLI's code; a code the desktop does not act on, known or
+not, is said by one sentence that carries it, and nothing of the CLI's own words is shown or logged.
 
 ## Its own files
 

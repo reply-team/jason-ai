@@ -567,14 +567,16 @@ accounts were read, and one card per Reply account, each one profile of the Repl
 every other global route that names it, its sign-in with the team it is bound to, or who it was last signed in as
 ([desktop.md](desktop.md#connect), Reply). The cards are drawn by the same code as the one Reply card of the desktop's
 Connect panel and act through the same acts of the desktop. A card offers **Sign in with Reply** and a key only while it
-is not signed in, and **Sign out** once it is; **Remove** where the Reply CLI holds its profile and it is not `default`.
-Adding a mailbox or a LinkedIn account and reconnecting one go straight to the provider's link, with no box, and the
-desktop opens or copies that link, which the page never shows or keeps. Signing out, removing, pausing and resuming,
-unblocking, changing a daily limit and deleting each ask in a box of the desktop's own. **Add Reply account**, **Make
-default**, on every card while Jason has no default, **Choose**, on a card whose sign-in can act in more than one Reply
-team and whose profile pins none, and **Keep it**, on a card that says another login or team than it was, act with no
-box. Add Reply account's refusal is said under its field, every other act's on its card. The page writes no setting and
-adds no provider. The notification channels are not here: they are the **Notifications** section of Settings.
+is not signed in, and **Sign out** once it is; **Remove** where the Reply CLI holds its profile, it is not `default` and
+no route that names no profile follows it as the Reply CLI's current profile. Adding a mailbox or a LinkedIn account and
+reconnecting one go straight to the provider's link, with no box, and the desktop opens or copies that link, which the
+page never shows or keeps. Signing out, removing, pausing and resuming, unblocking, changing a daily limit and deleting
+each ask in a box of the desktop's own. **Add Reply account**, **Make default**, on every card while Jason has no
+default, **Choose**, on a card whose sign-in can act in more than one Reply team and whose profile pins none, and **Keep
+it**, on a card that says another login or team than it was, act with no box. One act runs at a time, and the cards'
+acts are off while one is asked. Add Reply account's refusal is said under its field, every other act's on its card. The
+page writes no setting and adds no provider. The notification channels are not here: they are the **Notifications**
+section of Settings.
 
 ## Notifications in Settings
 
