@@ -43,7 +43,7 @@ export const templates = {
     reply_default_set: 'jason route set --global for a Reply account exited {Exit}',
     reply_default_made: 'Make default on a Reply account ended; done {Done}',
     reply_team_chosen: 'reply team use for a Reply account’s profile exited {Exit}',
-    reply_team_bound: 'reply team use for a Reply account’s profile that pinned no team, its sign-in in one, exited {Exit}',
+    reply_team_bound: 'reply team use binding a Reply account’s profile with no question, to its sign-in’s one team or back to its noted team, exited {Exit}',
     reply_account_added: 'reply profile add for Add Reply account exited {Exit}',
     reply_signed_out: 'reply auth logout for a Reply account exited {Exit}',
     reply_account_removed: 'reply profile delete for a Reply account exited {Exit}',

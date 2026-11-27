@@ -581,11 +581,27 @@ export interface DesktopReplyTeam {
     name: string;
 }
 
+/**
+ * A team an account is bound to: its id, digits only, and its name as Reply gives it, empty where Reply gives it none (as
+ * for every Reply account outside an organization), null where it was not read. The page names a team only by a name.
+ */
+export interface DesktopBoundTeam {
+    id: string;
+    name: string | null;
+}
+
 /** A sign-in as the desktop's note of an account keeps it: the login, and the team it was bound to. */
 export interface DesktopReplySignIn {
     user: string;
-    team: DesktopReplyTeam;
+    team: DesktopBoundTeam;
 }
+
+/**
+ * How the desktop found an account's sign-in changed from its note, until `setup.keepChange` or a sign-out: signed in as
+ * another login (`login`); the same login, no longer in the noted team (`left`); the same login, bound to another of its
+ * teams (`team`); or signed in as a login that cannot be known before the account has a team (`unknown`).
+ */
+export type DesktopAccountChange = 'login' | 'left' | 'team' | 'unknown';
 
 /** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
 export type DesktopAccountsFact = 'profiles' | 'routes';
@@ -619,10 +635,9 @@ export interface DesktopAccount extends DesktopAccountRef {
     user: string | null;
     /**
      * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it or the desktop's
-     * note keeps, empty where neither says it, which the page says in words; null while it is not signed in, or signed in
-     * and bound to none.
+     * note keeps; null while it is not signed in, or signed in and bound to none.
      */
-    team: DesktopReplyTeam | null;
+    team: DesktopBoundTeam | null;
     /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
     senders: DesktopReplySender[];
     /** As `DesktopReply`'s, of this account. */
@@ -646,11 +661,11 @@ export interface DesktopAccount extends DesktopAccountRef {
      */
     lastSignIn: DesktopReplySignIn | null;
     /**
-     * Whether the last read found it changed from what the note says, so until `setup.keepChange` or a sign-out: signed in
-     * as another login (`user` another than `lastSignIn`'s), or no longer a member of the noted team, `team` being null
-     * then, and nothing listed; or bound to another of its sign-in's teams.
+     * How the last read found its sign-in changed from what the note says; null where it did not. Until it is answered the
+     * desktop takes no act on its senders, no connect and no choice of a team; for `login`, `left` and `unknown` it is bound to
+     * no team and lists nothing, and for `team` it is bound to that team and lists as it now is.
      */
-    changed: boolean;
+    change: DesktopAccountChange | null;
 }
 
 /**
@@ -1177,9 +1192,9 @@ export interface JasonDesktop {
         makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
          * Pins a team the account's last read offered (`teams`) on its profile in the Reply CLI (`reply --profile <name> team
-         * use <id>`), with no question first. The account then reads as that team. An account bound to a team already is
-         * refused: the desktop never changes a pinned team. A refusal is the desktop's sentence and the Reply CLI's reason.
-         * Absent from a desktop of an earlier version.
+         * use <id>`), with no question first, and notes it as the account's. The account then reads as that team. An account
+         * bound to a team already is refused: the desktop never changes a pinned team; so is one whose `change` is not
+         * answered. A refusal is the desktop's own sentence. Absent from a desktop of an earlier version.
          */
         chooseTeam(account: DesktopAccountRef, teamId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
@@ -1204,9 +1219,10 @@ export interface JasonDesktop {
          */
         removeAccount(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Keep it, for an account the last read found `changed`: the account as it now is becomes the one the desktop's note
-         * keeps, and it is no longer `changed`. Nothing of the Reply CLI changes. Absent from a desktop of an earlier
-         * version.
+         * Keep it, for an account the last read found with a `change`: bound to another of its teams, the account as it now
+         * is becomes the one the desktop's note keeps; otherwise its team is picked afresh, by itself where its sign-in acts in
+         * one team and by `chooseTeam` where it acts in several. Nothing of the Reply CLI changes. Absent from a desktop of
+         * an earlier version.
          */
         keepChange(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */

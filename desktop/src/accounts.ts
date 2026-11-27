@@ -258,6 +258,7 @@ export const accountSentences = {
     notRepresentable: 'The settings file cannot hold this Reply account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.',
     teamNotOffered: 'That is not a team this Reply account was offered.',
     teamNotChosen: 'The team was not chosen.',
+    teamGone: 'The team was not chosen: this sign-in can no longer work in it.',
     teamPinned: 'This Reply account is bound to its team already, and Jason Desktop does not change it, so nothing was changed.',
     badName: `Name the Reply account in one line of up to ${profileLimit} characters that does not begin with a hyphen.`,
     nameTaken: 'The Reply CLI holds a Reply account of that name already; choose another name.',
@@ -271,6 +272,7 @@ export const accountSentences = {
     followedUnread: 'Jason’s routes could not be read, so Jason Desktop cannot tell whether one follows this Reply account as the Reply CLI’s current profile, and nothing was removed.',
     nothingToKeep: 'That Reply account shows no change to keep.',
     notKept: 'Jason Desktop could not write its note of this Reply account, so nothing was changed.',
+    unanswered: 'The sign-in of this Reply account changed: keep it or sign it out on its card first, so nothing was changed.',
 } as const;
 
 /**

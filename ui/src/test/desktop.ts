@@ -229,7 +229,7 @@ export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): 
     pendingUnread: [],
     notRead: [],
     lastSignIn: null,
-    changed: false,
+    change: null,
     ...over,
 });
 

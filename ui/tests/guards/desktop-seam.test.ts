@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
     DesktopAccount,
     DesktopAccounts,
+    DesktopBoundTeam,
     DesktopReply,
     DesktopReplySignIn,
     DesktopReplyTeam,
@@ -153,12 +154,13 @@ const account = {
     notRead: true,
     // The teams its sign-in can act in, where its profile has none pinned and Reply would not list it without one.
     teams: true,
-    // Who it was last seen signed in as, in which team, and whether the last read found another login or team.
+    // Who it was last seen signed in as, in which team, and how the last read found its sign-in changed from that.
     lastSignIn: true,
-    changed: true,
+    change: true,
 } as const satisfies Record<keyof DesktopAccount, true>;
 const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
 const accountSignIn = { user: true, team: true } as const satisfies Record<keyof DesktopReplySignIn, true>;
+const boundTeam = { id: true, name: true } as const satisfies Record<keyof DesktopBoundTeam, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -175,13 +177,15 @@ const held: [
     Exactly<keyof typeof account, keyof DesktopAccount>,
     Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
     Exactly<keyof typeof accountSignIn, keyof DesktopReplySignIn>,
+    Exactly<keyof typeof boundTeam, keyof DesktopBoundTeam>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
         expect(held).toEqual([
+            true,
             true,
             true,
             true,
@@ -326,9 +330,10 @@ describe('the desktop seam', () => {
             'notRead',
             'teams',
             'lastSignIn',
-            'changed',
+            'change',
         ]);
         expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
         expect(Object.keys(accountSignIn)).toEqual(['user', 'team']);
+        expect(Object.keys(boundTeam)).toEqual(['id', 'name']);
     });
 });

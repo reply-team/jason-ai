@@ -31,12 +31,16 @@ const said = rest.join(' ');
 // keeps its own (src/profile.ts, src/commands/auth.ts):
 //   {"current": "default", "profiles": {"outbound": {"team_id"?: 9}}, "credentials": {"default": "ada@example.test"},
 //    "seats": {"ada@example.test": [3, 9]}, "lists": {"ada@example.test#3": {"email": [...], "linkedin": [...]}},
-//    "browser": "ada@example.test", "keys": {"made-up-key": "bea@example.test"}, "teams": {"9": "Made-up Nine"}}
+//    "browser": "ada@example.test", "keys": {"made-up-key": {"login": "bea@example.test", "team": 9}},
+//    "teams": {"9": "Made-up Nine"}}
 // `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
-// replaces a profile's settings and never its sign-in. A sign-in is its login, or {"login": …, "unnamed": true} for a
-// browser's sign-in Reply would not name: reply-cli asks Reply's /v3/whoami in the profile's pinned team right after the
-// browser (src/commands/auth.ts `enrich_identity`), and keeps no `user` where Reply refuses it, as it does a login in
-// several teams with none pinned, or one in another team than the pin. Without the file the CLI holds `default` alone, or the profiles
+// replaces a profile's settings and never its sign-in. A browser's sign-in is its login, or {"login": …, "unnamed": true}
+// where Reply would not name it: reply-cli asks Reply's /v3/whoami in the profile's pinned team right after the browser
+// (src/commands/auth.ts `enrich_identity`), and keeps no `user` where Reply refuses it, as it does a login in several teams
+// with none pinned, or one in another team than the pin. A key's sign-in is {"login": …, "key": <its team>}: Reply acts for
+// a key in the key's own team whatever team is asked, so where a browser's sign-in is read, refused or named in the pinned
+// team, a key's is in its own (whoami, the lists, and the key's sign-in itself, which never fails for the pin); `team list`
+// and `team use` answer by the login's teams for both. Without the file the CLI holds `default` alone, or the profiles
 // STUB_REPLY_PROFILES names as `profile list --json` prints them, and the sign-in and lists are the variables' below,
 // whichever profile a run names.
 const worldFile = name === 'reply' ? process.env.STUB_REPLY_WORLD : undefined;
@@ -51,7 +55,17 @@ const loginOf = (profile) => {
     const credential = (world.credentials ?? {})[profile];
     return typeof credential === 'object' && credential !== null ? credential.login : credential;
 };
-const namedBy = (profile) => typeof (world.credentials ?? {})[profile] === 'string';
+const namedBy = (profile) => {
+    const credential = (world.credentials ?? {})[profile];
+    return typeof credential === 'string' || (typeof credential === 'object' && credential !== null && credential.key !== undefined);
+};
+// The team a key acts in, whatever is asked; undefined for a browser's sign-in.
+const keyTeamOf = (profile) => {
+    const credential = (world.credentials ?? {})[profile];
+    return typeof credential === 'object' && credential !== null ? credential.key : undefined;
+};
+// The team a run acts in: a key's own; else the profile's pin, or the one seat a login holds; null for none.
+const actingTeam = (profile, seats) => keyTeamOf(profile) ?? ((world.profiles ?? {})[profile] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
 // Reply's 403 for a login in several teams with none pinned, or for a team it is not in, which reply-cli answers as
 // access.denied carrying Reply's own code (src/operations/call.ts `refusal`).
 const refusedAccess = (reply_code) => answer({ code: 'access.denied', error: { status: 403, title: 'Reply refused access.', reply_code } });
@@ -217,13 +231,15 @@ if (process.env.STUB_HANG === name) {
     // The shape reply-cli prints (src/auth/status.ts, src/commands/auth.ts), and its exit code: 1 when no credential is
     // there. `team_id` at the top is the team the run would send, here the profile's pin, since the desktop hands the CLI
     // no REPLY_TEAM_ID and no --team-id. Without the file, a sign-in is pinned to team 3.
+    // A key's `user.team_id` is the team Reply named it in at its sign-in, its own; a browser's, the team it was named in.
     const profile = inUse();
     const login = world !== null ? loginOf(profile) : process.env.STUB_REPLY_SIGNED_IN === 'yes' ? 'someone@example.com' : undefined;
     const named = world === null || namedBy(profile);
-    const seat = world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3;
+    const key = world !== null ? keyTeamOf(profile) : undefined;
+    const seat = key ?? (world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3);
     const pinned = world !== null ? ((world.profiles ?? {})[profile] ?? {}).team_id : 3;
     const user = named ? { user: { id: 7, username: login, team_id: seat } } : {};
-    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: named ? 'api_key' : 'oauth', ...user, ...(pinned === undefined ? {} : { team_id: pinned }) } : { authenticated: false, profile }));
+    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: key !== undefined ? 'api_key' : 'oauth', ...user, ...(pinned === undefined ? {} : { team_id: pinned }) } : { authenticated: false, profile }));
     if (!login) process.exitCode = 1;
 } else if (name === 'reply' && said === 'auth whoami --json' && process.env.STUB_REPLY_WHOAMI) {
     // A read of who the sign-in is that ended as STUB_REPLY_WHOAMI names it.
@@ -231,13 +247,13 @@ if (process.env.STUB_HANG === name) {
 } else if (name === 'reply' && world !== null && said === 'auth whoami --json') {
     // Reply's /v3/whoami as reply-cli 0.23.2 prints it, the body as it came (src/commands/auth.ts `handle_whoami`), asked
     // in the profile's pinned team, else in none: refused as Reply refuses a login in several teams with none, or a team
-    // it is not in.
+    // it is not in. A key is answered in its own team.
     const login = loginOf(inUse());
     const seats = (world.seats ?? {})[login] ?? [3];
-    const team = ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
+    const team = actingTeam(inUse(), seats);
     if (!login) answer({ code: 'auth.required', exit: 2 });
     else if (team === null) refusedAccess('TEAM_REQUIRED');
-    else if (!seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
+    else if (keyTeamOf(inUse()) === undefined && !seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
     else answer({ print: { userId: 7, username: login, teamId: team } });
 } else if (name === 'reply' && said === 'team list --json' && process.env.STUB_REPLY_TEAM_LIST) {
     // A read of the teams that ended as STUB_REPLY_TEAM_LIST names it, as reply-cli prints `teams.unavailable` and the like.
@@ -277,6 +293,7 @@ if (process.env.STUB_HANG === name) {
 } else if (name === 'reply' && said === 'auth login --with-token --json') {
     // A key on standard input, checked as Reply's whoami would and kept under the profile only when it answers. A key Reply
     // refuses is its 401, printed under --json as reply-cli prints an API error (src/utils/errors.ts, src/utils/client.ts).
+    // Reply answers a key in its own team, whatever the profile pins, so the pin never refuses it.
     const key = stdin.trim();
     if (key === '') answer({ code: 'usage.stdin' });
     else if (world === null) process.exit(0);
@@ -284,9 +301,10 @@ if (process.env.STUB_HANG === name) {
         const hint = 'Invalid or expired credential. Re-check your key/token or run `reply auth login`.';
         answer({ exit: 1, stderr: `${JSON.stringify({ error: { status: 401, title: 'Unauthorized', detail: 'Authentication credentials are missing or invalid.', hint } })}\n` });
     } else {
-        world.credentials = { ...(world.credentials ?? {}), [inUse()]: world.keys[key] };
+        const { login, team } = world.keys[key];
+        world.credentials = { ...(world.credentials ?? {}), [inUse()]: { login, key: team } };
         keepWorld();
-        answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: 7, username: world.keys[key], team_id: 3 } } });
+        answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: 7, username: login, team_id: team } } });
     }
 } else if (name === 'reply' && world !== null && (said === 'team list --json' || (rest[0] === 'team' && rest[1] === 'use' && rest[3] === '--json' && rest.length === 4))) {
     // The teams a login can act in, as reply-cli 0.23.2 prints them (src/commands/team.ts): `team list` the profile's pinned
@@ -310,16 +328,16 @@ if (process.env.STUB_HANG === name) {
     // No sign-in under the profile: `auth.required`, exit 2, before Reply is asked (src/operations/call.ts).
     answer({ code: 'auth.required', exit: 2 });
 } else if (name === 'reply' && world !== null && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
-    // What Reply lists for the sign-in in the team the run acts in: the one its profile pins, else the one seat a sign-in
-    // holds; a sign-in with two seats and no team pinned, or a pinned team it has no seat in, is refused as Reply refuses
-    // it (403, `access.denied`, exit 1).
+    // What Reply lists for the sign-in in the team the run acts in: a key's own; else the one its profile pins, else the one
+    // seat a sign-in holds; a sign-in with two seats and no team pinned, or a pinned team it has no seat in, is refused as
+    // Reply refuses it (403, `access.denied`, exit 1).
     const login = loginOf(inUse());
     const seats = (world.seats ?? {})[login] ?? [3];
-    const team = ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
+    const team = actingTeam(inUse(), seats);
     // STUB_REPLY_ACCOUNT_LIST names another ending of every channel's read, a network failure say.
     if (process.env.STUB_REPLY_ACCOUNT_LIST) answer(JSON.parse(process.env.STUB_REPLY_ACCOUNT_LIST));
     else if (team === null) refusedAccess('TEAM_REQUIRED');
-    else if (!seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
+    else if (keyTeamOf(inUse()) === undefined && !seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
     else answer({ print: { items: ((world.lists ?? {})[`${login}#${team}`] ?? {})[rest[3]] ?? [] } });
 } else if (name === 'reply' && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
     // Per channel, as reply-cli prints it: the items of that channel, or a refusal when the plan or role has none.

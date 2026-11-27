@@ -1,6 +1,8 @@
 import { effect, signal } from '@preact/signals-react';
 import type {
+    DesktopAccountChange,
     DesktopAccountRef,
+    DesktopBoundTeam,
     DesktopDefaultFor,
     DesktopHost,
     DesktopPlugin,
@@ -122,7 +124,7 @@ interface AccountView {
     signedIn: boolean;
     user: string | null;
     /** The team its sign-in is bound to; null where it is bound to none, or the desktop does not say. */
-    team: DesktopReplyTeam | null;
+    team: DesktopBoundTeam | null;
     /** Its sign-in could not be read: said as that, and no sign-in. */
     authUnread: boolean;
     /** The teams of its sign-in could not be read: said as that, its other reads standing. */
@@ -138,8 +140,8 @@ interface AccountView {
     teams: readonly DesktopReplyTeam[] | null;
     /** Who it was last seen signed in as, as the desktop's note keeps it; null where nothing is noted. */
     lastSignIn: DesktopReplySignIn | null;
-    /** Whether the last read found another login or team than the note says. */
-    changed: boolean;
+    /** How the last read found its sign-in changed from what the note says; null where it did not. */
+    change: DesktopAccountChange | null;
 }
 
 const listOf = <T>(value: readonly T[] | undefined): readonly T[] => (Array.isArray(value) ? value : []);
@@ -172,7 +174,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             pendingUnread: each.pendingUnread,
             teams: each.teams !== undefined && each.teams.length > 0 ? each.teams : null,
             lastSignIn: each.lastSignIn,
-            changed: each.changed,
+            change: each.change,
         }));
     const reply = state.reply;
     if (!reply.cli.found) return [];
@@ -196,7 +198,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             pendingUnread: listOf(reply.pendingUnread),
             teams: null,
             lastSignIn: null,
-            changed: false,
+            change: null,
         },
     ];
 }
@@ -254,8 +256,8 @@ const usableCli = (reply: DesktopSetup['reply']): boolean =>
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
 
 /** A team as the card names it: by the name Reply gives it, never by its id. */
-const teamWords = (team: DesktopReplyTeam): string =>
-    team.name === '' ? 'a team whose name could not be read' : team.name;
+const teamWords = (team: DesktopBoundTeam): string =>
+    team.name === '' || team.name === null ? 'a team whose name could not be read' : team.name;
 
 /** A sign-in as the card says it: the login, and the team it is bound to. */
 const signInWords = (signIn: DesktopReplySignIn): Html =>
@@ -274,7 +276,7 @@ function noteView(view: AccountView, place: Place, real: Html | null): Html | nu
         return html`<div class="setrow meta acct-last">
             <div class="grow">Last signed in as ${signInWords(last)}.</div>
         </div>`;
-    if (!view.changed || !keepsChange()) return null;
+    if (view.change === null || !keepsChange()) return null;
     const now =
         view.team !== null
             ? html`${view.user === null ? null : html`<b>${view.user}</b> `}in <b>${teamWords(view.team)}</b>`

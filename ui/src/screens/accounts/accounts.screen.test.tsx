@@ -825,7 +825,7 @@ describe('Reply accounts, one card per profile', () => {
                     user: 'cy@example.test',
                     team: { id: '4', name: '' },
                     lastSignIn: ada3,
-                    changed: true,
+                    change: 'team',
                     senders: [mailbox],
                 }),
                 replyAccount('outbound', { lastSignIn: ada3 }),
@@ -838,9 +838,9 @@ describe('Reply accounts, one card per profile', () => {
                 }),
                 replyAccount('spare'),
                 // Another login: no team and nothing listed until Keep it.
-                replyAccount('moved', { signedIn: true, user: 'dee@example.test', lastSignIn: ada3, changed: true }),
+                replyAccount('moved', { signedIn: true, user: 'dee@example.test', lastSignIn: ada3, change: 'login' }),
                 // A sign-in that can no longer work in the noted team, whose login Reply does not say.
-                replyAccount('left', { signedIn: true, lastSignIn: ada3, changed: true }),
+                replyAccount('left', { signedIn: true, lastSignIn: ada3, change: 'unknown' }),
                 // Bound, and its login could not be read.
                 replyAccount('unnamed', {
                     signedIn: true,

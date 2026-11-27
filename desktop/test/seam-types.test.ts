@@ -5,7 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
+    DesktopAccountChange,
     DesktopAccountRef,
+    DesktopBoundTeam,
     DesktopChatEvent,
     DesktopChatOptions,
     DesktopConversation,
@@ -42,7 +44,7 @@ import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
 import type { AccountRef, DefaultFor, ReplyTeam } from '../src/accounts.ts';
-import type { SignIn } from '../src/account-notes.ts';
+import type { BoundTeam, Change, SignIn } from '../src/account-notes.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -207,6 +209,8 @@ type AccountIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['setup']['keepChange']>, [account: DesktopAccountRef]>>,
     Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['addAccount' | 'signOut' | 'removeAccount' | 'keepChange']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<SignIn, DesktopReplySignIn>>,
+    Holds<Equal<BoundTeam, DesktopBoundTeam>>,
+    Holds<Equal<Change, DesktopAccountChange>>,
     Holds<Equal<DefaultFor, DesktopDefaultFor>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
