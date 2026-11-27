@@ -1147,6 +1147,27 @@ export interface JasonDesktop {
          * Absent from a desktop of an earlier version.
          */
         chooseTeam(account: DesktopAccountRef, teamId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Add Reply account: a profile made in the Reply CLI under exactly `name` (`reply profile add`), with nothing of an
+         * account's own; it is the next status's card, not signed in. Refused before it is made, in the desktop's sentence,
+         * for a name that is empty after trimming, longer than the 64 characters a route's binding holds, begins with a
+         * hyphen, holds a control character or a line break, is `default`, or is one the Reply CLI holds. Absent from a
+         * desktop of an earlier version.
+         */
+        addAccount(name: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Sign out of an account `accounts` lists, after the person's yes in the desktop's own box, which says that the Reply
+         * CLI itself signs it out and, where a route names it, that campaigns sending through it stop (`reply --profile
+         * <name> auth logout`). No route changes. Absent from a desktop of an earlier version.
+         */
+        signOut(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Remove an account `accounts` lists whose profile the Reply CLI holds, never `default`, after the person's yes in the
+         * desktop's own box, which says that the Reply CLI itself deletes its profile and its sign-in and, where a route
+         * names it, that campaigns sending through it stop and its card stays (`reply profile delete <name> --yes`). No route
+         * changes. Absent from a desktop of an earlier version.
+         */
+        removeAccount(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

@@ -188,9 +188,9 @@ type OpenInIsTheSeam = [
     Holds<Equal<Place, DesktopOpenInAnswer['places'][number]>>,
 ];
 
-// An account reaches the desktop as the page names it, its type and its name and nothing else; Make default names one, a
-// team's choice names one and a team the desktop offered it, and every sign-in and every act on a sender takes one after
-// its own arguments, where the page names one.
+// An account reaches the desktop as the page names it, its type and its name and nothing else; Make default, Sign out and
+// Remove name one, a team's choice names one and a team the desktop offered it, and every sign-in and every act on a sender
+// takes one after its own arguments, where the page names one. Add Reply account names a profile not listed yet, by name.
 type AccountIsTheSeam = [
     Holds<Equal<AccountRef, DesktopAccountRef>>,
     Holds<Equal<keyof DesktopAccountRef, 'type' | 'name'>>,
@@ -198,6 +198,10 @@ type AccountIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['setup']['chooseTeam']>, [account: DesktopAccountRef, teamId: string]>>,
     Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['chooseTeam']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['makeDefault']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['addAccount']>, [name: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['signOut']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['removeAccount']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['addAccount' | 'signOut' | 'removeAccount']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyConnect']>[2], DesktopAccountRef | undefined>>,

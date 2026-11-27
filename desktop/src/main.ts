@@ -217,11 +217,16 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
         ['setup.replyResume', (id, account) => setup.replyResume(id, account)],
         ['setup.replyUnblock', (id, account) => setup.replyUnblock(id, account)],
         ['setup.replyDelete', (channel, id, options, account) => setup.replyDelete(channel, id, options, account)],
-        // Make default: the runtime names the account the global default, after the person's yes in the main process's box.
+        // Make default: the runtime names the account the global default, only while Jason has none.
         ['setup.makeDefault', (account) => setup.makeDefault(account)],
         // A team pinned on an account's profile in the Reply CLI, where its sign-in belongs to several and the last read
         // offered them.
         ['setup.chooseTeam', (account, teamId) => setup.chooseTeam(account, teamId)],
+        // A profile made in the Reply CLI under the name asked; a sign-out and a removal there, each after the person's yes
+        // in the main process's box.
+        ['setup.addAccount', (name) => setup.addAccount(name)],
+        ['setup.signOut', (account) => setup.signOut(account)],
+        ['setup.removeAccount', (account) => setup.removeAccount(account)],
     ];
     for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
     setup.onChanged(changed);

@@ -89,6 +89,10 @@ const setup = {
     makeDefault: true,
     // A team chosen for an account whose sign-in belongs to more than one, pinned on its profile in the Reply CLI.
     chooseTeam: true,
+    // Add Reply account, Sign out and Remove: a profile made, signed out or deleted in the Reply CLI itself.
+    addAccount: true,
+    signOut: true,
+    removeAccount: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -259,6 +263,9 @@ describe('the desktop seam', () => {
             'setup.replyDelete',
             'setup.makeDefault',
             'setup.chooseTeam',
+            'setup.addAccount',
+            'setup.signOut',
+            'setup.removeAccount',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([

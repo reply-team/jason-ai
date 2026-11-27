@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
 import {
     accountArguments,
+    accountBox,
+    accountNameProblem,
     accountsOf,
     accountSentences,
     defaultBinding,
@@ -557,6 +559,15 @@ function refusal(refused: string, reread = false): ReplyRefusal {
 }
 
 /**
+ * An act on a Reply account the Reply CLI refused: the desktop's sentence and the CLI's reason (`signInWords`), its code,
+ * and the accounts read again to show where they stand.
+ */
+function cliRefusal(result: RunResult, sentence: string): ReplyRefusal {
+    const ending = replyCliEnding(result);
+    return { refused: signInWords(result, sentence), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
+}
+
+/**
  * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
  * run, since it was looked at already, `reply` was not found, the switch is off or could not be read, the version was not
  * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
@@ -588,6 +599,8 @@ export class Setup {
      * senders, and its box names the sender as the list does.
      */
     #listed: AccountState[] = [];
+    /** The profiles a route named at the last read, at any level; null where the routes were not read, or none was read. */
+    #routed: Set<string> | null = null;
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -913,6 +926,7 @@ export class Setup {
         );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
+        this.#routed = listing?.routed ?? null;
         const acting = this.#accountOf(undefined);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -1388,10 +1402,66 @@ export class Setup {
             if (auth?.team != null) return refusal(accountSentences.teamPinned, true);
             const result = await this.#writingConfig(() => this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs }));
             this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
-            if (result.exit === 0) return { done: true };
-            const ending = replyCliEnding(result);
-            return { refused: signInWords(result, accountSentences.teamNotChosen), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
+            return result.exit === 0 ? { done: true } : cliRefusal(result, accountSentences.teamNotChosen);
         });
+    }
+
+    /**
+     * Add Reply account: the profile made in the Reply CLI under exactly the name given (`reply profile add <name>`), with
+     * nothing of an account's own, which the CLI would pin on it; its card is the next read's, not signed in. A name
+     * `accountNameProblem` refuses is refused before anything runs, and so is one the Reply CLI, asked now, holds, since an
+     * add of it would replace that profile's settings without a word.
+     */
+    addAccount(name: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const problem = accountNameProblem(name);
+        if (problem !== null) return Promise.resolve(refusal(problem));
+        const asked = name as string;
+        return this.#acting(async () => {
+            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+            if (profiles === null) return refusal(accountSentences.profilesUnreadAtAdd, true);
+            if (profiles.available.includes(asked)) return refusal(accountSentences.nameTaken, true);
+            const added = await this.#writingConfig(() => this.#run('reply', 'profile add', ['profile', 'add', asked, '--json']));
+            this.#deps.log.info('reply_account_added', { Exit: added.exit });
+            return added.exit === 0 ? this.#announced({ done: true }) : cliRefusal(added, accountSentences.notAdded);
+        });
+    }
+
+    /**
+     * Sign out, on the person's yes to the box that names the Reply account (`accountBox`): its sign-in removed in the Reply
+     * CLI itself (`reply --profile <name> auth logout`). No route changes.
+     */
+    signOut(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        return this.#acting(async () => {
+            if (!(await this.#confirmed(accountBox('signOut', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
+            const result = await this.#run('reply', 'auth logout', [...accountArguments(account), 'auth', 'logout', '--json']);
+            this.#deps.log.info('reply_signed_out', { Exit: result.exit });
+            return result.exit === 0 ? this.#announced({ done: true }) : cliRefusal(result, accountSentences.notSignedOut);
+        });
+    }
+
+    /**
+     * Remove, never for the Reply CLI's own profile `default`, on the person's yes to the box that names the Reply account
+     * (`accountBox`): its profile and its sign-in deleted in the Reply CLI itself (`reply profile delete <name> --yes`).
+     * No route changes, so an account a route names keeps its card, not signed in.
+     */
+    removeAccount(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (account.name === 'default') return Promise.resolve(refusal(accountSentences.defaultKept));
+        return this.#acting(async () => {
+            if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
+            const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
+            this.#deps.log.info('reply_account_removed', { Exit: result.exit });
+            return result.exit === 0 ? this.#announced({ done: true }) : cliRefusal(result, accountSentences.notRemoved);
+        });
+    }
+
+    /** An act's answer, once every page has been told the accounts changed: the acts on a Reply account as a whole. */
+    #announced<T>(answer: T): T {
+        this.#changed();
+        return answer;
     }
 
     /**

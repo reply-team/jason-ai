@@ -376,23 +376,24 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     }
 });
 
-test('the accounts are every profile the Reply CLI holds and every profile a route to Reply names, one each: the default first, then the CLI’s own order, then the profiles only a route names; a route that names no profile is the profile the Reply CLI is set to at that read', () => {
+test('the accounts are every profile the Reply CLI holds and every profile a route to Reply names, one each: the default first, then the CLI’s own order, then the profiles only a route names; a route that names no profile is the profile the Reply CLI is set to at that read; and which of them a route names, which Sign out and Remove say', () => {
     // A route's profile is its binding's, else the one the Reply CLI is set to at this read, as Jason's Reply plugin runs it.
     const route = (stdout: string) => readRoutes({ exit: 0, stdout })!;
     const named = (name: string) => ({ type: 'reply', name });
     const cli = { current: 'outbound', available: ['default', 'outbound', 'quiet'] };
-    const listing = (accounts: string[], fallback: string | null) => ({
+    const listing = (accounts: string[], fallback: string | null, routed: string[] | null) => ({
         accounts: accounts.map(named),
         default: fallback === null ? null : named(fallback),
+        routed: routed === null ? null : new Set(routed),
     });
-    assert.deepEqual(accountsOf(cli, route(routesEverywhere)), listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null), 'a global default to another plugin marks no Reply account');
-    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research'), 'the default is the binding’s account, held by the CLI or not');
-    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound'), 'a default that names no profile is the profile the CLI is set to');
-    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet'), 'and moves with it');
+    assert.deepEqual(accountsOf(cli, route(routesEverywhere)), listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null, ['research', 'outbound', 'Made-up Ops']), 'a global default to another plugin marks no Reply account');
+    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research', ['research']), 'the default is the binding’s account, held by the CLI or not');
+    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound', ['outbound']), 'a default that names no profile is the profile the CLI is set to');
+    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet', ['quiet']), 'and moves with it');
     const teamed = [{ campaign_id: 'cmp_9', default: replyRoute({ profile: 'quiet', team_id: '7' }), operations: {}, channels: {} }];
-    assert.deepEqual(accountsOf(cli, route(routeList(null, teamed))), listing(['default', 'outbound', 'quiet'], null), 'a team in a binding is no part of the account');
-    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null), 'routes not read: the CLI’s profiles, none marked');
-    assert.deepEqual(accountsOf({ current: 'default', available: ['default'] }, route(routeList(null))), listing(['default'], null), 'a fresh installation: one account, no default');
+    assert.deepEqual(accountsOf(cli, route(routeList(null, teamed))), listing(['default', 'outbound', 'quiet'], null, ['quiet']), 'a team in a binding is no part of the account');
+    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null, null), 'routes not read: the CLI’s profiles, none marked, and which a route names not known');
+    assert.deepEqual(accountsOf({ current: 'default', available: ['default'] }, route(routeList(null))), listing(['default'], null, []), 'a fresh installation: one account, no default, no route');
 });
 
 // ---- The written set -----------------------------------------------------------------------------------------------
@@ -483,6 +484,10 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
     await act('makeDefault', () => setup.makeDefault({ type: 'reply', name: 'outbound' }), ['config/settings.json'], replyKeys);
     await act('connectReplyWithKey', () => setup.connectReplyWithKey('planted-reply-key'), ['config/settings.json', replySkills], replyKeys);
     await act('connectReply', () => setup.connectReply(), ['config/settings.json', replySkills], replyKeys);
+    // Add Reply account, Sign out and Remove are the Reply CLI's to write, in its own files: none of them under <data>.
+    await act('addAccount', () => setup.addAccount('Made-up Ops'), [], []);
+    await act('signOut', () => setup.signOut({ type: 'reply', name: 'outbound' }), [], []);
+    await act('removeAccount', () => setup.removeAccount({ type: 'reply', name: 'outbound' }), [], []);
     await act('setProviderKey', () => setup.setProviderKey('deepseek', 'sk-planted-provider'), ['desktop/provider-keys'], []);
     await act('installProgram', () => setup.installProgram('codex'), [], []);
     await act('configurePlugin slack', () => setup.configurePlugin('slack', { token: 'xoxb-planted', target: 'C0123ABCD' }), ['config/settings.json'], pluginKeys('slack'));
@@ -860,6 +865,129 @@ test('a refused sign-in says the desktop’s sentence, then the Reply CLI’s re
     }
 });
 
+/** A refusal of an act on a Reply account, as the desktop answers it. */
+const no = (refused: string, code: string | null = null, reread = false) => ({ refused, code, offer: null, reread });
+
+test('Add Reply account makes the profile in the Reply CLI under exactly the name given and nothing of an account’s own, its card at once and not signed in; a name a route’s binding cannot hold, default, or one a fresh profile list holds is refused before the profile is made', async (t) => {
+    const b = replyBench(t, { profiles: { outbound: { team_id: 9 } } });
+    const setup = await readSetup(b);
+    let from = b.record().length;
+    assert.deepEqual(await setup.addAccount('Made-up Ops'), { done: true });
+    assert.deepEqual(b.record().slice(from).filter((entry) => entry.name === 'reply').map((entry) => entry.args), [['profile', 'list', '--json'], ['profile', 'add', 'Made-up Ops', '--json']]);
+    assert.deepEqual(b.world().profiles?.['Made-up Ops'], {});
+    const made = (await setup.status()).accounts?.accounts.find((each) => each.name === 'Made-up Ops');
+    assert.deepEqual({ held: made?.held, signedIn: made?.signedIn }, { held: true, signedIn: false });
+    // Refused before anything runs: empty after trimming, past the 64 characters a route's binding holds, beginning with a
+    // hyphen, holding a control character or a line break, or not text; and `default`, which every Reply CLI holds.
+    const badName = 'Name the Reply account in one line of up to 64 characters that does not begin with a hyphen.';
+    const taken = 'The Reply CLI holds a Reply account of that name already; choose another name.';
+    from = b.record().length;
+    for (const [name, said] of [['', badName], ['   ', badName], ['x'.repeat(65), badName], ['-p', badName], ['two\nlines', badName], ['a\ttab', badName], ['a\u0007bell', badName], ['a line', badName], [7, badName], [null, badName], ['default', taken]] as const) {
+        assert.deepEqual(await setup.addAccount(name), no(said), JSON.stringify(name));
+    }
+    assert.deepEqual(runsAfter(b, from, 'reply'), []);
+    // A name the Reply CLI, asked now, holds, made in a terminal meanwhile: never added again, which would replace that
+    // profile's settings without a word; the page reads the accounts again to show it.
+    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), profiles: { ...b.world().profiles, later: { team_id: 5 } } }));
+    from = b.record().length;
+    assert.deepEqual(await setup.addAccount('later'), no(taken, null, true));
+    assert.deepEqual(await setup.addAccount('outbound'), no(taken, null, true));
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', 'profile list --json']);
+    assert.deepEqual([b.world().profiles?.['later'], b.world().profiles?.['outbound']], [{ team_id: 5 }, { team_id: 9 }]);
+    assert.deepEqual(await setup.addAccount('x'.repeat(64)), { done: true });
+    // A profile list that could not be read adds nothing; the Reply CLI's refusal is said with its reason, never its hint.
+    const reading = replyBench(t, {}, { STUB_REPLY_PROFILE_LIST: JSON.stringify({ code: 'config.corrupt' }) });
+    assert.deepEqual(await (await readSetup(reading)).addAccount('spare'), no('The Reply accounts could not be read, so none was added.', null, true));
+    assert.equal(replyRuns(reading).some((run) => run.startsWith('profile add')), false);
+    const refusing = replyBench(t, {}, { STUB_REPLY_PROFILE_ADD: JSON.stringify({ code: 'config.write', exit: 1, error: { title: 'Could not write the configuration.', hint: 'Check the folder.' } }) });
+    assert.deepEqual(await (await readSetup(refusing)).addAccount('spare'), no('The Reply CLI did not make the profile. Could not write the configuration.', 'config.write', true));
+});
+
+test('Sign out asks first in the desktop’s own box, naming the Reply account, saying that the Reply CLI itself signs it out and, where a route names it, that campaigns sending through it stop; on a yes it signs out that profile alone and changes no route', async (t) => {
+    const boxes: ReplyBox[] = [];
+    let yes = false;
+    const b = replyBench(t, {
+        profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, spare: { team_id: 4 } },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test', spare: 'cy@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9], 'cy@example.test': [4] },
+    }, { STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound' })]) });
+    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
+    const settingsBefore = readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8');
+    const setup = new Setup({ ...setupDeps(b), confirm: (box) => (boxes.push(box), Promise.resolve(yes)) });
+    await setup.status();
+    const outbound = { type: 'reply', name: 'outbound' } as const;
+    let from = b.record().length;
+    assert.deepEqual(await setup.signOut(outbound), no('Nothing was done.'));
+    assert.equal(runsAfter(b, from, 'reply').some((run) => run.includes('logout')), false);
+    const box = (name: string, detail: string) => ({ type: 'question', title: `Sign out of the Reply account “${name}”?`, message: `Sign out of the Reply account “${name}”?`, detail, buttons: ['Sign out', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true });
+    const itself = 'It is signed out in the Reply CLI itself, so reply in a terminal loses this sign-in too.';
+    assert.deepEqual(boxes, [box('outbound', `${itself} Campaigns sending through it stop until it is signed in again.`)]);
+    yes = true;
+    from = b.record().length;
+    assert.deepEqual(await setup.signOut(outbound), { done: true });
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['--profile outbound auth logout --json']);
+    assert.deepEqual(b.world().credentials, { default: 'ada@example.test', spare: 'cy@example.test' });
+    // The global default's account is named by a route too; one no route names is told nothing of campaigns.
+    await setup.signOut({ type: 'reply', name: 'default' });
+    await setup.signOut({ type: 'reply', name: 'spare' });
+    assert.deepEqual(boxes.slice(-2), [box('default', `${itself} Campaigns sending through it stop until it is signed in again.`), box('spare', itself)]);
+    assert.deepEqual(b.world().credentials, {});
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), settingsBefore, 'no route changes');
+    assert.deepEqual(b.world().profiles, { default: { team_id: 3 }, outbound: { team_id: 9 }, spare: { team_id: 4 } }, 'the profiles stay, and their teams');
+    // An account the last read did not list is no act; the Reply CLI's refusal is said with its reason, and the accounts are
+    // read again.
+    assert.deepEqual(await setup.signOut({ type: 'reply', name: 'nobody' }), no('That is not a Reply account the desktop listed.'));
+    const refusing = replyBench(t, { profiles: { outbound: { team_id: 9 } }, credentials: { outbound: 'bea@example.test' }, seats: { 'bea@example.test': [9] } }, { STUB_REPLY_AUTH_LOGOUT: JSON.stringify({ code: 'store.write', exit: 1, error: { title: 'Could not write the credential store.' } }) });
+    const refused = new Setup({ ...setupDeps(refusing), confirm: () => Promise.resolve(true) });
+    await refused.status();
+    assert.deepEqual(await refused.signOut(outbound), no('The Reply CLI did not sign it out. Could not write the credential store.', 'store.write', true));
+});
+
+test('Remove, never for the Reply CLI’s own default, asks first in the desktop’s own box, naming the Reply account, saying that the Reply CLI itself deletes its profile and sign-in and, where a route names it, that campaigns sending through it stop and its card stays; on a yes it deletes that profile and changes no route', async (t) => {
+    const boxes: ReplyBox[] = [];
+    let yes = false;
+    const b = replyBench(t, {
+        current: 'outbound',
+        profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, spare: { team_id: 4 } },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test', spare: 'cy@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9], 'cy@example.test': [4] },
+    }, { STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound' })]) });
+    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
+    const settingsBefore = readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8');
+    const setup = new Setup({ ...setupDeps(b), confirm: (box) => (boxes.push(box), Promise.resolve(yes)) });
+    await setup.status();
+    const outbound = { type: 'reply', name: 'outbound' } as const;
+    let from = b.record().length;
+    assert.deepEqual(await setup.removeAccount(outbound), no('Nothing was done.'));
+    assert.equal(runsAfter(b, from, 'reply').some((run) => run.includes('delete')), false);
+    const box = (name: string, detail: string) => ({ type: 'warning', title: `Remove the Reply account “${name}”?`, message: `Remove the Reply account “${name}”?`, detail, buttons: ['Remove', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true });
+    const itself = 'Its profile and its sign-in are deleted in the Reply CLI itself, so reply in a terminal loses them too.';
+    assert.deepEqual(boxes, [box('outbound', `${itself} Campaigns sending through it stop, and its card stays, not signed in.`)]);
+    yes = true;
+    from = b.record().length;
+    assert.deepEqual(await setup.removeAccount(outbound), { done: true });
+    assert.deepEqual(b.record().slice(from).filter((entry) => entry.name === 'reply').map((entry) => entry.args), [['profile', 'delete', 'outbound', '--yes', '--json']]);
+    assert.deepEqual([b.world().profiles, b.world().credentials], [{ default: { team_id: 3 }, spare: { team_id: 4 } }, { default: 'ada@example.test', spare: 'cy@example.test' }]);
+    // A route names it, so its card stays, not signed in; one no route names is told nothing of campaigns, and goes.
+    await setup.removeAccount({ type: 'reply', name: 'spare' });
+    assert.deepEqual(boxes.at(-1), box('spare', itself));
+    const left = (await setup.status()).accounts?.accounts.map((each) => `${each.name} ${each.held ? 'held' : 'routed'} ${each.signedIn ? 'in' : 'out'}`);
+    assert.deepEqual(left, ['default held in', 'outbound routed out']);
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), settingsBefore, 'no route changes');
+    // The Reply CLI's own default is never removed: refused with no box and no run.
+    const asked = boxes.length;
+    from = b.record().length;
+    assert.deepEqual(await setup.removeAccount({ type: 'reply', name: 'default' }), no('The Reply CLI’s own profile default is always there, so nothing was removed.'));
+    assert.deepEqual([boxes.length, runsAfter(b, from, 'reply')], [asked, []]);
+    // An account the last read did not list is no act; the Reply CLI's refusal is said with its reason, and the accounts are
+    // read again.
+    assert.deepEqual(await setup.removeAccount({ type: 'reply', name: 'nobody' }), no('That is not a Reply account the desktop listed.'));
+    const refusing = replyBench(t, { profiles: { spare: {} } }, { STUB_REPLY_PROFILE_DELETE: JSON.stringify({ code: 'config.write', exit: 1, error: { title: 'Could not write the configuration.' } }) });
+    const refused = new Setup({ ...setupDeps(refusing), confirm: () => Promise.resolve(true) });
+    await refused.status();
+    assert.deepEqual(await refused.removeAccount({ type: 'reply', name: 'spare' }), no('The Reply CLI did not remove the profile. Could not write the configuration.', 'config.write', true));
+});
+
 test('every signed-in Reply account is bound to one team, which it shows: a profile that pins none is pinned at the look that finds its sign-in in one team, and the log says so; a sign-in in several is offered them, and a pick pins one; the team is shown by its name, else its id; teams that could not be read are said, the other reads standing; and a pick for an account bound already is refused', async (t) => {
     const log = memoryLog();
     const b = replyBench(t, {
@@ -894,7 +1022,6 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     // refused as that, and so is one for an account a terminal bound meanwhile, before anything changes its team; Reply's
     // refusal of a pick is said.
     const outbound = { type: 'reply', name: 'outbound' } as const;
-    const no = (refused: string, code: string | null = null, reread = false) => ({ refused, code, offer: null, reread });
     const pinned = 'This Reply account is bound to its team already, and Jason Desktop does not change it, so nothing was changed.';
     from = b.record().length;
     for (const [named, team] of [[outbound, '7'], [outbound, 9]] as const) {

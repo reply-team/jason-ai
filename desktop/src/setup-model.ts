@@ -429,7 +429,7 @@ export interface ReplySender {
 // printed indented, so it is passed to both.
 
 /** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
-const profileLimit = 64;
+export const profileLimit = 64;
 
 /**
  * A sign-in as `reply auth status --json` prints it: whether there is one, as whom, under which profile, and the team its

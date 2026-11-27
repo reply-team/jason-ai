@@ -169,7 +169,8 @@ export interface NamedAccount {
     address: string;
 }
 
-const capped = (text: string): string => {
+/** A name drawn in a box: control and format characters made spaces, trimmed, and cut to eighty characters. */
+export const capped = (text: string): string => {
     const characters = [...text.replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()];
     return characters.length > 80 ? `${characters.slice(0, 80).join('')}…` : characters.join('');
 };
@@ -194,7 +195,7 @@ export interface ReplyBox {
     noLink: true;
 }
 
-const box = (type: ReplyBox['type'], message: string, detail: string, yes: string): ReplyBox => ({
+export const box = (type: ReplyBox['type'], message: string, detail: string, yes: string): ReplyBox => ({
     type,
     title: message,
     message,

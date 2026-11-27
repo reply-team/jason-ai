@@ -154,15 +154,33 @@ if (process.env.STUB_HANG === name) {
     else answer({ print: listedProfiles });
 } else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'add' && rest.length === 4 && rest[3] === '--json') {
     // `profile add <name>` refuses `default` and a blank name, and replaces a profile of that name whole, with no word,
-    // leaving its sign-in, which is kept apart (src/profile.ts `add_profile`).
+    // leaving its sign-in, which is kept apart (src/profile.ts `add_profile`). STUB_REPLY_PROFILE_ADD names another ending.
     const added = rest[2];
-    if (added.trim() === '' || added === 'default') answer({ code: 'usage.profile' });
+    if (process.env.STUB_REPLY_PROFILE_ADD) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_ADD));
+    else if (added.trim() === '' || added === 'default') answer({ code: 'usage.profile' });
     else {
         if (world !== null) {
             world.profiles = { ...(world.profiles ?? {}), [added]: {} };
             keepWorld();
         }
         answer({ print: { added } });
+    }
+} else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'delete' && rest.length === 5 && rest[3] === '--yes' && rest[4] === '--json') {
+    // `profile delete <name> --yes` ignores --profile (src/commands/profile.ts `handle_delete`): `default` and a name it
+    // does not hold are usage.profile, exit 2; else the profile goes, the current profile is reset to `default` where it
+    // was that one, and its sign-in goes too. STUB_REPLY_PROFILE_DELETE names another ending.
+    const deleted = rest[2];
+    if (process.env.STUB_REPLY_PROFILE_DELETE) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_DELETE));
+    else if (deleted === 'default') answer({ code: 'usage.profile', error: { title: 'The built-in default profile can\'t be deleted.' } });
+    else if (!listedProfiles.available.includes(deleted)) answer({ code: 'usage.profile', error: { title: `Unknown profile '${deleted}'.`, hint: 'List profiles with `profile list`.' } });
+    else if (world === null) answer({ print: { deleted, credential_removed: false, current_reset: false } });
+    else {
+        const { [deleted]: _gone, ...profiles } = world.profiles ?? {};
+        const { [deleted]: credential, ...credentials } = world.credentials ?? {};
+        const reset = listedProfiles.current === deleted;
+        Object.assign(world, { profiles, credentials, ...(reset ? { current: 'default' } : {}) });
+        keepWorld();
+        answer({ print: { deleted, credential_removed: credential !== undefined, current_reset: reset } });
     }
 } else if (name === 'reply' && rest[0] !== 'skills' && !declared(inUse())) {
     // Every other command resolves its profile first, and an undeclared one but `default` is a usage error before
@@ -188,6 +206,17 @@ if (process.env.STUB_HANG === name) {
     // Without the file, a sign-in can act in team 3 alone, which its profile pins.
     if (process.env.STUB_REPLY_SIGNED_IN === 'yes') answer({ print: { current_team_id: 3, teams: [{ team_id: 3, team_name: 'Made-up Three' }] } });
     else answer({ code: 'auth.required', exit: 2 });
+} else if (name === 'reply' && said === 'auth logout --json') {
+    // The sign-in kept under the profile the run names goes, and nothing else, with no call to Reply; exit 0 whether there
+    // was one or not (src/commands/auth.ts `handle_logout`). STUB_REPLY_AUTH_LOGOUT names another ending.
+    if (process.env.STUB_REPLY_AUTH_LOGOUT) answer(JSON.parse(process.env.STUB_REPLY_AUTH_LOGOUT));
+    else if (world === null) answer({ print: { logged_out: true } });
+    else {
+        const { [inUse()]: credential, ...credentials } = world.credentials ?? {};
+        world.credentials = credentials;
+        keepWorld();
+        answer({ print: { logged_out: credential !== undefined } });
+    }
 } else if (name === 'reply' && said === 'auth login --json' && process.env.STUB_REPLY_LOGIN) {
     // A browser's sign-in that ended as STUB_REPLY_LOGIN names it, the way it was printed: {"exit", "stderr"?}.
     answer(JSON.parse(process.env.STUB_REPLY_LOGIN));

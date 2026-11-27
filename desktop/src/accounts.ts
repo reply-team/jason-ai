@@ -12,6 +12,9 @@
  * default route's profile, where that route is the plugin `reply`'s, and no account otherwise.
  */
 
+import { box, capped, type ReplyBox } from './reply-accounts.ts';
+import { profileLimit } from './setup-model.ts';
+
 /** An account as a member of the seam names it: the provider, and the profile's name exactly. */
 export interface AccountRef {
     type: 'reply';
@@ -166,6 +169,8 @@ export interface Listing {
     /** In the order the page shows them: the default first, then the CLI's own order, then the profiles only a route names. */
     accounts: AccountRef[];
     default: AccountRef | null;
+    /** The profiles a route names, at any level; null where the routes were not read. */
+    routed: Set<string> | null;
 }
 
 /**
@@ -174,11 +179,12 @@ export interface Listing {
  */
 export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
     const unnamed = profiles.current;
-    const names = [...new Set([...profiles.available, ...(routes?.reply ?? []).map((profile) => profile ?? unnamed)])];
+    const routed = routes === null ? null : new Set(routes.reply.map((profile) => profile ?? unnamed));
+    const names = [...new Set([...profiles.available, ...(routed ?? [])])];
     const fallback = routes === null ? null : defaultAccount(routes, unnamed);
     const first = fallback === null ? -1 : names.indexOf(fallback.name);
     const ordered = first < 0 ? names : [names[first]!, ...names.filter((_, at) => at !== first)];
-    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback };
+    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback, routed };
 }
 
 /**
@@ -213,7 +219,36 @@ export const accountSentences = {
     teamNotOffered: 'That is not a team this Reply account was offered.',
     teamNotChosen: 'The team was not chosen.',
     teamPinned: 'This Reply account is bound to its team already, and Jason Desktop does not change it, so nothing was changed.',
+    badName: `Name the Reply account in one line of up to ${profileLimit} characters that does not begin with a hyphen.`,
+    nameTaken: 'The Reply CLI holds a Reply account of that name already; choose another name.',
+    profilesUnreadAtAdd: 'The Reply accounts could not be read, so none was added.',
+    notAdded: 'The Reply CLI did not make the profile.',
+    notSignedOut: 'The Reply CLI did not sign it out.',
+    notRemoved: 'The Reply CLI did not remove the profile.',
+    defaultKept: 'The Reply CLI’s own profile default is always there, so nothing was removed.',
 } as const;
+
+/**
+ * Why a name asked for a new Reply account is refused before anything runs, or null: one line of text, not empty after
+ * trimming, of no more characters than a route's binding holds, not beginning with a hyphen, which the Reply CLI would read
+ * as an option, and not `default`, which every Reply CLI holds. A name the Reply CLI holds is refused after it is asked.
+ */
+export function accountNameProblem(value: unknown): string | null {
+    if (typeof value !== 'string' || value.trim() === '' || value.length > profileLimit || value.startsWith('-') || /[\p{Cc}\p{Zl}\p{Zp}]/u.test(value)) return accountSentences.badName;
+    return value === 'default' ? accountSentences.nameTaken : null;
+}
+
+/**
+ * The box Sign out and Remove ask in, naming the Reply account in typographic quotes: that the act is made in the Reply CLI
+ * itself, so `reply` in a terminal loses the sign-in or the profile too, and, where a route names the account, that
+ * campaigns sending through it stop.
+ */
+export function accountBox(act: 'signOut' | 'remove', name: string, routed: boolean): ReplyBox {
+    const named = `the Reply account “${capped(name)}”`;
+    return act === 'signOut'
+        ? box('question', `Sign out of ${named}?`, `It is signed out in the Reply CLI itself, so reply in a terminal loses this sign-in too.${routed ? ' Campaigns sending through it stop until it is signed in again.' : ''}`, 'Sign out')
+        : box('warning', `Remove ${named}?`, `Its profile and its sign-in are deleted in the Reply CLI itself, so reply in a terminal loses them too.${routed ? ' Campaigns sending through it stop, and its card stays, not signed in.' : ''}`, 'Remove');
+}
 
 /**
  * A refusal in one shape: the desktop's sentence, then the reason of the program that refused as a sentence of its own,

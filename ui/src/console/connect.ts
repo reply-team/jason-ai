@@ -107,6 +107,8 @@ interface AccountView {
     /** How the page names it to the desktop; null for an earlier desktop's one account, whose name it cannot give. */
     ref: DesktopAccountRef | null;
     isDefault: boolean;
+    /** Whether the Reply CLI holds its profile; false for one only a route names. */
+    held: boolean;
     signedIn: boolean;
     user: string | null;
     /** The team its sign-in is bound to; null where it is bound to none, or the desktop does not say. */
@@ -138,6 +140,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
         return state.accounts!.accounts.map((each) => ({
             ref: { type: each.type, name: each.name },
             isDefault: each.default === true,
+            held: each.held === true,
             signedIn: each.signedIn === true,
             user: each.user,
             team: each.team ?? null,
@@ -156,6 +159,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
         {
             ref: null,
             isDefault: false,
+            held: true,
             signedIn: reply.signedIn,
             user: reply.user,
             team: null,
@@ -209,6 +213,15 @@ const makesDefault = (): boolean => mounted() && typeof earlier(here().desktop).
 
 /** Whether the desktop can pin a team on a profile, which one of an earlier version cannot: asked before a choice is offered. */
 const choosesTeam = (): boolean => mounted() && typeof earlier(here().desktop).setup?.chooseTeam === 'function';
+
+/** Whether the desktop has Add Reply account, Sign out and Remove, which one of an earlier version does not. */
+const addsAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.addAccount === 'function';
+const signsOut = (): boolean => mounted() && typeof earlier(here().desktop).setup?.signOut === 'function';
+const removesAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.removeAccount === 'function';
+
+/** Whether the Reply CLI is found, at the version the acts need and of a version that was read. */
+const usableCli = (reply: DesktopSetup['reply']): boolean =>
+    reply.cli.found && typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
 
 /** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
@@ -371,6 +384,7 @@ export function resetDialogs(): void {
     signedOut.value = [];
     copying.value = false;
     cardRefused.value = null;
+    addingAccount.value = { asking: false, refused: null };
 }
 
 /** The card's account, and the sender of it a control names by channel and id, as the last read listed them. */
@@ -621,6 +635,70 @@ defineReal('connect.makeDefault', ([place]) => {
         false,
         'Making it the default…',
     );
+});
+
+// Sign out and Remove, said on the card as they ended. Each asks the person in the desktop's own box first, so meanwhile the
+// card says what it waits on.
+defineReal('connect.signOut', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !signsOut()) return;
+    const ref = view.ref;
+    void ask(
+        place,
+        'Sign out',
+        null,
+        () => here().desktop.setup.signOut(ref),
+        () => null,
+        false,
+        'Signing it out…',
+    );
+});
+
+defineReal('connect.removeAccount', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !removesAccount()) return;
+    const ref = view.ref;
+    void ask(
+        place,
+        'Remove',
+        null,
+        () => here().desktop.setup.removeAccount(ref),
+        () => null,
+        false,
+        'Removing it…',
+    );
+});
+
+/** Where the name of a new Reply account is kept until the desktop takes it. */
+const accountNameField = 'reply-account-name';
+
+/** Add Reply account's ask: whether one is going, and what the desktop refused the last one with, said under its field. */
+const addingAccount = signal<{ asking: boolean; refused: string | null }>({ asking: false, refused: null });
+
+// Add Reply account: the name typed, trimmed, asked of the desktop; its card is the next read's, and a refusal is said under
+// the field, which keeps the name to be corrected.
+defineReal('connect.addReplyAccount', () => {
+    const name = typedOf(accountNameField);
+    if (name === '' || !addsAccount() || addingAccount.value.asking) return;
+    addingAccount.value = { asking: true, refused: null };
+    void here()
+        .desktop.setup.addAccount(name)
+        .catch((error: unknown): DesktopReplyRefusal => ({
+            refused: messageOf(error),
+            code: null,
+            offer: null,
+            reread: false,
+        }))
+        .then((answer) => {
+            if ('refused' in answer) {
+                addingAccount.value = { asking: false, refused: answer.refused };
+                if (answer.reread) void reload();
+                return;
+            }
+            forget(accountNameField);
+            addingAccount.value = { asking: false, refused: null };
+            void reload();
+        });
 });
 
 define('connect.closeLink', () => closeDialog());
@@ -1477,6 +1555,45 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
 }
 
 /**
+ * The acts on the card's account as a whole, beside its name: Sign in with Reply while it is not signed in, Sign out once it
+ * is, and Remove where the Reply CLI holds its profile and it is not the Reply CLI's own `default`; each only where the
+ * desktop has it.
+ */
+function accountActs(view: AccountView, place: Place, real: Html | null): Html[] {
+    const signIn = signInButton(view, place, real);
+    const acts = signIn === null ? [] : [signIn];
+    if (view.ref === null) return acts;
+    if (view.signedIn && signsOut())
+        acts.push(html`<button class="btn" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>`);
+    if (view.held && view.ref.name !== 'default' && removesAccount())
+        acts.push(
+            html`<button class="btn" type="button" ${real} ${act('connect.removeAccount', place)}>Remove</button>`,
+        );
+    return acts;
+}
+
+/** Add Reply account, where the accounts were read: a name asked, and the desktop's refusal of it under the field. */
+function addAccountView(state: DesktopSetup, real: Html | null): Html | null {
+    if (
+        !addsAccount() ||
+        !accountsSent(state) ||
+        listOf(state.accounts!.notRead).includes('profiles') ||
+        !usableCli(state.reply)
+    )
+        return null;
+    const { asking, refused } = addingAccount.value;
+    return html`<div class="reply-add">
+        <div class="setrow">
+            ${field(accountNameField, 'Name for a new Reply account', 'text')}
+            <button class="btn sm" type="button" ${asking ? html`disabled` : real} ${act('connect.addReplyAccount')}>
+                Add Reply account
+            </button>
+        </div>
+        ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
+    </div>`;
+}
+
+/**
  * "Sign in with Reply" for the card's account, only while it is not signed in, since another login is another Reply
  * account: the card's first act where its sign-in was read, a plain one where it could not be.
  */
@@ -1511,7 +1628,7 @@ function replyCard(
         <div class="bd">
             <div class="reply-top">
                 <div class="grow">${replyHead()}</div>
-                ${view === null ? null : signInButton(view, place, real)}
+                ${view === null ? null : accountActs(view, place, real)}
             </div>
             ${notInDemo()}
             ${notes && setupBusy.value ? html`<div class="note" role="status"><span class="spin"></span>${setupBusy.value}</div>` : null}
@@ -1532,7 +1649,8 @@ function replySection(state: DesktopSetup, busy: Html | null): Html {
             ${notInDemo()}
             ${setupBusy.value ? html`<div class="note" role="status"><span class="spin"></span>${setupBusy.value}</div>` : null}
             ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
-            ${cliLines(state.reply, realBusy(busy))} ${accountsLines(state)} ${manageInReply()}
+            ${cliLines(state.reply, realBusy(busy))} ${accountsLines(state)} ${addAccountView(state, realBusy(busy))}
+            ${manageInReply()}
         </div>
     </div>`;
 }
@@ -1548,7 +1666,7 @@ function accountCard(state: DesktopSetup, view: AccountView, busy: Html | null):
                 <div class="grow">
                     ${accountHead(state, view, place, real) ?? html`<div class="acct-head"><span class="acct-type">Reply</span></div>`}
                 </div>
-                ${signInButton(view, place, real)}
+                ${accountActs(view, place, real)}
             </div>
             ${accountBody(state.reply, view, busy, place)}
         </div>
@@ -1727,6 +1845,7 @@ export function accountsReplyGone(): void {
     if (ours(naming.peek())) naming.value = null;
     if (ours(limiting.peek()?.place)) limiting.value = null;
     if (ours(cardRefused.peek()?.place)) cardRefused.value = null;
+    addingAccount.value = { ...addingAccount.peek(), refused: null };
 }
 
 /**

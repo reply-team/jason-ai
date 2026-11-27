@@ -631,6 +631,85 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(page)).not.toContain('Error invoking remote method');
     });
 
+    it('offers Add Reply account in the Reply section wherever the accounts were read, asks the desktop under the name typed, and says its refusal under the field', async () => {
+        const desktop = inDesktop(three);
+        const taken = 'The Reply CLI holds a Reply account of that name already; choose another name.';
+        desktop.actAnswers.set('setup.addAccount', [{ ...refusal(taken), reread: true }, { done: true }]);
+        const page = await openAccounts('.reply-account');
+        const adding = () => section(page).querySelector<HTMLElement>('.reply-add')!;
+        const field = () => within(adding()).getByRole('textbox', { name: 'Name for a new Reply account' });
+        const reads = () => desktop.calls.filter((call) => call.name === 'setup.status').length;
+        fireEvent.click(within(adding()).getByRole('button', { name: 'Add Reply account' }));
+        fireEvent.input(field(), { target: { value: '  outbound ' } });
+        fireEvent.click(within(adding()).getByRole('button', { name: 'Add Reply account' }));
+        await waitFor(() => expect(words(within(adding()).getByRole('alert'))).toBe(taken));
+        expect(within(page).getAllByRole('alert')).toHaveLength(1);
+        const before = reads();
+        fireEvent.input(field(), { target: { value: 'Made-up Ops' } });
+        fireEvent.click(within(adding()).getByRole('button', { name: 'Add Reply account' }));
+        await waitFor(() => expect(within(adding()).queryByRole('alert')).toBeNull());
+        await waitFor(() => expect(reads()).toBeGreaterThan(before));
+        expect((field() as HTMLInputElement).value).toBe('');
+        // Nothing is asked for an empty field; the name typed is asked for trimmed.
+        expect(desktop.calls.filter((call) => call.name === 'setup.addAccount').map((call) => call.args)).toEqual([
+            ['outbound'],
+            ['Made-up Ops'],
+        ]);
+        cleanup();
+        // Not where the accounts were not read, nor below the Reply CLI the acts need, nor from a desktop without it.
+        inDesktop(withReplyAccounts(setupFound, [], { notRead: ['profiles'] }));
+        expect((await openAccounts('.reply-section')).querySelector('.reply-add')).toBeNull();
+        cleanup();
+        const older = chatDesktop(three);
+        delete (older.setup as Partial<typeof older.setup>).addAccount;
+        inDesktop(three, older);
+        expect((await openAccounts('.reply-account')).querySelector('.reply-add')).toBeNull();
+    });
+
+    it('offers Sign out on a signed-in card and Remove on a card whose profile the Reply CLI holds, never default’s, asks the desktop as that card’s account, and says on its card how it ended', async () => {
+        const four = withReplyAccounts(setupFound, [...three.accounts!.accounts, replyAccount('spare')]);
+        const desktop = inDesktop(four);
+        const notRemoved = 'The Reply CLI did not remove the profile. Could not write the configuration.';
+        desktop.actAnswers.set('setup.removeAccount', [{ ...refusal(notRemoved), reread: true }, { done: true }]);
+        const page = await openAccounts('.reply-account');
+        const card = (name: string) => cardOf(page, `Reply account ${name}`);
+        const topActs = (name: string) => Array.from(card(name).querySelectorAll('.reply-top button'), words);
+        expect([topActs('default'), topActs('outbound'), topActs('routed-only'), topActs('spare')]).toEqual([
+            ['Sign out'],
+            ['Sign out', 'Remove'],
+            ['Sign in with Reply'],
+            ['Sign in with Reply', 'Remove'],
+        ]);
+        const outbound = { type: 'reply', name: 'outbound' };
+        fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Sign out' }));
+        await waitFor(() => expect(words(within(card('outbound')).getByRole('dialog'))).toMatch(/Done\./));
+        fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(words(within(card('outbound')).getByRole('alert'))).toBe(notRemoved));
+        fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(words(within(card('outbound')).getByRole('dialog'))).toMatch(/Done\./));
+        expect(within(card('default')).queryByRole('dialog')).toBeNull();
+        expect(
+            desktop.calls
+                .filter((call) => call.name === 'setup.signOut' || call.name === 'setup.removeAccount')
+                .map((call) => [call.name, ...call.args]),
+        ).toEqual([
+            ['setup.signOut', outbound],
+            ['setup.removeAccount', outbound],
+            ['setup.removeAccount', outbound],
+        ]);
+        cleanup();
+        // A desktop of an earlier version, without them, is asked for neither.
+        const older = chatDesktop(four);
+        delete (older.setup as Partial<typeof older.setup>).signOut;
+        delete (older.setup as Partial<typeof older.setup>).removeAccount;
+        inDesktop(four, older);
+        const drawn = await openAccounts('.reply-account');
+        expect(Array.from(drawn.querySelectorAll('.reply-top button'), words)).toEqual([
+            'Sign in with Reply',
+            'Sign in with Reply',
+        ]);
+    });
+
     it('asks a desktop that lacks Make default for none: no card offers it, even with no default set', async () => {
         const none = withReplyAccounts(
             setupFound,

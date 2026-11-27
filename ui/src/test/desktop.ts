@@ -782,6 +782,9 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             replyDelete: acting('setup.replyDelete', done),
             makeDefault: acting('setup.makeDefault', done),
             chooseTeam: acting('setup.chooseTeam', done),
+            addAccount: acting('setup.addAccount', done),
+            signOut: acting('setup.signOut', done),
+            removeAccount: acting('setup.removeAccount', done),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

@@ -100,6 +100,9 @@ const desktop = {
             account === undefined ? ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options, account),
         makeDefault: (account: unknown) => ipcRenderer.invoke('jason:setup.makeDefault', account),
         chooseTeam: (account: unknown, teamId: string) => ipcRenderer.invoke('jason:setup.chooseTeam', account, teamId),
+        addAccount: (name: string) => ipcRenderer.invoke('jason:setup.addAccount', name),
+        signOut: (account: unknown) => ipcRenderer.invoke('jason:setup.signOut', account),
+        removeAccount: (account: unknown) => ipcRenderer.invoke('jason:setup.removeAccount', account),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

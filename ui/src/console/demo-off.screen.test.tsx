@@ -8,7 +8,14 @@ import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
+import {
+    chatDesktop,
+    replyAccount,
+    setupFound,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -26,11 +33,12 @@ async function renderAt(
     kept: 'live' | 'demo',
     panel: 'Connect' | 'Accounts',
     reply: Partial<DesktopSetup['reply']> = {},
+    status: DesktopSetup = setupFound,
 ): Promise<StubDesktop> {
     const desktop = chatDesktop({
-        ...setupFound,
-        reply: { ...setupFound.reply, ...reply },
-        plugins: setupFound.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
+        ...status,
+        reply: { ...status.reply, ...reply },
+        plugins: status.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
     });
     desktop.modeKept = kept;
     await loadMode(desktop);
@@ -127,6 +135,41 @@ describe('The Connect panel in the demo', () => {
         expect(
             [...desktop.calls, ...signedOut.calls].filter(
                 (each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply',
+            ),
+        ).toEqual([]);
+    });
+
+    it('turns off Add Reply account, Sign out and Remove on the Accounts page, and none of them runs', async () => {
+        const mailbox = {
+            id: 'm_1',
+            channel: 'email',
+            name: 'Sales inbox',
+            address: 'sales@example.test',
+            status: 'connected',
+        };
+        const accounts = withReplyAccounts(setupFound, [
+            replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test', senders: [mailbox] }),
+            replyAccount('spare'),
+        ]);
+        const desktop = await renderAt('demo', 'Accounts', {}, accounts);
+        const page = document.querySelector<HTMLElement>('.reply-accounts')!;
+        const card = (name: string) => within(page).getByRole('region', { name: `Reply account ${name}` });
+        fireEvent.input(within(page).getByRole('textbox', { name: 'Name for a new Reply account' }), {
+            target: { value: 'Made-up Ops' },
+        });
+        const controls = [
+            button(page, 'Add Reply account'),
+            button(card('default'), 'Sign out'),
+            button(card('spare'), 'Remove'),
+        ];
+        for (const each of controls) {
+            expect(each.disabled).toBe(true);
+            each.disabled = false;
+            fireEvent.click(each);
+        }
+        expect(
+            desktop.calls.filter((each) =>
+                ['setup.addAccount', 'setup.signOut', 'setup.removeAccount'].includes(each.name),
             ),
         ).toEqual([]);
     });
