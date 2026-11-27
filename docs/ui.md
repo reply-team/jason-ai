@@ -563,12 +563,12 @@ knows of a version it has not installed ([desktop.md](desktop.md#updating)); the
 ## Accounts
 
 One screen for what you have connected. **Provider** is the Reply section and one card per Reply account, each one
-profile of the Reply CLI, the default marked ([desktop.md](desktop.md), Reply), drawn by the same code as the one card
-of the desktop's Connect panel and acting through the same acts of the desktop: adding an account and reconnecting one
-go straight to the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit, deleting and
-**Make default** where a default is set each ask in a box of the desktop's own; **Choose**, on a card whose sign-in
-belongs to more than one Reply team and whose profile pins none, pins that team with no box; a connection link is
-opened or copied by the desktop and never shown in or kept by the page.
+profile of the Reply CLI, the default marked ([desktop.md](desktop.md#connect), Reply). The cards are drawn by the same
+code as the one Reply card of the desktop's Connect panel and act through the same acts of the desktop. Adding a
+mailbox or a LinkedIn account and reconnecting one go straight to the provider's link, with no box, and the desktop
+opens or copies that link, which the page never shows or keeps. Pausing and resuming, unblocking, changing a daily limit
+and deleting each ask in a box of the desktop's own. **Make default**, on every card while Jason has no default, and
+**Choose**, on a card whose sign-in belongs to more than one Reply team and whose profile pins none, act with no box.
 The page writes no setting and adds no provider. The notification channels are not
 here: they are the **Notifications** section of Settings.
 

@@ -24,14 +24,17 @@ that a person needs.
 | Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started, no folder of an installation made and no host name resolved |
 | Load the window | the link `jason ui pair` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
-| Read the Reply accounts, one per profile (`Setup.status`, `src/accounts.ts`) | `jason route list` and `reply profile list --json`: every profile the Reply CLI holds and every profile a route to `reply` names, at any level, one account each, by its profile alone; a route that names no profile is the profile the installation's settings remember at `Plugins:Config:reply:profile`, else `profile list`'s `current`; the campaigns whose own route to `reply` names a team beside its profile counted, each once, to be said; for each profile the CLI holds, `reply --profile <name> auth status --json` and, signed in, `account list` and `account pending` for each channel, run the same way; where Reply refuses a channel for want of a team (`access.denied` carrying `TEAM_REQUIRED`), no more of that account's channels, and `reply --profile <name> team list --json` once, its teams offered; nothing for a profile only a route names; the default, the account of the global default's profile, found the same way; none of it with a Reply CLI that is not found, below the minimum or of a version not read; a listing asked while one is read is answered by that read, unless an act or a Reply verb ended, or a change was announced (the models Codex offers and Full access's bypass among them), since it began |
-| Sign a Reply account in, on its card's ask | `reply profile add <name> --json` first, only where `reply profile list --json`, asked again, does not hold the profile; `reply --profile <name> auth login --json`, or `--with-token` with the key on standard input, a refusal said as the desktop's sentence and the detail, else the title, of the error the Reply CLI prints, never its hint; then what `jason plugin list` shows missing: `jason plugin install reply` where it lists no Reply plugin, the grant written where it does not hold `reply`, and `jason plugin reload` after either or where the plugin is listed and not valid; and where `jason route list` names no global default, that account made the default as Make default makes it, with no box and the reason of a default made at a sign-in |
-| Remember the profile a Reply route that names none acts as (`Setup.rememberReplyProfile` at a start in Live, once the runtime is up; and when a sign-in or Make default places Jason's Reply plugin) | where `jason plugin list` lists the Reply plugin and the installation's settings hold nothing at `Plugins:Config:reply:profile`: `reply profile list --json`'s `current` written there, then `jason plugin reload` (at a placing, the placing's own load); a setting there is never changed and no route is rewritten; a file the desktop cannot parse, a profile list not read or a reload refused leave it unrecorded, the file as it was, logged and said nowhere |
-| Make a Reply account the default (Make default) | `jason route list`; where a default is set, the person's yes in the main process's own box, which names it and the account that would be; `jason route list` again, and nothing more where the default is no longer the one the box named; what is missing of the plugin and its grant placed, or the plugin loaded again, as at a sign-in; `jason route set --global --plugin reply --binding <its profile, and derive_first_name where the Reply default before it held one> --actor human:<this account's name> --reason <the desktop's fixed reason for a click>` |
+| Read the Reply accounts, one per profile (`Setup.status`, `src/accounts.ts`) | `jason route list` and `reply profile list --json`: every profile the Reply CLI holds and every profile a route to `reply` names, at any level, one account each, by its profile alone; a route that names no profile is `profile list`'s `current`, at each read; for each profile the CLI holds, `reply --profile <name> auth status --json` and, signed in, `account list` and `account pending` for each channel, run the same way; where Reply refuses a channel for want of a team (`access.denied` carrying `TEAM_REQUIRED`), no more of that account's channels, and `reply --profile <name> team list --json` once, its teams offered; nothing for a profile only a route names; the default, the account of the global default's profile, found the same way; none of it with a Reply CLI that is not found, below the minimum or of a version not read |
+| Sign a Reply account in, on its card's ask | `reply profile add <name> --json` first, only where `reply profile list --json`, asked again, does not hold the profile; `reply --profile <name> auth login --json`, or `--with-token` with the key on standard input, a refusal said as the desktop's sentence and the detail, else the title, of the error the Reply CLI prints, never its hint; then what `jason plugin list` shows missing: `jason plugin install reply` where it lists no Reply plugin, the grant written where it does not hold `reply`, and `jason plugin reload` after either or where the plugin is listed and not valid, a placing that fails said as the desktop's sentence and the refusing program's reason; and where `jason route list` names no global default, that account made the default as Make default makes it, with the reason of a default made at a sign-in |
+| Make a Reply account the default (Make default), offered on every card only while no global default is set | in the setup's queue, `jason route list`, and nothing more where it names a default; what is missing of the plugin and its grant placed, or the plugin loaded again, as at a sign-in, a refusal said the same way; `jason route set --global --plugin reply --binding <its profile alone> --actor human:<this account's name> --reason <the desktop's fixed reason for a click>` |
 | Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and its `default_execution_profile` names none, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), the id it answered added to the mark, then `jason profile list --include-disabled --limit 1` and, where its `default_execution_profile` still names none, `jason profile set-default claude-code --reason <the desktop's fixed reason>`; a look or a naming the runtime does not answer is left to the next turn, a naming it refuses (or took and did not answer in time) to the next start, which lists first; where it lists one profile alone with the mark's id, the look and the naming alone; a mark with no id or another is let go (`src/roles-moments.ts` wires the two moments) |
 | Say which host the roles run on | `jason profile list --include-disabled --limit 1` for the default in force (`default_execution_profile`), then `jason profile get <that name>`: its host and whether it is enabled; said under Claude Code or Codex only where found and at its floor |
-| Act on a Reply account, on the card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`), run with the card's `--profile` before it: `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json`; an act the page asks with no account, as a page of an earlier version does, is the default account's |
+| Act on a sender of a Reply account, a mailbox or a LinkedIn account, on its card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`), run with the card's `--profile` before it: `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json`; an act the page asks with no account, as a page of an earlier version does, is the default account's |
 | Choose a team for a Reply account whose sign-in belongs to more than one, on the card's ask | `reply --profile <name> team use <id> --json`, only for a team the account's last read offered, with no box; a refusal said as the desktop's sentence and the detail, else the title, of the error the Reply CLI prints |
+
+A listing of `Setup.status` asked while one is being read is answered by that read, unless a change ended since it
+began: an act of the setup's queue, an act on a Reply account, or a change the desktop announces (the models Codex
+offers and Full access's bypass among them).
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
 and names `jason update`. A `feed` in the desktop's settings is passed to every verb that takes `--feed`.
@@ -134,8 +137,10 @@ servers, providers and profiles with it; it still sets the cached search and `fe
 (`codexFullAccessSettings`). One on a provider's key reads the config.toml of the desktop's own `CODEX_HOME`
 (`keyedFolder`) in its place, so none of the person's, as a keyed Claude Code turn loads none of theirs.
 
-A Reply card's acts are the Reply CLI's `account` verbs and nothing else, run as that card's account; the card offers them only from the Reply CLI
-that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. An installed one
+A Reply account's card acts on its senders by the Reply CLI's `account` verbs, run as that card's account, and on the
+account by its sign-in, **Choose** (`reply team use`) and **Make default** (`jason route set --global`). The cards offer
+them only from the Reply CLI that has them (`replyMinimumVersion`); below it the Reply section says to update the Reply
+CLI and no account is drawn. An installed one
 below it is updated once a Live start, in the queue the clicks wait in and by their one npm line
 (`Setup.updateReplyAtStart`, `src/reply-update.ts`), after the machine set-up's runs have ended. `Update:CheckEnabled`
 is read for it by `updateSwitch`, in the installation's settings file and in this process's own environment, and `false`
@@ -155,8 +160,9 @@ lock's one way out, or, where the page asked for a copy and the link is one that
 writes it to the clipboard itself. Nothing else of the desktop holds it. The page learns that a link was opened or
 copied, when it stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put
 into an error. A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the
-main process that names the account as the list does (a connect and a reconnect make a link and ask nothing), and so
-does Make default where a default is set, naming it and the account that would be, with Cancel focused; no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and
+main process that names the sender as the list does (a connect and a reconnect make a link and ask nothing, and so does
+Make default). Cancel is focused in every box; no window to ask on is a no, a box whose window is hidden or closed is
+closed and read as a no, and
 `delete` passes `--yes` only after the yes. One offer opens only after the code that calls for it, for the ask it
 answered and behind a box of its own: a forced delete (`--force`) after `linkedin.account_in_use`. A Reply that makes no
 one-mailbox link answers `email_link.not_available`, which is the plain refusal and offers nothing else. A refusal is
@@ -226,12 +232,12 @@ A Connect card also writes, into `<data>/config/settings.json`, the keys of the 
 `Plugins:Config:<id>`, `Plugins:Grants:<id>:Http` and `Notifications:Plugins:<id>:Binding`, each section made only when
 a value is written into it. The `Http` grant is written only where there is none, or where the server or receiver it
 derives from changed, so a grant you wrote yourself (a server of your own for ntfy, say) outlives a new token or topic.
-A Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`, only where the grant `jason plugin list` answers does not
-already hold `reply`, so one you widened is kept), as the golden path writes it by hand. The global default, `Routes:Default`, it has
-the runtime write, through the runtime's one writer of this file (`jason route set --global`, which checks the route
-first, puts the file back on a refusal and journals the person who made it): at the first sign-in that finds no global
-default at all, naming the account signed in, and at Make default, which replaces the default there was after the
-person's yes. A default is never replaced without that click. No other `Routes` key is ever written: every other route
+A Reply account's card writes one key, `Plugins:Grants:reply:Exec` (`["reply"]`, only where the grant `jason plugin
+list` answers does not already hold `reply`, so one you widened is kept), as the golden path writes it by hand. The
+global default, `Routes:Default`, it has the runtime write, through the runtime's one writer of this file (`jason route
+set --global`, which checks the route first, puts the file back on a refusal and journals the person who made it): at
+the first sign-in that finds no global default at all, naming the account signed in, and at Make default, only while
+no global default is set. The desktop never replaces a default. No other `Routes` key is ever written: every other route
 is `jason route set`'s. Every other key is kept as it was. `Roles:DefaultExecutionProfile` is not the
 desktop's to write: it asks the runtime to name the default with `jason profile set-default`, which the runtime writes
 into this file itself, only where the runtime answers no default in force and only after the profile it names was made
@@ -684,9 +690,10 @@ and, where a Full access turn could follow in this run, that only a Full access 
   the desktop keeps no record of, an installation's first start of this version included, is emptied and deployed
   afresh at the start, and the Reply skills' record goes with it, so they are copied in again by the step after. A start
   whose pass over the top cannot finish deploys nothing into the chat folder, the Reply skills included, and marks
-  nothing as deployed: the next start tries again, and a turn refuses on the same folder anyway. While no record of the Reply skills is kept, a start where
-  `reply --profile <name> auth status` says signed in of any profile `reply profile list` holds, each asked by its name so
-  the profile the Reply CLI is set to decides nothing, deploys them by the sign-in's own routine and records them, in the same step as Jason's skills; a
+  nothing as deployed: the next start tries again, and a turn refuses on the same folder anyway. While no record of the
+  Reply skills is kept, a start that finds any profile `reply profile list` holds signed in, each asked by its name
+  (`reply --profile <name> auth status`) so the profile the Reply CLI is set to decides nothing, deploys them by the
+  sign-in's own routine and records them, in the same step as Jason's skills; a
   `reply-*` folder that stood there is removed and replaced by the Reply CLI's copy, never kept, and an install that
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
@@ -1008,8 +1015,8 @@ What the desktop tells Reply about itself is one label in the User-Agent of repl
 the `reply` the desktop starts and of every agent host's turn in place of any `REPLY_CLIENT` the desktop inherited, and
 neither set nor passed on there by a build that carries no bundle version (`src/reply-client.ts`). The `reply` the
 desktop starts is not handed `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, in any letter case:
-each run names its account with `--profile` alone, as Jason's Reply plugin's runs do, so the account a card
-shows is the one Jason's work acts as. `XDG_CONFIG_HOME` and the home are passed on as they are: Jason takes the
+each run names its account by its profile alone, which is how Jason's Reply plugin runs a route that names no team, so
+the account a card shows is the one such a route acts as. `XDG_CONFIG_HOME` and the home are passed on as they are: Jason takes the
 computer to have one Reply CLI configuration.
 
 ## Updating and taking it off

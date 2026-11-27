@@ -174,7 +174,7 @@ ever run. On a running installation, `jason route set --global` writes the same 
 once ([routing.md](routing.md), §3). A campaign override, when you want one, is written with the CLI:
 
 ```
-jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply --actor human:ada
+jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply --binding '{"profile":"default"}' --actor human:ada
 ```
 
 ## 5. Activate both with one explicit act

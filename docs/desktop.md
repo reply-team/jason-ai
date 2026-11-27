@@ -318,7 +318,9 @@ directory.
 A Connect card writes, into `<data>/config/settings.json`, the keys of the plugin it configures and no other, as a person
 would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notifications:Plugins:<id>:Binding`), and then runs
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
-lists each key and each card's grant. The desktop writes no key there of its own: `Roles:DefaultExecutionProfile` is
+lists each key and each card's grant. A Reply account's card writes one key, Jason's Reply plugin's grant of the
+`reply` program (`Plugins:Grants:reply:Exec`), where it does not hold `reply`, and has the runtime write the global
+default (`jason route set --global`). The desktop writes no key there of its own: `Roles:DefaultExecutionProfile` is
 written by the runtime, which the desktop asks to name the default ([What it does at a start](#what-it-does-at-a-start)).
 
 ## A plugin your routes name that cannot run
@@ -612,121 +614,119 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
   asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
   desktop's own. A chat that chose a model before keeps it.
-- **Reply.** A Reply account is one profile of the Reply CLI, and the Accounts screen draws one card for each: every
-  profile the Reply CLI holds and every profile a route to Jason's Reply plugin names, global or a campaign's, the
-  default first. A card is that profile, named exactly as the Reply CLI names it, `default` included, and nothing beside
-  it: Jason knows nothing of Reply teams. A profile works in the team the Reply CLI holds for it, so a second team is a
-  second profile, pinned to that team in the Reply CLI (`reply --profile <name> team use <id>`). Everything on a card is
-  read and done as Jason's own work does it: the Reply CLI runs with the card's `--profile` alone, and is never handed
-  `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, so neither
-  the profile a terminal's `reply` is set to nor Jason Desktop's own environment decides what a card shows. Jason keeps
-  no list of the accounts: they are read again at each look. Jason takes the computer to have one Reply CLI
-  configuration; a runtime started with another `XDG_CONFIG_HOME` than Jason Desktop's would read other profiles and
-  sign-ins than the cards show.
-  One account is the default, marked **Default**: the one the global default route names, which every campaign with no
-  route of its own sends through. A route to Jason's Reply plugin that names no profile acts as one remembered profile,
-  the Reply plugin's own setting `Plugins:Config:reply:profile` in Jason's settings, and only where none is remembered as
-  the Reply CLI's current profile; its account is that profile's. Jason Desktop writes the setting once, where the plugin
-  is in place and nothing is there: at a start in Live, or when a sign-in or Make default places the plugin. It records
-  the Reply CLI's current profile at that moment, which such a route was already using, so that a later `reply profile
-  use` in a terminal moves nothing of Jason's; it never changes the setting once it is there, and rewrites no route for
-  it, so the runtime knows every account and every running campaign as before. A campaign's route that
-  names a Reply team beside its profile still sends in that team, which no card shows, and is on its way out: the screen
-  counts such campaigns, and says to route each to a profile pinned to that team instead. **Make default** on any other card makes it the default, replacing the default there
-  was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the
-  account that would be, and changes nothing where the default changed meanwhile. The runtime writes the
-  route (`jason route set --global`, journaled as yours, with a reason that tells a click on Make default from a default
-  made at a sign-in) and refuses it, and the card says why, while a search still
-  followed or a send Reply holds for later runs on the account that is the default now, or for a profile name the
-  settings file cannot hold as written. Every other route, a campaign's own or an
-  operation's, is `jason route set`'s, and no card makes one. Nothing is installed and no route is written without your
-  click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first sign-in on a
-  card where no default is set, which makes that account the default, or at Make
-  default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
-  it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a Reply CLI
-  installed or updated outside Jason Desktop, is loaded again. A sign-in where a default is set leaves it as it is.
-  A sign-in or a key that is refused is said on the card it was asked on, in Jason Desktop's sentence and the reason the
-  Reply CLI gives; a sign-in that went through and could not place the plugin says that first, then the refusing
-  program's own words. The line goes at your next act, at a look that shows that account's sign-in changed, or when the
-  card comes to show another account.
-  A card signs its own profile in, with `reply auth login` or with a key on standard input that only the Reply CLI
-  keeps; a profile only a route names is made in the Reply CLI first (`reply profile add`), and a profile the Reply CLI
-  holds never is. A card says "configured" when the runtime accepted it, never "connected". What the desktop tells
-  Reply about itself is one label in the User-Agent of `reply`'s requests and nothing else:
-  `jason-harness/<the bundle's version>`.
-  A card lists its account's mailboxes and its LinkedIn accounts, each channel read on its own, so an account
-  without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
-  account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
-  accounts stay in every case. A channel that was read and holds no account and no link still waiting shows no line:
-  the card says what it could not read, never that a channel is empty. The list is read again when the window takes the
-  focus back, at most once in 30 seconds.
+- **Reply.** A Reply account is one profile of the Reply CLI, named exactly as the Reply CLI names it, `default`
+  included. The accounts are every profile the Reply CLI holds and every profile a route to Jason's Reply plugin names,
+  global or a campaign's; the Accounts screen draws the Reply section, then one card for each account, the default
+  first. An account has no team of its own in Jason: the team is its profile's, pinned in the Reply CLI, so a second
+  team is a second profile, pinned to that team. Everything on a card is read and done as its profile: the Reply CLI runs
+  with the card's `--profile` alone, which is how Jason's Reply plugin runs a route that names no team, and is never
+  handed `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, so neither the profile a terminal's
+  `reply` is set to nor Jason Desktop's own environment decides what a card shows. Jason keeps no list of the accounts: they are read again at each look. Jason takes the computer to
+  have one Reply CLI configuration; a runtime started with another `XDG_CONFIG_HOME` than Jason Desktop's would read
+  other profiles and sign-ins than the cards show.
+  A card signs its own profile in, with **Sign in with Reply** (`reply auth login`) or with a key on standard input that
+  only the Reply CLI keeps (**Use key**); a profile only a route names is made in the Reply CLI first (`reply profile
+  add`), and a profile the Reply CLI holds never is. A sign-in or a key that is refused is said on the card it was asked
+  on, in Jason Desktop's sentence, then the reason the Reply CLI gives. The line goes at your next act, at a look that
+  shows that account's sign-in changed, or when the card comes to show another account, as the one Reply card outside
+  the Accounts screen does when the default moves. What the desktop tells Reply about itself is one label in the
+  User-Agent of `reply`'s requests and nothing else: `jason-harness/<the bundle's version>`.
+  A signed-in card lists its account's senders, its mailboxes and its LinkedIn accounts, each channel read on its own,
+  so an account without LinkedIn still shows its email. A channel that account's plan or role does not have says so
+  ("This Reply account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the
+  other channel's accounts stay in every case. A channel that was read and holds no account and no link still waiting
+  shows no line: the card says what it could not read, never that a channel is empty. The list is read again when the
+  window takes the focus back, at most once in 30 seconds.
   A sign-in that belongs to more than one Reply team, on a profile that pins none, is one Reply will not list: its card
-  says so and shows the teams in place of its mailboxes and LinkedIn accounts, each by its name with its id beside it, from
-  the look right after a sign-in on the card or at any later look. **Choose** pins that team on the profile in the Reply
-  CLI (`reply --profile <name> team use <id>`), with no question, since nothing is lost by it, and the card then reads as
-  that team. A team already pinned is changed in a terminal (`reply team use`).
-  The same goes for what the screen reads before the lists. A sign-in it could not read is said on its card as that
-  ("The Reply sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in"
-  only where the Reply CLI answers that the profile holds no credential, or does not hold the profile, and asks for no
-  account either way. Where the Reply CLI's profiles could not be read, no card is drawn and the screen says so ("The
-  Reply accounts could not be read.") with **Check again**; where the routes could not be read, the cards stay, none is
-  marked and none offers Make default, and the screen says so ("Which account is the default could not be read.").
-  Where no default is set at all, it says that no account is the default yet and that campaigns have nothing to send
-  through until you make one the default. No card says who uses it: which account a campaign sends through is its
-  routes', which `jason route resolve` answers.
-  Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
-  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. A Reply CLI whose
-  version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**, never
-  as one below it, and the card offers no **Update** and no act. An update, and an
-  install, has the runtime read its plugins again, so the Reply plugin takes the new CLI at once; that reload, like any
-  reload of plugins, also takes up what was edited by hand since the last one: routes, grants and packages.
+  says so and shows the teams in place of its senders, each by its name with its id beside it. **Choose** pins that team
+  on the profile in the Reply CLI, with no question, since nothing is lost by it, and the card then reads as that team.
+  What could not be read is said as that, never as a state. A sign-in a card could not read is said on it ("The Reply
+  sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in" only where the
+  Reply CLI answers that the profile holds no credential, or does not hold the profile, and lists nothing either way.
+  Where the Reply CLI's profiles could not be read, no card is drawn and the Reply section says so ("The Reply accounts
+  could not be read.") with **Check again**; where the routes could not be read, the cards stay, none is marked and none
+  offers Make default, and the Reply section says so ("Which account is the default could not be read.").
+  One account is the default, marked **Default**: the one the global default route names, the route a campaign's work
+  falls back to last. Jason Desktop makes a default only where Jason has none, and never moves one: a campaign with no
+  route of its own follows the default at every step, so moving the default would move running campaigns with it, and
+  whoever means to do that does it with `jason route set --global`. Where no default is set, the first sign-in on a card
+  makes that account the default, and every card offers **Make default** until one is; a Make default that finds a
+  default set by then changes nothing and says so. The runtime writes the route (`jason route set --global`, by the
+  account's profile, journaled as yours, with a reason that tells a click on Make default from a default made at a
+  sign-in) and refuses it, and the card says why, for a profile name the settings file cannot hold as written. Nothing
+  is installed and no route is written without your click: Jason's Reply plugin, its grant of the `reply` program and
+  the first default appear at that first sign-in, or at Make default. Each places only what `jason plugin list` shows
+  missing of the plugin and its grant, so where both are there it fetches nothing and leaves the settings file to the
+  runtime; a plugin listed and not valid, as after a Reply CLI installed or updated outside Jason Desktop, is loaded
+  again. A placing that fails is said in Jason
+  Desktop's sentence, then the refusing program's reason. A sign-in where a default is set leaves it as it is, whatever
+  its plugin or binding. Where no default is set at all, the Reply section says that no account is the default yet and
+  that campaigns have nothing to send through until you make one the default. Every other route, a campaign's own or an
+  operation's, is `jason route set`'s, and no card makes one. No card on the Accounts screen, nor the one Reply card
+  outside it, says who uses an account: which account a campaign sends through is its routes', which `jason route
+  resolve` answers.
+  A route to Jason's Reply plugin that names no profile acts as whichever profile the Reply CLI is set to when it runs,
+  as the plugin runs it. Its account is that profile's at each look: where the global default is such a route, the card
+  of the Reply CLI's current profile carries the Default mark, and a `reply profile use` in a terminal moves the mark. A
+  route that names a Reply team sends in that team; the window shows it as the account of its profile, or of the current
+  profile where it names none, and nothing of the team. Both keep working as they are, and every route Jason Desktop
+  writes names its profile and no team.
+  Each act is a verb of the Reply CLI, and the cards offer them only from the Reply CLI that has them. Below that version
+  the Reply section says to update the Reply CLI and offers **Update**, where npm is there to update it with; a Reply CLI
+  whose version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**,
+  never as one below it. In both cases no account is drawn, nor where the Reply CLI is not found, since only the Reply
+  CLI can read one. An update, and an install, has the runtime read its plugins again, so the Reply plugin takes the new
+  CLI at once; that reload, like any reload of plugins, also takes up what was edited by hand since the last one:
+  routes, grants and packages.
   Jason Desktop makes that update of an installed Reply CLI by itself when it starts, in Live and never in the Demo: in
   the background, once the runtime is up and the machine set-up has ended, with the npm line Update runs, where the
   version could be read and is below the one Jason needs and npm is there. It runs only while no plugin that runs the
   Reply CLI is at work: where the runtime holds one as valid, Reply's or another, or does not say, nothing is run and no
   try is used up. It tries once for each version Jason comes to need; after that the click is yours, and it is never
-  held back. The card says what came of it, in that run of the application only: that it was updated, that it could not
+  held back.
+  The Reply section says what came of it, in that run of the application only: that it was updated, that it could not
   be, with one line of what npm printed, or that the one in use is still the old one, which was installed another way
-  and is updated that way. Where the Reply CLI is not found, the screen says that it was not found and draws no
-  account, which only the Reply CLI can read; nor below the version Jason needs, or where its version could not be read. A missing Reply CLI is never installed without a click: where npm is
-  missing too, the card says so and where Node.js, which brings npm, comes from.
+  and is updated that way. Where the Reply CLI is not found, the Reply section says so and offers **Install**; a missing
+  Reply CLI is never installed without a click: where npm is missing too, the Reply section says so and where Node.js,
+  which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
   installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
   turns it off, whatever the other says. A variable set only for a runtime started elsewhere is not seen by it. A
   settings file that Jason Desktop cannot parse, one with comments or trailing commas, which the runtime reads, among
   them, runs no update and uses up no try.
-  **Add account** offers
-  Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
-  daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when
-  it is enabled, **Resume** when it is disabled, neither at its daily limit, and **Delete**; and a row that is not in a
-  good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
-  the desktop opens it here, in this computer's browser, or, where you tick **Copy a new link to hand on**, puts it on
-  the clipboard for you to send to whoever owns the mailbox or the LinkedIn account. They sign in to Google, Microsoft
-  or LinkedIn there with their own credentials, so a password never passes through Jason. Only a link that expires and
-  connects one account is copied. The desktop keeps the link nowhere, and the card says only that it was opened or
-  copied and until when it connects an account. A limit's change, a pause, a resume, an unblock and a delete ask you
-  first in a box of the desktop's own that names the account; with no window to ask in, or once the window is hidden or
-  closed, it does not act. Where Reply does not make a link for one mailbox, the card says the Reply CLI answered
-  `email_link.not_available`, and offers nothing else. Where sequences use a LinkedIn account, its delete is refused,
-  and **Delete anyway** asks again in a box of its own. A signed-out LinkedIn account offers **Reconnect**, and no pause
-  or resume until it is reconnected. An answer that leaves the account's state unknown reads the list again and shows
-  what is; nothing is repeated by itself. The card lists the links made and not used yet under their channel, with
-  Waiting or Expired and their expiry; such a link is not shown again, so adding the account again makes a new one.
-  They are read for each channel whose accounts were listed, and a read of them that fails says so ("Email links still
-  waiting could not be read.") and offers **Check again**; the channel's accounts stay. A Reply that issues no such
-  links, or a plan or role that does not include them, shows no line.
+  On a signed-in card, **Add account** offers Gmail, Outlook and LinkedIn (a channel the account does not have is not
+  offered). A mailbox row offers **Limits** (its daily limit), **Unblock** (sending again after its provider stopped it)
+  and **Delete**; a LinkedIn row **Pause** when it is enabled, **Resume** when it is disabled, neither at its daily
+  limit, and **Delete**; and a row that is not in a good state **Reconnect**. A connect or a reconnect makes a link to
+  Reply's own page, which needs no Reply sign-in: the desktop opens it here, in this computer's browser, or, where you
+  tick **Copy a new link to hand on**, puts it on the clipboard for you to send to whoever owns the mailbox or the
+  LinkedIn account. They sign in to Google, Microsoft or LinkedIn there with their own credentials, so a password never
+  passes through Jason. Only a link that expires and connects one account is copied. The desktop keeps the link
+  nowhere, and the card says only that it was opened or copied and until when it connects an account. A limit's change,
+  a pause, a resume, an unblock and a delete ask you first in a box of the desktop's own that names the mailbox or the
+  LinkedIn account; with no window to ask in, or once the window is hidden or closed, it does not act. Where Reply does
+  not make a link for one mailbox, the card says the Reply CLI answered `email_link.not_available`, and offers nothing
+  else. Where sequences use a LinkedIn account, its delete is refused, and **Delete anyway** asks again in a box of its
+  own. A signed-out LinkedIn account offers **Reconnect**, and no pause or resume until it is reconnected. An answer that
+  leaves the state unknown reads the list again and shows what is; nothing is repeated by itself. The card lists the
+  links made and not used yet under their channel, with Waiting or Expired and their expiry; such a link is not shown
+  again, so adding the account again makes a new one. They are read for each channel whose accounts were listed, and a
+  read of them that fails says so ("Email links still waiting could not be read.") and offers **Check again**; the
+  channel's accounts stay. A Reply that issues no such links, or a plan or role that does not include them, shows no
+  line.
   Finishing a connection happens on Reply's side, so the card learns of it by **Check now**, **Check again** or a focus.
-  Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the card links to.
-  The default account's card, or the profile `default`'s where no Reply account is the default, appears inside the chat
-  of a draft campaign while no Reply account is the default or the default is not signed in. It is an offer, so it is hidden
-  only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
-  `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
-  global default). Where the route is Reply, where no route exists yet (a sign-in or Make default writes the first one) and
-  where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
-  running shows none. **Not now** hides it for that chat until the window is closed.
-  The Connect panel draws that card too, and the Accounts screen every account's, drawn by the same code and acting
-  through the same acts;
-  the notification channels as the runtime reports them are in Settings, under Notifications; see
+  Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the window links to.
+  Outside the Accounts screen the window draws one Reply card, the default account's, or the profile `default`'s where
+  no Reply account is the default, drawn by the same code as the Accounts screen's cards and acting through the same
+  acts: on the Connect panel, and inside the chat of a draft campaign while no Reply account is the default, the default
+  is not signed in, or Jason's Reply plugin is not valid. It is an offer, so it is hidden only where the runtime says the
+  campaign's enrolment is routed to a plugin other than Reply (the window asks `route.resolve` for `campaign.enroll`,
+  which applies the campaign's own route, its default, the global override and the global default). Where the route is
+  Reply, where no route exists yet (a sign-in or Make default writes the first one) and where the route cannot be read,
+  the card shows; nothing shows while it is being read, and a campaign that is already running shows none. **Not now**
+  hides it for that chat until the window is closed.
+  The chat's own **Accounts** card shows the default account's senders ([Cards in the chat](#cards-in-the-chat)). The
+  notification channels as the runtime reports them are in Settings, under Notifications; see
   [ui.md](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
@@ -958,7 +958,8 @@ a card that does not hold what its kind needs is drawn as one line saying so, an
 - **Agent**: how one agent is doing, its counts now and over the last thirty days.
 - **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them; a read
   that finds nothing waiting is headed **Your decisions** instead.
-- **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
+- **Accounts**: the senders of the default Reply account, or of the profile `default` where no Reply account is the
+  default, and the plugin the runtime sends messages through.
 - **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
   Connect**.
 - **Reply**, the card that opens Accounts: it only leads to the Accounts page, where Reply's sign-in and its accounts
