@@ -165,8 +165,11 @@ const shown = (value: string): string => {
     return characters.length > 64 ? `${characters.slice(0, 64).join('')}…` : characters.join('');
 };
 
-/** `the Reply account outbound`, `the Reply account outbound, team 3`: an account in the desktop's sentences. */
-export const accountNamed = (account: AccountRef): string => `the Reply account ${shown(account.name)}${account.team === null ? '' : `, team ${shown(account.team)}`}`;
+/**
+ * `the Reply account “outbound”`, `the Reply account “outbound”, team 3`: an account in the desktop's sentences, its name set
+ * off, since a profile is as often named `default` as anything, and the team outside the quotes.
+ */
+export const accountNamed = (account: AccountRef): string => `the Reply account “${shown(account.name)}”${account.team === null ? '' : `, team ${shown(account.team)}`}`;
 
 /** The global default as the box of Make default names it: a Reply account, or another plugin by its id. */
 export function defaultWords(fallback: GlobalDefault, current: string): string {
@@ -174,8 +177,9 @@ export function defaultWords(fallback: GlobalDefault, current: string): string {
     return accountNamed(boundAccount({ profile: text(fallback.binding?.['profile']), team: text(fallback.binding?.['team_id']) }, current));
 }
 
-/** The reason the runtime journals with a default Jason Desktop names; fixed text, never a person's. */
+/** The reasons the runtime journals with a default Jason Desktop names, by a click or at a sign-in; fixed text, never a person's. */
 export const defaultReason = 'Made the default with Jason Desktop';
+export const signInReason = 'Made the default at a sign-in in Jason Desktop';
 
 /** The desktop's sentences for the accounts: the only words their acts end with. */
 export const accountSentences = {
@@ -184,7 +188,7 @@ export const accountSentences = {
     profileNotMade: 'The Reply CLI did not make the profile, so nobody was signed in.',
     cliMissing: 'The Reply CLI was not found, so nobody was signed in.',
     routesUnread: 'Which account is the default could not be read, so nothing was changed.',
-    changedMeanwhile: 'The default changed while you were asked, so nothing was changed: look at the cards again, then try again.',
+    changedMeanwhile: 'The default changed meanwhile, so nothing was changed: look at the cards again, then try again.',
     teamDefault: 'The global default cannot name a team, so nothing was changed: route a campaign to this account with `jason route set`.',
     routesUnreadAtSignIn: 'Signed in, but which account is the default could not be read, so none was made the default.',
     noActor: 'Jason Desktop could not read the name of this computer’s account, which a change of the default is recorded under, so nothing was changed.',
@@ -193,8 +197,14 @@ export const accountSentences = {
     orphansSearch: 'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.',
     orphansSend: 'A send Reply holds for later runs on the account that is the default now, so nothing was changed: cancel it, or wait until it is sent, then try again.',
     notDefaultAtSignIn: 'Signed in, but this account was not made the default: Make default on its card says why.',
-    notRepresentable: 'The settings file cannot hold this account’s name or team as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.',
+    notRepresentable: 'The settings file cannot hold this account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.',
 } as const;
+
+/**
+ * A sign-in that signed in, then could not place or load Jason's Reply plugin: said as that first, so the program's own words
+ * after it, which often end in "nothing was changed", are not read as the sign-in's.
+ */
+export const notPlacedAtSignIn = (said: string): string => `Signed in, but Jason’s Reply plugin could not be placed, so no default was made: ${said}`;
 
 /** Every other refusal of the runtime's, in one sentence that carries its code. */
 export const otherDefaultRefusal = (code: string | null): string =>

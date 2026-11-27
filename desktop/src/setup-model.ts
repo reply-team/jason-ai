@@ -598,10 +598,10 @@ export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
 
 /**
  * What of Jason's Reply plugin is in place, as `jason plugin list` answered: whether the runtime lists its package, in any
- * state, and whether its Exec grant holds the Reply CLI (`capabilities.exec.granted`, as the load resolved the grant).
- * Null where the runtime gave no list.
+ * state, whether it holds it valid, and whether its Exec grant holds the Reply CLI (`capabilities.exec.granted`, as the load
+ * resolved the grant). Null where the runtime gave no list.
  */
-export function replyPlacement(result: { exit: number; stdout: string }): { placed: boolean; granted: boolean } | null {
+export function replyPlacement(result: { exit: number; stdout: string }): { placed: boolean; valid: boolean; granted: boolean } | null {
     if (result.exit !== 0) return null;
     let raw: { plugins?: unknown } | null;
     try {
@@ -610,9 +610,9 @@ export function replyPlacement(result: { exit: number; stdout: string }): { plac
         return null;
     }
     if (!Array.isArray(raw?.plugins)) return null;
-    const reply = (raw.plugins as { id?: unknown; capabilities?: { exec?: { granted?: unknown } | null } | null }[]).find((plugin) => plugin?.id === 'reply');
+    const reply = (raw.plugins as { id?: unknown; status?: unknown; capabilities?: { exec?: { granted?: unknown } | null } | null }[]).find((plugin) => plugin?.id === 'reply');
     const granted = reply?.capabilities?.exec?.granted;
-    return { placed: reply !== undefined, granted: Array.isArray(granted) && granted.includes('reply') };
+    return { placed: reply !== undefined, valid: reply?.status === 'valid', granted: Array.isArray(granted) && granted.includes('reply') };
 }
 
 /**

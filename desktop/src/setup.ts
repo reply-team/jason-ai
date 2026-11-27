@@ -17,6 +17,8 @@ import {
     defaultAccount,
     defaultBinding,
     defaultReason,
+    notPlacedAtSignIn,
+    signInReason,
     defaultRefusal,
     defaultWords,
     isAccountRef,
@@ -570,6 +572,10 @@ export class Setup {
     #startCheckEnded = false;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
+    /** How many changes have ended: the acts of the setup's queue, each Reply verb, and every change the desktop announced. */
+    #ended = 0;
+    /** The listing being read now, and how many changes had ended when it began. */
+    #reading: { listing: Promise<SetupState>; ended: number } | null = null;
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -582,12 +588,15 @@ export class Setup {
     }
 
     #changed(): void {
+        this.#ended += 1;
         for (const listener of this.#listeners) listener();
     }
 
     /** One change at a time: two cards clicked together never write the settings file over each other. */
     #serial<T>(work: () => Promise<T>): Promise<T> {
-        const next = this.#queue.then(work, work);
+        const next = this.#queue.then(work, work).finally(() => {
+            this.#ended += 1;
+        });
         this.#queue = next.catch(() => undefined);
         return next;
     }
@@ -649,7 +658,23 @@ export class Setup {
         return this.#handedClaude;
     }
 
-    async status(): Promise<SetupState> {
+    /**
+     * What is set up, each host and each Reply account. A listing asked while one is read is answered by that read, so one
+     * check reads each account once: a click on Check again that also brings the window forward, or an act's end and the
+     * change it announced, both ask. A listing asked after a change ended is never answered by a read that began before
+     * it ended.
+     */
+    status(): Promise<SetupState> {
+        const going = this.#reading;
+        if (going !== null && going.ended === this.#ended) return going.listing;
+        const listing = this.#status().finally(() => {
+            if (this.#reading?.listing === listing) this.#reading = null;
+        });
+        this.#reading = { listing, ended: this.#ended };
+        return listing;
+    }
+
+    async #status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
@@ -966,6 +991,7 @@ export class Setup {
      */
     async #verb(account: AccountRef, act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
         const result = await this.#run('reply', `account ${act}`, [...accountArguments(account), ...args], { timeoutMs: replyActLimitMs });
+        this.#ended += 1;
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
@@ -1185,16 +1211,21 @@ export class Setup {
      * Places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no global default at
      * all, has the runtime name the account signed in that default, as Make default does. A default already set, whatever
      * its plugin, is left as it is, and so is one an account with a team cannot be, since the global default cannot name a
-     * team: the section then says that no account is the default yet. Routes that could not be read are said.
+     * team: the section then says that no account is the default yet. Routes that could not be read are said, and so is a
+     * placing that failed, first as that, then in the refusing program's words.
      */
     async #wireReply(account: AccountRef): Promise<void> {
-        await this.#placeMissing('program');
+        try {
+            await this.#placeMissing('program');
+        } catch (error) {
+            throw error instanceof Refused ? new Refused(notPlacedAtSignIn(error.message)) : error;
+        }
         if (account.team !== null) {
             this.#deps.log.info('reply_wired', { Default: 'team' });
             return;
         }
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
-        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null)) === null ? 'made' : 'refused';
+        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null, signInReason)) === null ? 'made' : 'refused';
         this.#deps.log.info('reply_wired', { Default: outcome });
         if (outcome === 'unread') throw new Refused(accountSentences.routesUnreadAtSignIn);
         if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
@@ -1203,9 +1234,10 @@ export class Setup {
     /**
      * Jason's Reply plugin placed and granted the Reply CLI where either is missing, as `jason plugin list` answers it now:
      * the package fetched with `jason plugin install` only where the runtime lists none, the grant written only where it
-     * does not hold `reply`, and the plugins loaded again only where either was. So an installation where the plugin is
-     * listed and granted asks no release feed, and its settings file is neither read nor written by the desktop, one with
-     * comments included. A list the runtime did not give places both, as a sign-in always did. A refusal is thrown in the
+     * does not hold `reply`, and the plugins loaded again where either was, or where the plugin is listed and not valid, as
+     * after a Reply CLI installed or updated outside the desktop. So an installation where the plugin is listed valid and
+     * granted asks no release feed, loads nothing again, and its settings file is neither read nor written by the desktop,
+     * one with comments included. A list the runtime did not give places both, as a sign-in always did. A refusal is thrown in the
      * words of the program that refused (`program`, a sign-in's, as on release 51.2) or in the desktop's own sentence
      * (`desktop`, Make default's); a settings file the desktop cannot parse is refused in its own words either way.
      */
@@ -1213,7 +1245,7 @@ export class Setup {
         const placement = replyPlacement(await this.#deps.cli.run(['plugin', 'list']));
         const placed = placement?.placed === true;
         const granted = placement?.granted === true;
-        if (placed && granted) return;
+        if (placed && placement?.valid === true && granted) return;
         // A file the edit cannot keep is refused before anything is fetched.
         if (!granted) this.#readForEdit();
         if (!placed) {
@@ -1231,13 +1263,14 @@ export class Setup {
     /**
      * Has the runtime name the account the global default (`jason route set --global`), which checks the route before it
      * writes it, writes it through its one writer of the settings file, puts the file back on a refusal and journals the
-     * change under the person who made it, by this account's name. Null where it did, else the desktop's sentence why not.
+     * change under the person who made it, by this account's name, with the reason of the act that made it. Null where it
+     * did, else the desktop's sentence why not.
      */
-    async #setDefault(account: AccountRef, was: GlobalDefault | null): Promise<string | null> {
+    async #setDefault(account: AccountRef, was: GlobalDefault | null, reason: string): Promise<string | null> {
         const person = this.#deps.account;
         if (!usableAccount(person)) return accountSentences.noActor;
         const binding = JSON.stringify(defaultBinding(account, was));
-        const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', defaultReason]);
+        const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', reason]);
         this.#deps.log.info('reply_default_set', { Exit: set.exit });
         return set.exit === 0 ? null : defaultRefusal(set);
     }
@@ -1281,7 +1314,7 @@ export class Setup {
                 if (error instanceof Refused) return refusal(error.message);
                 throw error;
             }
-            const refused = await this.#setDefault(account, routes.globalDefault);
+            const refused = await this.#setDefault(account, routes.globalDefault, defaultReason);
             return refused === null ? { done: true } : refusal(refused);
         });
     }

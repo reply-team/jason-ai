@@ -806,7 +806,8 @@ test('a sign-in runs reply auth login as the card’s account and nothing else o
 
 test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; one that finds a default leaves it', async (t) => {
     const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: null };
-    const set = (profile: string) => `route set --global --plugin reply --binding {"profile":"${profile}"} --actor human:made-up-person --reason ${defaultReason}`;
+    // A default made at a sign-in is journaled as one, told from a click on Make default.
+    const set = (profile: string) => `route set --global --plugin reply --binding {"profile":"${profile}"} --actor human:made-up-person --reason Made the default at a sign-in in Jason Desktop`;
     // A fresh installation: no plugin, no grant, no default. All three, the package fetched from the release feed.
     const fresh = replyBench(t, { profiles: { outbound: {} }, keys: { 'planted-reply-key': 'bea@example.test' } }, { STUB_REPLY_PLUGIN: 'absent' });
     const log = memoryLog();
@@ -844,6 +845,15 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.deepEqual(runsAfter(ready, from, 'jason'), ['plugin list', 'route list']);
     assert.equal(readFileSync(dataLayout(ready.paths.data).userSettingsFile, 'utf8'), before, 'the file as it was, byte for byte');
     assert.deepEqual(keptLog.lines.filter((line) => line.name === 'reply_wired').map((line) => line.fields), [{ Default: 'kept' }]);
+
+    // Listed and granted, but not valid, as after a Reply CLI installed or updated outside the desktop: nothing is fetched
+    // or written, and the runtime loads its plugins again, which is what makes it valid.
+    const unavailable = replyBench(t, { profiles: { outbound: {} } }, { STUB_REPLY_PLUGIN: 'unavailable' });
+    writeInstallationSettings(unavailable, kept);
+    const reloading = await readSetup(unavailable, memoryLog(), settings);
+    from = unavailable.record().length;
+    await reloading.connectReply({ type: 'reply', name: 'default', team: null });
+    assert.deepEqual(runsAfter(unavailable, from, 'jason'), ['plugin list', 'plugin reload', 'route list']);
 
     // Listed and granted in a file with a comment, which the desktop cannot parse and the runtime reads: no default set,
     // so the runtime makes this one, and the desktop asks no release feed and writes nothing itself.
@@ -883,12 +893,14 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.equal(refused.world().credentials?.['default'], 'browser@example.test');
     assert.equal((readInstallationSettings(refused) as { Routes?: unknown }).Routes, undefined);
 
-    // A placing that fails is said as on release 51.2, in the words of the program that refused: the package's fetch, or
-    // the load that would take the grant up.
+    // A placing that fails after the sign-in is said as such first, so the program's own "nothing was changed" is not read
+    // as the sign-in's; then, as on release 51.2, the words of the program that refused: the package's fetch, or the load
+    // that would take the grant up.
     const offline = replyBench(t, {}, { STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' });
-    await assert.rejects((await readSetup(offline)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'The release could not be reached.');
+    await assert.rejects((await readSetup(offline)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed, so no default was made: The release could not be reached.');
+    assert.equal(offline.world().credentials?.['default'], 'browser@example.test');
     const reloadRefused = replyBench(t, {}, { STUB_RELOAD_REFUSED: 'yes' });
-    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && /^the settings file could not be read \(not valid JSON/.test(error.message));
+    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && /^Signed in, but Jason’s Reply plugin could not be placed, so no default was made: the settings file could not be read \(not valid JSON/.test(error.message));
 });
 
 test('a global default a person set to another plugin is kept at a sign-in, and the members of today do not say it is wired', async (t) => {
@@ -910,7 +922,7 @@ test('a global default a person set to another plugin is kept at a sign-in, and 
     const setup = await readSetup(unreadable);
     writeInstallationSettings(unreadable, '{ /* mine */ }');
     const from = unreadable.record().length;
-    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && /comments/.test(error.message));
+    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed, so no default was made: ') && /comments/.test(error.message));
     assert.equal(readFileSync(dataLayout(unreadable.paths.data).userSettingsFile, 'utf8'), '{ /* mine */ }');
     assert.deepEqual(runsAfter(unreadable, from, 'jason'), ['plugin list']);
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
@@ -939,7 +951,7 @@ test('Make default asks first where a default is set, naming it and the account 
     assert.deepEqual(await setup.makeDefault({ type: 'reply', name: 'quiet', team: null }), no('Nothing was done.'));
     assert.deepEqual(runsAfter(b, from, 'jason'), ['route list']);
     assert.deepEqual(boxes.map((box) => [box.message, box.detail, box.buttons[0]]), [
-        ['Make the Reply account quiet the default?', 'Campaigns with no route of their own send through the Reply account default now. They will send through the Reply account quiet instead.', 'Make default'],
+        ['Make the Reply account “quiet” the default?', 'Campaigns with no route of their own send through the Reply account “default” now. They will send through the Reply account “quiet” instead.', 'Make default'],
     ]);
 
     // The plugin listed and granted: nothing is placed or written by the desktop; the routes read again after the yes, and
@@ -970,7 +982,7 @@ test('Make default asks first where a default is set, naming it and the account 
     await setup.status();
     meanwhile = () => writeInstallationSettings(b, { ...granted, Routes: { Default: { Plugin: 'slack', Binding: { channel: 'C1' } } } });
     from = b.record().length;
-    assert.deepEqual(await setup.makeDefault({ type: 'reply', name: 'quiet', team: null }), no('The default changed while you were asked, so nothing was changed: look at the cards again, then try again.'));
+    assert.deepEqual(await setup.makeDefault({ type: 'reply', name: 'quiet', team: null }), no('The default changed meanwhile, so nothing was changed: look at the cards again, then try again.'));
     assert.deepEqual(runsAfter(b, from, 'jason'), ['route list', 'route list']);
     assert.deepEqual((readInstallationSettings(b) as { Routes: unknown }).Routes, { Default: { Plugin: 'slack', Binding: { channel: 'C1' } } });
     assert.equal(JSON.stringify(log.lines).includes('quiet'), false);
@@ -998,18 +1010,21 @@ test('Make default with no default set asks nothing, and a default of another pl
     assert.deepEqual(await make({ STUB_REPLY_PLUGIN: 'absent' }, {}), { answer: 'done', boxes: [], routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } }, runs: ['route list', 'route list', 'plugin list', 'plugin install reply', 'plugin reload', set] });
     // Listed and not granted: the grant alone, and its load.
     assert.deepEqual((await make({}, {})).runs, ['route list', 'route list', 'plugin list', 'plugin reload', set]);
+    // Listed and granted, but not valid: the load alone.
+    assert.deepEqual((await make({ STUB_REPLY_PLUGIN: 'unavailable' }, { Plugins: { Grants: { reply: { Exec: ['reply'] } } } })).runs, ['route list', 'route list', 'plugin list', 'plugin reload', set]);
     const slack = { Default: { Plugin: 'slack', Binding: { channel: 'C1' } } };
-    assert.deepEqual((await make({}, { Routes: slack })).boxes, ['Campaigns with no route of their own send through the plugin slack now. They will send through the Reply account outbound instead.']);
+    assert.deepEqual((await make({}, { Routes: slack })).boxes, ['Campaigns with no route of their own send through the plugin slack now. They will send through the Reply account “outbound” instead.']);
     const kept = { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } };
     const refusals: [Record<string, string>, string][] = [
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'route_orphans_search' }) }, 'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'route_orphans_send' }) }, 'A send Reply holds for later runs on the account that is the default now, so nothing was changed: cancel it, or wait until it is sent, then try again.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ exit: 3 }) }, 'Jason is not running, so nothing was changed. Start it, then try again.'],
+        [{ STUB_ROUTE_SET: JSON.stringify({ code: 'validation_failed', details: [{ code: 'not_representable_globally' }] }) }, 'The settings file cannot hold this account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'plugin_reload_rejected' }) }, 'The runtime did not change the default: it answered plugin_reload_rejected, so nothing was changed.'],
         [{ STUB_RELOAD_REFUSED: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.'],
         [{ STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.'],
     ];
-    const asked = ['Campaigns with no route of their own send through the Reply account default now. They will send through the Reply account outbound instead.'];
+    const asked = ['Campaigns with no route of their own send through the Reply account “default” now. They will send through the Reply account “outbound” instead.'];
     for (const [env, sentence] of refusals) {
         const { runs: _, ...made } = await make(env, kept);
         assert.deepEqual(made, { answer: sentence, boxes: asked, routes: kept.Routes }, sentence);
@@ -1108,7 +1123,8 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
         STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound', team_id: '9' }), campaignRoute('cmp_2', { profile: 'routed-only' }), campaignRoute('cmp_3', null)]),
     });
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } } });
-    const { reply, accounts } = await setupOn(b).status();
+    const setup = setupOn(b);
+    const { reply, accounts } = await setup.status();
     const state = (name: string, team: string | null, over: Record<string, unknown>) => ({
         type: 'reply', name, team, default: false, held: true, signedIn: false, user: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], ...over,
     });
@@ -1136,6 +1152,20 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     assert.equal(runs.some((run) => run.includes('routed-only')), false, 'nothing is asked of the CLI for a profile it does not hold');
     assert.equal(runs.some((run) => run.startsWith('--profile quiet account')), false, 'nothing is listed for a profile with no sign-in');
     for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile '), `every other run names its account: ${run}`);
+    // One check reads each account once: a listing asked while one is read is answered by that read, as when a click on
+    // Check again also brings the window forward, or an act's end and the change it announces both ask.
+    const listed = (from: number) => runsAfter(b, from, 'reply').filter((run) => run === 'profile list --json').length;
+    let from = b.record().length;
+    await Promise.all([setup.status(), setup.status(), setup.status()]);
+    assert.equal(listed(from), 1, 'three listings asked together, one read');
+    // A listing asked after an act ended is never answered by a read that began before it ended.
+    from = b.record().length;
+    let answered = false;
+    const before = setup.status().then((state) => ((answered = true), state));
+    await setup.setProviderKey('moonshot', 'sk-planted');
+    assert.equal(answered, false, 'the first read is still going when the act ends');
+    await Promise.all([before, setup.status()]);
+    assert.equal(listed(from), 2, 'the listing asked after the act is read afresh');
     // A page of an earlier version reads the default account in the members of today, and Jason uses that very account.
     assert.deepEqual(reply, {
         cli: { found: true, version: '0.23.2', install: null },
