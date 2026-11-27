@@ -64,7 +64,7 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
 package it carries, once for each desktop version, and the role skills again at a start where `jason status` finds no
-readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on a card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
+readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on a card, and again at a start that finds them unrecorded while any profile of the Reply CLI is signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -625,13 +625,16 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   One account is the default, marked **Default**: the one the global default route names, which every campaign with no
   route of its own sends through. **Make default** on any other card makes it the default, replacing the default there
   was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the
-  account that would be. The runtime writes the route (`jason route set --global`, journaled as yours) and refuses it,
-  and the card says why, while a search still followed or a send Reply holds for later runs on the account that is the
-  default now, or for a profile or a team the settings file cannot hold as written. Every other route, a campaign's
-  own or an operation's, is `jason route set`'s, and no card makes one. Nothing is installed and no route is written
-  without your click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first
-  sign-in on a card where no default is set, which makes that account the default, or at Make default. A sign-in where
-  a default is set leaves it as it is and still places the plugin and its grant.
+  account that would be, and changes nothing where the default changed while you were asked. The runtime writes the
+  route (`jason route set --global`, journaled as yours) and refuses it, and the card says why, while a search still
+  followed or a send Reply holds for later runs on the account that is the default now, or for a profile name the
+  settings file cannot hold as written. The global default cannot name a team, so a card with a team offers no Make
+  default, and a campaign is routed to such an account with `jason route set`. Every other route, a campaign's own or an
+  operation's, is `jason route set`'s, and no card makes one. Nothing is installed and no route is written without your
+  click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first sign-in on a
+  card where no default is set, which makes that account the default (an account with a team aside), or at Make
+  default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
+  it fetches nothing and leaves the settings file to the runtime. A sign-in where a default is set leaves it as it is.
   A card signs its own profile in, with `reply auth login` or with a key on standard input that only the Reply CLI
   keeps; a profile only a route names is made in the Reply CLI first (`reply profile add`), and a profile the Reply CLI
   holds never is. A card says "configured" when the runtime accepted it, never "connected". What the desktop tells
@@ -699,7 +702,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   of a draft campaign while no Reply account is the default or the default is not signed in. It is an offer, so it is hidden
   only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
   `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
-  global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
+  global default). Where the route is Reply, where no route exists yet (a sign-in or Make default writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
   The Connect panel draws that card too, and the Accounts screen every account's, drawn by the same code and acting
