@@ -97,12 +97,20 @@ export interface GlobalDefault {
 }
 
 /**
- * What `jason route list` answered: the global default, or none; and the profile every route to `reply` there is names,
- * the global ones first, null for one that names none.
+ * A global route to `reply` other than the default, as the mark of the account it names: the kind of work it routes, by
+ * Jason's operation, and the channel where it is one channel's route of that operation.
+ */
+export type DefaultFor = { kind: 'operation'; operation: string } | { kind: 'channel'; operation: string; channel: string };
+
+/**
+ * What `jason route list` answered: the global default, or none; the profile every route to `reply` there is names, the
+ * global ones first, null for one that names none; and each global route to `reply` but the default, with the profile
+ * its binding names.
  */
 export interface Routes {
     globalDefault: GlobalDefault | null;
     reply: (string | null)[];
+    globalReply: { mark: DefaultFor; profile: string | null }[];
 }
 
 const objectOf = (value: unknown): Record<string, unknown> | null =>
@@ -116,6 +124,20 @@ const profileOf = (binding: Record<string, unknown> | null): string | null => te
 /** The profile each route to `reply` of these names, null for one that names none. */
 const replyProfiles = (routes: Record<string, unknown>[]): (string | null)[] =>
     routes.filter((route) => route['plugin_id'] === 'reply').map((route) => profileOf(objectOf(route['binding'])));
+
+/** The global routes to `reply` other than the default, in the order the runtime answered them: the operations', then the channels'. */
+function globalReplyRoutes(global: Record<string, unknown>): Routes['globalReply'] {
+    const found: Routes['globalReply'] = [];
+    const add = (mark: DefaultFor, value: unknown) => {
+        const route = objectOf(value);
+        if (route?.['plugin_id'] === 'reply') found.push({ mark, profile: profileOf(objectOf(route['binding'])) });
+    };
+    for (const [operation, route] of Object.entries(objectOf(global['operations']) ?? {})) add({ kind: 'operation', operation }, route);
+    for (const [operation, channels] of Object.entries(objectOf(global['channels']) ?? {})) {
+        for (const [channel, route] of Object.entries(objectOf(channels) ?? {})) add({ kind: 'channel', operation, channel }, route);
+    }
+    return found;
+}
 
 /** Every route of one scope, in the order the runtime answered them: the default, the operations' own, then the channels'. */
 function routesOf(scope: Record<string, unknown>): Record<string, unknown>[] {
@@ -152,6 +174,7 @@ export function readRoutes(result: { exit: number; stdout: string }): Routes | n
     return {
         globalDefault: defaulted === null ? null : { plugin: text(defaulted['plugin_id'])!, binding: objectOf(defaulted['binding']) },
         reply: [global, ...campaigns].flatMap((scope) => replyProfiles(routesOf(scope))),
+        globalReply: globalReplyRoutes(global),
     };
 }
 
@@ -171,11 +194,13 @@ export interface Listing {
     default: AccountRef | null;
     /** The profiles a route names, at any level; null where the routes were not read. */
     routed: Set<string> | null;
+    /** The marks of each account a global route to `reply` other than the default names, by its profile. */
+    defaultFor: Map<string, DefaultFor[]>;
 }
 
 /**
- * The accounts, one for each profile, the profiles only a route names in the order the routes name them. A route that
- * names no profile acts as the one the Reply CLI is set to at this read.
+ * The accounts, one for each profile, the profiles only a route names in the order the routes name them, and the marks of
+ * the global routes. A route that names no profile acts as the one the Reply CLI is set to at this read.
  */
 export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
     const unnamed = profiles.current;
@@ -184,7 +209,12 @@ export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
     const fallback = routes === null ? null : defaultAccount(routes, unnamed);
     const first = fallback === null ? -1 : names.indexOf(fallback.name);
     const ordered = first < 0 ? names : [names[first]!, ...names.filter((_, at) => at !== first)];
-    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback, routed };
+    const defaultFor = new Map<string, DefaultFor[]>();
+    for (const { mark, profile } of routes?.globalReply ?? []) {
+        const name = profile ?? unnamed;
+        defaultFor.set(name, [...(defaultFor.get(name) ?? []), mark]);
+    }
+    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback, routed, defaultFor };
 }
 
 /**

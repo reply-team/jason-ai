@@ -10,6 +10,7 @@ import type {
     DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopDefaultFor,
     DesktopKeptEntry,
     DesktopLink,
     DesktopOpenInAnswer,
@@ -40,7 +41,7 @@ import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
-import type { AccountRef, ReplyTeam } from '../src/accounts.ts';
+import type { AccountRef, DefaultFor, ReplyTeam } from '../src/accounts.ts';
 import type { SignIn } from '../src/account-notes.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -206,6 +207,7 @@ type AccountIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['setup']['keepChange']>, [account: DesktopAccountRef]>>,
     Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['addAccount' | 'signOut' | 'removeAccount' | 'keepChange']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<SignIn, DesktopReplySignIn>>,
+    Holds<Equal<DefaultFor, DesktopDefaultFor>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyConnect']>[2], DesktopAccountRef | undefined>>,

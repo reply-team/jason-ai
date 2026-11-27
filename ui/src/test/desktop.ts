@@ -216,6 +216,7 @@ export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): 
     type: 'reply',
     name,
     default: false,
+    defaultFor: [],
     held: true,
     signedIn: false,
     user: null,

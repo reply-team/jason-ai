@@ -351,17 +351,25 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     for (const [exit, stdout] of [[1, listedTeams([{ team_id: 5, team_name: 'x' }])], [0, listedTeams([])], [0, listedTeams([{ team_id: 0 }])], [0, '{}'], [0, 'not json'], [0, 'null']] as const) {
         assert.equal(teams(exit, stdout), null, `${exit} ${stdout}`);
     }
-    // The routes, as the runtime answers route.list (RoutesDto): the global default, or none; and the profile every route
-    // to Reply names, at any level, global or a campaign's, null where it names none, a team beside it or alone no part
-    // of it.
+    // The routes, as the runtime answers route.list (RoutesDto): the global default, or none; the profile every route to
+    // Reply names, at any level, global or a campaign's, null where it names none, a team beside it or alone no part of it;
+    // and each global route to Reply but the default, by the kind of work it routes: an operation, or an operation's
+    // channel.
     const route = (exit: number, stdout: string) => readRoutes({ exit, stdout });
-    assert.deepEqual(route(0, routeList(replyRoute({ profile: 'default' }))), { globalDefault: { plugin: 'reply', binding: { profile: 'default' } }, reply: ['default'] });
-    assert.deepEqual(route(0, routeList(null)), { globalDefault: null, reply: [] }, 'no global default is an answer');
+    assert.deepEqual(route(0, routeList(replyRoute({ profile: 'default' }))), { globalDefault: { plugin: 'reply', binding: { profile: 'default' } }, reply: ['default'], globalReply: [] });
+    assert.deepEqual(route(0, routeList(null)), { globalDefault: null, reply: [], globalReply: [] }, 'no global default is an answer');
     const everywhere = route(0, routesEverywhere);
     assert.deepEqual(everywhere, {
         globalDefault: { plugin: 'slack', binding: { channel: 'C1' } },
         reply: ['research', null, null, 'outbound', null, null, 'Made-up Ops', null],
+        globalReply: [
+            { mark: { kind: 'operation', operation: 'contact.find' }, profile: 'research' },
+            { mark: { kind: 'operation', operation: 'sender.list' }, profile: null },
+            { mark: { kind: 'channel', operation: 'message.send', channel: 'email' }, profile: null },
+        ],
     });
+    const otherPlugin = routeList(null, [], { 'contact.find': { plugin_id: 'slack', binding: null, binding_identity: null } }, { 'message.send': { linkedin: { plugin_id: 'slack', binding: null, binding_identity: null } } });
+    assert.deepEqual(route(0, otherPlugin)?.globalReply, [], 'a global route to another plugin marks no Reply account');
     const unreachable = JSON.stringify({ error: { code: 'runtime_unreachable', message: 'No runtime answered.', retryable: true } });
     for (const [exit, stdout] of [[0, '{'], [0, '{}'], [0, '{"global":{}}'], [0, '{"global":{"default":{}}}'], [0, 'null'], [3, unreachable], [1, routeList(null)], [-1, '']] as const) {
         assert.equal(route(exit, stdout), null, `${exit} ${stdout}`);
@@ -381,12 +389,21 @@ test('the accounts are every profile the Reply CLI holds and every profile a rou
     const route = (stdout: string) => readRoutes({ exit: 0, stdout })!;
     const named = (name: string) => ({ type: 'reply', name });
     const cli = { current: 'outbound', available: ['default', 'outbound', 'quiet'] };
-    const listing = (accounts: string[], fallback: string | null, routed: string[] | null) => ({
+    const listing = (accounts: string[], fallback: string | null, routed: string[] | null, defaultFor: [string, unknown[]][] = []) => ({
         accounts: accounts.map(named),
         default: fallback === null ? null : named(fallback),
         routed: routed === null ? null : new Set(routed),
+        defaultFor: new Map(defaultFor),
     });
-    assert.deepEqual(accountsOf(cli, route(routesEverywhere)), listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null, ['research', 'outbound', 'Made-up Ops']), 'a global default to another plugin marks no Reply account');
+    // Each global route to Reply but the default marks the account it names, one that names no profile the CLI's current one.
+    assert.deepEqual(
+        accountsOf(cli, route(routesEverywhere)),
+        listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null, ['research', 'outbound', 'Made-up Ops'], [
+            ['research', [{ kind: 'operation', operation: 'contact.find' }]],
+            ['outbound', [{ kind: 'operation', operation: 'sender.list' }, { kind: 'channel', operation: 'message.send', channel: 'email' }]],
+        ]),
+        'a global default to another plugin marks no Reply account',
+    );
     assert.deepEqual(accountsOf(cli, route(routeList(replyRoute({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research', ['research']), 'the default is the binding’s account, held by the CLI or not');
     assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound', ['outbound']), 'a default that names no profile is the profile the CLI is set to');
     assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet', ['quiet']), 'and moves with it');
@@ -1397,7 +1414,7 @@ const twoSignIns: ReplyWorld = {
     lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
 };
 
-test('each account is read under its own profile’s name alone, a profile only a route names asked nothing, the default first and marked; a default that names no profile is, at each read, the profile the Reply CLI is set to', async (t) => {
+test('each account is read under its own profile’s name alone, a profile only a route names asked nothing, the default first and marked, and every other global route to Reply marked on the account it names; a route that names no profile is, at each read, the profile the Reply CLI is set to', async (t) => {
     // bea's login can act in teams 5 and 9: `outbound` pins none, `outbound-nine` pins 9 in the Reply CLI.
     const world: ReplyWorld = {
         ...twoSignIns,
@@ -1408,11 +1425,17 @@ test('each account is read under its own profile’s name alone, a profile only 
     const b = replyBench(t, world, {
         STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound', team_id: '9' }), campaignRoute('cmp_2', { profile: 'routed-only' }), campaignRoute('cmp_3', null)]),
     });
-    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } } });
+    // Global routes of an operation and of a channel's sends, one of them naming no profile, and one to another plugin.
+    const operations = {
+        'contact.find': { Plugin: 'reply', Binding: { profile: 'outbound-nine' } },
+        'campaign.get': { Plugin: 'slack', Binding: { channel: 'C1' } },
+        'message.send': { Channels: { linkedin: { Plugin: 'reply', Binding: { profile: 'outbound' } }, email: { Plugin: 'reply', Binding: {} } } },
+    };
+    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } }, Operations: operations } });
     const setup = setupOn(b);
     const { accounts } = await setup.status();
     const state = (name: string, over: Record<string, unknown>) => ({
-        type: 'reply', name, default: false, held: true, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false, ...over,
+        type: 'reply', name, default: false, defaultFor: [], held: true, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false, ...over,
     });
     const bea = { signedIn: true, user: 'bea@example.test' };
     const asListed = (row: typeof mailbox) => ({ id: String(row.id), channel: row.channel, name: row.name, address: row.address, status: row.reply_status });
@@ -1420,14 +1443,14 @@ test('each account is read under its own profile’s name alone, a profile only 
         accounts: [
             // The default, whatever team a campaign's route names beside it: bea's profile with no team pinned, which Reply
             // will not list until one is; it is offered the login's teams, its channels unread.
-            state('outbound', { ...bea, default: true, unread: ['email', 'linkedin'], teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }] }),
+            state('outbound', { ...bea, default: true, defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'linkedin' }], unread: ['email', 'linkedin'], teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }] }),
             // ada's sign-in in one team, bound to it by this look, shown by its id since Reply names it not.
             // Each account signed in and bound is noted as who it was signed in as at this first look.
             state('default', { signedIn: true, user: 'ada@example.test', team: { id: '3', name: '' }, senders: [asListed(mailbox)], lastSignIn: { user: 'ada@example.test', team: { id: '3', name: '' } } }),
             // A second team is a second profile, pinned to it in the Reply CLI, and shown by its name.
-            state('outbound-nine', { ...bea, team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)], lastSignIn: { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } } }),
-            // The profile the CLI is set to is an account like any other.
-            state('quiet', {}),
+            state('outbound-nine', { ...bea, defaultFor: [{ kind: 'operation', operation: 'contact.find' }], team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)], lastSignIn: { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } } }),
+            // The profile the CLI is set to is an account like any other, and the route naming no profile marks it.
+            state('quiet', { defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'email' }] }),
             state('routed-only', { held: false }),
         ],
         notRead: [],

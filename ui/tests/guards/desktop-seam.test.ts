@@ -136,6 +136,8 @@ const account = {
     type: true,
     name: true,
     default: true,
+    // Every other global route to Reply that names it: the kind, the operation and the channel, never a sentence.
+    defaultFor: true,
     held: true,
     signedIn: true,
     user: true,
@@ -308,6 +310,7 @@ describe('the desktop seam', () => {
             'type',
             'name',
             'default',
+            'defaultFor',
             'held',
             'signedIn',
             'user',

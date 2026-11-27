@@ -39,14 +39,24 @@ function replyExecGranted() {
     return Array.isArray(exec) ? exec : [];
 }
 
-/** The routes as the runtime answers `route.list`: the settings file's global default, and STUB_CAMPAIGN_ROUTES's campaigns. */
+/**
+ * The routes as the runtime answers `route.list`: the settings file's global routes, the default and each operation's and
+ * channel's under `Routes:Operations` (`Routes:Operations:<operation>:Channels:<channel>`), and STUB_CAMPAIGN_ROUTES's
+ * campaigns.
+ */
 function routesAnswer() {
     const settings = settingsRead();
-    const routes = settings[keyOf(settings, 'Routes')];
-    const route = routes && routes[keyOf(routes, 'Default')];
-    const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
+    const routes = settings[keyOf(settings, 'Routes')] ?? {};
+    const answered = (route) => ({ plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null });
+    const route = routes[keyOf(routes, 'Default')];
+    const operations = {};
+    const channels = {};
+    for (const [operation, value] of Object.entries(routes[keyOf(routes, 'Operations')] ?? {})) {
+        if (value.Plugin) operations[operation] = answered(value);
+        for (const [channel, each] of Object.entries(value.Channels ?? {})) channels[operation] = { ...channels[operation], [channel]: answered(each) };
+    }
     const campaigns = process.env.STUB_CAMPAIGN_ROUTES ? JSON.parse(process.env.STUB_CAMPAIGN_ROUTES) : [];
-    return { routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {}, channels: {} }, campaigns };
+    return { routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: route ? answered(route) : null, operations, channels }, campaigns };
 }
 
 if (args[0] === 'status') {

@@ -25,6 +25,7 @@ import {
     readTeams,
     sameAccount,
     type AccountRef,
+    type DefaultFor,
     type ReplyTeam,
     withReason,
 } from './accounts.ts';
@@ -249,6 +250,12 @@ export type AccountsFact = 'profiles' | 'routes';
 export interface AccountState extends AccountRef {
     /** Whether the global default route names this account. */
     default: boolean;
+    /**
+     * Every other global route to Jason's Reply plugin that names it, as closed data: the operation it routes, and the
+     * channel where it is one channel's route; a route that names no profile names the Reply CLI's current one. Always
+     * sent; optional as the page reads it.
+     */
+    defaultFor?: DefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
     signedIn: boolean;
@@ -934,6 +941,7 @@ export class Setup {
             (listing?.accounts ?? []).map(async (account) => ({
                 ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
                 default: listing?.default != null && sameAccount(account, listing.default),
+                defaultFor: listing?.defaultFor.get(account.name) ?? [],
             })),
         );
         // Noted in the listing's order once every account is read, so the note is written in one order.

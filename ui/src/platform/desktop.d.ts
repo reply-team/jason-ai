@@ -590,10 +590,22 @@ export interface DesktopReplySignIn {
 /** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
 export type DesktopAccountsFact = 'profiles' | 'routes';
 
+/**
+ * A global route to Jason's Reply plugin other than the default, as the mark of the account it names: the kind of work it
+ * routes, by Jason's operation, and the channel where it is one channel's route of that operation.
+ */
+export type DesktopDefaultFor =
+    { kind: 'operation'; operation: string } | { kind: 'channel'; operation: string; channel: string };
+
 /** One Reply account: one profile of the Reply CLI, read under its own name alone, as Jason's work acts as it. */
 export interface DesktopAccount extends DesktopAccountRef {
     /** Whether the global default route names this account: campaigns with no route of their own send through it. */
     default: boolean;
+    /**
+     * Every other global route to Jason's Reply plugin that names it, each a mark of its card; a route that names no profile
+     * names the Reply CLI's current one. Always sent by this desktop; optional as the page reads it.
+     */
+    defaultFor?: DesktopDefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
     signedIn: boolean;

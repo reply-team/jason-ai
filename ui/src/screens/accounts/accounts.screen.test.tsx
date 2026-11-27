@@ -279,6 +279,30 @@ describe('Reply accounts, one card per profile', () => {
         expect(within(routed).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         // No card says who uses it.
         expect(words(page)).not.toMatch(/uses this sign-in|does not use it yet|whether jason uses/i);
+        cleanup();
+        // Every other global route to Reply is a mark of the card of the account it names, in the words the page gives
+        // the desktop's closed data: a channel's sends by the channel, any other work by its operation's name.
+        const marked = withReplyAccounts(setupFound, [
+            {
+                ...three.accounts!.accounts[0]!,
+                defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'linkedin' }],
+            },
+            {
+                ...three.accounts!.accounts[1]!,
+                defaultFor: [
+                    { kind: 'operation', operation: 'contact.find' },
+                    { kind: 'channel', operation: 'message.send', channel: 'email' },
+                    { kind: 'channel', operation: 'conversation.reply', channel: 'linkedin' },
+                ],
+            },
+            three.accounts!.accounts[2]!,
+        ]);
+        inDesktop(marked);
+        expect(cards(await openAccounts('.reply-account'))).toEqual([
+            'Reply default Default Default for LinkedIn',
+            'Reply outbound Default for contact.find Default for email Default for conversation.reply on LinkedIn',
+            'Reply routed-only',
+        ]);
     });
 
     it('asks every act on a card as that card’s account, and a sign-in or a key for that account alone', async () => {

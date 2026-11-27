@@ -1,6 +1,7 @@
 import { effect, signal } from '@preact/signals-react';
 import type {
     DesktopAccountRef,
+    DesktopDefaultFor,
     DesktopHost,
     DesktopPlugin,
     DesktopReplySender,
@@ -108,6 +109,8 @@ interface AccountView {
     /** How the page names it to the desktop; null for an earlier desktop's one account, whose name it cannot give. */
     ref: DesktopAccountRef | null;
     isDefault: boolean;
+    /** Every other global route to Reply that names it, each a mark of its card. */
+    defaultFor: readonly DesktopDefaultFor[];
     /** Whether the Reply CLI holds its profile; false for one only a route names. */
     held: boolean;
     signedIn: boolean;
@@ -145,6 +148,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
         return state.accounts!.accounts.map((each) => ({
             ref: { type: each.type, name: each.name },
             isDefault: each.default === true,
+            defaultFor: listOf(each.defaultFor),
             held: each.held === true,
             signedIn: each.signedIn === true,
             user: each.user,
@@ -166,6 +170,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
         {
             ref: null,
             isDefault: false,
+            defaultFor: [],
             held: true,
             signedIn: reply.signedIn,
             user: reply.user,
@@ -1471,10 +1476,23 @@ const manageInReply = (): Html =>
         </div>
     </div>`;
 
+/** A channel as a mark names it. */
+const channelWords = (channel: string): string => (channel === 'linkedin' ? 'LinkedIn' : cap(channel));
+
 /**
- * An account's head: Reply and its name exactly as the Reply CLI has it, and the default mark, or Make default where the
- * desktop has it and the routes were read and name no default at all. None for an earlier desktop's account, which has
- * no name.
+ * The mark of a global route other than the default: "Default for LinkedIn" or "Default for email" for a channel's sends,
+ * else the work's name as Jason has it, with its channel where the route is one channel's.
+ */
+function defaultForWords(mark: DesktopDefaultFor): string {
+    if (mark.kind !== 'channel') return `Default for ${cap(mark.operation)}`;
+    if (mark.operation === 'message.send') return `Default for ${channelWords(mark.channel)}`;
+    return `Default for ${cap(mark.operation)} on ${channelWords(mark.channel)}`;
+}
+
+/**
+ * An account's head: Reply and its name exactly as the Reply CLI has it, the default mark and a mark for each other global
+ * route that names it, or Make default where the desktop has it and the routes were read and name no default at all. None
+ * for an earlier desktop's account, which has no name.
  */
 function accountHead(state: DesktopSetup, view: AccountView, place: Place, real: Html | null): Html | null {
     if (view.ref === null) return null;
@@ -1482,6 +1500,7 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
     return html`<div class="acct-head">
         <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>
         ${view.isDefault ? html`<span class="pillc green acct-default">Default</span>` : null}
+        ${view.defaultFor.map((mark) => html` <span class="pillc green acct-default">${defaultForWords(mark)}</span>`)}
         ${offered ? html`<button class="btn sm" type="button" ${real} ${act('connect.makeDefault', place)}>Make default</button>` : null}
     </div>`;
 }
