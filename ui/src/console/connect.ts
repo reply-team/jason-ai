@@ -331,8 +331,8 @@ const needsReconnect = (sender: DesktopReplySender): boolean =>
 //
 // A link the Reply CLI makes for connecting or reconnecting a sender goes from the desktop straight to the person's
 // browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a
-// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as does a forced delete,
-// and so does Make default where a default is set; the card can only ask for the act.
+// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as do a forced delete, a
+// sign-out and a removal; the card can only ask for the act.
 
 /**
  * Which of the cards a dialog or a choice belongs to: the Connect panel's, a chat's, or an account's on the Accounts page.
