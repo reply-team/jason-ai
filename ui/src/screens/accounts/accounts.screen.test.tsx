@@ -450,24 +450,23 @@ describe('Reply accounts, one card per profile', () => {
         );
         desktop.refuse.set('setup.connectReply', wrapped('connectReply', 'Reply did not sign in.'));
         const page = await openAccounts('.reply-account');
+        const second = () => cardOf(page, 'Reply account outbound, team 9');
         const routed = () => cardOf(page, 'Reply account routed-only');
-        fireEvent.input(within(routed()).getByPlaceholderText('Or paste a Reply API key'), {
+        fireEvent.input(within(second()).getByPlaceholderText('Or paste a Reply API key'), {
             target: { value: 'made-up-key' },
         });
-        fireEvent.click(within(routed()).getByRole('button', { name: 'Use key' }));
-        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toBe('Reply did not accept that key.'));
+        fireEvent.click(within(second()).getByRole('button', { name: 'Use key' }));
+        await waitFor(() => expect(words(within(second()).getByRole('alert'))).toBe('Reply did not accept that key.'));
         expect(within(section(page)).queryByRole('alert')).toBeNull();
         expect(within(cardOf(page, 'Reply account default')).queryByRole('alert')).toBeNull();
         // The next sign-in, on another card, says its own refusal there, and the first card's goes.
-        fireEvent.click(
-            within(cardOf(page, 'Reply account default')).getByRole('button', { name: 'Sign in with Reply' }),
-        );
-        await waitFor(() =>
-            expect(words(within(cardOf(page, 'Reply account default')).getByRole('alert'))).toBe(
-                'Reply did not sign in.',
-            ),
-        );
-        expect(within(routed()).queryByRole('alert')).toBeNull();
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Sign in with Reply' }));
+        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toBe('Reply did not sign in.'));
+        expect(within(second()).queryByRole('alert')).toBeNull();
+        // The next act of any kind takes it away too.
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.makeDefault')).toBe(true));
+        await waitFor(() => expect(within(routed()).queryByText('Reply did not sign in.')).toBeNull());
         expect(words(page)).not.toContain('Error invoking remote method');
     });
 

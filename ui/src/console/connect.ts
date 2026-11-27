@@ -367,6 +367,7 @@ async function ask(
     adding.value = null;
     naming.value = null;
     limiting.value = null;
+    cardRefused.value = null;
     actDialog.value = {
         place,
         title,
