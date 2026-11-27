@@ -581,6 +581,12 @@ export interface DesktopReplyTeam {
     name: string;
 }
 
+/** A sign-in as the desktop's note of an account keeps it: the login, and the team it was bound to. */
+export interface DesktopReplySignIn {
+    user: string;
+    team: DesktopReplyTeam;
+}
+
 /** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
 export type DesktopAccountsFact = 'profiles' | 'routes';
 
@@ -616,6 +622,16 @@ export interface DesktopAccount extends DesktopAccountRef {
      * offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` then.
      */
     teams?: DesktopReplyTeam[];
+    /**
+     * Who it was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is noted.
+     * Always sent by this desktop; optional as the page reads it.
+     */
+    lastSignIn?: DesktopReplySignIn | null;
+    /**
+     * Whether the last read found it signed in as another login, or bound to another team, than the note says: so until
+     * `setup.keepChange` or a sign-out. Always sent by this desktop; optional as the page reads it.
+     */
+    changed?: boolean;
 }
 
 /**
@@ -1168,6 +1184,12 @@ export interface JasonDesktop {
          * changes. Absent from a desktop of an earlier version.
          */
         removeAccount(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Keep it, for an account the last read found `changed`: the account as it now is becomes the one the desktop's note
+         * keeps, and it is no longer `changed`. Nothing of the Reply CLI changes. Absent from a desktop of an earlier
+         * version.
+         */
+        keepChange(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

@@ -988,6 +988,62 @@ test('Remove, never for the Reply CLI’s own default, asks first in the desktop
     assert.deepEqual(await refused.removeAccount({ type: 'reply', name: 'spare' }), no('The Reply CLI did not remove the profile. Could not write the configuration.', 'config.write', true));
 });
 
+test('the desktop notes who each Reply account was last signed in as, and in which team, in a file of its own: at the look that finds it signed in and bound with nothing noted, and at Keep it; a look that finds another login or team says what it was, at every look until Keep it; a sign-out keeps the note, a removal forgets it, and the note never decides which accounts there are', async (t) => {
+    const log = memoryLog();
+    const b = replyBench(t, {
+        profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, spare: {} },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test' },
+        seats: { 'ada@example.test': [3, 6], 'bea@example.test': [5, 9], 'cy@example.test': [4] },
+        teams: { '3': 'Made-up Three', '4': 'Made-up Four', '6': 'Made-up Six', '9': 'Made-up Nine' },
+        lists: { 'cy@example.test#4': { email: [mailbox] } },
+    });
+    const setup = new Setup({ ...setupDeps(b, log), confirm: () => Promise.resolve(true) });
+    const file = b.paths.replyAccounts;
+    assert.equal(file, join(b.paths.data, 'desktop', 'reply-accounts.json'));
+    const noted = () => JSON.parse(readFileSync(file, 'utf8')) as unknown;
+    const seen = async () =>
+        Object.fromEntries(((await setup.status()).accounts?.accounts ?? []).map((each) => [each.name, { last: each.lastSignIn, changed: each.changed }]));
+    const ada3 = { user: 'ada@example.test', team: { id: '3', name: 'Made-up Three' } };
+    const bea9 = { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } };
+    const cy4 = { user: 'cy@example.test', team: { id: '4', name: 'Made-up Four' } };
+    const world = (change: (current: ReplyWorld) => ReplyWorld) => writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify(change(b.world())));
+    // The first look notes each account signed in and bound; one signed out, or never signed in, has nothing noted.
+    assert.deepEqual(await seen(), { default: { last: ada3, changed: false }, outbound: { last: bea9, changed: false }, spare: { last: null, changed: false } });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3 }, { type: 'reply', name: 'outbound', ...bea9 }] });
+    assert.deepEqual(log.lines.filter((line) => line.name === 'reply_account_noted').map((line) => line.fields), [{ Moment: 'look', Written: true }, { Moment: 'look', Written: true }]);
+    // Signed out in a terminal: who it was last signed in as stays.
+    world((current) => ({ ...current, credentials: { default: 'ada@example.test' } }));
+    assert.deepEqual((await seen())['outbound'], { last: bea9, changed: false });
+    // Signed in again in a terminal as another login, in its own team: the note is the old one, and every look says the
+    // change, the lists those of the account as it now is; another team of the same login is a change too.
+    world((current) => ({ ...current, profiles: { ...current.profiles, outbound: { team_id: 4 }, default: { team_id: 6 } }, credentials: { ...current.credentials, outbound: 'cy@example.test' } }));
+    for (const look of ['the first look', 'the next look']) {
+        const now = await seen();
+        assert.deepEqual([now['outbound'], now['default']], [{ last: bea9, changed: true }, { last: ada3, changed: true }], look);
+    }
+    const outbound = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
+    assert.deepEqual({ user: outbound?.user, team: outbound?.team, ids: outbound?.senders.map((each) => each.id) }, { ...cy4, ids: ['12'] });
+    // Keep it makes the account as it now is the noted one; an account that shows no change has nothing to keep.
+    assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'outbound' }), { done: true });
+    assert.deepEqual((await seen())['outbound'], { last: cy4, changed: false });
+    assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'outbound' }), no('That Reply account shows no change to keep.'));
+    assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'nobody' }), no('That is not a Reply account the desktop listed.'));
+    // Sign out keeps the note, so the card says who it was; Remove forgets it.
+    await setup.signOut({ type: 'reply', name: 'outbound' });
+    assert.deepEqual((await seen())['outbound'], { last: cy4, changed: false });
+    await setup.removeAccount({ type: 'reply', name: 'outbound' });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3 }] });
+    assert.deepEqual(Object.keys(await seen()), ['default', 'spare']);
+    // The note never decides which accounts there are: one it names that the Reply CLI holds not, and no route names, is
+    // no account. A note that cannot be read is no note: the next look finds nothing noted, and notes again.
+    writeFileSync(file, JSON.stringify({ accounts: [{ type: 'reply', name: 'ghost', ...cy4 }, { type: 'reply', name: 'default', ...ada3 }] }));
+    assert.deepEqual(Object.keys(await seen()), ['default', 'spare']);
+    writeFileSync(file, '{');
+    assert.deepEqual((await seen())['default'], { last: { user: 'ada@example.test', team: { id: '6', name: 'Made-up Six' } }, changed: false });
+    assert.deepEqual(b.world().profiles, { default: { team_id: 6 }, spare: {} }, 'the note is never written into the Reply CLI’s files');
+    assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false, 'nor into the installation’s settings');
+});
+
 test('every signed-in Reply account is bound to one team, which it shows: a profile that pins none is pinned at the look that finds its sign-in in one team, and the log says so; a sign-in in several is offered them, and a pick pins one; the team is shown by its name, else its id; teams that could not be read are said, the other reads standing; and a pick for an account bound already is refused', async (t) => {
     const log = memoryLog();
     const b = replyBench(t, {
@@ -1356,7 +1412,7 @@ test('each account is read under its own profile’s name alone, a profile only 
     const setup = setupOn(b);
     const { accounts } = await setup.status();
     const state = (name: string, over: Record<string, unknown>) => ({
-        type: 'reply', name, default: false, held: true, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], ...over,
+        type: 'reply', name, default: false, held: true, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false, ...over,
     });
     const bea = { signedIn: true, user: 'bea@example.test' };
     const asListed = (row: typeof mailbox) => ({ id: String(row.id), channel: row.channel, name: row.name, address: row.address, status: row.reply_status });
@@ -1366,9 +1422,10 @@ test('each account is read under its own profile’s name alone, a profile only 
             // will not list until one is; it is offered the login's teams, its channels unread.
             state('outbound', { ...bea, default: true, unread: ['email', 'linkedin'], teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }] }),
             // ada's sign-in in one team, bound to it by this look, shown by its id since Reply names it not.
-            state('default', { signedIn: true, user: 'ada@example.test', team: { id: '3', name: '' }, senders: [asListed(mailbox)] }),
+            // Each account signed in and bound is noted as who it was signed in as at this first look.
+            state('default', { signedIn: true, user: 'ada@example.test', team: { id: '3', name: '' }, senders: [asListed(mailbox)], lastSignIn: { user: 'ada@example.test', team: { id: '3', name: '' } } }),
             // A second team is a second profile, pinned to it in the Reply CLI, and shown by its name.
-            state('outbound-nine', { ...bea, team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)] }),
+            state('outbound-nine', { ...bea, team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)], lastSignIn: { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } } }),
             // The profile the CLI is set to is an account like any other.
             state('quiet', {}),
             state('routed-only', { held: false }),

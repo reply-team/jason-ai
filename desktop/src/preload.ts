@@ -103,6 +103,7 @@ const desktop = {
         addAccount: (name: string) => ipcRenderer.invoke('jason:setup.addAccount', name),
         signOut: (account: unknown) => ipcRenderer.invoke('jason:setup.signOut', account),
         removeAccount: (account: unknown) => ipcRenderer.invoke('jason:setup.removeAccount', account),
+        keepChange: (account: unknown) => ipcRenderer.invoke('jason:setup.keepChange', account),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

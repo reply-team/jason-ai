@@ -10,6 +10,7 @@ import type {
     DesktopReplyOpened,
     DesktopReplyPending,
     DesktopReplyRefusal,
+    DesktopReplySignIn,
     DesktopReplyTeam,
     DesktopSetup,
 } from '../platform/desktop';
@@ -124,6 +125,10 @@ interface AccountView {
     pendingUnread: readonly DesktopReplyChannel[];
     /** The teams its sign-in can act in, where Reply would not list it for want of one; null where there is no choice. */
     teams: readonly DesktopReplyTeam[] | null;
+    /** Who it was last seen signed in as, as the desktop's note keeps it; null where nothing is noted. */
+    lastSignIn: DesktopReplySignIn | null;
+    /** Whether the last read found another login or team than the note says. */
+    changed: boolean;
 }
 
 const listOf = <T>(value: readonly T[] | undefined): readonly T[] => (Array.isArray(value) ? value : []);
@@ -152,6 +157,8 @@ function accountViews(state: DesktopSetup): AccountView[] {
             pending: listOf(each.pending),
             pendingUnread: listOf(each.pendingUnread),
             teams: Array.isArray(each.teams) && each.teams.length > 0 ? each.teams : null,
+            lastSignIn: each.lastSignIn ?? null,
+            changed: each.changed === true,
         }));
     const reply = state.reply;
     if (!reply.cli.found) return [];
@@ -171,6 +178,8 @@ function accountViews(state: DesktopSetup): AccountView[] {
             pending: listOf(reply.pending),
             pendingUnread: listOf(reply.pendingUnread),
             teams: null,
+            lastSignIn: null,
+            changed: false,
         },
     ];
 }
@@ -218,6 +227,7 @@ const choosesTeam = (): boolean => mounted() && typeof earlier(here().desktop).s
 const addsAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.addAccount === 'function';
 const signsOut = (): boolean => mounted() && typeof earlier(here().desktop).setup?.signOut === 'function';
 const removesAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.removeAccount === 'function';
+const keepsChange = (): boolean => mounted() && typeof earlier(here().desktop).setup?.keepChange === 'function';
 
 /** Whether the Reply CLI is found, at the version the acts need and of a version that was read. */
 const usableCli = (reply: DesktopSetup['reply']): boolean =>
@@ -228,6 +238,32 @@ const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === nul
 
 /** A team as the card names it: by the name Reply gives it, else by its id. */
 const teamWords = (team: DesktopReplyTeam): string => (team.name === '' ? `team ${team.id}` : team.name);
+
+/** A sign-in as the card says it: the login, and the team it is bound to. */
+const signInWords = (signIn: DesktopReplySignIn): Html =>
+    html`<b>${signIn.user}</b> in <b>${teamWords(signIn.team)}</b>`;
+
+/**
+ * What the desktop's note of an account says: on a card not signed in, who it was last signed in as; on one the last read
+ * found as another login or team, what the account was and what it is now, and that campaigns sending through it now send
+ * as the new one, with Keep it and Sign out.
+ */
+function noteView(view: AccountView, place: Place, real: Html | null): Html | null {
+    const last = view.lastSignIn;
+    if (last === null || view.authUnread) return null;
+    if (!view.signedIn) return html`<div class="setrow meta acct-last">Last signed in as ${signInWords(last)}.</div>`;
+    if (!view.changed || view.user === null || view.team === null || !keepsChange()) return null;
+    return html`<div class="note am acct-changed" role="note">
+        <div>
+            This Reply account was ${signInWords(last)}, and is now
+            ${signInWords({ user: view.user, team: view.team })}: campaigns sending through it now send as the new one.
+        </div>
+        <div class="setrow">
+            <button class="btn sm" type="button" ${real} ${act('connect.keepChange', place)}>Keep it</button>
+            ${signsOut() ? html`<button class="btn sm" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>` : null}
+        </div>
+    </div>`;
+}
 
 /**
  * The one line for each read the desktop did not wholly make, from its lists of closed words: the teams of the sign-in
@@ -666,6 +702,22 @@ defineReal('connect.removeAccount', ([place]) => {
         () => null,
         false,
         'Removing it…',
+    );
+});
+
+// Keep it: the account as it now is becomes the one the desktop's note keeps, and the card no longer says the change.
+defineReal('connect.keepChange', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !keepsChange()) return;
+    const ref = view.ref;
+    void ask(
+        place,
+        'Keep it',
+        null,
+        () => here().desktop.setup.keepChange(ref),
+        () => null,
+        true,
+        'Keeping it…',
     );
 });
 
@@ -1499,6 +1551,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                       </div>
                       <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>`
         }
+        ${noteView(view, place, asks)}
         ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
         ${choosing ? teamChoice(view.teams!, place, asks) : null}
         ${(choosing ? [] : grouped(view.senders, view.pending)).map(

@@ -3,6 +3,7 @@ import type {
     DesktopAccount,
     DesktopAccounts,
     DesktopReply,
+    DesktopReplySignIn,
     DesktopReplyTeam,
     DesktopSetup,
     JasonDesktop,
@@ -93,6 +94,8 @@ const setup = {
     addAccount: true,
     signOut: true,
     removeAccount: true,
+    // Keep it: the account as it now is becomes the one the desktop's note keeps.
+    keepChange: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -146,8 +149,12 @@ const account = {
     notRead: true,
     // The teams its sign-in can act in, where its profile has none pinned and Reply would not list it without one.
     teams: true,
+    // Who it was last seen signed in as, in which team, and whether the last read found another login or team.
+    lastSignIn: true,
+    changed: true,
 } as const satisfies Record<keyof DesktopAccount, true>;
 const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
+const accountSignIn = { user: true, team: true } as const satisfies Record<keyof DesktopReplySignIn, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -163,13 +170,15 @@ const held: [
     Exactly<keyof typeof accounts, keyof DesktopAccounts>,
     Exactly<keyof typeof account, keyof DesktopAccount>,
     Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
+    Exactly<keyof typeof accountSignIn, keyof DesktopReplySignIn>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
         expect(held).toEqual([
+            true,
             true,
             true,
             true,
@@ -266,6 +275,7 @@ describe('the desktop seam', () => {
             'setup.addAccount',
             'setup.signOut',
             'setup.removeAccount',
+            'setup.keepChange',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([
@@ -309,7 +319,10 @@ describe('the desktop seam', () => {
             'pendingUnread',
             'notRead',
             'teams',
+            'lastSignIn',
+            'changed',
         ]);
         expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
+        expect(Object.keys(accountSignIn)).toEqual(['user', 'team']);
     });
 });

@@ -710,6 +710,56 @@ describe('Reply accounts, one card per profile', () => {
         ]);
     });
 
+    it('says who a card not signed in was last signed in as, and where the last read found another login or team, what the account was and is now, with Keep it and Sign out', async () => {
+        const ada3 = { user: 'ada@example.test', team: { id: '3', name: 'Made-up Three' } };
+        const desktop = inDesktop(
+            withReplyAccounts(setupFound, [
+                replyAccount('default', {
+                    default: true,
+                    signedIn: true,
+                    user: 'cy@example.test',
+                    team: { id: '4', name: '' },
+                    lastSignIn: ada3,
+                    changed: true,
+                    senders: [mailbox],
+                }),
+                replyAccount('outbound', { lastSignIn: ada3 }),
+                replyAccount('quiet', { signedIn: true, user: 'bea@example.test', team: { id: '9', name: '' } }),
+                replyAccount('spare'),
+            ]),
+        );
+        const page = await openAccounts('.reply-account');
+        const card = (name: string) => cardOf(page, `Reply account ${name}`);
+        expect(words(card('outbound').querySelector('.reply-state')!)).toBe('Not signed in');
+        expect(words(card('outbound').querySelector('.acct-last')!)).toBe(
+            'Last signed in as ada@example.test in Made-up Three.',
+        );
+        // Nothing noted, or nothing changed: no line and no notice.
+        for (const name of ['spare', 'quiet'])
+            expect([card(name).querySelector('.acct-last'), card(name).querySelector('.acct-changed')]).toEqual([
+                null,
+                null,
+            ]);
+        // The notice stands while the desktop says the change, and the lists are the account's as it now is.
+        const notice = () => card('default').querySelector<HTMLElement>('.acct-changed')!;
+        expect(words(notice())).toBe(
+            'This Reply account was ada@example.test in Made-up Three, and is now cy@example.test in team 4: campaigns sending through it now send as the new one. Keep it Sign out',
+        );
+        expect(words(card('default').querySelector('.acct')!)).toContain('Sales inbox');
+        fireEvent.click(within(notice()).getByRole('button', { name: 'Keep it' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.keepChange')).toBe(true));
+        fireEvent.click(within(notice()).getByRole('button', { name: 'Sign out' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.signOut')).toBe(true));
+        expect(
+            desktop.calls
+                .filter((call) => call.name === 'setup.keepChange' || call.name === 'setup.signOut')
+                .map((call) => [call.name, ...call.args]),
+        ).toEqual([
+            ['setup.keepChange', { type: 'reply', name: 'default' }],
+            ['setup.signOut', { type: 'reply', name: 'default' }],
+        ]);
+    });
+
     it('asks a desktop that lacks Make default for none: no card offers it, even with no default set', async () => {
         const none = withReplyAccounts(
             setupFound,

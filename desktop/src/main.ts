@@ -227,6 +227,8 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
         ['setup.addAccount', (name) => setup.addAccount(name)],
         ['setup.signOut', (account) => setup.signOut(account)],
         ['setup.removeAccount', (account) => setup.removeAccount(account)],
+        // Keep it: the account as it now is becomes the one the desktop's note keeps.
+        ['setup.keepChange', (account) => setup.keepChange(account)],
     ];
     for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
     setup.onChanged(changed);

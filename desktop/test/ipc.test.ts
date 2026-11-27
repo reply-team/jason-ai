@@ -162,6 +162,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             addAccount: 'function',
             signOut: 'function',
             removeAccount: 'function',
+            keepChange: 'function',
             onChanged: 'function',
         },
     });
@@ -233,6 +234,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.addAccount', ['Made-up Ops']],
         ['setup.signOut', [outbound]],
         ['setup.removeAccount', [outbound]],
+        ['setup.keepChange', [outbound]],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];

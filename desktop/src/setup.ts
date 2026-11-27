@@ -28,6 +28,7 @@ import {
     type ReplyTeam,
     withReason,
 } from './accounts.ts';
+import { readAccountNotes, sameSignIn, writeAccountNotes, type AccountNote, type SignIn } from './account-notes.ts';
 import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
@@ -273,6 +274,16 @@ export interface AccountState extends AccountRef {
      * offers. Absent otherwise; its channels are unread then, since Reply lists none of them without a team.
      */
     teams?: ReplyTeam[];
+    /**
+     * Who the account was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is
+     * noted. Always sent; optional as the page reads it.
+     */
+    lastSignIn?: SignIn | null;
+    /**
+     * Whether this look found it signed in as another login, or bound to another team, than the note says: so until Keep
+     * it, or a sign-out. Always sent; optional as the page reads it.
+     */
+    changed?: boolean;
 }
 
 /**
@@ -918,12 +929,15 @@ export class Setup {
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
         const listing = profiles === null ? null : accountsOf(profiles, routes);
-        const accounts = await Promise.all(
+        const notes = readAccountNotes(this.#deps.paths.replyAccounts);
+        const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => ({
                 ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
                 default: listing?.default != null && sameAccount(account, listing.default),
             })),
         );
+        // Noted in the listing's order once every account is read, so the note is written in one order.
+        const accounts = read.map((account) => this.#noted(account, notes));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
         this.#routed = listing?.routed ?? null;
@@ -983,6 +997,36 @@ export class Setup {
         if (teams !== null && teams.length > 1) return { ...signedIn, unread: [...replyChannels], teams };
         const team = teams?.length === 1 ? await this.#bind(account, teams[0]!) : null;
         return { ...signedIn, ...(await this.#lists(account)), team, notRead: unreadTeams(teams) };
+    }
+
+    /**
+     * An account as the desktop's note says it was (`account-notes.ts`): who it was last seen signed in as, and whether this
+     * look found another login or another team. One signed in and bound to a team, with nothing noted, is noted now.
+     */
+    #noted(account: AccountState, notes: readonly AccountNote[]): AccountState {
+        const now = account.signedIn && account.user !== null && account.team != null ? { user: account.user, team: account.team } : null;
+        const kept = notes.find((each) => sameAccount(each, account)) ?? (now !== null && this.#note(account, now, 'look') ? now : null);
+        return { ...account, lastSignIn: kept === null ? null : { user: kept.user, team: kept.team }, changed: kept !== null && now !== null && !sameSignIn(kept, now) };
+    }
+
+    /**
+     * Writes one account's note, or takes it away (`signIn` null), on the file as it is at this moment, read and written in
+     * one turn of the event loop so no other write comes between. A look notes only an account that has nothing noted by
+     * then. Whether the note was written.
+     */
+    #note(account: AccountRef, signIn: SignIn | null, moment: 'look' | 'keep' | 'remove'): boolean {
+        const file = this.#deps.paths.replyAccounts;
+        const notes = readAccountNotes(file);
+        const others = notes.filter((each) => !sameAccount(each, account));
+        if ((moment === 'look' && others.length !== notes.length) || (signIn === null && others.length === notes.length)) return false;
+        try {
+            writeAccountNotes(file, signIn === null ? others : [...others, { type: account.type, name: account.name, ...signIn }]);
+        } catch {
+            this.#deps.log.warn('reply_account_noted', { Moment: moment, Written: false });
+            return false;
+        }
+        this.#deps.log.info('reply_account_noted', { Moment: moment, Written: true });
+        return true;
     }
 
     /** The teams an account's sign-in can act in (`reply --profile <name> team list --json`); null where they were not read. */
@@ -1454,8 +1498,24 @@ export class Setup {
             if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
             const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
             this.#deps.log.info('reply_account_removed', { Exit: result.exit });
-            return result.exit === 0 ? this.#announced({ done: true }) : cliRefusal(result, accountSentences.notRemoved);
+            if (result.exit !== 0) return cliRefusal(result, accountSentences.notRemoved);
+            this.#note(account, null, 'remove');
+            return this.#announced({ done: true });
         });
+    }
+
+    /**
+     * Keep it, where the last read found the account signed in as another login, or bound to another team, than the
+     * desktop's note says: the account as it now is becomes the noted one, and the card no longer says the change. Nothing
+     * is run, and nothing of the Reply CLI's changes.
+     */
+    async keepChange(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return refusal(accountSentences.badAccount);
+        if (account.changed !== true || account.user === null || account.team == null) return refusal(accountSentences.nothingToKeep);
+        if (!this.#note(account, { user: account.user, team: account.team }, 'keep')) return refusal(accountSentences.notKept);
+        this.#ended += 1;
+        return this.#announced({ done: true });
     }
 
     /** An act's answer, once every page has been told the accounts changed: the acts on a Reply account as a whole. */

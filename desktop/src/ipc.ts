@@ -26,6 +26,7 @@ export const invokeChannels = {
     'setup.addAccount': 'jason:setup.addAccount',
     'setup.signOut': 'jason:setup.signOut',
     'setup.removeAccount': 'jason:setup.removeAccount',
+    'setup.keepChange': 'jason:setup.keepChange',
     'theme.get': 'jason:theme.get',
     'theme.set': 'jason:theme.set',
     'updates.key': 'jason:updates.key',

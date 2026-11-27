@@ -226,6 +226,8 @@ export const accountSentences = {
     notSignedOut: 'The Reply CLI did not sign it out.',
     notRemoved: 'The Reply CLI did not remove the profile.',
     defaultKept: 'The Reply CLI’s own profile default is always there, so nothing was removed.',
+    nothingToKeep: 'That Reply account shows no change to keep.',
+    notKept: 'Jason Desktop could not write its note of this Reply account, so nothing was changed.',
 } as const;
 
 /**
