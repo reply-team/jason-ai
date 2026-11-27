@@ -64,7 +64,7 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
 package it carries, once for each desktop version, and the role skills again at a start where `jason status` finds no
-readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
+readable record of their deployment, as after `jason uninstall` kept the data, deploys the Reply skills when you sign in to Reply on a card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui pair` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -612,21 +612,46 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
   asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
   desktop's own. A chat that chose a model before keeps it.
-- **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
-  plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
-  runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
-  `reply`'s requests and nothing else: `jason-harness/<the bundle's version>`.
-  The card lists the Reply account's mailboxes and its LinkedIn accounts, each channel read on its own, so an account
+- **Reply.** A Reply account is one profile of the Reply CLI, and the Accounts screen draws one card for each: every
+  profile the Reply CLI holds and every profile a route to Jason's Reply plugin names, global or a campaign's, the
+  default first. A card is that profile, named exactly as the Reply CLI names it, `default` included, with the team a
+  route names for it beside it, and two teams a route names for one profile are two cards. Everything on a card is read
+  and done as Jason's own work does it: the Reply CLI runs with the card's `--profile` and, where it has a team,
+  `--team-id`, and is never handed `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, so neither
+  the profile a terminal's `reply` is set to nor Jason Desktop's own environment decides what a card shows. Jason keeps
+  no list of the accounts: they are read again at each look. Jason takes the computer to have one Reply CLI
+  configuration; a runtime started with another `XDG_CONFIG_HOME` than Jason Desktop's would read other profiles and
+  sign-ins than the cards show.
+  One account is the default, marked **Default**: the one the global default route names, which every campaign with no
+  route of its own sends through. **Make default** on any other card makes it the default, replacing the default there
+  was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the
+  account that would be. The runtime writes the route (`jason route set --global`, journaled as yours) and refuses it,
+  and the card says why, while a search still followed or a send Reply holds for later runs on the account that is the
+  default now, or for a profile or a team the settings file cannot hold as written. Every other route, a campaign's
+  own or an operation's, is `jason route set`'s, and no card makes one. Nothing is installed and no route is written
+  without your click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first
+  sign-in on a card where no default is set, which makes that account the default, or at Make default. A sign-in where
+  a default is set leaves it as it is and still places the plugin and its grant.
+  A card signs its own profile in, with `reply auth login` or with a key on standard input that only the Reply CLI
+  keeps; a profile only a route names is made in the Reply CLI first (`reply profile add`), and a profile the Reply CLI
+  holds never is. A card says "configured" when the runtime accepted it, never "connected". What the desktop tells
+  Reply about itself is one label in the User-Agent of `reply`'s requests and nothing else:
+  `jason-harness/<the bundle's version>`.
+  A card lists its account's mailboxes and its LinkedIn accounts, each channel read on its own, so an account
   without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. A channel that was read and holds no account and no link still waiting shows no line:
   the card says what it could not read, never that a channel is empty. The list is read again when the window takes the
   focus back, at most once in 30 seconds.
-  The same goes for what the card reads before the lists. A sign-in it could not read is said as that ("The Reply
-  sign-in could not be read.") with **Check again**, in place of the sign-in: the card says "Not signed in" only where
-  the Reply CLI answers that it holds no credential, and asks for no account either way. Where it could not read
-  whether Jason uses the sign-in, the runtime giving no list of its plugins or of its routes, it says that, never that
-  Jason does not use it.
+  The same goes for what the screen reads before the lists. A sign-in it could not read is said on its card as that
+  ("The Reply sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in"
+  only where the Reply CLI answers that the profile holds no credential, or does not hold the profile, and asks for no
+  account either way. Where the Reply CLI's profiles could not be read, no card is drawn and the screen says so ("The
+  Reply accounts could not be read.") with **Check again**; where the routes could not be read, the cards stay, none is
+  marked and none offers Make default, and the screen says so ("Which account is the default could not be read.").
+  Where no default is set at all, it says that no account is the default yet and that campaigns have nothing to send
+  through until you make one the default. No card says who uses it: which account a campaign sends through is its
+  routes', which `jason route resolve` answers.
   Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
   to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. A Reply CLI whose
   version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**, never
@@ -640,8 +665,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   try is used up. It tries once for each version Jason comes to need; after that the click is yours, and it is never
   held back. The card says what came of it, in that run of the application only: that it was updated, that it could not
   be, with one line of what npm printed, or that the one in use is still the old one, which was installed another way
-  and is updated that way. Where the Reply CLI is not found, the card says that it was not found, and nothing of a
-  sign-in, which only the Reply CLI can read. A missing Reply CLI is never installed without a click: where npm is
+  and is updated that way. Where the Reply CLI is not found, the screen says that it was not found and draws no
+  account, which only the Reply CLI can read; nor below the version Jason needs, or where its version could not be read. A missing Reply CLI is never installed without a click: where npm is
   missing too, the card says so and where Node.js, which brings npm, comes from.
   `Update:CheckEnabled` set to `false` turns this update off, as Jason Desktop reads it when it starts: in the
   installation's settings file or in Jason Desktop's own environment, as `JASON_Update__CheckEnabled`; `false` in either
@@ -670,13 +695,15 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   links, or a plan or role that does not include them, shows no line.
   Finishing a connection happens on Reply's side, so the card learns of it by **Check now**, **Check again** or a focus.
   Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply, which the card links to.
-  The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
+  The default account's card, or the profile `default`'s where no Reply account is the default, appears inside the chat
+  of a draft campaign while no Reply account is the default or the default is not signed in. It is an offer, so it is hidden
   only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
   `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
-  The Accounts screen shows the same card, drawn by the same code and acting through the same acts;
+  The Connect panel draws that card too, and the Accounts screen every account's, drawn by the same code and acting
+  through the same acts;
   the notification channels as the runtime reports them are in Settings, under Notifications; see
   [ui.md](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
