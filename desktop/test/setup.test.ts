@@ -272,7 +272,26 @@ test('the grant keeps an Exec grant that already holds reply, and writes ["reply
     }
 });
 
-test('Reply’s answers are read in the shapes reply-cli prints, the profiles and the routes as the accounts, each told from a read that did not answer', () => {
+/** A route to Jason's Reply plugin as `route.list` answers it, bound as given. */
+const replyRoute = (binding: unknown) => ({ plugin_id: 'reply', binding, binding_identity: null });
+
+/** What `route.list` answers (`RoutesDto`): the global routes, and each campaign that has routes of its own. */
+const routeList = (global: unknown, campaigns: unknown[] = [], operations: unknown = {}, channels: unknown = {}) =>
+    JSON.stringify({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations, channels }, campaigns });
+
+/** Routes to Reply at every level: a global default to another plugin, global operation and channel routes, three campaigns. */
+const routesEverywhere = routeList(
+    { plugin_id: 'slack', binding: { channel: 'C1' }, binding_identity: null },
+    [
+        { campaign_id: 'cmp_1', default: replyRoute({ profile: 'outbound', team_id: '9' }), operations: { 'message.send': replyRoute(null) }, channels: { 'message.send': { email: replyRoute({}) } } },
+        { campaign_id: 'cmp_2', default: null, operations: {}, channels: { 'message.send': { linkedin: replyRoute({ profile: 'Made-up Ops', derive_first_name: false }) } } },
+        { campaign_id: 'cmp_3', default: replyRoute({ team_id: '7' }), operations: {}, channels: {} },
+    ],
+    { 'contact.find': replyRoute({ profile: 'research' }), 'sender.list': replyRoute({}) },
+    { 'message.send': { email: replyRoute(null) } },
+);
+
+test('Reply’s answers are read in the shapes reply-cli and the runtime print, each told from a read that did not answer', () => {
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } })), {
         signedIn: true,
         user: 'someone@example.com',
@@ -319,7 +338,7 @@ test('Reply’s answers are read in the shapes reply-cli prints, the profiles an
     const listedTeams = (each: unknown[]) => JSON.stringify({ current_team_id: null, teams: each });
     assert.deepEqual(
         teams(0, listedTeams([
-            { team_id: 5, team_name: ' Made-up\u0007Five​ ' },
+            { team_id: 5, team_name: ' Made-up\u0007Five\u200b ' },
             { team_id: 5, team_name: 'Made-up Five again' },
             { team_id: 0, team_name: 'zero' },
             { team_id: -9, team_name: 'below zero' },
@@ -337,51 +356,18 @@ test('Reply’s answers are read in the shapes reply-cli prints, the profiles an
     // The routes, as the runtime answers route.list (RoutesDto): the global default, or none; and the profile every route
     // to Reply names, at any level, global or a campaign's, null where it names none, a team beside it or alone no part
     // of it.
-    const reply = (binding: unknown) => ({ plugin_id: 'reply', binding, binding_identity: null });
-    const routes = (global: unknown, campaigns: unknown[] = [], operations: unknown = {}, channels: unknown = {}) =>
-        JSON.stringify({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations, channels }, campaigns });
     const route = (exit: number, stdout: string) => readRoutes({ exit, stdout });
-    assert.deepEqual(route(0, routes(reply({ profile: 'default' }))), { globalDefault: { plugin: 'reply', binding: { profile: 'default' } }, reply: ['default'] });
-    assert.deepEqual(route(0, routes(null)), { globalDefault: null, reply: [] }, 'no global default is an answer');
-    const everywhere = route(
-        0,
-        routes(
-            { plugin_id: 'slack', binding: { channel: 'C1' }, binding_identity: null },
-            [
-                { campaign_id: 'cmp_1', default: reply({ profile: 'outbound', team_id: '9' }), operations: { 'message.send': reply(null) }, channels: { 'message.send': { email: reply({}) } } },
-                { campaign_id: 'cmp_2', default: null, operations: {}, channels: { 'message.send': { linkedin: reply({ profile: 'Made-up Ops', derive_first_name: false }) } } },
-                { campaign_id: 'cmp_3', default: reply({ team_id: '7' }), operations: {}, channels: {} },
-            ],
-            { 'contact.find': reply({ profile: 'research' }), 'sender.list': reply({}) },
-            { 'message.send': { email: reply(null) } },
-        ),
-    );
+    assert.deepEqual(route(0, routeList(replyRoute({ profile: 'default' }))), { globalDefault: { plugin: 'reply', binding: { profile: 'default' } }, reply: ['default'] });
+    assert.deepEqual(route(0, routeList(null)), { globalDefault: null, reply: [] }, 'no global default is an answer');
+    const everywhere = route(0, routesEverywhere);
     assert.deepEqual(everywhere, {
         globalDefault: { plugin: 'slack', binding: { channel: 'C1' } },
         reply: ['research', null, null, 'outbound', null, null, 'Made-up Ops', null],
     });
     const unreachable = JSON.stringify({ error: { code: 'runtime_unreachable', message: 'No runtime answered.', retryable: true } });
-    for (const [exit, stdout] of [[0, '{'], [0, '{}'], [0, '{"global":{}}'], [0, '{"global":{"default":{}}}'], [0, 'null'], [3, unreachable], [1, routes(null)], [-1, '']] as const) {
+    for (const [exit, stdout] of [[0, '{'], [0, '{}'], [0, '{"global":{}}'], [0, '{"global":{"default":{}}}'], [0, 'null'], [3, unreachable], [1, routeList(null)], [-1, '']] as const) {
         assert.equal(route(exit, stdout), null, `${exit} ${stdout}`);
     }
-    // The accounts: the CLI's profiles and every profile a route to Reply names, one account each; the default first,
-    // then the CLI's own order, then the profiles only a route names. A route's profile is its binding's, else the one
-    // the Reply CLI is set to at this read, as Jason's Reply plugin runs it.
-    const named = (name: string) => ({ type: 'reply', name });
-    const cli = { current: 'outbound', available: ['default', 'outbound', 'quiet'] };
-    const listing = (accounts: string[], fallback: string | null) => ({
-        accounts: accounts.map(named),
-        default: fallback === null ? null : named(fallback),
-        unnamed: 'outbound',
-    });
-    assert.deepEqual(accountsOf(cli, everywhere), listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null), 'a global default to another plugin marks no Reply account');
-    assert.deepEqual(accountsOf(cli, route(0, routes(reply({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research'), 'the default is the binding’s account, held by the CLI or not');
-    assert.deepEqual(accountsOf(cli, route(0, routes(reply(null)))), listing(['outbound', 'default', 'quiet'], 'outbound'), 'a default that names no profile is the profile the CLI is set to');
-    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(0, routes(reply({})))), { ...listing(['quiet', 'default', 'outbound'], 'quiet'), unnamed: 'quiet' }, 'and moves with it');
-    const teamed = [{ campaign_id: 'cmp_9', default: reply({ profile: 'quiet', team_id: '7' }), operations: {}, channels: {} }];
-    assert.deepEqual(accountsOf(cli, route(0, routes(null, teamed))), listing(['default', 'outbound', 'quiet'], null), 'a team in a binding is no part of the account');
-    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null), 'routes not read: the CLI’s profiles, none marked');
-    assert.deepEqual(accountsOf({ current: 'default', available: ['default'] }, route(0, routes(null))), { ...listing(['default'], null), unnamed: 'default' }, 'a fresh installation: one account, no default');
     // The Reply plugin as the runtime's plugin list holds it: valid, in another state or not listed, or no list given.
     const plugins = (exit: number, stdout: string) => replyPluginValid({ exit, stdout });
     assert.equal(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'valid' }] })), true);
@@ -390,6 +376,26 @@ test('Reply’s answers are read in the shapes reply-cli prints, the profiles an
     for (const [exit, stdout] of [[3, unreachable], [3, ''], [1, JSON.stringify({ plugins: [] })], [-1, ''], [0, 'not json'], [0, '{}'], [0, '{"plugins":{}}'], [0, 'null']] as const) {
         assert.equal(plugins(exit, stdout), null, `${exit} ${stdout}`);
     }
+});
+
+test('the accounts are every profile the Reply CLI holds and every profile a route to Reply names, one each: the default first, then the CLI’s own order, then the profiles only a route names; a route that names no profile is the profile the Reply CLI is set to at that read', () => {
+    // A route's profile is its binding's, else the one the Reply CLI is set to at this read, as Jason's Reply plugin runs it.
+    const route = (stdout: string) => readRoutes({ exit: 0, stdout })!;
+    const named = (name: string) => ({ type: 'reply', name });
+    const cli = { current: 'outbound', available: ['default', 'outbound', 'quiet'] };
+    const listing = (accounts: string[], fallback: string | null) => ({
+        accounts: accounts.map(named),
+        default: fallback === null ? null : named(fallback),
+        unnamed: 'outbound',
+    });
+    assert.deepEqual(accountsOf(cli, route(routesEverywhere)), listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null), 'a global default to another plugin marks no Reply account');
+    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research'), 'the default is the binding’s account, held by the CLI or not');
+    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound'), 'a default that names no profile is the profile the CLI is set to');
+    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), { ...listing(['quiet', 'default', 'outbound'], 'quiet'), unnamed: 'quiet' }, 'and moves with it');
+    const teamed = [{ campaign_id: 'cmp_9', default: replyRoute({ profile: 'quiet', team_id: '7' }), operations: {}, channels: {} }];
+    assert.deepEqual(accountsOf(cli, route(routeList(null, teamed))), listing(['default', 'outbound', 'quiet'], null), 'a team in a binding is no part of the account');
+    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null), 'routes not read: the CLI’s profiles, none marked');
+    assert.deepEqual(accountsOf({ current: 'default', available: ['default'] }, route(routeList(null))), { ...listing(['default'], null), unnamed: 'default' }, 'a fresh installation: one account, no default');
 });
 
 // ---- The written set -----------------------------------------------------------------------------------------------
@@ -765,77 +771,26 @@ async function readSetup(b: Bench, log: Logger = memoryLog(), settings?: Desktop
 /** The runs of one program after the first `from` the record held. */
 const runsAfter = (b: Bench, from: number, name: 'reply' | 'jason') => b.record().slice(from).filter((entry) => entry.name === name).map((entry) => entry.args.join(' '));
 
-test('a sign-in on a card signs that account in, the key on standard input, and the Reply CLI alone keeps the key; a login in several teams is offered them at once, and a pick pins one on the profile', async (t) => {
-    const b = replyBench(t, {
-        profiles: { outbound: {} },
-        keys: { 'planted-reply-key': 'bea@example.test' },
-        seats: { 'bea@example.test': [5, 9] },
-        teams: { '5': 'Made-up Five', '9': 'Made-up Nine' },
-        lists: { 'bea@example.test#9': { linkedin: [{ id: 34, channel: 'linkedin', name: 'Made-up Bea', address: '', reply_status: 'enabled' }] } },
-    });
-    const setup = await readSetup(b);
-    let from = b.record().length;
-    await setup.connectReplyWithKey('  planted-reply-key  ', { type: 'reply', name: 'outbound' });
-    const login = b.record().slice(from).find((entry) => entry.name === 'reply' && entry.args.includes('login'));
+test('a sign-in signs in the account its card names: its key on standard input, kept by the Reply CLI alone, or the browser’s, as that profile; a profile only a route names is made in the Reply CLI first and one it holds never is, and a name the last read did not list signs nobody in', async (t) => {
+    // A key, on standard input and in no argument, kept under that account's profile and no other.
+    const keyed = replyBench(t, { profiles: { outbound: {} }, keys: { 'planted-reply-key': 'bea@example.test' } });
+    const withKey = await readSetup(keyed);
+    let from = keyed.record().length;
+    await withKey.connectReplyWithKey('  planted-reply-key  ', { type: 'reply', name: 'outbound' });
+    const login = keyed.record().slice(from).find((entry) => entry.name === 'reply' && entry.args.includes('login'));
     assert.deepEqual(login?.args, ['--profile', 'outbound', 'auth', 'login', '--with-token', '--json']);
     assert.equal(login?.stdin, 'planted-reply-key');
-    assert.deepEqual(b.world().credentials, { outbound: 'bea@example.test' }, 'that account, and no other, holds the sign-in');
-    for (const entry of b.record()) assert.equal(JSON.stringify(entry.args).includes('planted-reply-key'), false);
+    assert.deepEqual(keyed.world().credentials, { outbound: 'bea@example.test' }, 'that account, and no other, holds the sign-in');
+    for (const entry of keyed.record()) assert.equal(JSON.stringify(entry.args).includes('planted-reply-key'), false);
     for (const host of ['.claude', '.agents']) {
-        assert.equal(existsSync(join(b.paths.chat, host, 'skills', 'reply-cli', 'SKILL.md')), true, host);
-        assert.equal(existsSync(join(b.paths.chat, host, 'skills', 'campaign-launch')), false, host);
+        assert.equal(existsSync(join(keyed.paths.chat, host, 'skills', 'reply-cli', 'SKILL.md')), true, host);
+        assert.equal(existsSync(join(keyed.paths.chat, host, 'skills', 'campaign-launch')), false, host);
     }
-    // The login can act in two Reply teams and the profile has none pinned: the read right after the sign-in offers its
-    // teams, by id and name, its channels unread as before; the Reply CLI is asked for them only because Reply refused a
-    // read for want of one, and the second channel is not asked again.
-    from = b.record().length;
-    const offered = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
-    assert.deepEqual(
-        { teams: offered?.teams, senders: offered?.senders, unread: offered?.unread },
-        { teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }], senders: [], unread: ['email', 'linkedin'] },
-    );
-    const asked = runsAfter(b, from, 'reply').filter((run) => run.startsWith('--profile outbound'));
-    assert.deepEqual(asked, ['--profile outbound auth status --json', '--profile outbound account list --channel email --json', '--profile outbound team list --json']);
-    // A pick names a team the last read offered that account, and nothing else runs; Reply's refusal of it is said.
-    const outbound = { type: 'reply', name: 'outbound' } as const;
-    const no = (refused: string, code: string | null = null, reread = false) => ({ refused, code, offer: null, reread });
-    from = b.record().length;
-    for (const [named, team] of [[outbound, '7'], [outbound, 9], [{ type: 'reply', name: 'default' }, '9']] as const) {
-        assert.deepEqual(await setup.chooseTeam(named, team), no('That is not a team this account was offered.'), `${JSON.stringify(named)} ${team}`);
-    }
-    assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'nobody' }, '9'), no('That is not a Reply account the desktop listed.'));
-    assert.deepEqual(runsAfter(b, from, 'reply'), []);
-    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), seats: { 'bea@example.test': [5, 7] } }));
-    assert.deepEqual(await setup.chooseTeam(outbound, '9'), no('The team was not chosen. Team 9 isn\'t one you can act in.', 'usage.team', true));
-    assert.deepEqual(b.world().profiles?.['outbound'], {});
-    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), seats: { 'bea@example.test': [5, 9] } }));
-    assert.deepEqual(await setup.chooseTeam(outbound, '9'), { done: true });
-    assert.deepEqual(runsAfter(b, from, 'reply'), ['--profile outbound team use 9 --json', '--profile outbound team use 9 --json']);
-    assert.deepEqual(b.world().profiles?.['outbound'], { team_id: 9 });
-    // The account then reads as that team, and offers none.
-    const chosen = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
-    assert.deepEqual({ teams: chosen?.teams, ids: chosen?.senders.map((each) => each.id) }, { teams: undefined, ids: ['34'] });
-    assert.equal(b.record().some((entry) => entry.args.includes('--team-id')), false, 'no run names a team but the pick');
-    await assert.rejects(setup.connectReplyWithKey('   '), Refused);
-    // A refused sign-in is the desktop's sentence, then the Reply CLI's own reason as its error under --json gives it: the
-    // detail, else the title. Never its hint, which tells the person to sign in with no profile named, nor its fields; an
-    // error that does not read as that leaves the sentence alone.
-    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key'), (error: unknown) => error instanceof Refused && error.message === 'Reply did not accept that key. Authentication credentials are missing or invalid.');
-    const timedOut = { code: 'oauth.timeout', title: 'Timed out waiting for the browser login.', hint: 'Re-run the login and complete it in the browser.' };
-    for (const [stderr, said] of [
-        [`Opening your browser to complete sign-in…\nIf it doesn't open, visit:\n  http://127.0.0.1:9/authorize\n${JSON.stringify({ error: timedOut })}\n`, 'Reply did not sign in. Timed out waiting for the browser login.'],
-        [`${JSON.stringify({ error: { code: 'oauth.authorize' } })}\n`, 'Reply did not sign in.'],
-        ['Timed out waiting for the browser login.\n  Hint: Re-run the login and complete it in the browser.\n', 'Reply did not sign in.'],
-    ] as const) {
-        const refusing = await readSetup(replyBench(t, { profiles: { outbound: {} } }, { STUB_REPLY_LOGIN: JSON.stringify({ exit: 1, stderr }) }));
-        await assert.rejects(refusing.connectReply({ type: 'reply', name: 'outbound' }), (error: unknown) => error instanceof Refused && error.message === said, said);
-    }
-});
-
-test('a sign-in runs reply auth login as the card’s account and nothing else of the sign-in; a profile only a route names is made in the Reply CLI first, and a profile the CLI holds never is', async (t) => {
+    await assert.rejects(withKey.connectReplyWithKey('   '), Refused);
+    // The browser's, as the card's profile.
     const b = replyBench(t, { profiles: { outbound: {} }, browser: 'ada@example.test' }, { STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'routed-only', team_id: '9' })]) });
     const setup = await readSetup(b);
-    let from = b.record().length;
+    from = b.record().length;
     // No account named, as a page of an earlier version asks: the default account, here none, so the profile default.
     await setup.connectReply();
     assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', '--profile default auth login --json', 'skills install adapter --project --agent codex']);
@@ -883,7 +838,67 @@ test('a sign-in runs reply auth login as the card’s account and nothing else o
     }
 });
 
-test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; one that finds a default leaves it', async (t) => {
+test('a refused sign-in says the desktop’s sentence, then the Reply CLI’s reason: the detail, else the title, of the error it prints under --json', async (t) => {
+    // Never its hint, which tells the person to sign in with no profile named, nor its other fields; an error that does not
+    // read as that leaves the sentence alone.
+    const setup = await readSetup(replyBench(t, { profiles: { outbound: {} } }));
+    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key', { type: 'reply', name: 'outbound' }), (error: unknown) => error instanceof Refused && error.message === 'Reply did not accept that key. Authentication credentials are missing or invalid.');
+    const timedOut = { code: 'oauth.timeout', title: 'Timed out waiting for the browser login.', hint: 'Re-run the login and complete it in the browser.' };
+    for (const [stderr, said] of [
+        [`Opening your browser to complete sign-in…\nIf it doesn't open, visit:\n  http://127.0.0.1:9/authorize\n${JSON.stringify({ error: timedOut })}\n`, 'Reply did not sign in. Timed out waiting for the browser login.'],
+        [`${JSON.stringify({ error: { code: 'oauth.authorize' } })}\n`, 'Reply did not sign in.'],
+        ['Timed out waiting for the browser login.\n  Hint: Re-run the login and complete it in the browser.\n', 'Reply did not sign in.'],
+    ] as const) {
+        const refusing = await readSetup(replyBench(t, { profiles: { outbound: {} } }, { STUB_REPLY_LOGIN: JSON.stringify({ exit: 1, stderr }) }));
+        await assert.rejects(refusing.connectReply({ type: 'reply', name: 'outbound' }), (error: unknown) => error instanceof Refused && error.message === said, said);
+    }
+});
+
+test('a sign-in in several Reply teams, its profile pinning none, is offered them at the next read, the Reply CLI asked for them only where Reply refused a read for want of a team; a pick of a team offered pins it on the profile, and the account then reads as that team', async (t) => {
+    const b = replyBench(t, {
+        profiles: { outbound: {} },
+        credentials: { default: 'ada@example.test' },
+        keys: { 'planted-reply-key': 'bea@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+        teams: { '5': 'Made-up Five', '9': 'Made-up Nine' },
+        lists: { 'bea@example.test#9': { linkedin: [{ id: 34, channel: 'linkedin', name: 'Made-up Bea', address: '', reply_status: 'enabled' }] } },
+    });
+    const setup = await readSetup(b);
+    await setup.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'outbound' });
+    // bea's login can act in two teams and `outbound` pins none: the read right after the sign-in offers its teams, by id
+    // and name, its channels unread; once Reply refused the first channel for want of a team the second is not asked, and
+    // ada's one-team sign-in is never asked for teams.
+    let from = b.record().length;
+    const offered = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
+    assert.deepEqual(
+        { teams: offered?.teams, senders: offered?.senders, unread: offered?.unread },
+        { teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }], senders: [], unread: ['email', 'linkedin'] },
+    );
+    const asked = runsAfter(b, from, 'reply');
+    assert.deepEqual(asked.filter((run) => run.startsWith('--profile outbound')), ['--profile outbound auth status --json', '--profile outbound account list --channel email --json', '--profile outbound team list --json']);
+    assert.deepEqual(asked.filter((run) => run.endsWith(' team list --json')), ['--profile outbound team list --json']);
+    // A pick names a team the last read offered that account, and nothing else runs; Reply's refusal of it is said.
+    const outbound = { type: 'reply', name: 'outbound' } as const;
+    const no = (refused: string, code: string | null = null, reread = false) => ({ refused, code, offer: null, reread });
+    from = b.record().length;
+    for (const [named, team] of [[outbound, '7'], [outbound, 9], [{ type: 'reply', name: 'default' }, '9']] as const) {
+        assert.deepEqual(await setup.chooseTeam(named, team), no('That is not a team this account was offered.'), `${JSON.stringify(named)} ${team}`);
+    }
+    assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'nobody' }, '9'), no('That is not a Reply account the desktop listed.'));
+    assert.deepEqual(runsAfter(b, from, 'reply'), []);
+    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), seats: { 'bea@example.test': [5, 7] } }));
+    assert.deepEqual(await setup.chooseTeam(outbound, '9'), no('The team was not chosen. Team 9 isn\'t one you can act in.', 'usage.team', true));
+    assert.deepEqual(b.world().profiles?.['outbound'], {});
+    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), seats: { 'bea@example.test': [5, 9] } }));
+    assert.deepEqual(await setup.chooseTeam(outbound, '9'), { done: true });
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['--profile outbound team use 9 --json', '--profile outbound team use 9 --json']);
+    assert.deepEqual(b.world().profiles?.['outbound'], { team_id: 9 });
+    // The account then reads as that team, and offers none.
+    const chosen = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
+    assert.deepEqual({ teams: chosen?.teams, ids: chosen?.senders.map((each) => each.id) }, { teams: undefined, ids: ['34'] });
+});
+
+test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; a default already set, whatever its plugin or binding, is left as it is', async (t) => {
     const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: null };
     // A default made at a sign-in is journaled as one, told from a click on Make default.
     const set = (profile: string) => `route set --global --plugin reply --binding {"profile":"${profile}"} --actor human:made-up-person --reason Made the default at a sign-in in Jason Desktop`;
@@ -952,7 +967,6 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     from = teamed.record().length;
     await onTeam.connectReply({ type: 'reply', name: 'outbound' });
     assert.deepEqual(runsAfter(teamed, from, 'jason'), ['plugin list', 'route list', set('outbound')]);
-    assert.equal(teamed.record().slice(from).some((entry) => entry.args.includes('--team-id')), false);
     assert.deepEqual(teamLog.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'in_place', Default: 'made' });
     assert.deepEqual(readInstallationSettings(teamed).Routes, { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } });
 
@@ -980,38 +994,33 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.equal(offline.world().credentials?.['default'], 'browser@example.test');
     const reloadRefused = replyBench(t, {}, { STUB_RELOAD_REFUSED: 'yes' });
     await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed or loaded. The settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.');
-});
 
-test('a global default a person set to another plugin is kept at a sign-in, and the members of today do not say it is wired', async (t) => {
-    const b = bench(t, { programs: ['reply'] });
-    writeInstallationSettings(b, { Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } } });
-    const log = memoryLog();
-    await (await readSetup(b, log)).connectReply();
-    assert.deepEqual(readInstallationSettings(b), {
+    // A default a person set to another plugin: kept, and the grant written beside it.
+    const other = bench(t, { programs: ['reply'] });
+    writeInstallationSettings(other, { Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } } });
+    const otherLog = memoryLog();
+    await (await readSetup(other, otherLog)).connectReply();
+    assert.deepEqual(readInstallationSettings(other), {
         Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } },
         Plugins: { Grants: { reply: { Exec: ['reply'] } } },
     });
-    assert.deepEqual(log.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'granted', Default: 'kept' });
-    assert.equal(b.record().some((entry) => entry.name === 'jason' && entry.args[1] === 'set'), false);
-    assert.equal((await setupOn(b).status()).reply.wired, false);
-    // So is a Reply default that names no profile: no route is rewritten for it, and it is the account of the profile the
-    // Reply CLI is set to.
+    assert.deepEqual(otherLog.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'granted', Default: 'kept' });
+    assert.equal(other.record().some((entry) => entry.name === 'jason' && entry.args[1] === 'set'), false);
+    // So is a Reply default that names no profile: no route is rewritten for it.
     const unnamed = bench(t, { programs: ['reply'] });
     writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: {} } } });
     const unnamedLog = memoryLog();
     await (await readSetup(unnamed, unnamedLog)).connectReply();
     assert.deepEqual(readInstallationSettings(unnamed).Routes, { Default: { Plugin: 'reply', Binding: {} } });
     assert.deepEqual(unnamedLog.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'in_place', Default: 'kept' });
-    const { reply: wiredReply, accounts: marked } = await setupOn(unnamed).status();
-    assert.deepEqual([wiredReply.wired, marked?.accounts.filter((each) => each.default).map((each) => each.name)], [true, ['default']]);
 
     // A grant to write in a file the desktop cannot parse: the file is left as it is, nothing is placed, and the sign-in
     // itself still stands.
     const unreadable = bench(t, { programs: ['reply'] });
-    const setup = await readSetup(unreadable);
+    const parsing = await readSetup(unreadable);
     writeInstallationSettings(unreadable, '{ /* mine */ }');
-    const from = unreadable.record().length;
-    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed or loaded. The settings file is not plain JSON') && /comments/.test(error.message));
+    from = unreadable.record().length;
+    await assert.rejects(parsing.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed or loaded. The settings file is not plain JSON') && /comments/.test(error.message));
     assert.equal(readFileSync(dataLayout(unreadable.paths.data).userSettingsFile, 'utf8'), '{ /* mine */ }');
     assert.deepEqual(runsAfter(unreadable, from, 'jason'), ['plugin list']);
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
@@ -1040,7 +1049,7 @@ test('Make default asks first where a default is set, naming it and the account 
     // A profile's name is whatever was typed for it: the box shows it with control and format characters made spaces,
     // trimmed, and past 64 characters cut, with an ellipsis.
     const shownAs = (name: string) => accountNamed({ type: 'reply', name });
-    assert.equal(shownAs(` Made-up\u0007Ops​${'x'.repeat(70)} `), `the Reply account “Made-up Ops ${'x'.repeat(52)}…”`);
+    assert.equal(shownAs(` Made-up\u0007Ops\u200b${'x'.repeat(70)} `), `the Reply account “Made-up Ops ${'x'.repeat(52)}…”`);
     assert.equal(shownAs('x'.repeat(64)), `the Reply account “${'x'.repeat(64)}”`);
     assert.equal(shownAs('x'.repeat(65)), `the Reply account “${'x'.repeat(64)}…”`);
 
@@ -1152,7 +1161,7 @@ test('Make default with no default set asks nothing, and a default of another pl
     }
 });
 
-test('the members of today read the default account, or the profile default where none is: its sign-in, whether Jason’s Reply plugin is valid and names that very account the global default, and each of the last two it could not read', async (t) => {
+test('the members a page of an earlier version reads are the default account’s, or the profile default’s where none is: its sign-in, whether Jason’s Reply plugin is valid and the global default names that very account, and each of the last two it could not read', async (t) => {
     const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
@@ -1187,7 +1196,7 @@ test('the members of today read the default account, or the profile default wher
         assert.deepEqual(await read({ STUB_REPLY_AUTH_STATUS: JSON.stringify(ending) }), { signedIn: false, user: null, wired: true, notRead: ['auth'], listed: false, routes: true }, JSON.stringify(ending));
     }
 
-    // Whether Jason uses it: a route list that names another plugin, or none, is the state "not used"; one that did not
+    // Whether the default names this account: a route list that names another plugin, or none, says no; one that did not
     // answer (no runtime answered, exit 3; it refused, exit 1) or printed what is no list could not be read.
     assert.deepEqual(await read({}, { Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } } }), { signedIn: true, user: 'someone@example.com', wired: false, notRead: [], listed: true, routes: true });
     assert.deepEqual(await read({}, {}), { signedIn: true, user: 'someone@example.com', wired: false, notRead: [], listed: true, routes: true });
@@ -1204,6 +1213,28 @@ test('the members of today read the default account, or the profile default wher
         assert.deepEqual(await read({ STUB_PLUGIN_LIST_FAILS: ending }), { signedIn: true, user: 'someone@example.com', wired: false, notRead: ['route'], listed: true, routes: true }, ending);
     }
     assert.deepEqual(await read({ STUB_REPLY_AUTH_STATUS: JSON.stringify({ code: 'store.corrupt' }), STUB_ROUTE_LIST: 'unreachable' }), { signedIn: false, user: null, wired: false, notRead: ['auth', 'route'], listed: false, routes: true });
+    // Of several accounts, the default's: bea's, its channels unread for want of a team, and the default names it.
+    const several = replyBench(t, twoSignIns);
+    writeInstallationSettings(several, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } } });
+    assert.deepEqual((await setupOn(several).status()).reply, {
+        cli: { found: true, version: '0.23.2', install: null },
+        signedIn: true,
+        user: 'bea@example.test',
+        wired: true,
+        accounts: [],
+        absent: [],
+        unread: ['email', 'linkedin'],
+        pending: [],
+        pendingUnread: [],
+        notRead: [],
+        belowMinimum: null,
+        startCheck: 'pending',
+    });
+    // A Reply default that names no profile is the account of the profile the Reply CLI is set to, and names it.
+    const unnamed = bench(t, { programs: ['reply'] });
+    writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: {} } } });
+    const { reply: unnamedReply, accounts: marked } = await setupOn(unnamed).status();
+    assert.deepEqual([unnamedReply.wired, marked?.accounts.filter((each) => each.default).map((each) => each.name)], [true, ['default']]);
 });
 
 // Two made-up sign-ins: ada, one seat, with a mailbox; bea, two seats, with a LinkedIn account in seat 9.
@@ -1217,7 +1248,7 @@ const twoSignIns: ReplyWorld = {
     lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
 };
 
-test('the accounts are the Reply CLI’s profiles and every profile a route names, one each, read under its own name alone, the default first; a route’s profile the CLI does not hold is asked nothing', async (t) => {
+test('each account is read under its own profile’s name alone, a profile only a route names asked nothing, the default first and marked; a default that names no profile is, at each read, the profile the Reply CLI is set to', async (t) => {
     // bea's login can act in teams 5 and 9: `outbound` pins none, `outbound-nine` pins 9 in the Reply CLI.
     const world: ReplyWorld = {
         ...twoSignIns,
@@ -1227,11 +1258,10 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     };
     const b = replyBench(t, world, {
         STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound', team_id: '9' }), campaignRoute('cmp_2', { profile: 'routed-only' }), campaignRoute('cmp_3', null)]),
-        STUB_REPLY_ACCOUNT_LIMITS: JSON.stringify({ print: printed.limitsEmail }),
     });
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } } });
     const setup = setupOn(b);
-    const { reply, accounts } = await setup.status();
+    const { accounts } = await setup.status();
     const state = (name: string, over: Record<string, unknown>) => ({
         type: 'reply', name, default: false, held: true, signedIn: false, user: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], ...over,
     });
@@ -1240,7 +1270,7 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     assert.deepEqual(accounts, {
         accounts: [
             // The default, whatever team a campaign's route names beside it: bea's profile with no team pinned, which Reply
-            // will not list until one is; it is offered the login's teams, its channels unread as before.
+            // will not list until one is; it is offered the login's teams, its channels unread.
             state('outbound', { ...bea, default: true, unread: ['email', 'linkedin'], teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }] }),
             state('default', { signedIn: true, user: 'ada@example.test', senders: [asListed(mailbox)] }),
             // A second team is a second profile, pinned to it in the Reply CLI.
@@ -1257,79 +1287,10 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     assert.ok(runs.includes('--profile outbound auth status --json'));
     assert.ok(runs.includes('--profile outbound-nine account list --channel linkedin --json'));
     assert.ok(runs.includes('--profile outbound-nine account pending --channel linkedin --json'));
-    assert.ok(runs.includes('--profile outbound team list --json'));
-    assert.equal(runs.some((run) => run.startsWith('--profile outbound account list --channel linkedin')), false, 'a channel refused for want of a team is the account’s last');
-    assert.equal(runs.filter((run) => run.endsWith(' team list --json')).length, 1, 'teams are asked only where Reply refused a read for want of one');
-    assert.equal(runs.some((run) => run.includes('--team-id')), false, 'no run names a team');
     assert.ok(runs.includes('--profile quiet auth status --json'));
     assert.equal(runs.some((run) => run.includes('routed-only')), false, 'nothing is asked of the CLI for a profile it does not hold');
     assert.equal(runs.some((run) => run.startsWith('--profile quiet account')), false, 'nothing is listed for a profile with no sign-in');
     for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile '), `every other run names its account: ${run}`);
-    // One check reads each account once: a listing asked while one is read is answered by that read, as when a click on
-    // Check again also brings the window forward, or an act's end and the change it announces both ask.
-    const listed = (from: number) => runsAfter(b, from, 'reply').filter((run) => run === 'profile list --json').length;
-    let from = b.record().length;
-    await Promise.all([setup.status(), setup.status(), setup.status()]);
-    assert.equal(listed(from), 1, 'three listings asked together, one read');
-    // A listing asked after an act ended is never answered by a read that began before it ended.
-    from = b.record().length;
-    let answered = false;
-    const before = setup.status().then((state) => ((answered = true), state));
-    await setup.setProviderKey('moonshot', 'sk-planted');
-    assert.equal(answered, false, 'the first read is still going when the act ends');
-    await Promise.all([before, setup.status()]);
-    assert.equal(listed(from), 2, 'the listing asked after the act is read afresh');
-    // So is one asked after a Reply verb that ended while the read was going.
-    from = b.record().length;
-    answered = false;
-    const beforeVerb = setup.status().then((state) => ((answered = true), state));
-    assert.deepEqual(await setup.replyLimits(String(mailbox.id), undefined, { type: 'reply', name: 'default' }), { daily: 500 });
-    assert.equal(answered, false, 'the first read is still going when the verb ends');
-    await Promise.all([beforeVerb, setup.status()]);
-    assert.equal(listed(from), 2, 'the listing asked after the verb is read afresh');
-    // So is one asked after a team was chosen for an account while the read was going.
-    from = b.record().length;
-    answered = false;
-    const beforePick = setup.status().then((state) => ((answered = true), state));
-    assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'outbound' }, '9'), { done: true });
-    assert.equal(answered, false, 'the first read is still going when the team is chosen');
-    await Promise.all([beforePick, setup.status()]);
-    assert.equal(listed(from), 2, 'the listing asked after the pick is read afresh');
-    // So is one asked after a sign-in refused once it had made its profile in the Reply CLI, which announces nothing; the
-    // sign-in reads the profiles once itself.
-    from = b.record().length;
-    answered = false;
-    const beforeRefused = setup.status().then((state) => ((answered = true), state));
-    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key', { type: 'reply', name: 'routed-only' }), Refused);
-    assert.equal(answered, false, 'the first read is still going when the sign-in is refused');
-    await Promise.all([beforeRefused, setup.status()]);
-    assert.ok(runsAfter(b, from, 'reply').includes('profile add routed-only --json'));
-    assert.equal(listed(from), 3, 'the listing asked after the refusal is read afresh');
-    // And one asked after a change the desktop learnt of elsewhere, the models Codex offers or Full access's bypass, which
-    // it announces through the setup, as the page is told of every change.
-    let told = 0;
-    setup.onChanged(() => void told++);
-    from = b.record().length;
-    answered = false;
-    const beforeAnnounced = setup.status().then((state) => ((answered = true), state));
-    setup.announceChange();
-    assert.equal(told, 1, 'the page is told');
-    await Promise.all([beforeAnnounced, setup.status()]);
-    assert.equal(listed(from), 2, 'the listing asked after the announcement is read afresh');
-    // A page of an earlier version reads the default account in the members of today, and Jason uses that very account.
-    assert.deepEqual(reply, {
-        cli: { found: true, version: '0.23.2', install: null },
-        ...bea,
-        wired: true,
-        accounts: [],
-        absent: [],
-        unread: ['email', 'linkedin'],
-        pending: [],
-        pendingUnread: [],
-        notRead: [],
-        belowMinimum: null,
-        startCheck: 'pending',
-    });
     // A global default that names no profile is, at each read, the account of the profile the Reply CLI is set to then: a
     // `reply profile use` in a terminal moves the mark. Jason's Reply plugin keeps no profile of its own for such a route,
     // so nothing in its configuration is read for one.
@@ -1338,6 +1299,48 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     assert.deepEqual(await marked(), ['quiet']);
     writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), current: 'outbound-nine' }));
     assert.deepEqual(await marked(), ['outbound-nine']);
+});
+
+test('a listing asked while one is read is answered by that read, and one asked after a change ended is read afresh, whatever the change', async (t) => {
+    const b = replyBench(t, twoSignIns, {
+        STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'routed-only' })]),
+        STUB_REPLY_ACCOUNT_LIMITS: JSON.stringify({ print: printed.limitsEmail }),
+    });
+    const setup = setupOn(b);
+    await setup.status();
+    const listed = (from: number) => runsAfter(b, from, 'reply').filter((run) => run === 'profile list --json').length;
+    // One check reads each account once: three listings asked together, as when a click on Check again also brings the
+    // window forward, or an act's end and the change it announces both ask, are one read.
+    let from = b.record().length;
+    await Promise.all([setup.status(), setup.status(), setup.status()]);
+    assert.equal(listed(from), 1);
+    // A listing asked after a change that ended while a read was going is never answered by that read. The kinds of change,
+    // each with the reads of the profiles it makes itself.
+    const announced = async () => {
+        let told = 0;
+        const stop = setup.onChanged(() => void told++);
+        setup.announceChange();
+        stop();
+        assert.equal(told, 1, 'the page is told');
+    };
+    const changes: [string, () => Promise<unknown>, number][] = [
+        ['an act of the setup’s queue', () => setup.setProviderKey('moonshot', 'sk-planted'), 0],
+        ['a Reply verb', () => setup.replyLimits(String(mailbox.id), undefined, { type: 'reply', name: 'default' }), 0],
+        ['a team’s pick', () => setup.chooseTeam({ type: 'reply', name: 'outbound' }, '5'), 0],
+        ['a sign-in refused once it made its profile, which announces nothing', () => setup.connectReplyWithKey('made-up-unknown-key', { type: 'reply', name: 'routed-only' }).catch(() => undefined), 1],
+        ['a change the desktop learnt of elsewhere, the models Codex offers or Full access’s bypass', announced, 0],
+    ];
+    for (const [kind, change, ownReads] of changes) {
+        from = b.record().length;
+        let answered = false;
+        const before = setup.status().then((state) => ((answered = true), state));
+        await change();
+        assert.equal(answered, false, `${kind}: the first read is still going when it ends`);
+        await Promise.all([before, setup.status()]);
+        assert.equal(listed(from), 2 + ownReads, kind);
+    }
+    assert.ok(b.world().profiles?.['routed-only'] !== undefined, 'the refused sign-in made its profile');
+    assert.deepEqual(b.world().profiles?.['outbound'], { team_id: 5 }, 'the pick pinned its team');
 });
 
 test('what could not be read of the accounts is said, never drawn as a state: the profiles, the routes, a sign-in; and a default that is not set is told from one that is another plugin’s', async (t) => {

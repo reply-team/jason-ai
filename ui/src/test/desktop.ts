@@ -229,8 +229,9 @@ export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): 
 });
 
 /**
- * A desktop of this version with these Reply accounts: the members of today answer the default account's, or the profile
- * `default`'s where none is the default, wired only for the default, as the desktop answers them.
+ * A desktop of this version with these Reply accounts. The Reply state a page of an earlier version reads, and this page's
+ * chat, is the default account's, or the profile `default`'s where none is the default, wired only for the default, as the
+ * desktop answers it (`#reply` in the desktop's `setup.ts`) where its routes and its plugin list were read.
  */
 export function withReplyAccounts(
     status: DesktopSetup,

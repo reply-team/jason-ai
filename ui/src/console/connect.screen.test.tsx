@@ -509,6 +509,56 @@ describe('the Reply card, its acts', () => {
         ]);
     });
 
+    it('says a key’s refusal for the account it was asked for: not once the card shows another account, nor when it shows that one again, nor where the default moved while the key was asked', async () => {
+        const wrapped = (member: string, said: string) =>
+            `Error invoking remote method 'jason:setup.${member}': Error: ${said}`;
+        const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
+        const ada = replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test' });
+        const bea = replyAccount('outbound', { signedIn: true, user: 'bea@example.test' });
+        const first = withReplyAccounts(setupFound, [ada, bea]);
+        // The default moved to another account, signed in as the same person.
+        const moved = withReplyAccounts(setupFound, [
+            { ...bea, default: true, user: 'ada@example.test' },
+            { ...ada, default: false },
+        ]);
+        const desktop = renderConnect(first);
+        desktop.refuse.set('setup.connectReplyWithKey', wrapped('connectReplyWithKey', keyRefused));
+        await openConnect();
+        const panel = () =>
+            screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
+        const card = () => replyCard(panel());
+        const drawn = () => card().querySelector('.acct-name')?.textContent;
+        const useKey = () => {
+            fireEvent.input(within(card()).getByPlaceholderText('Or paste a Reply API key'), {
+                target: { value: 'made-up-key' },
+            });
+            fireEvent.click(within(card()).getByRole('button', { name: 'Use key' }));
+        };
+        await waitFor(() => expect(drawn()).toBe('default'));
+        useKey();
+        await waitFor(() => expect(words(within(card()).getByRole('alert'))).toBe(keyRefused));
+        desktop.status = moved;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('outbound'));
+        expect(within(card()).queryByRole('alert')).toBeNull();
+        desktop.status = first;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('default'));
+        expect(within(card()).queryByRole('alert')).toBeNull();
+        // The default moves while the key is asked, and no read comes after it: no card says the refusal.
+        let refuseKey: (error: Error) => void = () => undefined;
+        desktop.setup.connectReplyWithKey = () => new Promise((_, reject) => (refuseKey = reject));
+        useKey();
+        desktop.status = moved;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('outbound'));
+        desktop.refuse.set('setup.status', wrapped('status', 'This window may not ask that.'));
+        refuseKey(new Error(wrapped('connectReplyWithKey', keyRefused)));
+        await waitFor(() => expect(words(panel())).toContain('This window may not ask that.'));
+        expect(words(card())).not.toContain(keyRefused);
+        expect(words(document.body)).not.toContain('Error invoking remote method');
+    });
+
     it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, accounts: [], absent: ['email'] } });
         const connect = await openConnect();
@@ -1032,7 +1082,7 @@ describe('the Reply card, its acts', () => {
         }
     });
 
-    it('keeps a dialog to the card it was asked from: another chat’s card never shows it, and a card no longer drawn drops it', async () => {
+    it('keeps a dialog, and a key’s refusal, to the card they were asked on: another chat’s card never shows them, and a card that goes drops them', async () => {
         const desktop = stubDesktop({ ...setupFound, reply: { ...setupFound.reply, accounts: [] } });
         setup.value = desktop.status;
         const unbind = bind({ api: new FakeApi(), desktop, dock: {} as never });

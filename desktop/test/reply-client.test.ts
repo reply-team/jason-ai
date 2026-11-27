@@ -46,11 +46,11 @@ test('the label replaces an inherited one in any letter case, so there is one; w
 });
 
 // The variables reply-cli 0.23.2 reads to choose the account a run acts as (src/profile.ts, src/auth/resolve.ts,
-// src/auth/request-identity.ts, src/config.ts): a run the desktop starts names its account by --profile and --team-id, as
-// Jason's Reply plugin does, so none of them decides it, in any letter case Windows may have written its name in.
+// src/auth/request-identity.ts, src/config.ts): a run the desktop starts names its account by --profile alone, so none of
+// them decides it, in any letter case Windows may have written its name in.
 const accountChoosers = { REPLY_PROFILE: 'other', Reply_Api_Key: 'planted-env-key', REPLY_TEAM_ID: '9', reply_config_dir: '/elsewhere/reply' };
 
-test('the reply the desktop runs carries the label and none of the variables that would choose its account, and another program it runs gets its environment as before', async (t) => {
+test('the reply the desktop runs carries the label and none of the variables that would choose its account, and another program it runs keeps its environment whole', async (t) => {
     const b = bench(t, { programs: ['reply', 'npm'], env: { reply_client: 'someone-else/1.0', XDG_CONFIG_HOME: '/kept/config', ...accountChoosers }, bundleVersion: '0.35.0+4f2a9c1' });
     assert.equal((await b.programs.run('reply', ['--profile', 'default', 'auth', 'status', '--json'])).exit, 1);
     assert.equal((await b.programs.run('npm', ['install', '-g', 'something'])).exit, 0);

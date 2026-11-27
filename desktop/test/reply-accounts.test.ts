@@ -148,8 +148,8 @@ test('each verb is started with its own arguments: a name as one argument, the f
     assert.deepEqual(deleteArguments('email', '12', true), ['account', 'delete', '12', '--channel', 'email', '--yes', '--json'], 'never forced for email');
     assert.deepEqual(deleteArguments('linkedin', '34', false), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--json']);
     assert.deepEqual(deleteArguments('linkedin', '34', true), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--force', '--json']);
-    // Each run names the account it acts as before the command, as Jason's Reply plugin starts it: its profile, one
-    // argument, and never a team.
+    // Each run names the account it acts as before the command: its profile, as one argument, and nothing else of the
+    // account.
     assert.deepEqual(accountArguments({ type: 'reply', name: 'default' }), ['--profile', 'default']);
     assert.deepEqual(accountArguments({ type: 'reply', name: 'Made-up Ops' }), ['--profile', 'Made-up Ops']);
 });
@@ -196,7 +196,6 @@ test('every act runs as the account it names, its profile before the verb and no
     const acts = b.record().slice(from).filter((entry) => entry.name === 'reply' && entry.args.includes('account'));
     assert.equal(acts.length, 9);
     for (const entry of acts) assert.deepEqual(entry.args.slice(0, 3), ['--profile', 'outbound', 'account'], entry.args.join(' '));
-    assert.equal(b.record().some((entry) => entry.args.includes('--team-id')), false, 'the team is the profile’s own, pinned in the Reply CLI');
     // No account named, as a page of an earlier version asks: the default, here the profile default, by its rows alone.
     const bare = b.record().length;
     assert.deepEqual(await h.setup.replyUnblock('12'), { done: true });

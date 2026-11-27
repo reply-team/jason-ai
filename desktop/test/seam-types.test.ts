@@ -188,9 +188,9 @@ type OpenInIsTheSeam = [
     Holds<Equal<Place, DesktopOpenInAnswer['places'][number]>>,
 ];
 
-// An account reaches the desktop as the page names it, its type and its name, never a team; Make default names one, a
-// team's choice names one and a team the desktop offered it, and every act of today takes one after its own arguments,
-// where the page names one.
+// An account reaches the desktop as the page names it, its type and its name and nothing else; Make default names one, a
+// team's choice names one and a team the desktop offered it, and every sign-in and every act on a sender takes one after
+// its own arguments, where the page names one.
 type AccountIsTheSeam = [
     Holds<Equal<AccountRef, DesktopAccountRef>>,
     Holds<Equal<keyof DesktopAccountRef, 'type' | 'name'>>,
@@ -200,8 +200,13 @@ type AccountIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['setup']['makeDefault']>, [account: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
-    Holds<Equal<Parameters<JasonDesktop['setup']['replyPause']>, [accountId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyConnect']>[2], DesktopAccountRef | undefined>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyReconnect']>[3], DesktopAccountRef | undefined>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyLimits']>, [accountId: string, daily?: number, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyPause']>, [accountId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyResume']>, [accountId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyUnblock']>, [accountId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyDelete']>[3], DesktopAccountRef | undefined>>,
 ];
 
 export type SeamHeld = [

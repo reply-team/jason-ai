@@ -16,15 +16,13 @@ const naming = (name === 'claude' && args.includes('--no-session-persistence')) 
 const sandboxCheck = name === 'codex' && args[0] === 'sandbox';
 record(naming ? `${name}-naming` : sandboxCheck ? 'codex-sandbox' : name, args, stdin);
 
-// The Reply CLI's global options name the profile and the team a run acts as. reply-cli 0.23.2 takes them anywhere
-// (src/index.ts); the desktop puts them first, as Jason's Reply plugin does, and the stand-in reads them only there, so a
-// run that names them anywhere else is a form it does not answer.
+// The profile a run acts as, `--profile`, a global option of the Reply CLI. reply-cli 0.23.2 takes it anywhere
+// (src/index.ts); the desktop puts it first and names nothing else of the account, and the stand-in reads it only there,
+// so a run that names it anywhere else, or names a team, is a form it does not answer.
 let replyProfile = null;
-let replyTeam = null;
 let rest = args;
-while (name === 'reply' && (rest[0] === '--profile' || rest[0] === '--team-id') && rest[1] !== undefined) {
-    if (rest[0] === '--profile') replyProfile = rest[1];
-    else replyTeam = rest[1];
+if (name === 'reply' && rest[0] === '--profile' && rest[1] !== undefined) {
+    replyProfile = rest[1];
     rest = rest.slice(2);
 }
 const said = rest.join(' ');
@@ -174,12 +172,11 @@ if (process.env.STUB_HANG === name) {
     // A read of the sign-in that ended as STUB_REPLY_AUTH_STATUS names it.
     answer(JSON.parse(process.env.STUB_REPLY_AUTH_STATUS));
 } else if (name === 'reply' && said === 'auth status --json') {
-    // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there; a team the run
-    // names is said as the header it would send.
+    // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
     const profile = inUse();
     const login = world !== null ? (world.credentials ?? {})[profile] : process.env.STUB_REPLY_SIGNED_IN === 'yes' ? 'someone@example.com' : undefined;
     const seat = world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3;
-    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat }, ...(replyTeam === null ? {} : { team_id: Number(replyTeam) }) } : { authenticated: false, profile }));
+    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat } } : { authenticated: false, profile }));
     if (!login) process.exitCode = 1;
 } else if (name === 'reply' && said === 'auth login --json' && process.env.STUB_REPLY_LOGIN) {
     // A browser's sign-in that ended as STUB_REPLY_LOGIN names it, the way it was printed: {"exit", "stderr"?}.
@@ -227,13 +224,13 @@ if (process.env.STUB_HANG === name) {
     // No sign-in under the profile: `auth.required`, exit 2, before Reply is asked (src/operations/call.ts).
     answer({ code: 'auth.required', exit: 2 });
 } else if (name === 'reply' && world !== null && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
-    // What Reply lists for the sign-in in the team the run acts in: the team named, else the profile's own, else the one
-    // seat a sign-in holds; a sign-in with two seats and no team named, or a team it has no seat in, is refused as Reply
-    // refuses it (403, `access.denied`, exit 1).
+    // What Reply lists for the sign-in in the team the run acts in: the one its profile pins, else the one seat a sign-in
+    // holds; a sign-in with two seats and no team pinned, or a pinned team it has no seat in, is refused as Reply refuses
+    // it (403, `access.denied`, exit 1).
     const login = world.credentials[inUse()];
     const seats = (world.seats ?? {})[login] ?? [3];
-    const team = replyTeam !== null ? Number(replyTeam) : ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
-    // Reply's 403 for a login in several teams with none named, or for a team it is not in, which reply-cli answers as
+    const team = ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
+    // Reply's 403 for a login in several teams with none pinned, or for a team it is not in, which reply-cli answers as
     // access.denied carrying Reply's own code (src/operations/call.ts `refusal`).
     const refusedAccess = (reply_code) => answer({ code: 'access.denied', error: { status: 403, title: 'Reply refused access.', reply_code } });
     if (team === null) refusedAccess('TEAM_REQUIRED');
