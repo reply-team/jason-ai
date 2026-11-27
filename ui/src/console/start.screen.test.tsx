@@ -653,7 +653,7 @@ describe('Reply in a chat', () => {
             await ready();
             await openCampaignChat(desktop, 'Autumn');
             const card = () => screen.getByRole('region', { name: 'Connect Reply' });
-            fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Add account' }));
+            fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
             fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' })));
             await waitFor(() => expect(heldDialog()).not.toBeNull());
             expect(calls(desktop, 'setup.replyConnect')).toHaveLength(1);

@@ -209,7 +209,7 @@ describe('Accounts inside a desktop of an earlier version, which sends one Reply
         inDesktop();
         const page = await openAccounts();
         const card = () => earlierCard(page);
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' }));
         bringForward('System');
         await waitFor(() => expect(screen.queryByRole('heading', { name: 'Accounts', level: 1 })).toBeNull());
@@ -258,7 +258,7 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(routed.querySelector('.reply-state')!)).toBe('Not signed in');
         expect(within(routed).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(true);
         expect(within(routed).getByRole('button', { name: 'Use key' })).toBeTruthy();
-        expect(within(routed).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(routed).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         // No card says who uses it.
         expect(words(page)).not.toMatch(/uses this sign-in|does not use it yet|whether jason uses/i);
     });
@@ -311,10 +311,10 @@ describe('Reply accounts, one card per profile', () => {
         await answered(/Done\./);
         fireEvent.click(within(rowOf('Made-up Ops')).getByRole('button', { name: 'Delete' }));
         await answered(/Done\./);
-        fireEvent.click(within(bea()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         fireEvent.click(await waitFor(() => within(bea()).getByRole('button', { name: 'Gmail' })));
         await answered(/The link opened in your browser\./);
-        fireEvent.click(within(bea()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         fireEvent.click(await waitFor(() => within(bea()).getByRole('button', { name: 'LinkedIn' })));
         fireEvent.input(
             await waitFor(() => within(bea()).getByRole('textbox', { name: 'Name for the LinkedIn account' })),
@@ -410,8 +410,8 @@ describe('Reply accounts, one card per profile', () => {
             ),
         );
         page = await openAccounts('.reply-account');
-        expect(words(section(page))).toContain('Which account is the default could not be read.');
-        expect(words(section(page))).not.toContain('No account is the default yet');
+        expect(words(section(page))).toContain('Which Reply account is the default could not be read.');
+        expect(words(section(page))).not.toContain('No Reply account is the default yet');
         expect(cards(page)).toEqual(['Reply default', 'Reply outbound']);
         expect(within(page).queryByRole('button', { name: 'Make default' })).toBeNull();
         cleanup();
@@ -423,7 +423,7 @@ describe('Reply accounts, one card per profile', () => {
         );
         page = await openAccounts('.reply-account');
         expect(words(section(page))).toContain(
-            'No account is the default yet. Campaigns have nothing to send through until you make one the default.',
+            'No Reply account is the default yet. Campaigns have nothing to send through until you make one the default.',
         );
         expect(cards(page)).toEqual(['Reply default Make default']);
         cleanup();
@@ -644,7 +644,7 @@ describe('Reply accounts, one card per profile', () => {
         await waitFor(() => expect(words(bea())).toContain(why));
         expect(words(bea())).not.toMatch(/could not be read/);
         expect(teamRows()).toEqual(['Made-up Five team 5 Choose', 'Made-up Nine team 9 Choose']);
-        expect(within(bea()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(bea()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         // A pick asks the desktop by the account and the team's id, with no question, and the card reads as that team.
         desktop.status = withReplyAccounts(setupFound, [
             ada,

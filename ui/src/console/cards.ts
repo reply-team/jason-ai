@@ -82,7 +82,7 @@ export const controlWords: readonly string[] = [
     'Reconnect',
     'Disconnect',
     'Sign in with Reply',
-    'Add account',
+    'Connect a mailbox or LinkedIn',
     'Make default',
     'Choose',
     'Make the link',

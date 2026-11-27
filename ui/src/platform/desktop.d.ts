@@ -661,9 +661,9 @@ export interface DesktopReplyRefusal {
 }
 
 /**
- * A link the Reply CLI made that expires and connects one account, written to the clipboard by the desktop's main process
- * for the person to hand on to whoever owns the account. The page learns that it was copied, when it stops working and
- * its pending entry; never the link.
+ * A link the Reply CLI made that expires and connects one mailbox or LinkedIn account, written to the clipboard by the
+ * desktop's main process for the person to hand on to whoever owns it. The page learns that it was copied, when it stops
+ * working and its pending entry; never the link.
  */
 export interface DesktopReplyCopied {
     copied: true;

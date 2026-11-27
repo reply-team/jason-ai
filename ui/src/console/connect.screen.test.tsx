@@ -235,7 +235,7 @@ describe('the Reply card', () => {
         const links = within(card).getAllByRole('link');
         expect(links).toHaveLength(1);
         const link = links[0]! as HTMLAnchorElement;
-        expect(words(link)).toBe('Manage accounts in Reply');
+        expect(words(link)).toBe('Manage mailboxes and LinkedIn accounts in Reply');
         expect(link.getAttribute('href')).toBe(replyAccountsAddress);
         expect(new URL(link.href).protocol).toBe('https:');
         expect(link.tagName).toBe('A');
@@ -283,7 +283,7 @@ describe('the Reply card, a channel it did not list', () => {
         const card = replyCard((renderConnect(with_(['linkedin'], ['email'])), await openConnect()));
         expect(noted(card)).toEqual([
             'This Reply account has no LinkedIn.',
-            'Email accounts could not be read. Check again.',
+            'Mailboxes could not be read. Check again.',
         ]);
     });
 
@@ -381,7 +381,7 @@ describe('the Reply card, its acts', () => {
         desktop.calls.filter((call) => call.name.startsWith('setup.reply')).map((call) => [call.name, ...call.args]);
     const dialogOf = (card: () => HTMLElement) => within(card()).getByRole('dialog');
     const addAccount = async (card: () => HTMLElement, choice: string) => {
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: choice })));
     };
     const rowOf = (card: () => HTMLElement, name: string) =>
@@ -401,7 +401,7 @@ describe('the Reply card, its acts', () => {
         renderConnect(withSenders([]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['Gmail', 'Outlook', 'LinkedIn', 'Cancel']);
         expect(card().querySelector('input[type="password"]:not([aria-label="Or paste a Reply API key"])')).toBeNull();
@@ -424,7 +424,9 @@ describe('the Reply card, its acts', () => {
         expect(key.getAttribute('type')).toBe('password');
         expect(within(card).getByRole('button', { name: 'Use key' })).toBeTruthy();
         expect(within(card).queryByRole('button', { name: 'Connect' })).toBeNull();
-        expect(within(card).getByRole('link', { name: 'Manage accounts in Reply' })).toBeTruthy();
+        expect(
+            within(card).getByRole('link', { name: 'Manage mailboxes and LinkedIn accounts in Reply' }),
+        ).toBeTruthy();
         cleanup();
 
         // A sign-in the desktop could not read is said as that, in the sign-in's place, with Check again in its row:
@@ -439,7 +441,7 @@ describe('the Reply card, its acts', () => {
         expect(words(unread)).not.toMatch(/not signed in|signed in as|uses this sign-in|does not use it yet/i);
         expect(within(unread).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
         expect(within(unread).getByPlaceholderText('Or paste a Reply API key')).toBeTruthy();
-        expect(within(unread).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(unread).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         const reads = statusReads(desktop);
         fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
         await waitFor(() => expect(statusReads(desktop)).toBe(reads + 1));
@@ -567,12 +569,12 @@ describe('the Reply card, its acts', () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, accounts: [], absent: ['email'] } });
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['LinkedIn', 'Cancel']);
     });
 
-    it('has no Add account and no act on a row before the CLI is signed in', async () => {
+    it('has no Connect a mailbox or LinkedIn and no act on a row before the CLI is signed in', async () => {
         renderConnect({
             ...setupFound,
             reply: {
@@ -584,7 +586,7 @@ describe('the Reply card, its acts', () => {
         });
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(card()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
     });
 
@@ -597,7 +599,7 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'email', { provider: 'gmail' }]]);
         const dialog = dialogOf(card);
-        expect(words(dialog)).toContain('It connects one account until it expires.');
+        expect(words(dialog)).toContain('It connects one mailbox until it expires.');
         expect(within(dialog).queryByRole('textbox')).toBeNull();
         expect(within(dialog).queryByRole('link')).toBeNull();
         expect(within(dialog).queryByRole('button', { name: 'Copy link' })).toBeNull();
@@ -633,7 +635,7 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Make the link' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'linkedin', { name: 'Made-up Sales' }]]);
-        expect(words(dialogOf(card))).toContain('It connects one account until 2026-11-19 04:59 UTC.');
+        expect(words(dialogOf(card))).toContain('It connects one LinkedIn account until 2026-11-19 04:59 UTC.');
         await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
     });
 
@@ -660,7 +662,7 @@ describe('the Reply card, its acts', () => {
         const connect = await openConnect();
         const card = () => replyCard(connect);
         const box = within(card()).getByRole('checkbox', {
-            name: 'Copy a new link to hand on to whoever owns the account, instead of opening it here',
+            name: 'Copy a new link to hand on to whoever owns the mailbox or LinkedIn account, instead of opening it here',
         }) as HTMLInputElement;
         expect(box.checked).toBe(false);
         fireEvent.click(box);
@@ -675,7 +677,7 @@ describe('the Reply card, its acts', () => {
         await addAccount(card, 'Gmail');
         await waitFor(() => expect(words(dialogOf(card))).toContain('The link was copied.'));
         expect(words(dialogOf(card))).toContain(
-            'Hand it to whoever owns the account: it connects one account to this Reply account until 2026-11-18 12:00 UTC, so send it to no one else.',
+            'Hand it to whoever owns the mailbox: it connects one mailbox to this Reply account until 2026-11-18 12:00 UTC, so send it to no one else.',
         );
         expect(words(dialogOf(card))).not.toContain('works once');
         expect(words(dialogOf(card))).not.toContain(opened);
@@ -799,10 +801,8 @@ describe('the Reply card, its acts', () => {
             fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
             return shown;
         };
-        expect(
-            await ask(refusal('The account’s state changed meanwhile.', 'account.status_changed', null, true)),
-        ).toEqual({
-            words: 'The account’s state changed meanwhile.',
+        expect(await ask(refusal('Its state changed meanwhile.', 'account.status_changed', null, true))).toEqual({
+            words: 'Its state changed meanwhile.',
             buttons: ['Close'],
             reads: 1,
         });
@@ -861,7 +861,7 @@ describe('the Reply card, its acts', () => {
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
         expect(words(card())).not.toContain('Reply CLI 0.21.0');
         expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
-        expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(card()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
         fireEvent.click(within(card()).getByRole('button', { name: 'Update' }));
         await waitFor(() =>
@@ -888,7 +888,7 @@ describe('the Reply card, its acts', () => {
         expect(unread().querySelector('.below-minimum')).toBeNull();
         expect(words(unread())).not.toContain('or later');
         expect(within(unread()).queryByRole('button', { name: 'Update' })).toBeNull();
-        expect(within(unread()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(unread()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(unread, 'Account 2'))).toEqual([]);
         const reads = statusReads(asked);
         fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
@@ -1027,8 +1027,9 @@ describe('the Reply card, its acts', () => {
         const acts = () =>
             Array.from(card().querySelectorAll<HTMLButtonElement>('button')).filter(
                 (each) =>
-                    ['Reconnect', 'Limits', 'Unblock', 'Delete', 'Add account'].includes(words(each)) &&
-                    !each.closest('[role="dialog"]'),
+                    ['Reconnect', 'Limits', 'Unblock', 'Delete', 'Connect a mailbox or LinkedIn'].includes(
+                        words(each),
+                    ) && !each.closest('[role="dialog"]'),
             );
         fireEvent.click(within(rowOf(card, 'Account 14')).getByRole('button', { name: 'Reconnect' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Asking Reply'));
@@ -1190,8 +1191,8 @@ describe('the Reply card, its acts', () => {
         for (const row of pending) expect(within(row).queryAllByRole('button')).toEqual([]);
         // Each group with a waiting link says how to make a new one, once.
         expect(Array.from(card().querySelectorAll('.acct-pending-hint'), words)).toEqual([
-            'A link here is not shown again: add the account again to make a new link.',
-            'A link here is not shown again: add the account again to make a new link.',
+            'A link here is not shown again: connect the mailbox or LinkedIn account again to make a new link.',
+            'A link here is not shown again: connect the mailbox or LinkedIn account again to make a new link.',
         ]);
     });
 });

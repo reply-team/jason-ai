@@ -875,7 +875,7 @@ test('a sign-in in several Reply teams, its profile pinning none, is offered the
     const no = (refused: string, code: string | null = null, reread = false) => ({ refused, code, offer: null, reread });
     from = b.record().length;
     for (const [named, team] of [[outbound, '7'], [outbound, 9], [{ type: 'reply', name: 'default' }, '9']] as const) {
-        assert.deepEqual(await setup.chooseTeam(named, team), no('That is not a team this account was offered.'), `${JSON.stringify(named)} ${team}`);
+        assert.deepEqual(await setup.chooseTeam(named, team), no('That is not a team this Reply account was offered.'), `${JSON.stringify(named)} ${team}`);
     }
     assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'nobody' }, '9'), no('That is not a Reply account the desktop listed.'));
     assert.deepEqual(runsAfter(b, from, 'reply'), []);
@@ -968,14 +968,14 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     writeInstallationSettings(unread, { Plugins: { Grants: { reply: { Exec: ['reply'] } } } });
     const blind = await readSetup(unread, memoryLog(), settings);
     unread.env['STUB_ROUTE_LIST'] = 'unreachable';
-    await assert.rejects(blind.connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but which account is the default could not be read, so none was made the default.');
+    await assert.rejects(blind.connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but which Reply account is the default could not be read, so none was made the default.');
     assert.equal(unread.world().credentials?.['default'], 'browser@example.test');
     assert.equal(unread.record().some((entry) => entry.name === 'jason' && entry.args[1] === 'set'), false);
 
     // A default the runtime refused leaves the sign-in standing, and says so in the desktop's sentence.
     const refused = replyBench(t, {}, { STUB_ROUTE_SET: JSON.stringify({ code: 'validation_failed', details: [{ code: 'not_representable_globally' }] }) });
     const refusing = await readSetup(refused);
-    await assert.rejects(refusing.connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but this account was not made the default: Make default on its card says why.');
+    await assert.rejects(refusing.connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but this Reply account was not made the default: Make default on its card says why.');
     assert.equal(refused.world().credentials?.['default'], 'browser@example.test');
     assert.equal((readInstallationSettings(refused) as { Routes?: unknown }).Routes, undefined);
 
@@ -1067,7 +1067,7 @@ test('Make default, only while Jason has no global default, places what is missi
     // Every other refusal is the desktop's sentence, and the default stays unset.
     const refusals: [Record<string, string>, unknown, string][] = [
         [{ STUB_ROUTE_SET: JSON.stringify({ exit: 3 }) }, granted, 'Jason is not running, so nothing was changed. Start it, then try again.'],
-        [{ STUB_ROUTE_SET: JSON.stringify({ code: 'validation_failed', details: [{ code: 'not_representable_globally' }] }) }, granted, 'The settings file cannot hold this account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.'],
+        [{ STUB_ROUTE_SET: JSON.stringify({ code: 'validation_failed', details: [{ code: 'not_representable_globally' }] }) }, granted, 'The settings file cannot hold this Reply account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'plugin_reload_rejected' }) }, granted, 'The runtime did not change the default: it answered plugin_reload_rejected, so nothing was changed.'],
         // A placing that fails is the desktop's sentence, then the refusing program's reason, as at a sign-in.
         [{ STUB_RELOAD_REFUSED: 'yes' }, {}, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed. The settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.'],
@@ -1083,8 +1083,8 @@ test('Make default, only while Jason has no global default, places what is missi
     assert.match(unparsed.answer, /^Jason’s Reply plugin could not be placed or loaded, so nothing was changed\. The settings file is not plain JSON, so the desktop left it as it is: .* Edit it by hand, then press Reload\.$/);
     assert.deepEqual(unparsed.runs, ['route list', 'plugin list']);
     // Nobody can be named as having made the change, or the routes could not be read: nothing runs, or nothing past them.
-    assert.deepEqual(await make({}, granted, { account: null }), { answer: 'Jason Desktop could not read the name of this computer’s account, which a change of the default is recorded under, so nothing was changed.', routes: undefined, runs: [] });
-    assert.deepEqual(await make({ STUB_ROUTE_LIST: 'unreachable' }, granted), { answer: 'Which account is the default could not be read, so nothing was changed.', routes: undefined, runs: ['route list'] });
+    assert.deepEqual(await make({}, granted, { account: null }), { answer: 'Jason Desktop could not read the name you are signed in to this computer as, which a change of the default is recorded under, so nothing was changed.', routes: undefined, runs: [] });
+    assert.deepEqual(await make({ STUB_ROUTE_LIST: 'unreachable' }, granted), { answer: 'Which Reply account is the default could not be read, so nothing was changed.', routes: undefined, runs: ['route list'] });
     // An account the last read did not list, or a value of another shape, is refused before anything runs.
     const b = replyBench(t, twoSignIns);
     const setup = await readSetup(b);

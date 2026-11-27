@@ -214,7 +214,7 @@ const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === nul
 const unlisted = (view: AccountView): string[] => [
     ...view.absent.map((channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`),
     ...view.unread.map(
-        (channel) => `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} accounts could not be read. Check again.`,
+        (channel) => `${channel === 'linkedin' ? 'LinkedIn accounts' : 'Mailboxes'} could not be read. Check again.`,
     ),
     ...view.pendingUnread.map(
         (channel) =>
@@ -372,7 +372,12 @@ function listedSender(
     return view && sender ? { view, sender } : null;
 }
 
-const senderTitle = (sender: DesktopReplySender): string => cap(sender.name || sender.address || 'the account');
+const senderTitle = (sender: DesktopReplySender): string =>
+    cap(sender.name || sender.address || (sender.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'));
+
+/** What a link connects, by its channel: a mailbox or a LinkedIn account. */
+const linkedSender = (channel: DesktopReplyChannel): string =>
+    channel === 'linkedin' ? 'LinkedIn account' : 'mailbox';
 
 /**
  * Opens a dialog that asks the desktop for one act and says how it ended. A refusal that says the list may have changed
@@ -674,10 +679,13 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
         ${
             opened !== null
                 ? html`<div class="meta" role="status">The link opened in your browser.</div>
-                      <p class="meta link-note">It connects one account until ${until ?? 'it expires'}.</p>
+                      <p class="meta link-note">
+                          It connects one ${linkedSender(opened.channel)} until ${until ?? 'it expires'}.
+                      </p>
                       <div class="setrow">
                           <div class="grow meta">
-                              The account appears in the list when the sign-in there is finished.
+                              The ${linkedSender(opened.channel)} appears in the list when the sign-in there is
+                              finished.
                           </div>
                           <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
                       </div>`
@@ -687,11 +695,14 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
             shown.copied !== null
                 ? html`<div class="meta" role="status">The link was copied.</div>
                       <p class="meta link-note">
-                          Hand it to whoever owns the account: it connects one account to this Reply account until
+                          Hand it to whoever owns the ${linkedSender(shown.copied.channel)}: it connects one
+                          ${linkedSender(shown.copied.channel)} to this Reply account until
                           ${momentOf(shown.copied.expiresAt) ?? 'it expires'}, so send it to no one else.
                       </p>
                       <div class="setrow">
-                          <div class="grow meta">The account appears in the list when they finish.</div>
+                          <div class="grow meta">
+                              The ${linkedSender(shown.copied.channel)} appears in the list when they finish.
+                          </div>
                           <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
                       </div>`
                 : null
@@ -779,7 +790,7 @@ function pendingView(row: DesktopReplyPending): Html {
     const until = momentOf(row.expiresAt);
     return html`<div class="setrow acct-pending">
         <div class="grow">
-            <b>${cap(row.name || (row.kind === 'reconnect' ? 'A reconnect' : 'A new account'))}</b>
+            <b>${cap(row.name || (row.kind === 'reconnect' ? 'A reconnect' : `A new ${linkedSender(row.channel)}`))}</b>
             <span class="meta"
                 >${row.expired ? 'Its link expired' : until ? `Link valid until ${until}` : 'Waiting to be finished'}</span
             >
@@ -1296,11 +1307,12 @@ function accountsLines(state: DesktopSetup): Html | null {
               </div>`
             : null
     }
-    ${notRead.includes('routes') ? html`<div class="setrow meta default-unread">Which account is the default could not be read.</div>` : null}
+    ${notRead.includes('routes') ? html`<div class="setrow meta default-unread">Which Reply account is the default could not be read.</div>` : null}
     ${
         state.accounts!.noDefault
             ? html`<div class="setrow meta no-default" role="note">
-                  No account is the default yet. Campaigns have nothing to send through until you make one the default.
+                  No Reply account is the default yet. Campaigns have nothing to send through until you make one the
+                  default.
               </div>`
             : null
     }`;
@@ -1311,7 +1323,9 @@ const manageInReply = (): Html =>
     html`<div class="setrow">
         <div class="grow meta">
             Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account’s limits are set in Reply.
-            <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer">Manage accounts in Reply</a>
+            <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer"
+                >Manage mailboxes and LinkedIn accounts in Reply</a
+            >
         </div>
     </div>`;
 
@@ -1384,7 +1398,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
             ${secret(keyField(place), 'Or paste a Reply API key')}
             <button class="btn" type="button" ${real} ${act('connect.replyKey', place)}>Use key</button>
         </div>
-        <div class="meta reply-key-why">For an account the browser sign-in does not reach.</div>
+        <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>
         ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
         ${choosing ? teamChoice(view.teams!, place, asks) : null}
         ${(choosing ? [] : grouped(view.senders, view.pending)).map(
@@ -1406,7 +1420,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                     ${
                         waiting.length > 0
                             ? html`<div class="setrow meta acct-pending-hint">
-                                  A link here is not shown again: add the account again to make a new link.
+                                  A link here is not shown again: connect the mailbox or LinkedIn account again to make
+                                  a new link.
                               </div>`
                             : null
                     }
@@ -1416,9 +1431,11 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
         ${
             offering && !choosing
                 ? html`<div class="setrow">
-                          <div class="grow meta">Accounts are read again when this window takes the focus back.</div>
+                          <div class="grow meta">
+                              Mailboxes and LinkedIn accounts are read again when this window takes the focus back.
+                          </div>
                           <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
-                              Add account
+                              Connect a mailbox or LinkedIn
                           </button>
                           <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
                       </div>
@@ -1428,7 +1445,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                               data-change="connect.copyLinks"
                               ${copying.value ? html`checked` : null}
                           />
-                          Copy a new link to hand on to whoever owns the account, instead of opening it here
+                          Copy a new link to hand on to whoever owns the mailbox or LinkedIn account, instead of opening
+                          it here
                       </label>
                       ${adding.value === place ? addView(view, place, asks) : null}`
                 : null

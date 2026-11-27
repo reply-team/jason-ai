@@ -112,12 +112,12 @@ describe('The Connect panel in the demo', () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
-        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
+        for (const name of ['Sign in with Reply', 'Use key', 'Connect a mailbox or LinkedIn'])
             expect(button(card, name).disabled).toBe(true);
         const acts = within(rowOf(card)).getAllByRole('button') as HTMLButtonElement[];
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
         for (const each of acts) expect(each.disabled).toBe(true);
-        for (const each of [...acts, button(card, 'Add account'), button(card, 'Sign in with Reply')])
+        for (const each of [...acts, button(card, 'Connect a mailbox or LinkedIn'), button(card, 'Sign in with Reply')])
             fireEvent.click(each);
         expect(card.querySelector('.add-account')).toBeNull();
         expect(
@@ -128,7 +128,7 @@ describe('The Connect panel in the demo', () => {
     it('does not run a stale control either: the act itself refuses in the demo', async () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
-        const add = button(card, 'Add account');
+        const add = button(card, 'Connect a mailbox or LinkedIn');
         add.disabled = false;
         fireEvent.click(add);
         const del = button(rowOf(card), 'Delete');
@@ -204,7 +204,7 @@ describe('The Accounts page in the demo', () => {
         expect(words(card)).toContain('Sales inbox');
         expect(within(replyCard()).getAllByRole('note').map(words)).toEqual([sentence]);
         expect(notes()).toHaveLength(1);
-        expect(button(card, 'Add account').disabled).toBe(true);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(true);
     });
 });
 
@@ -214,11 +214,11 @@ describe('The same screens in Live', () => {
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
-        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
+        for (const name of ['Sign in with Reply', 'Use key', 'Connect a mailbox or LinkedIn'])
             expect(button(card, name).disabled).toBe(false);
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);
-        fireEvent.click(button(card, 'Add account'));
+        fireEvent.click(button(card, 'Connect a mailbox or LinkedIn'));
         await waitFor(() => expect(replyCard().querySelector('.add-account')).not.toBeNull());
     });
 
@@ -226,6 +226,6 @@ describe('The same screens in Live', () => {
         await renderAt('live', 'Accounts');
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
-        expect(button(accountCard(), 'Add account').disabled).toBe(false);
+        expect(button(accountCard(), 'Connect a mailbox or LinkedIn').disabled).toBe(false);
     });
 });
