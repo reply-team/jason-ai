@@ -612,6 +612,9 @@ export type StartUpdateOutcome =
     | 'updated' | 'still_old' | 'failed'
     | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';
 
+/** The outcomes of the start's look at the Reply CLI that ran npm: the others changed nothing a listing reads. */
+const npmRan: ReadonlySet<StartUpdateOutcome> = new Set(['updated', 'still_old', 'failed']);
+
 export class Setup {
     #deps: SetupDeps;
     #listeners = new Set<() => void>();
@@ -682,11 +685,21 @@ export class Setup {
         this.#changed();
     }
 
-    /** One change at a time: two cards clicked together never write the settings file over each other. */
-    #serial<T>(work: () => Promise<T>): Promise<T> {
-        const next = this.#queue.then(work, work).finally(() => {
-            this.#ended += 1;
-        });
+    /**
+     * One change at a time: two cards clicked together never write the settings file over each other. Each ends a change,
+     * but where `changed` says of what it answered that it changed nothing a listing reads.
+     */
+    #serial<T>(work: () => Promise<T>, changed: (answer: T) => boolean = () => true): Promise<T> {
+        const next = this.#queue.then(work, work).then(
+            (answer) => {
+                if (changed(answer)) this.#ended += 1;
+                return answer;
+            },
+            (error: unknown) => {
+                this.#ended += 1;
+                throw error;
+            },
+        );
         this.#queue = next.catch(() => undefined);
         return next;
     }
@@ -752,14 +765,17 @@ export class Setup {
      * What is set up, each host and each Reply account. A listing asked while one is read is answered by that read, so one
      * check reads each account once: a click on Check again that also brings the window forward, or an act's end and the
      * change it announced, both ask. A listing asked after a change ended is never answered by a read that began before
-     * it ended.
+     * it ended. Whether the start's check of the Reply CLI has ended is taken as the read ends, so a window told of that
+     * end may be answered by the read already going.
      */
     status(): Promise<SetupState> {
         const going = this.#reading;
         if (going !== null && going.ended === this.#ended) return going.listing;
-        const listing = this.#status().finally(() => {
-            if (this.#reading?.listing === listing) this.#reading = null;
-        });
+        const listing = this.#status()
+            .then((state): SetupState => ({ ...state, reply: { ...state.reply, startCheck: this.#startCheck() } }))
+            .finally(() => {
+                if (this.#reading?.listing === listing) this.#reading = null;
+            });
         this.#reading = { listing, ended: this.#ended };
         return listing;
     }
@@ -2000,7 +2016,7 @@ export class Setup {
                 // Where the check had already ended, by the bound on the machine set-up, a sentence set now is told anew.
                 if (!this.#endStartCheck() && this.#startUpdate !== said) this.#changed();
             }
-        });
+        }, (outcome) => npmRan.has(outcome));
     }
 
     /**

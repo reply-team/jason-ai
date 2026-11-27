@@ -18,7 +18,7 @@ import { npmLine, readUpdateSwitch, replyAtWork, replyStartCheck, runtimeReplyVe
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import type { Cli } from '../src/cli.ts';
-import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
+import { installLimit, Setup, writeAtomically, type SetupDeps, type SetupState } from '../src/setup.ts';
 import {
     bundledPlugin,
     parseInstallationSettings,
@@ -1732,6 +1732,23 @@ test('a listing asked while one is read is answered by that read, and one asked 
     release();
     assert.equal((await older).accounts?.accounts.some((each) => each.name === 'later'), false, 'the older read answers its own asker');
     assert.deepEqual(await ordered.removeAccount({ type: 'reply', name: 'later' }), no('Nothing was done.'), 'an act on an account the later read listed');
+    // A window's start: its first listing goes while the start's look at the Reply CLI finds it at the minimum and runs
+    // nothing; told that the check ended, the window asks again, as it does over the seam, a moment later. That is one
+    // read, and it says the check ended.
+    // The first read is held at the profiles, past where it reads the Reply CLI's version.
+    const starting = new Setup({ ...setupDeps(b), programs: slow });
+    const asked: Promise<SetupState>[] = [];
+    starting.onChanged(() => void setTimeout(() => asked.push(starting.status()), 10));
+    from = b.record().length;
+    holding = true;
+    const window = starting.status();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(holding, false, 'the first read is held');
+    assert.equal(await starting.updateReplyAtStart(), 'current');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    const answers = await Promise.all([window, ...asked]);
+    assert.deepEqual([listed(from), answers.map((state) => state.reply.startCheck)], [1, ['ended', 'ended']]);
 });
 
 test('what could not be read of the accounts is said, never drawn as a state: the profiles, the routes, a sign-in; and a default that is not set is told from one that is another plugin’s', async (t) => {
