@@ -450,8 +450,24 @@ describe('Reply accounts, one card per profile', () => {
                 ).disabled,
                 name,
             ).toBe(true);
+        // Done is said once the accounts are read again: until then the act is still asked and Make default stays off, so
+        // no card offers it under Done.
+        let reading: (state: DesktopSetup) => void = () => undefined;
+        desktop.setup.status = () => new Promise((resolve) => (reading = resolve));
         held({ done: true });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(words(within(routed()).getByRole('dialog'))).not.toMatch(/Done\./);
+        expect((within(routed()).getByRole('button', { name: 'Make default' }) as HTMLButtonElement).disabled).toBe(
+            true,
+        );
+        reading(
+            withReplyAccounts(
+                setupFound,
+                three.accounts!.accounts.map((each) => ({ ...each, default: each.name === 'routed-only' })),
+            ),
+        );
         await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
+        expect(cards(page).filter((card) => card.includes('Make default'))).toEqual([]);
     });
 
     it('says what of the accounts could not be read in the section, never as a state: no account where the profiles were not, no mark and no Make default where the routes were not; and that no account is the default yet', async () => {

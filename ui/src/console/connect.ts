@@ -537,6 +537,11 @@ async function ask(
         }
         return;
     }
+    if ('done' in answer) {
+        // Said once the accounts are read again, so no card still offers what the act changed under its Done.
+        await reload();
+        if (mine !== asked || actDialog.value === null) return;
+    } else void reload();
     actDialog.value = {
         ...actDialog.value,
         asking: false,
@@ -544,7 +549,6 @@ async function ask(
         copied: 'copied' in answer ? answer : null,
         done: 'done' in answer,
     };
-    void reload();
 }
 
 /** A link act: connect or reconnect, copied instead of opened where the person asked so. */
