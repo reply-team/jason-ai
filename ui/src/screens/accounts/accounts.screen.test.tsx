@@ -442,33 +442,12 @@ describe('Reply accounts, one card per profile', () => {
             withReplyAccounts(setupFound, [replyAccount('default', { signedIn: true, user: 'ada@example.test' })]),
         );
         page = await openAccounts('.reply-account');
-        expect(words(section(page))).not.toMatch(/could not be read|no account is the default|names no profile/i);
+        expect(words(section(page))).not.toMatch(/could not be read|no account is the default|names a Reply team/i);
         expect(cards(page)).toEqual(['Reply default Make default']);
         cleanup();
 
-        // Routes to Reply that name no profile act as no account, and each kind is said with the command that fixes it: the
-        // global default's names the profile it has been sending through, which Make default on that card keeps.
-        const noProfile = (campaigns: number, globalRoutes: number) => ({
-            noProfile: { default: true, current: 'quiet', campaigns, globalRoutes },
-        });
-        const accounts = [replyAccount('default', { signedIn: true, user: 'ada@example.test' }), replyAccount('quiet')];
-        inDesktop(withReplyAccounts(setupFound, accounts, noProfile(1, 1)));
-        page = await openAccounts('.reply-account');
-        const lines = () => Array.from(section(page).querySelectorAll<HTMLElement>('.no-profile')).map(words);
-        expect(lines()).toEqual([
-            'The default route names no profile, so campaigns that use it cannot send. It has been sending through the Reply CLI’s current profile, “quiet”: make that account the default to keep it so.',
-            '1 campaign has a route of its own that names no profile, so work that goes through it cannot run. Name one for it: jason route set --campaign <id> --plugin reply --binding \'{"profile":"<name>"}\'.',
-            '1 global route for one kind of work names no profile, so that work cannot run. Name one for it: jason route set --global --operation <operation> --plugin reply --binding \'{"profile":"<name>"}\'.',
-        ]);
-        expect(
-            Array.from(section(page).querySelectorAll('.no-profile code')).map((code) => code.textContent),
-        ).toHaveLength(2);
-        expect(words(section(page))).not.toContain('No account is the default yet');
-        expect(cards(page)).toEqual(['Reply default Make default', 'Reply quiet Make default']);
-        cleanup();
         // A campaign's route that names a Reply team beside its profile still works there, and is said, with the way off it.
-        expect(words(section(page))).not.toContain('names a Reply team');
-        cleanup();
+        const accounts = [replyAccount('default', { signedIn: true, user: 'ada@example.test' }), replyAccount('quiet')];
         inDesktop(withReplyAccounts(setupFound, accounts, { campaignsWithTeam: 1 }));
         page = await openAccounts('.reply-account');
         const teamLine = () => Array.from(section(page).querySelectorAll<HTMLElement>('.team-routes')).map(words);
@@ -476,16 +455,10 @@ describe('Reply accounts, one card per profile', () => {
             '1 campaign has a route that names a Reply team beside its profile. Its work goes to that team, and the profile’s card shows the profile’s own. Route it to a profile pinned to that team instead.',
         ]);
         cleanup();
-        inDesktop(
-            withReplyAccounts(setupFound, accounts, { ...noProfile(3, 2), noDefault: false, campaignsWithTeam: 2 }),
-        );
+        inDesktop(withReplyAccounts(setupFound, accounts, { campaignsWithTeam: 2 }));
         page = await openAccounts('.reply-account');
         expect(teamLine()).toEqual([
             '2 campaigns have a route that names a Reply team beside its profile. Their work goes to that team, and the profile’s card shows the profile’s own. Route each to a profile pinned to that team instead.',
-        ]);
-        expect(lines().slice(1)).toEqual([
-            '3 campaigns have a route of their own that names no profile, so work that goes through it cannot run. Name one for each: jason route set --campaign <id> --plugin reply --binding \'{"profile":"<name>"}\'.',
-            '2 global routes for one kind of work each name no profile, so that work cannot run. Name one for each: jason route set --global --operation <operation> --plugin reply --binding \'{"profile":"<name>"}\'.',
         ]);
     });
 

@@ -622,25 +622,10 @@ export interface DesktopAccounts {
     /** Whether the routes were read and no global default is set at all, whatever its plugin. */
     noDefault: boolean;
     /**
-     * The routes to Jason's Reply plugin that name no profile, which act as no account and cannot send: whether the global
-     * default is one, with the profile the Reply CLI is set to, which it has been sending through (null unless it is one,
-     * or where the profiles were not read); how many campaigns have one of their own, each once; and how many global
-     * routes but the default are one.
-     */
-    noProfile: DesktopNoProfile;
-    /**
      * How many campaigns have a route of their own to Jason's Reply plugin that names a Reply team beside its profile, each
      * once: its work goes to that team, while the profile's card shows the profile's own team.
      */
     campaignsWithTeam: number;
-}
-
-/** The routes to Jason's Reply plugin that name no profile, as `DesktopAccounts.noProfile` counts them. */
-export interface DesktopNoProfile {
-    default: boolean;
-    current: string | null;
-    campaigns: number;
-    globalRoutes: number;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */

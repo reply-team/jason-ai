@@ -16,7 +16,6 @@ import {
     accountSentences,
     defaultAccount,
     defaultBinding,
-    defaultNamesNoProfile,
     defaultReason,
     notPlacedAtSignIn,
     signInReason,
@@ -100,6 +99,8 @@ import {
     hasBinding,
     isConfigured,
     parseInstallationSettings,
+    rememberedProfile,
+    remembersProfile,
     parseReplyAccounts,
     readReplyAuth,
     readReplyChannel,
@@ -116,6 +117,7 @@ import {
     withPluginConfigured,
     withPluginDisconnected,
     withReplyGranted,
+    withReplyProfile,
     type PluginRuntime,
     type PluginValues,
     type ReplyAccount,
@@ -280,13 +282,6 @@ export interface AccountsState {
     notRead: AccountsFact[];
     /** Whether the routes were read and no global default is set at all, whatever its plugin. */
     noDefault: boolean;
-    /**
-     * The routes to Jason's Reply plugin that name no profile, which act as no account and are said: whether the global
-     * default is one, with the profile the Reply CLI is set to, which it has been sending through (null unless it is one,
-     * or where the profiles were not read); how many campaigns have one of their own; and how many global routes but the
-     * default are one.
-     */
-    noProfile: { default: boolean; current: string | null; campaigns: number; globalRoutes: number };
     /**
      * How many campaigns have a route of their own to Jason's Reply plugin that names a Reply team beside its profile, each
      * once: its work goes to that team, which the profile's card does not show, so it is said.
@@ -591,6 +586,8 @@ export class Setup {
      * them and one of its rows, and its box names the row as the list does.
      */
     #listed: AccountState[] = [];
+    /** The profile a route that names none acts as, at the last read that listed the accounts; set with `#listed`. */
+    #unnamed: string | null = null;
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -822,7 +819,7 @@ export class Setup {
         const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
-        const { reply, accounts } = await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
+        const { reply, accounts } = await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null, rememberedProfile(settings));
         return {
             hosts: [...programHosts, ...providerHosts],
             reply,
@@ -873,10 +870,11 @@ export class Setup {
      * own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account. A
      * profile only a route names is asked nothing. What a page of an earlier version reads is the default account's state,
      * or the profile `default`'s where no Reply account is the default; it is wired where Jason's Reply plugin is valid and
-     * the global default names that very account. `valid` is null where the runtime gave no plugin list.
+     * the global default names that very account. `valid` is null where the runtime gave no plugin list. `remembered` is the
+     * profile the Reply plugin's setting remembers for a route that names none, null where none is.
      */
-    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
-        const none: AccountsState = { accounts: [], notRead: [], noDefault: false, noProfile: { default: false, current: null, campaigns: 0, globalRoutes: 0 }, campaignsWithTeam: 0 };
+    async #reply(valid: boolean | null, runtimeVersion: string | null, remembered: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
+        const none: AccountsState = { accounts: [], notRead: [], noDefault: false, campaignsWithTeam: 0 };
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
@@ -904,7 +902,7 @@ export class Setup {
         }
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
-        const listing = profiles === null ? { accounts: [], default: null } : accountsOf(profiles, routes);
+        const listing = profiles === null ? { accounts: [], default: null } : accountsOf(profiles, routes, remembered);
         const accounts = await Promise.all(
             listing.accounts.map(async (account) => ({
                 ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
@@ -913,7 +911,7 @@ export class Setup {
         );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
-        const unnamed = routes !== null && defaultNamesNoProfile(routes);
+        this.#unnamed = profiles === null ? null : (remembered ?? profiles.current);
         const acting = this.#accountOf(undefined);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -938,12 +936,6 @@ export class Setup {
                 accounts,
                 notRead: [...(profiles === null ? ['profiles' as const] : []), ...(routes === null ? ['routes' as const] : [])],
                 noDefault: routes !== null && routes.globalDefault === null,
-                noProfile: {
-                    default: unnamed,
-                    current: unnamed ? (profiles?.current ?? null) : null,
-                    campaigns: routes?.campaignsWithoutProfile ?? 0,
-                    globalRoutes: routes?.globalWithoutProfile ?? 0,
-                },
                 campaignsWithTeam: routes?.campaignsWithTeam ?? 0,
             },
         };
@@ -1295,7 +1287,9 @@ export class Setup {
      * Jason's Reply plugin placed and granted the Reply CLI where either is missing, as `jason plugin list` answers it now:
      * the package fetched with `jason plugin install` only where the runtime lists none, the grant written only where it
      * does not hold `reply`, and the plugins loaded again where either was, or where the plugin is listed and not valid, as
-     * after a Reply CLI installed or updated outside the desktop. So an installation where the plugin is listed valid and
+     * after a Reply CLI installed or updated outside the desktop. A plugin it places remembers the profile the Reply CLI is
+     * set to as the one a route that names none acts as, where nothing is remembered yet, taken up by the same load. So an
+     * installation where the plugin is listed valid and
      * granted asks no release feed, loads nothing again, and its settings file is neither read nor written by the desktop,
      * one with comments included. A list the runtime did not give places both, as a sign-in always did. A refusal is thrown in the
      * words of the program that refused (`program`, a sign-in's, as on release 51.2) or in the desktop's own sentence
@@ -1312,12 +1306,77 @@ export class Setup {
             const install = await this.#deps.cli.run(['plugin', 'install', 'reply', ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
             if (install.exit !== 0) throw new Refused(say === 'program' ? words(install, 'jason plugin install reply did not place the plugin.') : accountSentences.notPlaced);
         }
+        // A plugin this act placed remembers the profile a route that names none acts as, taken up by the load below.
+        const profile = placed ? null : await this.#currentProfile();
         if (!granted) {
             const { file, settings } = this.#readForEdit();
-            writeAtomically(file, `${JSON.stringify(withReplyGranted(settings), null, 2)}\n`);
+            const next = withReplyGranted(settings);
+            writeAtomically(file, `${JSON.stringify(profile === null ? next : withReplyProfile(next, profile), null, 2)}\n`);
+            if (!placed) this.#deps.log.info('reply_profile_remembered', { Outcome: profile === null ? 'unread' : remembersProfile(settings) ? 'present' : 'recorded' });
+        } else if (!placed) {
+            this.#deps.log.info('reply_profile_remembered', { Outcome: profile === null ? 'unread' : this.#writeRemembered(profile) });
         }
         const reload = await this.#reloadPlugins();
         if (reload.exit !== 0) throw say === 'program' ? this.#reloadRefused(reload) : new Refused(accountSentences.notPlaced);
+    }
+
+    /** The profile the Reply CLI is set to now (`reply profile list --json`'s `current`); null where it was not read. */
+    async #currentProfile(): Promise<string | null> {
+        if (this.#deps.programs.find('reply') === null) return null;
+        return readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']))?.current ?? null;
+    }
+
+    /**
+     * Writes `profile` as the one Jason's Reply plugin acts as for a route that names none, where the settings hold nothing
+     * there; never over what they hold. A file the desktop cannot parse is left as it is.
+     */
+    #writeRemembered(profile: string): 'recorded' | 'present' | 'unparsed' {
+        let edit: { file: string; settings: Record<string, unknown> };
+        try {
+            edit = this.#readForEdit();
+        } catch (error) {
+            if (error instanceof Refused) return 'unparsed';
+            throw error;
+        }
+        if (remembersProfile(edit.settings)) return 'present';
+        writeAtomically(edit.file, `${JSON.stringify(withReplyProfile(edit.settings, profile), null, 2)}\n`);
+        return 'recorded';
+    }
+
+    /**
+     * At a start in Live, once the runtime is up: where the runtime lists Jason's Reply plugin and the installation's
+     * settings remember no profile for a route that names none, records the one the Reply CLI is set to now, which such a
+     * route was acting as, and has the runtime load its plugins again, since a setting is taken at a load. No route is
+     * rewritten, so the runtime knows every account as before. A setting there is never changed. A plugin not listed, a
+     * file the desktop cannot parse, a profile list not read or a reload refused leave it unrecorded, the file as it was;
+     * each is logged, and nothing is said on the page, since such a route then goes where it went before.
+     */
+    rememberReplyProfile(): Promise<void> {
+        return this.#serial(async () => {
+            this.#deps.log.info('reply_profile_remembered', { Outcome: await this.#rememberAtStart() });
+        }).catch(() => this.#deps.log.warn('reply_profile_remembered', { Outcome: 'failed' }));
+    }
+
+    async #rememberAtStart(): Promise<'recorded' | 'present' | 'unparsed' | 'not_listed' | 'unread' | 'reload_refused'> {
+        if (replyPlacement(await this.#deps.cli.run(['plugin', 'list']))?.placed !== true) return 'not_listed';
+        const file = this.#settingsFile();
+        const before = readText(file);
+        let settings: Record<string, unknown>;
+        try {
+            settings = parseInstallationSettings(before);
+        } catch {
+            return 'unparsed';
+        }
+        if (remembersProfile(settings)) return 'present';
+        const profile = await this.#currentProfile();
+        if (profile === null) return 'unread';
+        const written = this.#writeRemembered(profile);
+        if (written !== 'recorded') return written;
+        // Not through `#reloadPlugins`, whose refusal the page says: this one is the desktop's own, and the file goes back.
+        if ((await this.#deps.cli.run(['plugin', 'reload'])).exit === 0) return 'recorded';
+        if (before === null) rmSync(file, { force: true });
+        else writeAtomically(file, before);
+        return 'reload_refused';
     }
 
     /**
@@ -1377,9 +1436,11 @@ export class Setup {
         if (!usableAccount(this.#deps.account)) return refusal(accountSentences.noActor);
         const asked = readRoutes(await this.#deps.cli.run(['route', 'list']));
         if (asked === null) return refusal(accountSentences.routesUnread);
-        const now = defaultAccount(asked);
+        // An account Make default names came from a read that listed the accounts, which set this.
+        const unnamed = this.#unnamed!;
+        const now = defaultAccount(asked, unnamed);
         if (now !== null && sameAccount(now, account)) return { done: true };
-        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault), accountNamed(account))))) {
+        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault, unnamed), accountNamed(account))))) {
             return refusal(said.notConfirmed);
         }
         return this.#serial(async () => {

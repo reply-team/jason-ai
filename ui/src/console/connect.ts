@@ -2,7 +2,6 @@ import { effect, signal } from '@preact/signals-react';
 import type {
     DesktopAccountRef,
     DesktopHost,
-    DesktopNoProfile,
     DesktopPlugin,
     DesktopReplyAccount,
     DesktopReplyChannel,
@@ -1290,58 +1289,9 @@ function cliLines(reply: DesktopSetup['reply'], real: Html | null): Html {
 }
 
 /**
- * The routes to Jason's Reply plugin that name no profile, which act as no account and cannot send, each kind said with
- * the command that fixes it: the global default's with the profile it has been sending through, a campaign's own, and a
- * global route for one kind of work. The profile's name is drawn as text, never read for a command.
- */
-function noProfileLines(noProfile: DesktopNoProfile | undefined): Html[] {
-    if (noProfile === undefined) return [];
-    const campaigns = noProfile.campaigns;
-    const globals = noProfile.globalRoutes;
-    const binding = html`--plugin reply --binding '{"profile":"&lt;name&gt;"}'`;
-    const campaignCommand = html`<code>jason route set --campaign &lt;id&gt; ${binding}</code>`;
-    const globalCommand = html`<code>jason route set --global --operation &lt;operation&gt; ${binding}</code>`;
-    return [
-        ...(noProfile.default
-            ? [
-                  html`The default route names no profile, so campaigns that use it cannot
-                  send.${
-                      noProfile.current === null
-                          ? null
-                          : html` It has been sending through the Reply CLI’s current profile, “${noProfile.current}”:
-                            make that account the default to keep it so.`
-                  }`,
-              ]
-            : []),
-        ...(campaigns === 1
-            ? [
-                  html`1 campaign has a route of its own that names no profile, so work that goes through it cannot run.
-                  Name one for it: ${campaignCommand}.`,
-              ]
-            : campaigns > 1
-              ? [
-                    html`${campaigns} campaigns have a route of their own that names no profile, so work that goes
-                    through it cannot run. Name one for each: ${campaignCommand}.`,
-                ]
-              : []),
-        ...(globals === 1
-            ? [
-                  html`1 global route for one kind of work names no profile, so that work cannot run. Name one for it:
-                  ${globalCommand}.`,
-              ]
-            : globals > 1
-              ? [
-                    html`${globals} global routes for one kind of work each name no profile, so that work cannot run.
-                    Name one for each: ${globalCommand}.`,
-                ]
-              : []),
-    ];
-}
-
-/**
  * What of the accounts as a whole the desktop could not read, said as that and never as a state; that no account is the
- * default yet where the routes were read and name none; and the routes that name no profile: from a desktop of this
- * version alone.
+ * default yet where the routes were read and name none; and the campaigns whose route names a team: from a desktop of
+ * this version alone.
  */
 function accountsLines(state: DesktopSetup): Html | null {
     if (!accountsSent(state)) return null;
@@ -1362,9 +1312,6 @@ function accountsLines(state: DesktopSetup): Html | null {
               </div>`
             : null
     }
-    ${noProfileLines(state.accounts!.noProfile).map(
-        (line) => html`<div class="setrow meta no-profile" role="note">${line}</div>`,
-    )}
     ${teamRoutesLine(state.accounts!.campaignsWithTeam)}`;
 }
 

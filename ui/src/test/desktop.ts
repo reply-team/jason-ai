@@ -244,7 +244,6 @@ export function withReplyAccounts(
             accounts,
             notRead: [],
             noDefault: false,
-            noProfile: { default: false, current: null, campaigns: 0, globalRoutes: 0 },
             campaignsWithTeam: 0,
             ...over,
         },

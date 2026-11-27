@@ -3,7 +3,6 @@ import type {
     DesktopAccount,
     DesktopAccounts,
     DesktopReply,
-    DesktopNoProfile,
     DesktopReplyTeam,
     DesktopSetup,
     JasonDesktop,
@@ -125,14 +124,8 @@ const accounts = {
     accounts: true,
     notRead: true,
     noDefault: true,
-    noProfile: true,
     campaignsWithTeam: true,
 } as const satisfies Record<keyof DesktopAccounts, true>;
-// The routes to the Reply plugin that name no profile, which the section says.
-const noProfile = { default: true, current: true, campaigns: true, globalRoutes: true } as const satisfies Record<
-    keyof DesktopNoProfile,
-    true
->;
 const account = {
     type: true,
     name: true,
@@ -163,17 +156,15 @@ const held: [
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof reply, keyof DesktopReply>,
     Exactly<keyof typeof accounts, keyof DesktopAccounts>,
-    Exactly<keyof typeof noProfile, keyof DesktopNoProfile>,
     Exactly<keyof typeof account, keyof DesktopAccount>,
     Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
         expect(held).toEqual([
-            true,
             true,
             true,
             true,
@@ -294,8 +285,7 @@ describe('the desktop seam', () => {
             'startUpdate',
             'startCheck',
         ]);
-        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault', 'noProfile', 'campaignsWithTeam']);
-        expect(Object.keys(noProfile)).toEqual(['default', 'current', 'campaigns', 'globalRoutes']);
+        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault', 'campaignsWithTeam']);
         expect(Object.keys(account)).toEqual([
             'type',
             'name',

@@ -624,10 +624,13 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   configuration; a runtime started with another `XDG_CONFIG_HOME` than Jason Desktop's would read other profiles and
   sign-ins than the cards show.
   One account is the default, marked **Default**: the one the global default route names, which every campaign with no
-  route of its own sends through. A route to Jason's Reply plugin that names no profile is no account and cannot send,
-  and the screen says so: where the global default is one, it names the Reply CLI's current profile, which that route has
-  been sending through, so that Make default on its card keeps it so; a campaign's own route, or a global route for one
-  kind of work, that names none is counted, with the `jason route set` that names a profile in it. A campaign's route that
+  route of its own sends through. A route to Jason's Reply plugin that names no profile acts as one remembered profile,
+  the Reply plugin's own setting `Plugins:Config:reply:profile` in Jason's settings, and only where none is remembered as
+  the Reply CLI's current profile; its account is that profile's. Jason Desktop writes the setting once, where the plugin
+  is in place and nothing is there: at a start in Live, or when a sign-in or Make default places the plugin. It records
+  the Reply CLI's current profile at that moment, which such a route was already using, so that a later `reply profile
+  use` in a terminal moves nothing of Jason's; it never changes the setting once it is there, and rewrites no route for
+  it, so the runtime knows every account and every running campaign as before. A campaign's route that
   names a Reply team beside its profile still sends in that team, which no card shows, and is on its way out: the screen
   counts such campaigns, and says to route each to a profile pinned to that team instead. **Make default** on any other card makes it the default, replacing the default there
   was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the

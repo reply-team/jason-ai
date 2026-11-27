@@ -907,6 +907,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             }
             log.info('window_loaded', { Origin: started.origin });
             roles.atStart();
+            // The profile a Reply route that names none acts as, remembered once where Jason's Reply plugin is in place.
+            if (runOn.mode === 'live') void setup.rememberReplyProfile();
             // An installed Reply CLI below the minimum is updated in the background, once the machine set-up's runs have ended.
             replyCheck.ask();
             settleStart(rollback, app.getVersion(), true, log);
