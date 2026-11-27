@@ -11,6 +11,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class CanonicalReadsDocTests
 {
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("`contacts` appears when `preflight.contact` is `required`, or when it is `optional` and the work item names a contact")]
     [InlineData("## The preview a person reads")]
     [InlineData("The preview is never part of what is approved:")]
@@ -32,6 +33,7 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("**`contacts`** appears when the operation's pre-flight says a contact is `required`, or when it says `optional` and the work item names one")]
     [InlineData("### Pages")]
     [InlineData("`provider_answer_too_large`")]
@@ -61,6 +63,7 @@ public sealed partial class CanonicalReadsDocTests
     /// row says the rest name nobody.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_contact_proxy_rule_names_each_way_s_operations_as_the_documents_state_them()
     {
         var text = Source("docs/plugins.md").ReplaceLineEndings("\n");
@@ -92,6 +95,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_routing_page_says_an_optional_contact_runs_with_one_or_without() =>
         Assert.Contains(
             "| 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |",
@@ -99,6 +103,7 @@ public sealed partial class CanonicalReadsDocTests
             StringComparison.Ordinal);
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_approvals_section_says_a_preview_may_lead_with_a_summary() =>
         Assert.Contains(
             "and, where the operation declares one, a summary rendered from the composed input with the values it highlights",
@@ -107,6 +112,7 @@ public sealed partial class CanonicalReadsDocTests
 
     /// <summary>The refusal of an argument points to the one key every operation reserves, and to the rule that key keeps.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_invalid_argument_row_points_to_the_provider_rule() =>
         Assert.Contains(
             "all of them reported at once. The one key every operation reserves, `provider`, is held only to [its own rule](contracts/README.md#the-input-a-plugin-receives) |",
@@ -118,6 +124,7 @@ public sealed partial class CanonicalReadsDocTests
     /// their own: the paging, what each read leaves out, and the words the catalogue lacks.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("| Paging |")]
     [InlineData("| `enrollment.list` from the person's end |")]
     [InlineData("| `enrollment.list` status filter |")]
@@ -184,6 +191,7 @@ public sealed partial class CanonicalReadsDocTests
     /// marks is how a page comes to argue with something the catalogue never said.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/contracts/divergence-from-l1.md", "a mandatory preview naming the population, not counting it")]
     [InlineData("docs/contracts/divergence-from-l1.md", "whose non-performance is itself the harm")]
     [InlineData("docs/contracts/divergence-from-l1.md", "Take them out, and record why")]
@@ -211,6 +219,7 @@ public sealed partial class CanonicalReadsDocTests
     /// than calling it no disagreement.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_approval_row_says_the_activation_preview_counts_and_asks_back()
     {
         var row = Source("docs/contracts/divergence-from-l1.md").Split('\n').Single(line => line.StartsWith("| Approval |", StringComparison.Ordinal));
@@ -226,6 +235,7 @@ public sealed partial class CanonicalReadsDocTests
     /// the provider no longer holds is, for the stop, the completed stop it cannot be told apart from.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("the stop never creates anybody")]
     [InlineData("the enrollment, the list add, the opt-out, the update, the invitation and the message look the person up and create them only when nobody matches")]
     [InlineData("Every one of them but the stop creates the contact when the provider holds nobody under the value, and only then")]
@@ -248,6 +258,7 @@ public sealed partial class CanonicalReadsDocTests
     /// package's own README counts the operations the package performs, which is the whole catalog.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("README.md", false)]
     [InlineData("docs/handbook.md", true)]
     [InlineData("docs/plugins.md", true)]
@@ -272,6 +283,7 @@ public sealed partial class CanonicalReadsDocTests
     ];
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_plugins_index_lists_every_operation_the_reply_plugin_performs()
     {
         var index = Source("plugins/README.md");
@@ -285,6 +297,7 @@ public sealed partial class CanonicalReadsDocTests
     /// it today — read from the catalog, so a third fails here until the sentence says so.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_eligibility_rule_names_the_field_and_every_operation_that_runs_in_a_paused_campaign()
     {
         var text = Flat(Source("docs/work-execution.md"));
@@ -304,6 +317,7 @@ public sealed partial class CanonicalReadsDocTests
     /// the record says which of the two matches let the work run.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Work_execution_says_an_added_pin_keeps_the_cover_and_a_changed_or_vanished_one_asks_again()
     {
         var text = Flat(Source("docs/work-execution.md"));
@@ -321,6 +335,7 @@ public sealed partial class CanonicalReadsDocTests
     /// publishes with an approval other than `auto`, under the word it publishes, and none that runs `auto`.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Work_execution_names_every_operation_a_person_confirms_and_no_other()
     {
         var text = Flat(Source("docs/work-execution.md"));
@@ -345,6 +360,7 @@ public sealed partial class CanonicalReadsDocTests
     /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Routing_row_10_names_every_operation_the_register_does_not_refuse()
     {
         var row = Source("docs/routing.md").Split('\n').Single(line => line.StartsWith("| 10 | `suppressed` |", StringComparison.Ordinal));
@@ -360,6 +376,7 @@ public sealed partial class CanonicalReadsDocTests
     /// marks `pinned_only`, and the field that marks it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Routing_row_11_names_every_operation_that_works_by_the_pin_alone()
     {
         var row = Source("docs/routing.md").Split('\n').Single(line => line.StartsWith("| 11 | `contact_not_linked` |", StringComparison.Ordinal));
@@ -375,6 +392,7 @@ public sealed partial class CanonicalReadsDocTests
     /// already have been made — so a repeat reads before it creates, whatever the operation does besides.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Every_operation_that_may_create_the_provider_s_contact_says_a_lost_answer_may_have_made_it()
     {
         var creating = OperationCatalog.All.Where(contract => contract.Preflight.ProviderContact == ProviderContact.FindOrCreate).ToList();
@@ -392,6 +410,7 @@ public sealed partial class CanonicalReadsDocTests
     /// the account is chosen — the operations read from the code that serves them.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("### A read on request")]
     [InlineData("`contact.threads`")]
     [InlineData("`contact.thread`")]
@@ -408,6 +427,7 @@ public sealed partial class CanonicalReadsDocTests
     /// own route, as the routing page does: the one campaign read on request that is not routed by the search.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md")]
     [InlineData("docs/contracts/README.md")]
     public void The_published_pages_say_the_sender_read_goes_by_its_own_route(string page) =>
@@ -418,6 +438,7 @@ public sealed partial class CanonicalReadsDocTests
     /// the routing page does, so a change to the routing page's wording fails here until they follow.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/plugins.md")]
     [InlineData("docs/ui.md")]
     public void The_published_pages_say_a_read_on_request_in_the_routing_page_s_words(string page)
@@ -437,6 +458,7 @@ public sealed partial class CanonicalReadsDocTests
     /// the catalog, so a send published later fails here until the page says so too.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_routing_page_names_every_operation_that_is_never_repeated()
     {
         var text = Flat(Source("docs/routing.md"));
@@ -460,6 +482,7 @@ public sealed partial class CanonicalReadsDocTests
     ];
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [MemberData(nameof(Counts))]
     public void Work_execution_defines_every_count_of_a_campaign_s_people(string count)
     {
@@ -472,6 +495,7 @@ public sealed partial class CanonicalReadsDocTests
 
     /// <summary>The series' two refusals, in the numbers the runtime enforces.</summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Work_execution_states_the_limits_a_series_is_refused_by()
     {
         var text = Flat(Source("docs/work-execution.md"));
@@ -482,6 +506,7 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Work_execution_names_where_the_operations_are_rather_than_listing_them() =>
         Assert.Contains(
             "one of the canonical operations this build publishes a contract for — the documents under `docs/contracts/operations/` —",
@@ -495,6 +520,7 @@ public sealed partial class CanonicalReadsDocTests
     /// responder, which now writes a reply, has its sentence held by its own role's tests.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("skills/runtime/roles/responder/SKILL.md", "**This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox.")]
     [InlineData("skills/runtime/roles/analyst/SKILL.md", "Jason records no open, click, reply or delivery of its own; the provider's counts reach it only as the result of a `provider_op` item naming `engagement.summarize`, with the envelope that says what each number counts.")]
     [InlineData("skills/runtime/roles/copywriter/SKILL.md", "The other operations write no message of their own: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
@@ -503,6 +529,7 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains(sentence, Flat(Source(skill)), StringComparison.Ordinal);
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_register_records_how_canonical_operations_are_published() =>
         Assert.Contains(
             "| DEC-OPS-003 | Canonical operations are published in subsets chosen by the role sentences they retire and the chain they complete, each copied from the vendor-neutral catalogue with its properties unsoftened; an operation on the catalogue's protective floor runs `auto`, and the claim's own guards do not block it. |",
@@ -515,6 +542,7 @@ public sealed partial class CanonicalReadsDocTests
     /// subject and the composed input show.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_register_records_what_an_approval_preview_is_and_neither_the_subject_nor_the_plugin_carries_one()
     {
         Assert.Contains(
