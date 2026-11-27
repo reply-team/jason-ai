@@ -1560,7 +1560,7 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
 
 /**
  * The teams of a sign-in that belongs to more than one, in place of its account's senders, where the profile pins none
- * and Reply would not list it without one: each by its name, with Choose.
+ * and Reply would not list it without one: each by its name, or as one Reply gives none, with Choose.
  */
 function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
     return html`<div class="acct-group acct-teams">
@@ -1570,9 +1570,7 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
         ${teams.map(
             (team) =>
                 html`<div class="setrow acct-team">
-                    <div class="grow">
-                        <b>${team.name}</b>
-                    </div>
+                    <div class="grow">${team.name === '' ? 'A team with no name' : html`<b>${team.name}</b>`}</div>
                     <button class="btn sm" type="button" ${asks} ${act('connect.chooseTeam', place, team.id)}>
                         Choose
                     </button>

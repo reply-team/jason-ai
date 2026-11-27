@@ -971,10 +971,11 @@ describe('Reply accounts, one card per profile', () => {
         expect(cards(page)).toEqual(['Reply default', 'Reply outbound', 'Reply routed-only']);
     });
 
-    it('offers the teams of a sign-in in more than one in place of its mailboxes and LinkedIn accounts, from the read right after a sign-in on the card, and pins the one picked', async () => {
+    it('offers the teams of a sign-in in more than one in place of its mailboxes and LinkedIn accounts, from the read right after a sign-in on the card, each by its name or as one with none, and pins the one picked', async () => {
         const teams = [
             { id: '5', name: 'Made-up Five' },
             { id: '9', name: 'Made-up Nine' },
+            { id: '7', name: '' },
         ];
         const ada = replyAccount('default', {
             default: true,
@@ -992,16 +993,13 @@ describe('Reply accounts, one card per profile', () => {
         const bea = () => cardOf(page, 'Reply account outbound');
         const why = 'This sign-in belongs to more than one Reply team. Choose the one this profile works in.';
         const teamRows = () => Array.from(bea().querySelectorAll<HTMLElement>('.acct-team')).map(words);
-        // A key whose login is in two teams: the read that follows the sign-in offers them at once, and no line says
-        // that something could not be read.
+        // A browser's sign-in of a login in several teams: the read that follows the sign-in offers them at once, one Reply
+        // gives no name as that, and no line says that something could not be read.
         desktop.status = teamless;
-        fireEvent.input(within(bea()).getByPlaceholderText('Or paste a Reply API key'), {
-            target: { value: 'made-up-key' },
-        });
-        fireEvent.click(within(bea()).getByRole('button', { name: 'Use key' }));
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Sign in with Reply' }));
         await waitFor(() => expect(words(bea())).toContain(why));
         expect(words(bea())).not.toMatch(/could not be read/);
-        expect(teamRows()).toEqual(['Made-up Five Choose', 'Made-up Nine Choose']);
+        expect(teamRows()).toEqual(['Made-up Five Choose', 'Made-up Nine Choose', 'A team with no name Choose']);
         expect(within(bea()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         // A pick asks the desktop by the account and the team's id, with no question, and the card reads as that team.
         desktop.status = withReplyAccounts(setupFound, [
@@ -1016,18 +1014,18 @@ describe('Reply accounts, one card per profile', () => {
         expect(desktop.calls.filter((call) => call.name === 'setup.chooseTeam').map((call) => call.args)).toEqual([
             [{ type: 'reply', name: 'outbound' }, '9'],
         ]);
-        // Its refusal is said on the card.
+        // Its refusal, the desktop's own sentence, is said on the card.
         desktop.status = teamless;
         desktop.changed();
-        await waitFor(() => expect(teamRows()).toHaveLength(2));
+        await waitFor(() => expect(teamRows()).toHaveLength(3));
         desktop.actAnswers.set(
             'setup.chooseTeam',
-            refusal("The team was not chosen. Team 5 isn't one you can act in."),
+            refusal('The team was not chosen: this sign-in can no longer work in it.'),
         );
         fireEvent.click(within(row('Made-up Five')).getByRole('button', { name: 'Choose' }));
         await waitFor(() =>
             expect(words(within(bea()).getByRole('alert'))).toBe(
-                "The team was not chosen. Team 5 isn't one you can act in.",
+                'The team was not chosen: this sign-in can no longer work in it.',
             ),
         );
     });
