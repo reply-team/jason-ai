@@ -74,6 +74,12 @@ const replyCard = (connect: HTMLElement) =>
     within(connect).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** Words as drawn: the hint of a Reply account’s mark shows only under the pointer or the keyboard’s focus. */
+const drawnWords = (element: Element) => {
+    const drawn = element.cloneNode(true) as Element;
+    drawn.querySelectorAll('.acct-elsewhere-hint').forEach((hint) => hint.remove());
+    return words(drawn);
+};
 
 const sender = (id: string, channel: string, status: string, name = `Account ${id}`): DesktopReplySender => ({
     id,
@@ -503,12 +509,12 @@ describe('the Reply card, its acts', () => {
             );
         const desktop = renderConnect(twoAccounts('outbound'));
         let card = replyCard(await openConnect());
-        expect(words(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');
+        expect(drawnWords(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');
         // Its profile is not on Reply's production: the card's mark says so, here as on the Accounts page.
         expect(
-            within(card.querySelector<HTMLElement>('.acct-head')!).getByRole('img', {
-                name: 'Not Reply’s production: https://api.example.test',
-            }).title,
+            within(card.querySelector<HTMLElement>('.acct-head')!)
+                .getByRole('img', { name: 'Not Reply’s production: https://api.example.test' })
+                .querySelector('.acct-elsewhere-hint')?.textContent,
         ).toBe('Not Reply’s production: https://api.example.test');
         expect(words(card.querySelector('.reply-state')!)).toBe('Not signed in');
         expect(card.querySelector('.acct')).toBeNull();

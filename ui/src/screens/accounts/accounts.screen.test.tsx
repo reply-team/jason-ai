@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../../api/session';
 import { Console } from '../../console/console';
@@ -28,6 +29,12 @@ import { bringForward } from '../../test/area';
 // browser. The notification channels are Settings', not this page's.
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** Words as drawn: the hint of a Reply account’s mark shows only under the pointer or the keyboard’s focus. */
+const drawnWords = (element: Element) => {
+    const drawn = element.cloneNode(true) as Element;
+    drawn.querySelectorAll('.acct-elsewhere-hint').forEach((hint) => hint.remove());
+    return words(drawn);
+};
 
 beforeEach(() => {
     setup.value = null;
@@ -249,7 +256,7 @@ describe('Reply accounts, one card per profile', () => {
     const cardOf = (page: HTMLElement, label: string) => within(page).getByRole('region', { name: label });
     const cards = (page: HTMLElement) =>
         Array.from(page.querySelectorAll<HTMLElement>('.reply-account')).map((card) =>
-            words(card.querySelector('.acct-head')!),
+            drawnWords(card.querySelector('.acct-head')!),
         );
     const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
     const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
@@ -281,18 +288,32 @@ describe('Reply accounts, one card per profile', () => {
             'The teams of this sign-in could not be read. Check again.',
         ]);
         // A profile pointed at another Reply than production: a mark beside its name, which says so and gives the address,
-        // as its hint and to a screen reader, and which the keyboard reaches. A profile on production shows none.
+        // as its hint and to a screen reader, and which the keyboard reaches. Its hint is words of the page, shown while the
+        // pointer is over the mark and while the keyboard's focus is on it, never a browser's title, which shows only under
+        // the pointer. A profile on production shows none.
         const elsewhere = within(bea.querySelector<HTMLElement>('.acct-head')!).getByRole('img', {
             name: 'Not Reply’s production: https://api.example.test',
         });
-        expect([elsewhere.getAttribute('title'), elsewhere.tabIndex]).toEqual([
-            'Not Reply’s production: https://api.example.test',
-            0,
-        ]);
+        expect([
+            elsewhere.hasAttribute('title'),
+            words(elsewhere.querySelector('.acct-elsewhere-hint')!),
+            elsewhere.tabIndex,
+        ]).toEqual([false, 'Not Reply’s production: https://api.example.test', 0]);
+        // Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
+        const sheet = readFileSync('src/console/console.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+        const shownBy = Array.from(sheet.matchAll(/([^{}@]+)[{]([^{}]*)[}]/g))
+            .filter((rule) => /display: block;/.test(rule[2]!))
+            .flatMap((rule) => rule[1]!.split(',').map((each) => each.trim()));
+        expect(shownBy).toEqual(
+            expect.arrayContaining([
+                '.jc-console .reply-card .acct-head .acct-elsewhere:hover .acct-elsewhere-hint',
+                '.jc-console .reply-card .acct-head .acct-elsewhere:focus-visible .acct-elsewhere-hint',
+            ]),
+        );
         expect(
             [ada, cardOf(page, 'Reply account routed-only')].map((card) => card.querySelector('[role="img"]')),
         ).toEqual([null, null]);
-        expect(words(page)).not.toContain('production');
+        expect(drawnWords(page)).not.toContain('production');
         // A profile only a route names, which the Reply CLI does not hold: not signed in, with the sign-in that makes it.
         const routed = cardOf(page, 'Reply account routed-only');
         expect(words(routed.querySelector('.reply-state')!)).toBe('Not signed in');

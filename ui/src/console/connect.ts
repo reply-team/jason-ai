@@ -1572,14 +1572,15 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
 }
 
 /**
- * The mark beside an account's name where its profile points at another Reply than production: the hint, which the
- * keyboard reaches and a screen reader reads as the same words, says so and gives the API address. None on production.
+ * The mark beside an account's name where its profile points at another Reply than production: the hint says so and
+ * gives the API address, shown while the pointer is over the mark or the keyboard's focus is on it, and read by a screen
+ * reader as the mark's name. None on production.
  */
 function elsewhereMark(view: AccountView): Html | null {
     if (view.nonProductionApi === null) return null;
     const hint = `Not Reply’s production: ${view.nonProductionApi}`;
-    return html`<span class="acct-elsewhere" role="img" tabindex="0" aria-label="${hint}" title="${hint}"
-        >${svg('att', 14)}</span
+    return html`<span class="acct-elsewhere" role="img" tabindex="0" aria-label="${hint}"
+        >${svg('att', 14)}<span class="acct-elsewhere-hint" aria-hidden="true">${hint}</span></span
     >`;
 }
 

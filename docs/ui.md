@@ -564,9 +564,10 @@ knows of a version it has not installed ([desktop.md](desktop.md#updating)); the
 
 One screen for what you have connected. **Provider** is the Reply section, with **Add Reply account** wherever the Reply
 accounts were read, and one card per Reply account, each one profile of the Reply CLI, marked for the default and for
-every other global route that names it, with a small mark whose hint gives the address where its profile is not on
-Reply's production, its sign-in with the team it is bound to, by the team's name and never a number (no team where Reply
-gives it no name), or who it was last signed in as ([desktop.md](desktop.md#connect), Reply). The cards are drawn by the
+every other global route that names it, with a small mark where its profile is not on Reply's production, whose hint,
+shown under the pointer and under the keyboard's focus alike, gives the address, its sign-in with the team it is bound
+to, by the team's name and never a number (no team where Reply gives it no name), or who it was last signed in as
+([desktop.md](desktop.md#connect), Reply). The cards are drawn by the
 same code as the one Reply card of the desktop's Connect panel and act through the same acts of the desktop. A card
 offers **Sign in with Reply** and a key only while it is not signed in, and **Sign out** once it is; **Remove** where
 the Reply CLI holds its profile, it is not `default` and no route that names no profile follows it as the Reply CLI's

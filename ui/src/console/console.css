@@ -309,9 +309,33 @@
 }
 /* The mark of a profile that points at another Reply than production: a small icon whose hint gives the address. */
 .jc-console .reply-card .acct-head .acct-elsewhere {
+    position: relative;
     display: inline-flex;
     color: #e3a03a;
     border-radius: 50%;
+}
+/* Its hint, words of the page under the mark, shown alike under the pointer and under the keyboard's focus. */
+.jc-console .reply-card .acct-head .acct-elsewhere-hint {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    width: max-content;
+    max-width: 320px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: var(--panel);
+    font-family: var(--f);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.jc-console .reply-card .acct-head .acct-elsewhere:hover .acct-elsewhere-hint,
+.jc-console .reply-card .acct-head .acct-elsewhere:focus-visible .acct-elsewhere-hint {
+    display: block;
 }
 .jc-console .grow {
     flex: 1;
