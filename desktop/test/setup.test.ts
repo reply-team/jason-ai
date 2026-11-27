@@ -1879,9 +1879,10 @@ test('a listing asked while one is read is answered by that read, and one asked 
     release();
     assert.equal((await older).accounts?.accounts.some((each) => each.name === 'later'), false, 'the older read answers its own asker');
     assert.deepEqual(await ordered.removeAccount({ type: 'reply', name: 'later' }), no('Nothing was done.'), 'an act on an account the later read listed');
-    // A window's start: its first listing goes while the start's look at the Reply CLI finds it at the minimum and runs
-    // nothing; told that the check ended, the window asks again, as it does over the seam, a moment later. That is one
-    // read, and it says the check ended.
+    // A window's start: its first listing goes while, in the setup's queue, the start puts the agents' roles on the AI
+    // the chat runs on and finds nothing to do there (no host found), then looks at the Reply CLI, finds it at the
+    // minimum and runs nothing; told that the check ended, the window asks again, as it does over the seam, a moment
+    // later. That is one read, and it says the check ended.
     // The first read is held at the profiles, past where it reads the Reply CLI's version.
     const starting = new Setup({ ...setupDeps(b), programs: slow });
     const asked: Promise<SetupState>[] = [];
@@ -1891,6 +1892,7 @@ test('a listing asked while one is read is answered by that read, and one asked 
     const window = starting.status();
     await new Promise((resolve) => setTimeout(resolve, 500));
     assert.equal(holding, false, 'the first read is held');
+    assert.equal(await starting.connectRoles(null), 'no_host');
     assert.equal(await starting.updateReplyAtStart(), 'current');
     await new Promise((resolve) => setTimeout(resolve, 50));
     release();

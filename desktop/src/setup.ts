@@ -467,6 +467,11 @@ export type RolesOutcome =
     | 'named';
 /** The ends of `connectRoles` that leave it to the next turn: a runtime that did not answer, or no connected host. */
 const unsettling: ReadonlySet<RolesOutcome> = new Set(['settled', 'profiles_unread', 'no_host', 'default_unanswered']);
+/**
+ * The ends of `connectRoles` where the default profile in force, which a listing reads, may have changed: named, or asked
+ * for with no answer. The others changed nothing a listing reads.
+ */
+const rolesDefaultMoved: ReadonlySet<RolesOutcome> = new Set(['made', 'named', 'default_unanswered']);
 export const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
@@ -1798,12 +1803,15 @@ export class Setup {
      * settles it for this run.
      */
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
-        return this.#serial(async () => {
-            const outcome = await this.#connectRoles(chosen);
-            if (!unsettling.has(outcome)) this.#rolesSettled = true;
-            this.#deps.log.info('roles_profile', { Outcome: outcome });
-            return outcome;
-        });
+        return this.#serial(
+            async () => {
+                const outcome = await this.#connectRoles(chosen);
+                if (!unsettling.has(outcome)) this.#rolesSettled = true;
+                this.#deps.log.info('roles_profile', { Outcome: outcome });
+                return outcome;
+            },
+            (outcome) => rolesDefaultMoved.has(outcome),
+        );
     }
 
     async #connectRoles(chosen: string | null): Promise<RolesOutcome> {

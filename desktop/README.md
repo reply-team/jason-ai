@@ -38,8 +38,9 @@ that a person needs.
 
 A listing of `Setup.status` asked while one is being read is answered by that read, unless a change ended since it
 began: an act of the setup's queue, an act on a Reply account, or a change the desktop announces (the models Codex
-offers and Full access's bypass among them). The start's look at the Reply CLI ends a change only where it ran npm, and
-whether it has ended is taken as a read ends, so a window told of its end at a start is answered by the read already
+offers and Full access's bypass among them). At a start, putting the agents' roles on the AI ends a change only where
+it named a default or asked for one and had no answer, and the look at the Reply CLI only where it ran npm; whether
+that look has ended is taken as a read ends, so a window told of its end at a start is answered by the read already
 going. Where two reads overlap, the acts are checked against the accounts of the read that began last, and the page
 drops an answer older than the one it shows.
 
