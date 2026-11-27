@@ -239,7 +239,7 @@ describe('Reply accounts, one card per profile', () => {
         replyAccount('outbound', {
             signedIn: true,
             user: 'bea@example.test',
-            team: { id: '9', name: '' },
+            team: { id: '9', name: null },
             notRead: ['teams'],
             senders: [linkedIn],
         }),
@@ -263,8 +263,8 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(ada.querySelector('.acct')!)).toContain('Sales inbox');
         expect(within(ada).queryByRole('button', { name: 'Make default' })).toBeNull();
         expect(words(ada)).not.toContain('could not be read');
-        // A team Reply gives no name, or whose name could not be read, said as that, never by its id; teams that could not
-        // be read said as that, the account's mailboxes and LinkedIn accounts standing.
+        // A team whose name could not be read, while its teams could not be read, said as that, never by its id; teams that
+        // could not be read said as that, the account's mailboxes and LinkedIn accounts standing.
         const bea = cardOf(page, 'Reply account outbound');
         expect(words(bea.querySelector('.reply-state')!)).toBe(
             'Signed in as bea@example.test in a team whose name could not be read',
@@ -815,32 +815,52 @@ describe('Reply accounts, one card per profile', () => {
         ]);
     });
 
-    it('says who a card not signed in was last signed in as, and where the last read found another login, a team the sign-in is no longer in, or another of its teams, what the account was and is now, with Keep it and Sign out; a team only by its name', async () => {
+    it('says who a card not signed in was last signed in as, and where the last read found its sign-in changed, the change the desktop found (another login, a team the same login is no longer in, another of its teams, or a login not known before it has a team), with Keep it and Sign out, and nothing to do in the account meanwhile; a team only by its name, and none where Reply gives it none', async () => {
         const ada3 = { user: 'ada@example.test', team: { id: '3', name: 'Made-up Three' } };
+        const bea9 = { user: 'bea@example.test', team: { id: '9', name: '' } };
         const desktop = inDesktop(
             withReplyAccounts(setupFound, [
+                // The same login, pinned to another of its teams: listed as it now is.
                 replyAccount('default', {
                     default: true,
                     signedIn: true,
-                    user: 'cy@example.test',
-                    team: { id: '4', name: '' },
+                    user: 'ada@example.test',
+                    team: { id: '6', name: 'Made-up Six' },
                     lastSignIn: ada3,
                     change: 'team',
                     senders: [mailbox],
                 }),
                 replyAccount('outbound', { lastSignIn: ada3 }),
-                // Signed in as the note says: no change to say.
-                replyAccount('quiet', {
-                    signedIn: true,
-                    user: 'bea@example.test',
-                    team: { id: '9', name: '' },
-                    lastSignIn: { user: 'bea@example.test', team: { id: '9', name: '' } },
-                }),
+                // Signed in as the note says, in a team Reply gives no name: no team named, no change to say.
+                replyAccount('quiet', { signedIn: true, user: 'bea@example.test', team: bea9.team, lastSignIn: bea9 }),
+                replyAccount('personal', { lastSignIn: bea9 }),
                 replyAccount('spare'),
                 // Another login: no team and nothing listed until Keep it.
                 replyAccount('moved', { signedIn: true, user: 'dee@example.test', lastSignIn: ada3, change: 'login' }),
-                // A sign-in that can no longer work in the noted team, whose login Reply does not say.
-                replyAccount('left', { signedIn: true, lastSignIn: ada3, change: 'unknown' }),
+                // The same login, which can no longer work in the noted team.
+                replyAccount('left', { signedIn: true, user: 'ada@example.test', lastSignIn: ada3, change: 'left' }),
+                // A login Reply does not name before it has a team.
+                replyAccount('unknown', { signedIn: true, lastSignIn: ada3, change: 'unknown' }),
+                // Each change, where the team was one Reply gives no name.
+                replyAccount('moved-nameless', {
+                    signedIn: true,
+                    user: 'dee@example.test',
+                    lastSignIn: bea9,
+                    change: 'login',
+                }),
+                replyAccount('left-nameless', {
+                    signedIn: true,
+                    user: 'bea@example.test',
+                    lastSignIn: bea9,
+                    change: 'left',
+                }),
+                replyAccount('team-nameless', {
+                    signedIn: true,
+                    user: 'bea@example.test',
+                    team: { id: '6', name: 'Made-up Six' },
+                    lastSignIn: bea9,
+                    change: 'team',
+                }),
                 // Bound, and its login could not be read.
                 replyAccount('unnamed', {
                     signedIn: true,
@@ -852,13 +872,19 @@ describe('Reply accounts, one card per profile', () => {
         const page = await openAccounts('.reply-account');
         const card = (name: string) => cardOf(page, `Reply account ${name}`);
         const line = (name: string) => words(card(name).querySelector('.reply-state')!);
-        expect([line('moved'), line('left'), line('unnamed')]).toEqual([
+        expect(['moved', 'left', 'unknown', 'quiet', 'unnamed'].map(line)).toEqual([
             'Signed in as dee@example.test',
+            'Signed in as ada@example.test',
             'Signed in',
+            'Signed in as bea@example.test',
             'Signed in, in Made-up Six',
         ]);
         expect(words(card('unnamed'))).toContain('The login of this sign-in could not be read. Check again.');
-        for (const [name, said] of [
+        const changed: [string, string][] = [
+            [
+                'default',
+                'This Reply account was in Made-up Three, and is now in Made-up Six: campaigns sending through it now send in the new team. Keep it Sign out',
+            ],
             [
                 'moved',
                 'This Reply account was ada@example.test in Made-up Three, and is now dee@example.test: campaigns sending through it now send as the new one. Keep it Sign out',
@@ -867,14 +893,46 @@ describe('Reply accounts, one card per profile', () => {
                 'left',
                 'This Reply account was in Made-up Three, and this sign-in can no longer work in it. Keep it Sign out',
             ],
-        ] as const) {
+            [
+                'unknown',
+                'This Reply account was ada@example.test in Made-up Three, and who is signed in now cannot be known until it has a team. Keep it Sign out',
+            ],
+            [
+                'moved-nameless',
+                'This Reply account was bea@example.test, and is now dee@example.test: campaigns sending through it now send as the new one. Keep it Sign out',
+            ],
+            [
+                'left-nameless',
+                'This Reply account’s sign-in can no longer work in the team it was in. Keep it Sign out',
+            ],
+            [
+                'team-nameless',
+                'This Reply account is now in Made-up Six: campaigns sending through it now send in the new team. Keep it Sign out',
+            ],
+        ];
+        for (const [name, said] of changed) {
             expect(words(card(name).querySelector('.acct-changed')!), name).toBe(said);
-            expect(card(name).querySelector('.acct'), name).toBeNull();
+            // Until it is answered, nothing is offered to do in the account: no connect, no line about reading it again,
+            // and no act on a sender it lists.
+            expect(
+                within(card(name)).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' }),
+                name,
+            ).toBeNull();
+            expect(words(card(name)), name).not.toContain('read again');
+            for (const row of Array.from(card(name).querySelectorAll('.acct')))
+                expect(within(row as HTMLElement).queryAllByRole('button'), name).toEqual([]);
         }
+        for (const name of ['moved', 'left', 'unknown']) expect(card(name).querySelector('.acct'), name).toBeNull();
         expect(words(card('outbound').querySelector('.reply-state')!)).toBe('Not signed in');
         expect(words(card('outbound').querySelector('.reply-state + .acct-last')!)).toBe(
             'Last signed in as ada@example.test in Made-up Three.',
         );
+        expect(words(card('personal').querySelector('.reply-state + .acct-last')!)).toBe(
+            'Last signed in as bea@example.test.',
+        );
+        // A team Reply gives no name is an empty state, not a failure: nothing says it could not be read.
+        for (const name of ['quiet', 'personal', 'moved-nameless', 'left-nameless', 'team-nameless'])
+            expect(words(card(name)), name).not.toContain('could not be read');
         // Nothing noted, or signed in as noted: no line and no notice.
         for (const name of ['spare', 'quiet'])
             expect([card(name).querySelector('.acct-last'), card(name).querySelector('.acct-changed')]).toEqual([
@@ -883,9 +941,6 @@ describe('Reply accounts, one card per profile', () => {
             ]);
         // The notice stands while the desktop says the change, and the lists are the account's as it now is.
         const notice = () => card('default').querySelector<HTMLElement>('.acct-changed')!;
-        expect(words(notice())).toBe(
-            'This Reply account was ada@example.test in Made-up Three, and is now cy@example.test in a team whose name could not be read: campaigns sending through it now send as the new one. Keep it Sign out',
-        );
         // A team is named, never numbered.
         expect(words(page)).not.toMatch(/team \d/);
         expect(words(card('default').querySelector('.acct')!)).toContain('Sales inbox');

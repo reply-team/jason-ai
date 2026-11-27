@@ -255,19 +255,48 @@ const usableCli = (reply: DesktopSetup['reply']): boolean =>
 /** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
 
-/** A team as the card names it: by the name Reply gives it, never by its id. */
-const teamWords = (team: DesktopBoundTeam): string =>
-    team.name === '' || team.name === null ? 'a team whose name could not be read' : team.name;
+/**
+ * A team as the card names it: by the name Reply gives it, never by its id. Null where Reply gives it none, as for every
+ * Reply account outside an organization: no team is named then. Where its name was not read, `unread` says so, as the
+ * sign-in line does while the teams could not be read.
+ */
+function teamWords(team: DesktopBoundTeam, unread: string | null = null): string | null {
+    if (team.name === null) return unread;
+    return team.name === '' ? null : team.name;
+}
 
-/** A sign-in as the card says it: the login, and the team it is bound to. */
-const signInWords = (signIn: DesktopReplySignIn): Html =>
-    html`<b>${signIn.user}</b> in <b>${teamWords(signIn.team)}</b>`;
+/** A sign-in as the card says it: the login, and the team it is bound to where the card can name it. */
+function signInWords(signIn: DesktopReplySignIn): Html {
+    const team = teamWords(signIn.team);
+    return html`<b>${signIn.user}</b>${team === null ? null : html` in <b>${team}</b>`}`;
+}
+
+/** What a notice says of a change, by the kind the desktop gave it, each a sentence of the account as it was and as it is. */
+function changeWords(view: AccountView, last: DesktopReplySignIn): Html {
+    const was = teamWords(last.team);
+    switch (view.change) {
+        case 'login':
+            return html`This Reply account was ${signInWords(last)}, and is now <b>${view.user ?? ''}</b>: campaigns
+                sending through it now send as the new one.`;
+        case 'left':
+            return was === null
+                ? html`This Reply account’s sign-in can no longer work in the team it was in.`
+                : html`This Reply account was in <b>${was}</b>, and this sign-in can no longer work in it.`;
+        case 'team': {
+            const now = view.team === null ? null : teamWords(view.team);
+            const inNow = now === null ? html`in another team` : html`in <b>${now}</b>`;
+            return html`This Reply account ${was === null ? null : html`was in <b>${was}</b>, and `}is now ${inNow}:
+            campaigns sending through it now send in the new team.`;
+        }
+        default:
+            return html`This Reply account was ${signInWords(last)}, and who is signed in now cannot be known until it
+            has a team.`;
+    }
+}
 
 /**
- * What the desktop's note of an account says: on a card not signed in, who it was last signed in as; on one the last read
- * found changed, with Keep it and Sign out, what the account was and what it is now: bound to another of its sign-in's
- * teams, or signed in as another login and bound to none yet, campaigns sending through it now sending as the new one;
- * or, its login the noted one or not known, bound to none since the sign-in can no longer work in the noted team.
+ * What the desktop's note of an account says: on a card not signed in, who it was last signed in as; on one whose sign-in
+ * the last read found changed, the change as the desktop decided it (`changeWords`), with Keep it and Sign out.
  */
 function noteView(view: AccountView, place: Place, real: Html | null): Html | null {
     const last = view.lastSignIn;
@@ -277,22 +306,8 @@ function noteView(view: AccountView, place: Place, real: Html | null): Html | nu
             <div class="grow">Last signed in as ${signInWords(last)}.</div>
         </div>`;
     if (view.change === null || !keepsChange()) return null;
-    const now =
-        view.team !== null
-            ? html`${view.user === null ? null : html`<b>${view.user}</b> `}in <b>${teamWords(view.team)}</b>`
-            : view.user !== null && view.user !== last.user
-              ? html`<b>${view.user}</b>`
-              : null;
     return html`<div class="note am acct-changed" role="note">
-        <div>
-            ${
-                now === null
-                    ? html`This Reply account was in <b>${teamWords(last.team)}</b>, and this sign-in can no longer work
-                          in it.`
-                    : html`This Reply account was ${signInWords(last)}, and is now ${now}: campaigns sending through it
-                      now send as the new one.`
-            }
-        </div>
+        <div>${changeWords(view, last)}</div>
         <div class="setrow">
             <button class="btn sm" type="button" ${real} ${act('connect.keepChange', place)}>Keep it</button>
             ${signsOut() ? html`<button class="btn sm" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>` : null}
@@ -1556,7 +1571,7 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
             (team) =>
                 html`<div class="setrow acct-team">
                     <div class="grow">
-                        <b>${teamWords(team)}</b>
+                        <b>${team.name}</b>
                     </div>
                     <button class="btn sm" type="button" ${asks} ${act('connect.chooseTeam', place, team.id)}>
                         Choose
@@ -1574,7 +1589,9 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
     const shown = actDialog.value?.place === place ? actDialog.value : null;
     // Below the Reply CLI the acts need, the card offers no act: only a desktop of an earlier version draws an account then.
     const usable = typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
-    const offering = view.signedIn && usable;
+    // While a change of its sign-in is not answered, nothing is done in the account: no act on a sender, no connect.
+    const offering = view.signedIn && usable && view.change === null;
+    const team = view.team === null ? null : teamWords(view.team, 'a team whose name could not be read');
     // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
     const choosing = view.signedIn && view.teams !== null && choosesTeam();
     // Every act is off while one is being asked for.
@@ -1593,11 +1610,9 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                               !view.signedIn
                                   ? 'Not signed in'
                                   : view.user === null
-                                    ? html`Signed
-                                      in${view.team === null ? null : html`, in <b>${teamWords(view.team)}</b>`}`
-                                    : html`Signed in as <b>${view.user}</b>${
-                                              view.team === null ? null : html` in <b>${teamWords(view.team)}</b>`
-                                          }`
+                                    ? html`Signed in${team === null ? null : html`, in <b>${team}</b>`}`
+                                    : html`Signed in as
+                                          <b>${view.user}</b>${team === null ? null : html` in <b>${team}</b>`}`
                           }
                       </div>`
             }
