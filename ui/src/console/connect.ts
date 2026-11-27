@@ -22,6 +22,7 @@ import { mode } from '../platform/mode';
 import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
+import { svg } from './icons';
 import { signInSentence } from './live';
 import { earlier } from '../platform/window-desktop';
 import { here, messageOf, mounted, setup, setupBusy, setupError, setupReadFailed } from './state';
@@ -142,6 +143,8 @@ interface AccountView {
     lastSignIn: DesktopReplySignIn | null;
     /** How the last read found its sign-in changed from what the note says; null where it did not. */
     change: DesktopAccountChange | null;
+    /** The API address its profile points at where that is not Reply's production; null on production or unsaid. */
+    nonProductionApi: string | null;
 }
 
 const listOf = <T>(value: readonly T[] | undefined): readonly T[] => (Array.isArray(value) ? value : []);
@@ -175,6 +178,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             teams: each.teams !== undefined && each.teams.length > 0 ? each.teams : null,
             lastSignIn: each.lastSignIn,
             change: each.change,
+            nonProductionApi: each.nonProductionApi ?? null,
         }));
     const reply = state.reply;
     if (!reply.cli.found) return [];
@@ -199,6 +203,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             teams: null,
             lastSignIn: null,
             change: null,
+            nonProductionApi: null,
         },
     ];
 }
@@ -1551,11 +1556,23 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
     if (view.ref === null) return null;
     const offered = state.accounts?.noDefault === true && makesDefault();
     return html`<div class="acct-head">
-        <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>
+        <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>${elsewhereMark(view)}
         ${view.isDefault ? html`<span class="pillc green acct-default">Default</span>` : null}
         ${view.defaultFor.map((mark) => html` <span class="pillc green acct-default">${defaultForWords(mark)}</span>`)}
         ${offered ? html`<button class="btn sm" type="button" ${real} ${act('connect.makeDefault', place)}>Make default</button>` : null}
     </div>`;
+}
+
+/**
+ * The mark beside an account's name where its profile points at another Reply than production: the hint, which the
+ * keyboard reaches and a screen reader reads as the same words, says so and gives the API address. None on production.
+ */
+function elsewhereMark(view: AccountView): Html | null {
+    if (view.nonProductionApi === null) return null;
+    const hint = `Not Reply’s production: ${view.nonProductionApi}`;
+    return html`<span class="acct-elsewhere" role="img" tabindex="0" aria-label="${hint}" title="${hint}"
+        >${svg('att', 14)}</span
+    >`;
 }
 
 /**

@@ -307,6 +307,12 @@
     font-size: 14px;
     font-weight: 650;
 }
+/* The mark of a profile that points at another Reply than production: a small icon whose hint gives the address. */
+.jc-console .reply-card .acct-head .acct-elsewhere {
+    display: inline-flex;
+    color: #e3a03a;
+    border-radius: 50%;
+}
 .jc-console .grow {
     flex: 1;
     min-width: 0;

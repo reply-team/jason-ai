@@ -220,6 +220,24 @@ if (process.env.STUB_HANG === name) {
         keepWorld();
         answer({ print: { deleted, credential_removed: credential !== undefined, current_reset: reset } });
     }
+} else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'show' && rest.length === 4 && rest[3] === '--json') {
+    // `profile show <name>` ignores --profile and asks Reply nothing (src/commands/profile.ts `handle_show`): the profile's
+    // backend, each address its own or the built-in one it inherits (src/profile.ts `EMBEDDED`, `describe_profile`), its
+    // pin, and its stored sign-in without a secret. A name it does not hold is usage.profile, exit 2.
+    // STUB_REPLY_PROFILE_SHOW names another ending.
+    const shown = rest[2];
+    const own = world !== null ? ((world.profiles ?? {})[shown] ?? {}) : {};
+    const builtIn = { authority: 'https://oauth.reply.io', api_base: 'https://api.reply.io' };
+    if (process.env.STUB_REPLY_PROFILE_SHOW) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_SHOW));
+    else if (!declared(shown)) usageProfile(shown);
+    else {
+        const backend = {
+            authority: own.authority ?? builtIn.authority,
+            api_base: own.api_base ?? builtIn.api_base,
+            inherited: { authority: own.authority === undefined, api_base: own.api_base === undefined },
+        };
+        answer({ print: { name: shown, current: listedProfiles.current === shown, backend, team_id: own.team_id ?? null, authorization: { flag: false, env: false, stored: null, effective_source: null } } });
+    }
 } else if (name === 'reply' && rest[0] !== 'skills' && !declared(inUse())) {
     // Every other command resolves its profile first, and an undeclared one but `default` is a usage error before
     // anything else (src/profile.ts `resolve_profile`).

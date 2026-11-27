@@ -70,7 +70,7 @@ const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(dataLayou
 /** The Reply CLI's profiles and sign-ins as the stand-in keeps them (`STUB_REPLY_WORLD` in `stubs/program.cjs`). */
 interface ReplyWorld {
     current?: string;
-    profiles?: Record<string, { team_id?: number }>;
+    profiles?: Record<string, { team_id?: number; api_base?: string }>;
     /**
      * A browser's sign-in by its login, or one Reply did not name, which `auth status` holds no login for; or a key's, which
      * acts in its own team whatever is pinned.
@@ -1915,6 +1915,8 @@ test('the members a page of an earlier version reads are the default account’s
 
 // Two made-up sign-ins: ada, one seat, with a mailbox; bea, two seats, with a LinkedIn account in seat 9.
 const mailbox = { id: 12, channel: 'email', name: 'Made-up Sales', address: 'sales@example.test', reply_status: 'connected' };
+/** The address the stand-in Reply CLI, as reply-cli, gives a profile that sets none (reply-cli's own built-in one). */
+const replyCliBuiltIn = 'https://api.reply.io';
 const otherMailbox = { id: 56, channel: 'email', name: 'Made-up Other', address: 'other@example.test', reply_status: 'connected' };
 const linkedIn = { id: 34, channel: 'linkedin', name: 'Made-up Bea', address: '', reply_status: 'enabled' };
 const twoSignIns: ReplyWorld = {
@@ -1925,11 +1927,12 @@ const twoSignIns: ReplyWorld = {
     lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
 };
 
-test('each account is read under its own profile’s name alone, a profile only a route names asked nothing, the default first and marked, and every other global route to Reply marked on the account it names; a route that names no profile is, at each read, the profile the Reply CLI is set to', async (t) => {
-    // bea's login can act in teams 5 and 9: `outbound` pins none, `outbound-nine` pins 9 in the Reply CLI.
+test('each account is read under its own profile’s name alone, a profile only a route names asked nothing, the default first and marked, and every other global route to Reply marked on the account it names, and one whose profile points at another Reply than the Reply CLI’s built-in one with that address; a route that names no profile is, at each read, the profile the Reply CLI is set to', async (t) => {
+    // bea's login can act in teams 5 and 9: `outbound` pins none, `outbound-nine` pins 9 in the Reply CLI. `quiet` points
+    // at another Reply; `outbound-nine` names the Reply CLI's built-in address itself, which is production all the same.
     const world: ReplyWorld = {
         ...twoSignIns,
-        profiles: { outbound: {}, 'outbound-nine': { team_id: 9 }, quiet: {} },
+        profiles: { outbound: {}, 'outbound-nine': { team_id: 9, api_base: replyCliBuiltIn }, quiet: { api_base: 'https://api.example.test' } },
         credentials: { ...twoSignIns.credentials, 'outbound-nine': 'bea@example.test' },
         teams: { '5': 'Made-up Five', '9': 'Made-up Nine' },
     };
@@ -1943,7 +1946,8 @@ test('each account is read under its own profile’s name alone, a profile only 
         'message.send': { Channels: { linkedin: { Plugin: 'reply', Binding: { profile: 'outbound' } }, email: { Plugin: 'reply', Binding: {} } } },
     };
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } }, Operations: operations } });
-    const setup = setupOn(b);
+    const log = memoryLog();
+    const setup = setupOn(b, log);
     const { accounts } = await setup.status();
     const state = (name: string, over: Record<string, unknown>) => ({
         type: 'reply', name, default: false, defaultFor: [], held: true, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, change: null, ...over,
@@ -1961,7 +1965,7 @@ test('each account is read under its own profile’s name alone, a profile only 
             // A second team is a second profile, pinned to it in the Reply CLI, and shown by its name.
             state('outbound-nine', { ...bea, defaultFor: [{ kind: 'operation', operation: 'contact.find' }], team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)], lastSignIn: { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } } }),
             // The profile the CLI is set to is an account like any other, and the route naming no profile marks it.
-            state('quiet', { defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'email' }], followed: true }),
+            state('quiet', { defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'email' }], followed: true, nonProductionApi: 'https://api.example.test' }),
             state('routed-only', { held: false }),
         ],
         notRead: [],
@@ -1975,7 +1979,13 @@ test('each account is read under its own profile’s name alone, a profile only 
     assert.ok(runs.includes('--profile quiet auth status --json'));
     assert.equal(runs.some((run) => run.includes('routed-only')), false, 'nothing is asked of the CLI for a profile it does not hold');
     assert.equal(runs.some((run) => run.startsWith('--profile quiet account')), false, 'nothing is listed for a profile with no sign-in');
-    for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile '), `every other run names its account: ${run}`);
+    assert.ok(runs.includes('profile show quiet --json'), 'where each profile points is read with no call to Reply');
+    for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile ') || /^profile show \S+ --json$/.test(run), `every other run names its account: ${run}`);
+    assert.equal(JSON.stringify(log.lines).includes('api.example.test'), false, 'the address reaches no log');
+    // Where that could not be read, nothing is said of it.
+    const unread = replyBench(t, world, { STUB_REPLY_PROFILE_SHOW: JSON.stringify({ code: 'config.read' }) });
+    const quietUnread = (await setupOn(unread).status()).accounts?.accounts.find((each) => each.name === 'quiet');
+    assert.deepEqual([quietUnread?.nonProductionApi, quietUnread?.notRead], [undefined, []]);
     // A global default that names no profile is, at each read, the account of the profile the Reply CLI is set to then: a
     // `reply profile use` in a terminal moves the mark. Jason's Reply plugin keeps no profile of its own for such a route,
     // so nothing in its configuration is read for one.

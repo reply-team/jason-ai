@@ -21,12 +21,15 @@ import {
     signInReason,
     defaultRefusal,
     isAccountRef,
+    nonProductionApi,
+    readBackend,
     readProfiles,
     readRoutes,
     readTeams,
     sameAccount,
     type AccountRef,
     type DefaultFor,
+    type ProfileBackend,
     type ReplyTeam,
     withReason,
 } from './accounts.ts';
@@ -315,6 +318,11 @@ export interface AccountState extends AccountRef {
      * before it has a team; null where it is not.
      */
     change: Change | null;
+    /**
+     * The API address its profile points at, where that is not Reply's production (`nonProductionApi`); absent on
+     * production, and where it points could not be read.
+     */
+    nonProductionApi?: string;
 }
 
 /**
@@ -1006,16 +1014,23 @@ export class Setup {
         const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => {
                 const noted = notedOf(notes, account);
-                const { state, pin } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
+                const { state, pin, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
                 const marked = {
                     ...state,
                     default: listing?.default != null && sameAccount(account, listing.default),
                     defaultFor: listing?.defaultFor.get(account.name) ?? [],
                     followed: listing?.followed === account.name,
                 };
-                return { account: marked, noted, pin };
+                return { account: marked, noted, pin, backend };
             }),
         );
+        // The Reply CLI's built-in address, as a profile that inherits it says it at this look; an account pointing at
+        // another is said to (`nonProductionApi`).
+        const builtIn = read.find(({ backend }) => backend?.inherited === true)?.backend?.api ?? null;
+        for (const each of read) {
+            const elsewhere = nonProductionApi(each.backend, builtIn);
+            if (elsewhere !== null) each.account = { ...each.account, nonProductionApi: elsewhere };
+        }
         // Noted in the listing's order once every account is read, so the note is written in one order.
         const accounts = read.map(({ account, noted }) => this.#noted(account, noted));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
@@ -1053,9 +1068,16 @@ export class Setup {
      * One account's reads, each run naming its profile: the sign-in and its pin and, signed in, its mailboxes and LinkedIn
      * accounts and their links still waiting; after a sign-in, the teams of the sign-in too, who it is where the Reply CLI
      * does not name it, and its team as `bindingOf` decides it, bound where it decides one. The pin is the one the read saw.
-     * A profile the CLI does not hold is asked nothing.
+     * Beside the sign-in, where the profile points (`profile show`, which names the profile as its argument). A profile the
+     * CLI does not hold is asked nothing.
      */
-    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null }> {
+    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; backend: ProfileBackend | null }> {
+        const [read, backend] = await Promise.all([this.#readSignIn(account, held, noted), held ? this.#backend(account) : null]);
+        return { ...read, backend };
+    }
+
+    /** The account's sign-in and what follows from it (`#readAccount`). */
+    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null }> {
         const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: noted === 'fresh' ? null : noted, change: null };
         if (!held) return { state: read, pin: null };
         const marks = this.#marks;
@@ -1159,6 +1181,11 @@ export class Setup {
         }
         this.#deps.log.info('reply_account_noted', { Moment: moment, Written: true });
         return entry;
+    }
+
+    /** Where an account's profile points (`reply profile show <name> --json`), with no call to Reply; null where not read. */
+    async #backend(account: AccountRef): Promise<ProfileBackend | null> {
+        return readBackend(await this.#run('reply', 'profile show', ['profile', 'show', account.name, '--json']));
     }
 
     /** Who an account's sign-in is (`reply --profile <name> auth whoami --json`), asked in its pinned team; null where not said. */

@@ -564,22 +564,23 @@ knows of a version it has not installed ([desktop.md](desktop.md#updating)); the
 
 One screen for what you have connected. **Provider** is the Reply section, with **Add Reply account** wherever the Reply
 accounts were read, and one card per Reply account, each one profile of the Reply CLI, marked for the default and for
-every other global route that names it, its sign-in with the team it is bound to, by the team's name and never a number
-(no team where Reply gives it no name), or who it was last signed in as ([desktop.md](desktop.md#connect), Reply). The
-cards are drawn by the same code as the one Reply card of the desktop's Connect panel and act through the same acts of
-the desktop. A card offers **Sign in with Reply** and a key only while it is not signed in, and **Sign out** once it is;
-**Remove** where the Reply CLI holds its profile, it is not `default` and no route that names no profile follows it as
-the Reply CLI's current profile, nor might, the routes not read. Adding a mailbox or a LinkedIn account and reconnecting
-one go straight to the provider's link, with no box, and the desktop opens or copies that link, which the page never
-shows or keeps. Signing out, removing, pausing and resuming, unblocking, changing a daily limit and deleting each ask in
-a box of the desktop's own. **Add Reply account**, **Make default**, on every card while Jason has no default,
-**Choose**, on a card whose sign-in can act in more than one Reply team and is bound to none of them, and **Keep it**,
-on a card that says how its sign-in changed since the desktop noted it, act with no box; such a card says the change the
-desktop found, and offers nothing else to do in the Reply account, no connect and no act on a mailbox or a LinkedIn
-account, until Keep it or Sign out. One act runs at a time, and the cards' acts are off while one is asked; an act is
-said done once the accounts are read again after it, so no card still offers what it changed. Add Reply account's
-refusal, an empty name's among them, is said under its field, every other act's on its card. The page writes no setting
-and adds no provider. The notification channels are not here: they are the **Notifications** section of Settings.
+every other global route that names it, with a small mark whose hint gives the address where its profile is not on
+Reply's production, its sign-in with the team it is bound to, by the team's name and never a number (no team where Reply
+gives it no name), or who it was last signed in as ([desktop.md](desktop.md#connect), Reply). The cards are drawn by the
+same code as the one Reply card of the desktop's Connect panel and act through the same acts of the desktop. A card
+offers **Sign in with Reply** and a key only while it is not signed in, and **Sign out** once it is; **Remove** where
+the Reply CLI holds its profile, it is not `default` and no route that names no profile follows it as the Reply CLI's
+current profile, nor might, the routes not read. Adding a mailbox or a LinkedIn account and reconnecting one go straight
+to the provider's link, with no box, and the desktop opens or copies that link, which the page never shows or keeps.
+Signing out, removing, pausing and resuming, unblocking, changing a daily limit and deleting each ask in a box of the
+desktop's own. **Add Reply account**, **Make default**, on every card while Jason has no default, **Choose**, on a card
+whose sign-in can act in more than one Reply team and is bound to none of them, and **Keep it**, on a card that says how
+its sign-in changed since the desktop noted it, act with no box; such a card says the change the desktop found, and
+offers nothing else to do in the Reply account, no connect and no act on a mailbox or a LinkedIn account, until Keep it
+or Sign out. One act runs at a time, and the cards' acts are off while one is asked; an act is said done once the
+accounts are read again after it, so no card still offers what it changed. Add Reply account's refusal, an empty name's
+among them, is said under its field, every other act's on its card. The page writes no setting and adds no provider. The
+notification channels are not here: they are the **Notifications** section of Settings.
 
 ## Notifications in Settings
 

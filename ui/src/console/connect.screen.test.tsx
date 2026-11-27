@@ -481,7 +481,7 @@ describe('the Reply card, its acts', () => {
         }
     });
 
-    it('draws the default account’s card, or the profile default’s where no Reply account is the default, and asks its acts as that account', async () => {
+    it('draws the default account’s card, or the profile default’s where no Reply account is the default, marked where its profile is not on Reply’s production, and asks its acts as that account', async () => {
         const mailbox = sender('m_1', 'email', 'connected', 'Made-up Sales');
         const twoAccounts = (defaulted: string | null) =>
             withReplyAccounts(
@@ -493,13 +493,23 @@ describe('the Reply card, its acts', () => {
                         user: 'ada@example.test',
                         senders: [mailbox],
                     }),
-                    replyAccount('outbound', { default: defaulted === 'outbound', signedIn: false }),
+                    replyAccount('outbound', {
+                        default: defaulted === 'outbound',
+                        signedIn: false,
+                        nonProductionApi: 'https://api.example.test',
+                    }),
                 ],
                 { noDefault: defaulted === null },
             );
         const desktop = renderConnect(twoAccounts('outbound'));
         let card = replyCard(await openConnect());
         expect(words(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');
+        // Its profile is not on Reply's production: the card's mark says so, here as on the Accounts page.
+        expect(
+            within(card.querySelector<HTMLElement>('.acct-head')!).getByRole('img', {
+                name: 'Not Reply’s production: https://api.example.test',
+            }).title,
+        ).toBe('Not Reply’s production: https://api.example.test');
         expect(words(card.querySelector('.reply-state')!)).toBe('Not signed in');
         expect(card.querySelector('.acct')).toBeNull();
         fireEvent.click(within(card).getByRole('button', { name: 'Sign in with Reply' }));
@@ -512,6 +522,7 @@ describe('the Reply card, its acts', () => {
         const none = renderConnect(twoAccounts(null));
         card = replyCard(await openConnect());
         expect(words(card.querySelector('.acct-head')!)).toBe('Reply default Make default');
+        expect(card.querySelector('.acct-head [role="img"]')).toBeNull();
         expect(words(card.querySelector('.acct')!)).toContain('Made-up Sales');
         fireEvent.click(within(card.querySelector<HTMLElement>('.acct')!).getByRole('button', { name: 'Unblock' }));
         await waitFor(() => expect(none.calls.some((call) => call.name === 'setup.replyUnblock')).toBe(true));

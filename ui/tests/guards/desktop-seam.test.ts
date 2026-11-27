@@ -157,6 +157,8 @@ const account = {
     // Who it was last seen signed in as, in which team, and how the last read found its sign-in changed from that.
     lastSignIn: true,
     change: true,
+    // The API address its profile points at, where that is not Reply's production; absent otherwise.
+    nonProductionApi: true,
 } as const satisfies Record<keyof DesktopAccount, true>;
 const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
 const accountSignIn = { user: true, team: true } as const satisfies Record<keyof DesktopReplySignIn, true>;
@@ -331,6 +333,7 @@ describe('the desktop seam', () => {
             'teams',
             'lastSignIn',
             'change',
+            'nonProductionApi',
         ]);
         expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
         expect(Object.keys(accountSignIn)).toEqual(['user', 'team']);

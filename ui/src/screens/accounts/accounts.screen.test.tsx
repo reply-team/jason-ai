@@ -242,6 +242,7 @@ describe('Reply accounts, one card per profile', () => {
             team: { id: '9', name: null },
             notRead: ['teams'],
             senders: [linkedIn],
+            nonProductionApi: 'https://api.example.test',
         }),
         replyAccount('routed-only', { held: false }),
     ]);
@@ -253,7 +254,7 @@ describe('Reply accounts, one card per profile', () => {
     const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
     const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
 
-    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, its sign-in with the team it is bound to, and no Make default once a default is set', async () => {
+    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, one whose profile is not on Reply’s production marked with its address in the mark’s hint, its sign-in with the team it is bound to, and no Make default once a default is set', async () => {
         inDesktop(three);
         const page = await openAccounts('.reply-account');
         expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
@@ -273,6 +274,19 @@ describe('Reply accounts, one card per profile', () => {
         expect(Array.from(bea.querySelectorAll('.acct-none')).map((line) => words(line))).toEqual([
             'The teams of this sign-in could not be read. Check again.',
         ]);
+        // A profile pointed at another Reply than production: a mark beside its name, which says so and gives the address,
+        // as its hint and to a screen reader, and which the keyboard reaches. A profile on production shows none.
+        const elsewhere = within(bea.querySelector<HTMLElement>('.acct-head')!).getByRole('img', {
+            name: 'Not Reply’s production: https://api.example.test',
+        });
+        expect([elsewhere.getAttribute('title'), elsewhere.tabIndex]).toEqual([
+            'Not Reply’s production: https://api.example.test',
+            0,
+        ]);
+        expect(
+            [ada, cardOf(page, 'Reply account routed-only')].map((card) => card.querySelector('[role="img"]')),
+        ).toEqual([null, null]);
+        expect(words(page)).not.toContain('production');
         // A profile only a route names, which the Reply CLI does not hold: not signed in, with the sign-in that makes it.
         const routed = cardOf(page, 'Reply account routed-only');
         expect(words(routed.querySelector('.reply-state')!)).toBe('Not signed in');

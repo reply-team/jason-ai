@@ -666,6 +666,11 @@ export interface DesktopAccount extends DesktopAccountRef {
      * no team and lists nothing, and for `team` it is bound to that team and lists as it now is.
      */
     change: DesktopAccountChange | null;
+    /**
+     * The API address its Reply CLI profile points at, where that is not Reply's production: the card marks it, with the
+     * address in its hint. Absent on production, where it could not be read, and from a desktop of an earlier version.
+     */
+    nonProductionApi?: string;
 }
 
 /**

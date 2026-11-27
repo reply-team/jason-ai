@@ -55,6 +55,45 @@ export function readProfiles(result: { exit: number; stdout: string }): Profiles
     }
 }
 
+/**
+ * Where a profile points, as `reply profile show <name> --json` prints it with no call to Reply (reply-cli 0.23.2,
+ * src/commands/profile.ts `show_json`): `backend.api_base`, the API address its runs use, and whether the profile inherits
+ * it (`backend.inherited.api_base`), which it can only from the Reply CLI's own built-in address (src/profile.ts
+ * `EMBEDDED`, `resolve_profile`), production.
+ */
+export interface ProfileBackend {
+    api: string;
+    inherited: boolean;
+}
+
+/** The longest address the page is handed, in characters. */
+const addressMost = 200;
+
+/** A profile's backend as `profile show --json` printed it; null for any other ending, or an address that is no http(s) URL. */
+export function readBackend(result: { exit: number; stdout: string }): ProfileBackend | null {
+    if (result.exit !== 0) return null;
+    try {
+        const backend = objectOf(objectOf(JSON.parse(result.stdout))?.['backend']);
+        const api = backend?.['api_base'];
+        const inherited = objectOf(backend?.['inherited'])?.['api_base'];
+        if (typeof api !== 'string' || api.length > addressMost || !/^https?:\/\/[^\s]+$/.test(api) || typeof inherited !== 'boolean') return null;
+        return { api, inherited };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The API address an account's profile points at where that is not Reply's production: set on the profile, and not the
+ * Reply CLI's built-in address, which a profile that inherits it gives at the same look (`builtIn`; the desktop keeps no
+ * address of its own). With no profile inheriting it at that look, an address set on a profile counts. Null on
+ * production, or where the backend was not read.
+ */
+export function nonProductionApi(backend: ProfileBackend | null, builtIn: string | null): string | null {
+    if (backend === null || backend.inherited) return null;
+    return builtIn !== null && backend.api === builtIn ? null : backend.api;
+}
+
 /** A team a sign-in can act in, as the Reply CLI lists it: its id, digits only, and its name, held to a length. */
 export interface ReplyTeam {
     id: string;
