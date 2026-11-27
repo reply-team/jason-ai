@@ -783,7 +783,13 @@ describe('Reply accounts, one card per profile', () => {
                     senders: [mailbox],
                 }),
                 replyAccount('outbound', { lastSignIn: ada3 }),
-                replyAccount('quiet', { signedIn: true, user: 'bea@example.test', team: { id: '9', name: '' } }),
+                // Signed in as the note says: no change to say.
+                replyAccount('quiet', {
+                    signedIn: true,
+                    user: 'bea@example.test',
+                    team: { id: '9', name: '' },
+                    lastSignIn: { user: 'bea@example.test', team: { id: '9', name: '' } },
+                }),
                 replyAccount('spare'),
             ]),
         );
@@ -793,7 +799,7 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(card('outbound').querySelector('.reply-state + .acct-last')!)).toBe(
             'Last signed in as ada@example.test in Made-up Three.',
         );
-        // Nothing noted, or nothing changed: no line and no notice.
+        // Nothing noted, or signed in as noted: no line and no notice.
         for (const name of ['spare', 'quiet'])
             expect([card(name).querySelector('.acct-last'), card(name).querySelector('.acct-changed')]).toEqual([
                 null,

@@ -1222,6 +1222,15 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const loose = replyBench(t, { credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3] }, lists: { 'ada@example.test#3': { email: [mailbox] } } }, { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) });
     assert.deepEqual(bound(await accountOf(setupOn(loose), 'default')), { team: null, teams: undefined, notRead: ['teams'], ids: ['12'], unread: [] });
     assert.equal(replyRuns(loose).some((run) => run.includes(' team use ')), false);
+    // Two accounts bound at one look, side by side: the Reply CLI rewrites its configuration whole, so their writes go one
+    // after the other, or one pin would be lost.
+    const writes = join(mkdtempSync(join(tmpdir(), 'jason-config-writes-')), 'writes.log');
+    t.after(() => rmSync(dirname(writes), { recursive: true, force: true }));
+    const two = replyBench(t, { profiles: { outbound: {} }, credentials: { default: 'ada@example.test', outbound: 'cy@example.test' }, seats: { 'ada@example.test': [3], 'cy@example.test': [4] } }, { STUB_REPLY_CONFIG_WRITES: writes });
+    await setupOn(two).status();
+    const steps = readFileSync(writes, 'utf8').trim().split('\n').map((line) => line.split(' ')[0]);
+    assert.deepEqual(steps, ['start', 'end', 'start', 'end'], readFileSync(writes, 'utf8'));
+    assert.deepEqual([two.world().profiles?.['default'], two.world().profiles?.['outbound']], [{ team_id: 3 }, { team_id: 4 }]);
 });
 
 test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; a default already set, whatever its plugin or binding, is left as it is', async (t) => {

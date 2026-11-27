@@ -48,6 +48,17 @@ const declared = (profile) => profile === 'default' || listedProfiles.available.
 const inUse = () => replyProfile ?? listedProfiles.current;
 const usageProfile = (profile) => answer({ code: 'usage.profile', error: { hint: `Create it with \`profile add ${profile}\`.` } });
 
+// A write of the Reply CLI's configuration (`team use`, `profile add`, `profile delete`), which reply-cli makes as a read
+// of the whole file and a write of it whole: where STUB_REPLY_CONFIG_WRITES names a file, its start and its end are
+// recorded there, a quarter of a second apart, so two writes that overlap show as two starts in a row.
+function configWrite() {
+    const file = process.env.STUB_REPLY_CONFIG_WRITES;
+    if (!file) return;
+    require('node:fs').appendFileSync(file, `start ${said}\n`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    require('node:fs').appendFileSync(file, `end ${said}\n`);
+}
+
 // An ending a test names as JSON: {"print": <result>} on stdout and exit 0; {"code": <code>, "exit"?} as the Reply CLI's
 // error line on stderr and exit 1 (2 for a usage.* code); or {"exit", "stdout"?, "stderr"?} as it is.
 function answer(given) {
@@ -156,6 +167,7 @@ if (process.env.STUB_HANG === name) {
     // `profile add <name>` refuses `default` and a blank name, and replaces a profile of that name whole, with no word,
     // leaving its sign-in, which is kept apart (src/profile.ts `add_profile`). STUB_REPLY_PROFILE_ADD names another ending.
     const added = rest[2];
+    configWrite();
     if (process.env.STUB_REPLY_PROFILE_ADD) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_ADD));
     else if (added.trim() === '' || added === 'default') answer({ code: 'usage.profile' });
     else {
@@ -170,6 +182,7 @@ if (process.env.STUB_HANG === name) {
     // does not hold are usage.profile, exit 2; else the profile goes, the current profile is reset to `default` where it
     // was that one, and its sign-in goes too. STUB_REPLY_PROFILE_DELETE names another ending.
     const deleted = rest[2];
+    configWrite();
     if (process.env.STUB_REPLY_PROFILE_DELETE) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_DELETE));
     else if (deleted === 'default') answer({ code: 'usage.profile', error: { title: 'The built-in default profile can\'t be deleted.' } });
     else if (!listedProfiles.available.includes(deleted)) answer({ code: 'usage.profile', error: { title: `Unknown profile '${deleted}'.`, hint: 'List profiles with `profile list`.' } });
@@ -254,6 +267,7 @@ if (process.env.STUB_HANG === name) {
     else if (!/^\d+$/.test(rest[2])) answer({ code: 'usage.team', error: { title: 'Team id must be a positive integer.' } });
     else if (!seats.includes(Number(rest[2]))) answer({ code: 'usage.team', error: { title: `Team ${rest[2]} isn't one you can act in.` } });
     else {
+        configWrite();
         const id = Number(rest[2]);
         world.profiles = { ...(world.profiles ?? {}), [inUse()]: { ...((world.profiles ?? {})[inUse()] ?? {}), team_id: id } };
         keepWorld();
