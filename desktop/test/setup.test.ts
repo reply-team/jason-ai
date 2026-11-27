@@ -1044,8 +1044,8 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
         lists: { 'cy@example.test#4': { email: [mailbox] } },
     });
     const setup = new Setup({ ...setupDeps(b, log), confirm: () => Promise.resolve(true) });
-    const file = b.paths.replyAccounts;
-    assert.equal(file, join(b.paths.data, 'desktop', 'reply-accounts.json'));
+    const file = b.paths.replyAccountNotes;
+    assert.equal(file, join(b.paths.data, 'desktop', 'reply-account-notes.json'));
     const noted = () => JSON.parse(readFileSync(file, 'utf8')) as unknown;
     const seen = async () =>
         Object.fromEntries(((await setup.status()).accounts?.accounts ?? []).map((each) => [each.name, { last: each.lastSignIn, changed: each.changed }]));
@@ -1126,8 +1126,8 @@ test('one act on a Reply account at a time, whatever it is: while Make default o
         browser: 'cy@example.test',
     }, { STUB_REPLY_PLUGIN: 'absent' });
     writeInstallationSettings(b, {});
-    mkdirSync(dirname(b.paths.replyAccounts), { recursive: true });
-    writeFileSync(b.paths.replyAccounts, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'old@example.test', team: { id: '3', name: '' } }] }));
+    mkdirSync(dirname(b.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(b.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'old@example.test', team: { id: '3', name: '' } }] }));
     let release: () => void = () => undefined;
     let fetching: () => void = () => undefined;
     const fetched = () => new Promise<void>((resolve) => (fetching = resolve));

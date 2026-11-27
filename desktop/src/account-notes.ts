@@ -1,9 +1,9 @@
 /**
- * The desktop's note of who each Reply account was last seen signed in as, and in which team: `<data>/desktop/reply-
- * accounts.json`, the desktop's alone, never in the installation's settings or the Reply CLI's files. It is written where a
- * look finds an account signed in and bound to a team with nothing noted for it, and at Keep it; an account's note goes
- * when the account is removed. It says who an account was, and nothing else: it is never read to decide which accounts
- * there are or what a card lists.
+ * The desktop's note of who each Reply account was last seen signed in as, and in which team:
+ * `<data>/desktop/reply-account-notes.json`, the desktop's alone, never in the installation's settings or the Reply CLI's
+ * files. It is written where a look finds an account signed in and bound to a team with nothing noted for it, and at Keep
+ * it; an account's note goes when the account is removed. It says who an account was, and nothing else: it is never read
+ * to decide which accounts there are or what a card lists.
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -73,6 +73,6 @@ export function writeAccountNotes(file: string, notes: readonly AccountNote[]): 
         renameSync(beside, file);
     } catch {
         rmSync(beside, { force: true });
-        throw new Error('reply-accounts.json could not be written');
+        throw new Error('reply-account-notes.json could not be written');
     }
 }

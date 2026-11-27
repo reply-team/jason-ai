@@ -952,7 +952,7 @@ export class Setup {
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
         const listing = profiles === null ? null : accountsOf(profiles, routes);
-        const notes = readAccountNotes(this.#deps.paths.replyAccounts);
+        const notes = readAccountNotes(this.#deps.paths.replyAccountNotes);
         const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => ({
                 ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
@@ -1040,7 +1040,7 @@ export class Setup {
      * or the note could not be written.
      */
     #note(account: AccountRef, signIn: SignIn | null, moment: 'look' | 'keep' | 'remove'): SignIn | null {
-        const file = this.#deps.paths.replyAccounts;
+        const file = this.#deps.paths.replyAccountNotes;
         const notes = readAccountNotes(file);
         const noted = notes.find((each) => sameAccount(each, account)) ?? null;
         if (moment === 'look' && noted !== null) return { user: noted.user, team: noted.team };

@@ -284,7 +284,7 @@ runtime's start at logon is the machine set-up's, and no item of the menu's.
   system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
-- `<data>/desktop/reply-accounts.json`: the login and the team each Reply account was last seen signed in and bound to
+- `<data>/desktop/reply-account-notes.json`: the login and the team each Reply account was last seen signed in and bound to
   ([Connect](#connect), Reply), readable by your account alone where the system has modes.
 - `<data>/desktop/full-access.json` and `full-access-taken-back`, which an earlier version kept for a standing choice of
   Full access, are removed when Jason starts; no mode is read from them.
@@ -645,7 +645,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   it. Nothing in the window changes a pinned team, and no page says how it is changed elsewhere: a pick for a Reply
   account bound already is refused. The teams are read at each look, beside the mailboxes and LinkedIn accounts.
   Jason Desktop notes, for each Reply account, the login and the team it last saw there, in a file of its own
-  (`<data>/desktop/reply-accounts.json`, below): at the look that finds the account signed in and bound with nothing
+  (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the account signed in and bound with nothing
   noted, and at **Keep it**; a removal takes the note away. The note decides nothing of which Reply accounts there are or
   what a card lists. A card that is not signed in says who it was last signed in as. Where a look finds another login or
   another team than the note says, after a sign-in on the card (the browser decides who signs in) or a change made in a

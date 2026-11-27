@@ -499,16 +499,16 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
  * `rollback` the application an update kept aside and the record the next start acts on, `bundle` an AppImage's copy of
  * the jason it carries, `conversations` the record of every conversation, `models.json` the models Codex offered when
- * last asked, `reply-accounts.json` who each Reply account was last seen signed in as, `claude-keyed` and `codex-keyed`
- * the hosts' folders for the turns on a provider's key with those turns' transcripts, `skills-records` what the desktop
- * placed in the chat folder's skills folders, `chats` every
+ * last asked, `reply-account-notes.json` who each Reply account was last seen signed in as, `claude-keyed` and
+ * `codex-keyed` the hosts' folders for the turns on a provider's key with those turns' transcripts, `skills-records` what
+ * the desktop placed in the chat folder's skills folders, `chats` every
  * conversation's own folder, `full-access.json` and `full-access-taken-back` what an earlier desktop kept of a standing
  * choice of Full access, removed at each start, and `mode` the record of which installation the desktop runs on, which
  * these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: outside Full
  * access only its own read-only sandbox, which the desktop does not narrow, holds it, and in Full access nothing does
  * (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'reply-accounts.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'conversations-stamped', 'claude-keyed', 'codex-keyed', 'models.json', 'reply-account-notes.json', 'skills-records', 'chats', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over', 'machine-setup.json'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
