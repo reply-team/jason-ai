@@ -611,7 +611,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const models = new ModelLists({
         file: paths.models,
         ask: codexAsker({ paths, env, bundle, dataNamed, bundleVersion: version, keyFor: (id) => keys.keyFor(id) }),
-        changed: () => toPage('setup.changed'),
+        // Only the setup's listing asks for the models, so the setup is made by the time they change.
+        changed: () => setup.announceChange(),
         ...loggedModels(log),
     });
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
@@ -717,7 +718,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code on the other
         // side of the floor of Full access, or its bypass not available here.
         handedClaudeVersion: () => setup.handedClaudeVersion(),
-        setupChanged: () => toPage('setup.changed'),
+        setupChanged: () => setup.announceChange(),
         skillsGate,
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.

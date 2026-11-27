@@ -201,10 +201,13 @@ export const accountSentences = {
 } as const;
 
 /**
- * A sign-in that signed in, then could not place or load Jason's Reply plugin: said as that first, so the program's own words
- * after it, which often end in "nothing was changed", are not read as the sign-in's.
+ * A sign-in that signed in, then could not place or load Jason's Reply plugin: said as that first, then the program's own
+ * words without the "Nothing was changed." `jason plugin install` ends a refusal with, which the sign-in belies.
  */
-export const notPlacedAtSignIn = (said: string): string => `Signed in, but Jason’s Reply plugin could not be placed, so no default was made: ${said}`;
+export function notPlacedAtSignIn(said: string): string {
+    const why = said.replace(/\s*Nothing was changed\.\s*$/, '');
+    return why === '' ? 'Signed in, but Jason’s Reply plugin could not be placed.' : `Signed in, but Jason’s Reply plugin could not be placed: ${why}`;
+}
 
 /** Every other refusal of the runtime's, in one sentence that carries its code. */
 export const otherDefaultRefusal = (code: string | null): string =>

@@ -181,22 +181,30 @@ if (process.env.STUB_HANG === name) {
     const seat = world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3;
     process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat }, ...(replyTeam === null ? {} : { team_id: Number(replyTeam) }) } : { authenticated: false, profile }));
     if (!login) process.exitCode = 1;
-} else if (name === 'reply' && said === 'auth login') {
+} else if (name === 'reply' && said === 'auth login --json' && process.env.STUB_REPLY_LOGIN) {
+    // A browser's sign-in that ended as STUB_REPLY_LOGIN names it, the way it was printed: {"exit", "stderr"?}.
+    answer(JSON.parse(process.env.STUB_REPLY_LOGIN));
+} else if (name === 'reply' && said === 'auth login --json') {
     // The browser's sign-in is kept under the profile the run names, replacing what it held; the current profile stays.
+    const login = world?.browser || 'browser@example.test';
     if (world !== null) {
-        world.credentials = { ...(world.credentials ?? {}), [inUse()]: world.browser || 'browser@example.test' };
+        world.credentials = { ...(world.credentials ?? {}), [inUse()]: login };
         keepWorld();
     }
-    process.exit(0);
-} else if (name === 'reply' && said === 'auth login --with-token') {
-    // A key on standard input, checked as Reply's whoami would and kept under the profile only when it answers.
+    answer({ print: { logged_in: true, method: 'oauth', profile: inUse(), user: { id: 7, username: login, team_id: 3 } } });
+} else if (name === 'reply' && said === 'auth login --with-token --json') {
+    // A key on standard input, checked as Reply's whoami would and kept under the profile only when it answers. A key Reply
+    // refuses is its 401, printed under --json as reply-cli prints an API error (src/utils/errors.ts, src/utils/client.ts).
     const key = stdin.trim();
     if (key === '') answer({ code: 'usage.stdin' });
     else if (world === null) process.exit(0);
-    else if (!Object.hasOwn(world.keys ?? {}, key)) answer({ code: 'auth.invalid_key' });
-    else {
+    else if (!Object.hasOwn(world.keys ?? {}, key)) {
+        const hint = 'Invalid or expired credential. Re-check your key/token or run `reply auth login`.';
+        answer({ exit: 1, stderr: `${JSON.stringify({ error: { status: 401, title: 'Unauthorized', detail: 'Authentication credentials are missing or invalid.', hint } })}\n` });
+    } else {
         world.credentials = { ...(world.credentials ?? {}), [inUse()]: world.keys[key] };
         keepWorld();
+        answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: 7, username: world.keys[key], team_id: 3 } } });
     }
 } else if (name === 'reply' && rest[0] === 'account' && world !== null && !(world.credentials ?? {})[inUse()]) {
     // No sign-in under the profile: `auth.required`, exit 2, before Reply is asked (src/operations/call.ts).

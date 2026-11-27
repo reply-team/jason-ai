@@ -463,6 +463,25 @@ function words(result: RunResult, otherwise: string): string {
 }
 
 /**
+ * A refused sign-in: the desktop's sentence, then the Reply CLI's own reason as the error it prints last under `--json`
+ * gives it, its detail, else its title. Never its hint, which tells the person to sign in with no profile named, nor its
+ * other fields; an ending that does not read as that error is the sentence alone.
+ */
+function signInWords(result: RunResult, sentence: string): string {
+    const last = result.stderr.trim().split('\n').pop() ?? '';
+    let error: { detail?: unknown; title?: unknown } | undefined;
+    try {
+        error = (JSON.parse(last) as { error?: { detail?: unknown; title?: unknown } } | null)?.error;
+    } catch {
+        return sentence;
+    }
+    const reason = [error?.detail, error?.title].find((each): each is string => typeof each === 'string' && each.trim() !== '');
+    if (reason === undefined) return sentence;
+    const said = reason.replace(/\s+/g, ' ').trim().slice(0, 1000);
+    return `${sentence} ${/[.!?]$/.test(said) ? said : `${said}.`}`;
+}
+
+/**
  * The runtime's own words for a verb it refused: the error's message and the message of each detail it carries (what
  * became of the settings file, say), as the CLI prints them on stdout; the program's words otherwise.
  */
@@ -590,6 +609,14 @@ export class Setup {
     #changed(): void {
         this.#ended += 1;
         for (const listener of this.#listeners) listener();
+    }
+
+    /**
+     * A change the desktop learnt of outside the setup, the models Codex offers or Full access's bypass: announced to the
+     * page as every change is, so a listing asked after it is never answered by a read that began before it.
+     */
+    announceChange(): void {
+        this.#changed();
     }
 
     /** One change at a time: two cards clicked together never write the settings file over each other. */
@@ -1153,9 +1180,9 @@ export class Setup {
             // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
             this.#writableLayout();
             const account = await this.#signingIn(named);
-            const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login'], { timeoutMs: signInLimit });
+            const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login', '--json'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
+            if (result.exit !== 0) throw new Refused(signInWords(result, 'Reply did not sign in.'));
             await this.#signedIn(account);
         });
     }
@@ -1166,9 +1193,9 @@ export class Setup {
             this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
             const account = await this.#signingIn(named);
-            const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
+            const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token', '--json'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not accept that key.'));
+            if (result.exit !== 0) throw new Refused(signInWords(result, 'Reply did not accept that key.'));
             await this.#signedIn(account);
         });
     }

@@ -126,8 +126,10 @@ if (args[0] === 'status') {
     });
     process.exit(1);
 } else if (verb === 'plugin install' && process.env.STUB_PLUGIN_INSTALL_FAILS === 'yes') {
-    // A release feed that does not answer: the package is not fetched, and nothing is placed.
-    process.stderr.write('The release could not be reached.\n');
+    // A release feed that does not answer: the package is not fetched, nothing is placed, and the CLI says so as its
+    // installer does (PluginInstaller), with the feed the run named.
+    const feed = args.includes('--feed') ? args[args.indexOf('--feed') + 1] : 'https://releases.example.test/manifest.json';
+    process.stderr.write(`The update feed at ${feed} could not be reached. Nothing was changed.\n`);
     process.exit(1);
 } else if (verb === 'ui install' && process.env.STUB_UI_INSTALL_FAILS === 'yes') {
     process.stderr.write('The release could not be reached.\n');

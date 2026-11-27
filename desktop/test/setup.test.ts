@@ -36,6 +36,7 @@ import { claudeCodeModels } from '../src/chat-models.ts';
 import { accountsOf, defaultBinding, defaultReason, readProfiles, readRoutes } from '../src/accounts.ts';
 import { belowMinimumSentence, type ReplyBox } from '../src/reply-accounts.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
+import { printed } from './reply-cli-account-fixture.ts';
 import { dataLayout } from '../src/paths.ts';
 import { claudeWithSecrets, codexWithSecrets, plantedSecrets } from './own-servers-fixture.ts';
 
@@ -741,7 +742,7 @@ test('a sign-in on a card signs that account in, the key on standard input, and 
     const from = b.record().length;
     await setup.connectReplyWithKey('  planted-reply-key  ', { type: 'reply', name: 'outbound', team: null });
     const login = b.record().slice(from).find((entry) => entry.name === 'reply' && entry.args.includes('login'));
-    assert.deepEqual(login?.args, ['--profile', 'outbound', 'auth', 'login', '--with-token']);
+    assert.deepEqual(login?.args, ['--profile', 'outbound', 'auth', 'login', '--with-token', '--json']);
     assert.equal(login?.stdin, 'planted-reply-key');
     assert.deepEqual(b.world().credentials, { outbound: 'bea@example.test' }, 'that account, and no other, holds the sign-in');
     for (const entry of b.record()) assert.equal(JSON.stringify(entry.args).includes('planted-reply-key'), false);
@@ -750,8 +751,19 @@ test('a sign-in on a card signs that account in, the key on standard input, and 
         assert.equal(existsSync(join(b.paths.chat, host, 'skills', 'campaign-launch')), false, host);
     }
     await assert.rejects(setup.connectReplyWithKey('   '), Refused);
-    // A key Reply refused is said as the card said it on release 51.2: the Reply CLI's last words, else the desktop's.
-    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key'), (error: unknown) => error instanceof Refused && /"code":"auth\.invalid_key"/.test(error.message), 'the CLI’s own last words');
+    // A refused sign-in is the desktop's sentence, then the Reply CLI's own reason as its error under --json gives it: the
+    // detail, else the title. Never its hint, which tells the person to sign in with no profile named, nor its fields; an
+    // error that does not read as that leaves the sentence alone.
+    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key'), (error: unknown) => error instanceof Refused && error.message === 'Reply did not accept that key. Authentication credentials are missing or invalid.');
+    const timedOut = { code: 'oauth.timeout', title: 'Timed out waiting for the browser login.', hint: 'Re-run the login and complete it in the browser.' };
+    for (const [stderr, said] of [
+        [`Opening your browser to complete sign-in…\nIf it doesn't open, visit:\n  http://127.0.0.1:9/authorize\n${JSON.stringify({ error: timedOut })}\n`, 'Reply did not sign in. Timed out waiting for the browser login.'],
+        [`${JSON.stringify({ error: { code: 'oauth.authorize' } })}\n`, 'Reply did not sign in.'],
+        ['Timed out waiting for the browser login.\n  Hint: Re-run the login and complete it in the browser.\n', 'Reply did not sign in.'],
+    ] as const) {
+        const refusing = await readSetup(replyBench(t, { profiles: { outbound: {} } }, { STUB_REPLY_LOGIN: JSON.stringify({ exit: 1, stderr }) }));
+        await assert.rejects(refusing.connectReply({ type: 'reply', name: 'outbound', team: null }), (error: unknown) => error instanceof Refused && error.message === said, said);
+    }
 });
 
 test('a sign-in runs reply auth login as the card’s account and nothing else of the sign-in; a profile only a route names is made in the Reply CLI first, and a profile the CLI holds never is', async (t) => {
@@ -760,10 +772,10 @@ test('a sign-in runs reply auth login as the card’s account and nothing else o
     let from = b.record().length;
     // No account named, as a page of an earlier version asks: the default account, here none, so the profile default.
     await setup.connectReply();
-    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', '--profile default auth login', 'skills install adapter --project --agent codex']);
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', '--profile default auth login --json', 'skills install adapter --project --agent codex']);
     from = b.record().length;
     await setup.connectReply({ type: 'reply', name: 'routed-only', team: '9' });
-    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', 'profile add routed-only --json', '--profile routed-only --team-id 9 auth login', 'skills install adapter --project --agent codex']);
+    assert.deepEqual(runsAfter(b, from, 'reply'), ['profile list --json', 'profile add routed-only --json', '--profile routed-only --team-id 9 auth login --json', 'skills install adapter --project --agent codex']);
     assert.deepEqual(b.world().credentials, { default: 'ada@example.test', 'routed-only': 'ada@example.test' });
     // Made meanwhile in a terminal, the profile is there by the time of the click: never added again, which would replace
     // its settings without a word.
@@ -893,14 +905,14 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.equal(refused.world().credentials?.['default'], 'browser@example.test');
     assert.equal((readInstallationSettings(refused) as { Routes?: unknown }).Routes, undefined);
 
-    // A placing that fails after the sign-in is said as such first, so the program's own "nothing was changed" is not read
-    // as the sign-in's; then, as on release 51.2, the words of the program that refused: the package's fetch, or the load
-    // that would take the grant up.
+    // A placing that fails after the sign-in is said as such first; then, as on release 51.2, the words of the program that
+    // refused, the package's fetch or the load that would take the grant up, without the "Nothing was changed." a fetch
+    // ends with, which the sign-in belies.
     const offline = replyBench(t, {}, { STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' });
-    await assert.rejects((await readSetup(offline)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed, so no default was made: The release could not be reached.');
+    await assert.rejects((await readSetup(offline, memoryLog(), settings)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed: The update feed at http://127.0.0.1:9/manifest.json could not be reached.');
     assert.equal(offline.world().credentials?.['default'], 'browser@example.test');
     const reloadRefused = replyBench(t, {}, { STUB_RELOAD_REFUSED: 'yes' });
-    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && /^Signed in, but Jason’s Reply plugin could not be placed, so no default was made: the settings file could not be read \(not valid JSON/.test(error.message));
+    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && /^Signed in, but Jason’s Reply plugin could not be placed: the settings file could not be read \(not valid JSON/.test(error.message));
 });
 
 test('a global default a person set to another plugin is kept at a sign-in, and the members of today do not say it is wired', async (t) => {
@@ -922,7 +934,7 @@ test('a global default a person set to another plugin is kept at a sign-in, and 
     const setup = await readSetup(unreadable);
     writeInstallationSettings(unreadable, '{ /* mine */ }');
     const from = unreadable.record().length;
-    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed, so no default was made: ') && /comments/.test(error.message));
+    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed: ') && /comments/.test(error.message));
     assert.equal(readFileSync(dataLayout(unreadable.paths.data).userSettingsFile, 'utf8'), '{ /* mine */ }');
     assert.deepEqual(runsAfter(unreadable, from, 'jason'), ['plugin list']);
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
@@ -1121,6 +1133,7 @@ const twoSignIns: ReplyWorld = {
 test('the accounts are the Reply CLI’s profiles and every profile a route names, each read under its own name and team, the default first; a route’s profile the CLI does not hold is asked nothing', async (t) => {
     const b = replyBench(t, twoSignIns, {
         STUB_CAMPAIGN_ROUTES: JSON.stringify([campaignRoute('cmp_1', { profile: 'outbound', team_id: '9' }), campaignRoute('cmp_2', { profile: 'routed-only' }), campaignRoute('cmp_3', null)]),
+        STUB_REPLY_ACCOUNT_LIMITS: JSON.stringify({ print: printed.limitsEmail }),
     });
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } } });
     const setup = setupOn(b);
@@ -1166,6 +1179,35 @@ test('the accounts are the Reply CLI’s profiles and every profile a route name
     assert.equal(answered, false, 'the first read is still going when the act ends');
     await Promise.all([before, setup.status()]);
     assert.equal(listed(from), 2, 'the listing asked after the act is read afresh');
+    // So is one asked after a Reply verb that ended while the read was going.
+    from = b.record().length;
+    answered = false;
+    const beforeVerb = setup.status().then((state) => ((answered = true), state));
+    assert.deepEqual(await setup.replyLimits(String(mailbox.id), undefined, { type: 'reply', name: 'default', team: null }), { daily: 500 });
+    assert.equal(answered, false, 'the first read is still going when the verb ends');
+    await Promise.all([beforeVerb, setup.status()]);
+    assert.equal(listed(from), 2, 'the listing asked after the verb is read afresh');
+    // So is one asked after a sign-in refused once it had made its profile in the Reply CLI, which announces nothing; the
+    // sign-in reads the profiles once itself.
+    from = b.record().length;
+    answered = false;
+    const beforeRefused = setup.status().then((state) => ((answered = true), state));
+    await assert.rejects(setup.connectReplyWithKey('made-up-unknown-key', { type: 'reply', name: 'routed-only', team: null }), Refused);
+    assert.equal(answered, false, 'the first read is still going when the sign-in is refused');
+    await Promise.all([beforeRefused, setup.status()]);
+    assert.ok(runsAfter(b, from, 'reply').includes('profile add routed-only --json'));
+    assert.equal(listed(from), 3, 'the listing asked after the refusal is read afresh');
+    // And one asked after a change the desktop learnt of elsewhere, the models Codex offers or Full access's bypass, which
+    // it announces through the setup, as the page is told of every change.
+    let told = 0;
+    setup.onChanged(() => void told++);
+    from = b.record().length;
+    answered = false;
+    const beforeAnnounced = setup.status().then((state) => ((answered = true), state));
+    setup.announceChange();
+    assert.equal(told, 1, 'the page is told');
+    await Promise.all([beforeAnnounced, setup.status()]);
+    assert.equal(listed(from), 2, 'the listing asked after the announcement is read afresh');
     // A page of an earlier version reads the default account in the members of today, and Jason uses that very account.
     assert.deepEqual(reply, {
         cli: { found: true, version: '0.23.2', install: null },
