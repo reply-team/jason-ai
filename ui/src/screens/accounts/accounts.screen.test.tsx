@@ -838,7 +838,7 @@ describe('Reply accounts, one card per profile', () => {
         expect(cards(page)).toEqual(['Reply default', 'Reply outbound', 'Reply routed-only']);
     });
 
-    it('offers the teams of a sign-in in more than one in place of its accounts, from the read right after a sign-in on the card, and pins the one picked', async () => {
+    it('offers the teams of a sign-in in more than one in place of its mailboxes and LinkedIn accounts, from the read right after a sign-in on the card, and pins the one picked', async () => {
         const teams = [
             { id: '5', name: 'Made-up Five' },
             { id: '9', name: 'Made-up Nine' },

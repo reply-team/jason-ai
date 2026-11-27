@@ -89,15 +89,15 @@ const desktop = {
         disconnectPlugin: (pluginId: string) => ipcRenderer.invoke('jason:setup.disconnectPlugin', pluginId),
         replyConnect: (channel: 'email' | 'linkedin', options: unknown, account?: unknown) =>
             account === undefined ? ipcRenderer.invoke('jason:setup.replyConnect', channel, options) : ipcRenderer.invoke('jason:setup.replyConnect', channel, options, account),
-        replyReconnect: (channel: 'email' | 'linkedin', accountId: string, options?: unknown, account?: unknown) =>
-            account === undefined ? ipcRenderer.invoke('jason:setup.replyReconnect', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyReconnect', channel, accountId, options, account),
-        replyLimits: (accountId: string, daily?: number, account?: unknown) =>
-            account === undefined ? ipcRenderer.invoke('jason:setup.replyLimits', accountId, daily) : ipcRenderer.invoke('jason:setup.replyLimits', accountId, daily, account),
-        replyPause: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyPause', accountId) : ipcRenderer.invoke('jason:setup.replyPause', accountId, account)),
-        replyResume: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyResume', accountId) : ipcRenderer.invoke('jason:setup.replyResume', accountId, account)),
-        replyUnblock: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyUnblock', accountId) : ipcRenderer.invoke('jason:setup.replyUnblock', accountId, account)),
-        replyDelete: (channel: 'email' | 'linkedin', accountId: string, options?: unknown, account?: unknown) =>
-            account === undefined ? ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options, account),
+        replyReconnect: (channel: 'email' | 'linkedin', senderId: string, options?: unknown, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyReconnect', channel, senderId, options) : ipcRenderer.invoke('jason:setup.replyReconnect', channel, senderId, options, account),
+        replyLimits: (senderId: string, daily?: number, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyLimits', senderId, daily) : ipcRenderer.invoke('jason:setup.replyLimits', senderId, daily, account),
+        replyPause: (senderId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyPause', senderId) : ipcRenderer.invoke('jason:setup.replyPause', senderId, account)),
+        replyResume: (senderId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyResume', senderId) : ipcRenderer.invoke('jason:setup.replyResume', senderId, account)),
+        replyUnblock: (senderId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyUnblock', senderId) : ipcRenderer.invoke('jason:setup.replyUnblock', senderId, account)),
+        replyDelete: (channel: 'email' | 'linkedin', senderId: string, options?: unknown, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyDelete', channel, senderId, options) : ipcRenderer.invoke('jason:setup.replyDelete', channel, senderId, options, account),
         makeDefault: (account: unknown) => ipcRenderer.invoke('jason:setup.makeDefault', account),
         chooseTeam: (account: unknown, teamId: string) => ipcRenderer.invoke('jason:setup.chooseTeam', account, teamId),
         addAccount: (name: string) => ipcRenderer.invoke('jason:setup.addAccount', name),

@@ -1119,11 +1119,11 @@ export interface JasonDesktop {
          */
         disconnectPlugin(pluginId: string): Promise<void>;
         /**
-         * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
+         * Connects a new sender by a link the Reply CLI makes, which the desktop opens in the person's browser: a
          * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `copy` asks the
-         * desktop to put the link on the clipboard instead of opening it, for the person to hand on. Each act below acts
-         * in the Reply account `account` names, one `accounts` lists, and in the default one where it names none, as a
-         * page of an earlier version asks; a row it names is one of that account's own.
+         * desktop to put the link on the clipboard instead of opening it, for the person to hand on. Each act on a sender
+         * acts in the Reply account `account` names, one `DesktopSetup.accounts` lists, and in the default one where it
+         * names none, as a page of an earlier version asks; the sender it names is one of that account's `senders`.
          */
         replyConnect(
             channel: DesktopReplyChannel,
@@ -1132,10 +1132,10 @@ export interface JasonDesktop {
             },
             account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
-        /** Reconnects an account `accounts` lists, the same way, with `copy` as above. */
+        /** Reconnects a sender, the same way, with `copy` as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
-            accountId: string,
+            senderId: string,
             options?: { copy?: boolean },
             account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
@@ -1144,29 +1144,29 @@ export interface JasonDesktop {
          * own box.
          */
         replyLimits(
-            accountId: string,
+            senderId: string,
             daily?: number,
             account?: DesktopAccountRef,
         ): Promise<{ daily: number | null } | DesktopReplyRefusal>;
-        /** Pauses a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyPause(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
-        /** Resumes a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyResume(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /** Pauses a LinkedIn account, after the person's yes in the desktop's own box. */
+        replyPause(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /** Resumes a LinkedIn account, after the person's yes in the desktop's own box. */
+        replyResume(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Lets a mailbox its provider stopped send again, after the person's yes in the desktop's own box. */
-        replyUnblock(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyUnblock(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Deletes an account `accounts` lists from Reply, after the person's yes in the desktop's own box. `force` deletes
+         * Deletes a sender from Reply, after the person's yes in the desktop's own box. `force` deletes
          * a LinkedIn account sequences use, only after a delete of it answered the offer `force`, and after a box of
          * its own.
          */
         replyDelete(
             channel: DesktopReplyChannel,
-            accountId: string,
+            senderId: string,
             options?: { force?: boolean },
             account?: DesktopAccountRef,
         ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Make default, only while Jason has no global default: the account `accounts` lists becomes it. Jason's Reply
+         * Make default, only while Jason has no global default: the Reply account `DesktopSetup.accounts` lists becomes it. Jason's Reply
          * plugin and its grant are placed where they are missing, and the runtime writes the route (`jason route set
          * --global`) by the account's profile. Where a default is set by then, whatever its plugin or account, nothing is
          * changed: the desktop never moves a default. A refusal is the desktop's sentence, and the runtime writes nothing
@@ -1189,13 +1189,13 @@ export interface JasonDesktop {
          */
         addAccount(name: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Sign out of an account `accounts` lists, after the person's yes in the desktop's own box, which says that the Reply
+         * Sign out of a Reply account `DesktopSetup.accounts` lists, after the person's yes in the desktop's own box, which says that the Reply
          * CLI itself signs it out and, where a route names it, that campaigns sending through it stop (`reply --profile
          * <name> auth logout`). No route changes. Absent from a desktop of an earlier version.
          */
         signOut(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Remove an account `accounts` lists whose profile the Reply CLI holds, never `default`, after the person's yes in the
+         * Remove a Reply account `DesktopSetup.accounts` lists whose profile the Reply CLI holds, never `default`, after the person's yes in the
          * desktop's own box, which says that the Reply CLI itself deletes its profile and its sign-in and, where a route
          * names it, that campaigns sending through it stop and its card stays (`reply profile delete <name> --yes`). No route
          * changes. Absent from a desktop of an earlier version.

@@ -471,7 +471,7 @@ export function readReplyAuth(result: { exit: number; stdout: string }): ReplyAu
     return parseReplyAuth(result.stdout);
 }
 
-export function parseReplyAccounts(stdout: string): ReplySender[] {
+export function parseReplySenders(stdout: string): ReplySender[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };
         return (raw.items ?? []).map((item) => ({
@@ -487,7 +487,7 @@ export function parseReplyAccounts(stdout: string): ReplySender[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; accounts: ReplySender[] } | { kind: 'absent' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; senders: ReplySender[] } | { kind: 'absent' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
@@ -507,7 +507,7 @@ export function readReplyChannel(result: { exit: number; stdout: string; stderr:
     if (result.exit === 0) {
         try {
             const raw = JSON.parse(result.stdout) as { items?: unknown };
-            return Array.isArray(raw.items) ? { kind: 'listed', accounts: parseReplyAccounts(result.stdout) } : { kind: 'unread' };
+            return Array.isArray(raw.items) ? { kind: 'listed', senders: parseReplySenders(result.stdout) } : { kind: 'unread' };
         } catch {
             return { kind: 'unread' };
         }

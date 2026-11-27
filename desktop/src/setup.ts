@@ -99,7 +99,7 @@ import {
     hasBinding,
     isConfigured,
     parseInstallationSettings,
-    parseReplyAccounts,
+    parseReplySenders,
     readReplyAuth,
     readReplyChannel,
     type ReplyAuth,
@@ -1105,7 +1105,7 @@ export class Setup {
         // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
         for (const channel of replyChannels) {
             const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
-            if (listed.kind === 'listed') lists.senders.push(...listed.accounts);
+            if (listed.kind === 'listed') lists.senders.push(...listed.senders);
             else (listed.kind === 'absent' ? lists.absent : lists.unread).push(channel);
         }
         // A read that fails lists none and names its channel, unless the CLI's refusal says the channel has none here.
@@ -1270,8 +1270,8 @@ export class Setup {
     }
 
     /**
-     * Connects a new account by a link the CLI makes (`reply account connect`) in the Reply account named, the default where
-     * none is: LinkedIn under the name typed for it, a mailbox for its provider. With `copy`, the link is copied instead of
+     * Connects a new sender by a link the CLI makes (`reply account connect`) in the Reply account named, the default where
+     * none is: a LinkedIn account under the name typed for it, a mailbox for its provider. With `copy`, the link is copied instead of
      * opened, as `#open` says. `sharedPage`, the shared mailbox page a desktop of an earlier version offered, is refused.
      */
     replyConnect(channel: unknown, options: unknown, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
@@ -1294,12 +1294,12 @@ export class Setup {
         return connect({ channel: 'email', provider });
     }
 
-    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
-    replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
+    /** Reconnects a sender the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
+    replyReconnect(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
         if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
-        const on = this.#named(named, channel, accountId);
+        const on = this.#named(named, channel, senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.sender.id), { write: true }), copy));
     }
@@ -1308,8 +1308,8 @@ export class Setup {
      * A mailbox's daily limit (`reply account limits --channel email`): read with no limit given, and set to the one
      * given only on the person's yes to the box that names the mailbox.
      */
-    replyLimits(accountId: unknown, daily?: unknown, named?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
-        const on = this.#named(named, 'email', accountId);
+    replyLimits(senderId: unknown, daily?: unknown, named?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
+        const on = this.#named(named, 'email', senderId);
         if ('refused' in on) return Promise.resolve(on);
         if (daily !== undefined && (typeof daily !== 'number' || !Number.isSafeInteger(daily) || daily < 0 || daily > dailyLimitMost)) {
             return Promise.resolve(refusal(said.badLimit));
@@ -1323,17 +1323,17 @@ export class Setup {
     }
 
     /** Pauses a LinkedIn account the list gave, on the person's yes (`reply account pause`). */
-    replyPause(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('pause', accountId, named);
+    replyPause(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('pause', senderId, named);
     }
 
     /** Resumes a LinkedIn account the list gave, on the person's yes (`reply account resume`). */
-    replyResume(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('resume', accountId, named);
+    replyResume(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('resume', senderId, named);
     }
 
-    #state(verb: 'pause' | 'resume', accountId: unknown, named: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const on = this.#named(named, 'linkedin', accountId);
+    #state(verb: 'pause' | 'resume', senderId: unknown, named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'linkedin', senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
             if (!(await this.#confirmed(actBox(verb, on.sender)))) return refusal(said.notConfirmed);
@@ -1344,8 +1344,8 @@ export class Setup {
     }
 
     /** Lets a mailbox the list gave send again after its provider stopped it, on the person's yes (`reply account unblock`). */
-    replyUnblock(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const on = this.#named(named, 'email', accountId);
+    replyUnblock(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'email', senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
             if (!(await this.#confirmed(actBox('unblock', on.sender)))) return refusal(said.notConfirmed);
@@ -1356,16 +1356,16 @@ export class Setup {
     }
 
     /**
-     * Deletes an account the list gave (`reply account delete`), passing `--yes` only after the person's yes to the box
-     * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that account
-     * without it, and only on the person's yes to a box of its own that says sequences use it.
+     * Deletes a sender the list gave (`reply account delete`), passing `--yes` only after the person's yes to the box
+     * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that LinkedIn
+     * account without it, and only on the person's yes to a box of its own that says sequences use it.
      */
-    replyDelete(channel: unknown, accountId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+    replyDelete(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
         const force = asked['force'] === true;
         if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
-        const on = this.#named(named, channel, accountId);
+        const on = this.#named(named, channel, senderId);
         if ('refused' in on) return Promise.resolve(on);
         // A door is the one sender's of the one Reply account: two profiles may list the same sender.
         const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.sender.id]);

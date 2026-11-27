@@ -116,7 +116,7 @@ describe('The Connect panel in the demo', () => {
         expect(within(replyCard()).getAllByRole('note').map(words)).toContain(sentence);
     });
 
-    it('turns off Sign in with Reply, the API key, Add account and every act on an account row, and still lists the accounts', async () => {
+    it('turns off Sign in with Reply, the API key, Connect a mailbox or LinkedIn and every act on a mailbox’s or a LinkedIn account’s row, and still lists them', async () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
@@ -125,7 +125,7 @@ describe('The Connect panel in the demo', () => {
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
         for (const each of acts) expect(each.disabled).toBe(true);
         for (const each of [...acts, button(card, 'Connect a mailbox or LinkedIn')]) fireEvent.click(each);
-        expect(card.querySelector('.add-account')).toBeNull();
+        expect(card.querySelector('.connect-sender')).toBeNull();
         cleanup();
         // A card not signed in offers the sign-in, turned off the same way.
         const signedOut = await renderAt('demo', 'Connect', { signedIn: false, user: null, accounts: [] });
@@ -183,7 +183,7 @@ describe('The Connect panel in the demo', () => {
         const del = button(rowOf(card), 'Delete');
         del.disabled = false;
         fireEvent.click(del);
-        expect(card.querySelector('.add-account')).toBeNull();
+        expect(card.querySelector('.connect-sender')).toBeNull();
         expect(desktop.calls.some((each) => each.name === 'setup.replyDelete')).toBe(false);
     });
 
@@ -267,7 +267,7 @@ describe('The same screens in Live', () => {
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);
         fireEvent.click(button(card, 'Connect a mailbox or LinkedIn'));
-        await waitFor(() => expect(replyCard().querySelector('.add-account')).not.toBeNull());
+        await waitFor(() => expect(replyCard().querySelector('.connect-sender')).not.toBeNull());
     });
 
     it('keep the Accounts page Reply card on, with no sentence', async () => {

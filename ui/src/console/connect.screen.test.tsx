@@ -287,7 +287,7 @@ describe('the Reply card, a channel it did not list', () => {
         ]);
     });
 
-    it('says a listed channel whose links still waiting could not be read in its own line, its accounts staying', async () => {
+    it('says a listed channel whose links still waiting could not be read in its own line, its mailboxes or LinkedIn accounts staying', async () => {
         const card = replyCard((renderConnect(with_([], ['linkedin'], ['email'])), await openConnect()));
         expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
         expect(noted(card)).toEqual([
@@ -402,7 +402,7 @@ describe('the Reply card, its acts', () => {
         const connect = await openConnect();
         const card = () => replyCard(connect);
         fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
-        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.connect-sender')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['Gmail', 'Outlook', 'LinkedIn', 'Cancel']);
         expect(card().querySelector('input[type="password"]:not([aria-label="Or paste a Reply API key"])')).toBeNull();
     });
@@ -577,7 +577,7 @@ describe('the Reply card, its acts', () => {
         const connect = await openConnect();
         const card = () => replyCard(connect);
         fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
-        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.connect-sender')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['LinkedIn', 'Cancel']);
     });
 

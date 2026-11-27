@@ -10,7 +10,7 @@ import { fileLogger, type Logger } from '../src/log.ts';
 import type { Programs } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import {
-    accountWords,
+    senderWords,
     actBox,
     askBox,
     belowMinimumSentence,
@@ -340,10 +340,10 @@ test('a link is handed to the opener only as https on a host name, with no user,
 test('the boxes are the main process’s own: they name the account as the list does and the act, Cancel focused', async () => {
     const mailbox = { channel: 'email', name: 'Made-up Sales', address: 'sales@example.test' };
     const linkedin = { channel: 'linkedin', name: 'Made-up Ada', address: '' };
-    assert.equal(accountWords(mailbox), 'the mailbox Made-up Sales (sales@example.test)');
-    assert.equal(accountWords(linkedin), 'the LinkedIn account Made-up Ada');
-    assert.equal(accountWords({ channel: 'email', name: '', address: '' }), 'the mailbox with no name');
-    assert.equal(accountWords({ channel: 'email', name: `two\nlines${'x'.repeat(100)}`, address: '' }).includes('\n'), false);
+    assert.equal(senderWords(mailbox), 'the mailbox Made-up Sales (sales@example.test)');
+    assert.equal(senderWords(linkedin), 'the LinkedIn account Made-up Ada');
+    assert.equal(senderWords({ channel: 'email', name: '', address: '' }), 'the mailbox with no name');
+    assert.equal(senderWords({ channel: 'email', name: `two\nlines${'x'.repeat(100)}`, address: '' }).includes('\n'), false);
     assert.deepEqual(actBox('delete', mailbox), {
         type: 'warning',
         title: 'Delete the mailbox Made-up Sales (sales@example.test) from Reply?',
@@ -420,7 +420,7 @@ test('a mailbox is connected for its provider, and reconnected by the id the lis
     assert.deepEqual(h.opened, [fixtureLinks.emailConnect, fixtureLinks.linkedinConnect]);
 });
 
-test('an act names only an account the list gave, by channel and id, and anything out of shape is refused before reply starts', async (t) => {
+test('an act names only a sender the list gave, by channel and id, and anything out of shape is refused before reply starts', async (t) => {
     const h = await listedHarness(t, {});
     const no = (refusedWith: string) => ({ refused: refusedWith, code: null, offer: null, reread: false });
     assert.deepEqual(await h.setup.replyReconnect('email', '34'), no(said.badId), 'a LinkedIn id named as a mailbox');

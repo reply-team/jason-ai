@@ -378,8 +378,8 @@ interface ActDialog {
 }
 
 const actDialog = signal<ActDialog | null>(null);
-/** The place whose Add account choices are open; null when none is. */
-const adding = signal<Place | null>(null);
+/** The place whose choices of Connect a mailbox or LinkedIn are open; null when none is. */
+const connecting = signal<Place | null>(null);
 /** The place whose LinkedIn name field is open; null when none is. */
 const naming = signal<Place | null>(null);
 /** The mailbox whose daily limit is shown for a change, at its place; null when none is. */
@@ -418,7 +418,7 @@ function closeDialog(): void {
  */
 export function dropDialogs(place: Place): void {
     if (actDialog.peek()?.place === place) closeDialog();
-    if (adding.peek() === place) adding.value = null;
+    if (connecting.peek() === place) connecting.value = null;
     if (naming.peek() === place) naming.value = null;
     if (limiting.peek()?.place === place) limiting.value = null;
     if (cardRefused.peek()?.place === place) cardRefused.value = null;
@@ -430,7 +430,7 @@ export const heldDialog = (): Place | null => actDialog.peek()?.place ?? null;
 /** Drops every dialog, choice and field the card has open: what a console that goes away leaves behind. */
 export function resetDialogs(): void {
     closeDialog();
-    adding.value = null;
+    connecting.value = null;
     naming.value = null;
     limiting.value = null;
     signedOut.value = [];
@@ -474,7 +474,7 @@ async function ask(
 ): Promise<void> {
     asked += 1;
     const mine = asked;
-    adding.value = null;
+    connecting.value = null;
     naming.value = null;
     limiting.value = null;
     cardRefused.value = null;
@@ -544,18 +544,18 @@ define('connect.copyLinks', (_args, element) => {
     if (element instanceof HTMLInputElement) copying.value = element.checked;
 });
 
-defineReal('connect.addAccount', ([place]) => {
+defineReal('connect.connectSender', ([place]) => {
     if (typeof place !== 'string') return;
-    adding.value = adding.value === place ? null : place;
+    connecting.value = connecting.value === place ? null : place;
     naming.value = null;
 });
 
-define('connect.addCancel', () => {
-    adding.value = null;
+define('connect.connectCancel', () => {
+    connecting.value = null;
     naming.value = null;
 });
 
-defineReal('connect.addMailbox', ([place, provider]) => {
+defineReal('connect.connectMailbox', ([place, provider]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || !view || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
@@ -564,7 +564,7 @@ defineReal('connect.addMailbox', ([place, provider]) => {
     );
 });
 
-defineReal('connect.addLinkedIn', ([place]) => {
+defineReal('connect.nameLinkedIn', ([place]) => {
     if (typeof place === 'string') naming.value = place;
 });
 
@@ -781,7 +781,7 @@ effect(() => {
     const signedOutAt = (place: Place) => !(accountAt(place, state)?.signedIn ?? false);
     const shown = actDialog.peek();
     if (shown !== null && (gone(shown.place) || (shown.signedIn && signedOutAt(shown.place)))) closeDialog();
-    if (adding.peek() !== null && signedOutAt(adding.peek()!)) adding.value = null;
+    if (connecting.peek() !== null && signedOutAt(connecting.peek()!)) connecting.value = null;
     if (naming.peek() !== null && signedOutAt(naming.peek()!)) naming.value = null;
     if (limiting.peek() !== null && signedOutAt(limiting.peek()!.place)) limiting.value = null;
     const refused = cardRefused.peek();
@@ -870,10 +870,10 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
     </div>`;
 }
 
-/** Add account's choices: Gmail and Outlook where email is not absent, LinkedIn where it is not, and Cancel. */
-function addView(view: AccountView, place: Place, busy: Html | null): Html {
+/** Connect a mailbox or LinkedIn's choices: Gmail and Outlook where email is not absent, LinkedIn where it is not, and Cancel. */
+function senderChoices(view: AccountView, place: Place, busy: Html | null): Html {
     const absent = view.absent;
-    return html`<div class="setrow add-account">
+    return html`<div class="setrow connect-sender">
             ${
                 absent.includes('email')
                     ? null
@@ -883,7 +883,7 @@ function addView(view: AccountView, place: Place, busy: Html | null): Html {
                                   class="btn sm"
                                   type="button"
                                   ${busy}
-                                  ${act('connect.addMailbox', place, provider)}
+                                  ${act('connect.connectMailbox', place, provider)}
                               >
                                   ${name}
                               </button>`,
@@ -892,11 +892,11 @@ function addView(view: AccountView, place: Place, busy: Html | null): Html {
             ${
                 absent.includes('linkedin')
                     ? null
-                    : html`<button class="btn sm" type="button" ${busy} ${act('connect.addLinkedIn', place)}>
+                    : html`<button class="btn sm" type="button" ${busy} ${act('connect.nameLinkedIn', place)}>
                           LinkedIn
                       </button>`
             }
-            <button class="btn sm" type="button" ${act('connect.addCancel')}>Cancel</button>
+            <button class="btn sm" type="button" ${act('connect.connectCancel')}>Cancel</button>
         </div>
         ${
             naming.value === place
@@ -1544,7 +1544,7 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
 
 /**
  * An account's body: its sign-in line, the sign-in and the key for it, its senders (its mailboxes and LinkedIn accounts)
- * with their acts, what of them could not be read, its Add account and Check again, and the dialog an act on it opened.
+ * with their acts, what of them could not be read, its Connect a mailbox or LinkedIn and Check again, and the dialog an act on it opened.
  */
 function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html | null, place: Place): Html {
     const shown = actDialog.value?.place === place ? actDialog.value : null;
@@ -1620,7 +1620,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                           <div class="grow meta">
                               Mailboxes and LinkedIn accounts are read again when this window takes the focus back.
                           </div>
-                          <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
+                          <button class="btn sm" type="button" ${asks} ${act('connect.connectSender', place)}>
                               Connect a mailbox or LinkedIn
                           </button>
                           <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
@@ -1634,7 +1634,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                           Copy a new link to hand on to whoever owns the mailbox or LinkedIn account, instead of opening
                           it here
                       </label>
-                      ${adding.value === place ? addView(view, place, asks) : null}`
+                      ${connecting.value === place ? senderChoices(view, place, asks) : null}`
                 : null
         }
         ${shown !== null ? dialogView(shown, asks) : null}`;
@@ -1927,7 +1927,7 @@ export function accountsReplyGone(): void {
     const ours = (place: Place | null | undefined) =>
         place === accountsPlace || (place ?? '').startsWith(`${accountsPlace}:`);
     if (ours(actDialog.peek()?.place)) closeDialog();
-    if (ours(adding.peek())) adding.value = null;
+    if (ours(connecting.peek())) connecting.value = null;
     if (ours(naming.peek())) naming.value = null;
     if (ours(limiting.peek()?.place)) limiting.value = null;
     if (ours(cardRefused.peek()?.place)) cardRefused.value = null;

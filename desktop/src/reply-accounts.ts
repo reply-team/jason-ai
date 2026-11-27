@@ -1,7 +1,8 @@
 /**
- * Pure: what the desktop does with the Reply card's account acts, each of which is one verb of the Reply CLI
- * (`reply-cli-account.ts` holds that contract): its own sentences, what each refusal's code makes the card do, the main
- * process's confirmation boxes, and the check a link passes before the system opener is handed it.
+ * Pure: what the desktop does with the acts on a Reply account's senders, its mailboxes and LinkedIn accounts, each of
+ * which is one verb of the Reply CLI (`reply-cli-account.ts` holds that contract): its own sentences, what each refusal's
+ * code makes the card do, the main process's confirmation boxes (whose shape Sign out's and Remove's share), and the check
+ * a link passes before the system opener is handed it.
  *
  * A connection link and a consent address are the person's secrets: the main process hands
  * the link to the system opener and keeps nothing, and the page learns only that something was opened, when it expires
@@ -14,7 +15,7 @@ import { replyCliCodes as codes, replyCliUsagePrefix, type ReplyCliChannel, type
 /** How long one verb may take before it is stopped. */
 export const replyActLimitMs = 30_000;
 
-/** An account id as Reply gives one: digits with no leading zero, at most sixteen, a safe integer. */
+/** A sender's id as Reply gives one: digits with no leading zero, at most sixteen, a safe integer. */
 export function isReplyId(value: unknown): value is string {
     return typeof value === 'string' && /^[1-9][0-9]{0,15}$/.test(value) && Number.isSafeInteger(Number(value));
 }
@@ -162,8 +163,8 @@ export function isOpenableLink(value: unknown): value is string {
     return url.protocol === 'https:' && url.username === '' && url.password === '' && url.port === '' && isHostName(url.hostname);
 }
 
-/** An account as the main process names it in a box: by the list's name and address, as the card shows it. */
-export interface NamedAccount {
+/** A sender as the main process names it in a box: by the list's name and address, as the card shows it. */
+export interface NamedSender {
     channel: string;
     name: string;
     address: string;
@@ -175,12 +176,12 @@ export const capped = (text: string): string => {
     return characters.length > 80 ? `${characters.slice(0, 80).join('')}…` : characters.join('');
 };
 
-/** `the mailbox Sales (sales@example.test)`, `the LinkedIn account Ada`: the account as the list names it. */
-export function accountWords(account: NamedAccount): string {
-    const name = capped(account.name);
-    const address = capped(account.address);
+/** `the mailbox Sales (sales@example.test)`, `the LinkedIn account Ada`: the sender as the list names it. */
+export function senderWords(sender: NamedSender): string {
+    const name = capped(sender.name);
+    const address = capped(sender.address);
     const named = name && address && name !== address ? `${name} (${address})` : name || address || 'with no name';
-    return `${account.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'} ${named}`;
+    return `${sender.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'} ${named}`;
 }
 
 /** A native box of the main process: its words, Cancel focused, and only the first button a yes. */
@@ -206,9 +207,9 @@ export const box = (type: ReplyBox['type'], message: string, detail: string, yes
     noLink: true,
 });
 
-/** The box of an act on one account, naming it as the list does. */
-export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' | 'limits', account: NamedAccount, daily?: number): ReplyBox {
-    const named = accountWords(account);
+/** The box of an act on one sender, naming it as the list does. */
+export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' | 'limits', sender: NamedSender, daily?: number): ReplyBox {
+    const named = senderWords(sender);
     switch (act) {
         case 'pause':
             return box('question', `Pause ${named}?`, 'Reply stops its automation until it is resumed.', 'Pause');

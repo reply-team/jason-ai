@@ -212,10 +212,10 @@ type AccountIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyConnect']>[2], DesktopAccountRef | undefined>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyReconnect']>[3], DesktopAccountRef | undefined>>,
-    Holds<Equal<Parameters<JasonDesktop['setup']['replyLimits']>, [accountId: string, daily?: number, account?: DesktopAccountRef]>>,
-    Holds<Equal<Parameters<JasonDesktop['setup']['replyPause']>, [accountId: string, account?: DesktopAccountRef]>>,
-    Holds<Equal<Parameters<JasonDesktop['setup']['replyResume']>, [accountId: string, account?: DesktopAccountRef]>>,
-    Holds<Equal<Parameters<JasonDesktop['setup']['replyUnblock']>, [accountId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyLimits']>, [senderId: string, daily?: number, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyPause']>, [senderId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyResume']>, [senderId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyUnblock']>, [senderId: string, account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['replyDelete']>[3], DesktopAccountRef | undefined>>,
 ];
 

@@ -22,7 +22,7 @@ import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/set
 import {
     bundledPlugin,
     parseInstallationSettings,
-    parseReplyAccounts,
+    parseReplySenders,
     parseReplyAuth,
     readReplyAuth,
     readReplyChannel,
@@ -299,10 +299,10 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, profile: 'default', team: null });
     assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, profile: null, team: null });
     assert.equal(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'x'.repeat(65) })).profile, null, 'a profile the binding cannot hold is not taken');
-    assert.deepEqual(parseReplyAccounts(JSON.stringify({ items: [{ id: 5, channel: 'email', name: 'Sales', address: 'sales@example.com', owner_user_id: 7, status: 'active', reply_status: 'connected' }] })), [
+    assert.deepEqual(parseReplySenders(JSON.stringify({ items: [{ id: 5, channel: 'email', name: 'Sales', address: 'sales@example.com', owner_user_id: 7, status: 'active', reply_status: 'connected' }] })), [
         { id: '5', channel: 'email', name: 'Sales', address: 'sales@example.com', status: 'connected' },
     ], "the state is Reply's own word, reply_status, never the CLI's summary of it");
-    const states = (items: Record<string, unknown>[]) => parseReplyAccounts(JSON.stringify({ items })).map((each) => each.status);
+    const states = (items: Record<string, unknown>[]) => parseReplySenders(JSON.stringify({ items })).map((each) => each.status);
     assert.deepEqual(
         states([
             { channel: 'linkedin', status: 'inactive', reply_status: 'cookieInvalid' },
@@ -1851,7 +1851,7 @@ test('a channel read is the plan-or-role refusal only by the code reply-cli give
         { exit: 0, stdout: '{"items":"no"}', stderr: '' },
         { exit: 0, stdout: '', stderr: '' },
     ]) assert.deepEqual(readReplyChannel(result), { kind: 'unread' }, JSON.stringify(result));
-    assert.deepEqual(readReplyChannel({ exit: 0, stdout: '{"items":[]}', stderr: '' }), { kind: 'listed', accounts: [] });
+    assert.deepEqual(readReplyChannel({ exit: 0, stdout: '{"items":[]}', stderr: '' }), { kind: 'listed', senders: [] });
 });
 
 test('with no usable Reply CLI there is no account: one older than Jason’s Reply plugin requires is offered the update and asked nothing more; one whose version could not be read is named so, and asked nothing either; a missing one is asked nothing', async (t) => {
