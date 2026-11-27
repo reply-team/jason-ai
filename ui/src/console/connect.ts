@@ -1387,7 +1387,7 @@ function accountCard(state: DesktopSetup, view: AccountView, busy: Html | null):
         view.ref === null
             ? 'Reply account'
             : `Reply account ${view.ref.name}${view.ref.team === null ? '' : `, team ${view.ref.team}`}`;
-    return html`<div class="card reply-account" role="region" aria-label="${label}">
+    return html`<div class="card reply-card reply-account" role="region" aria-label="${label}">
         <div class="bd">
             <div class="reply-top">
                 <div class="grow">

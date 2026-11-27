@@ -284,6 +284,29 @@
 .jc-console .reply-card .reply-key-why {
     margin: 6px 0 4px;
 }
+/* The Accounts page's Reply cards, one under another: the section, then one card per account. */
+.jc-console .reply-accounts {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+/* An account's head: Reply and the profile's name, its team, and the Default mark or Make default, on one line that
+   wraps; on the one card outside the Accounts page it stands under the CLI's lines. */
+.jc-console .reply-card .acct-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+.jc-console .reply-card .bd > .acct-head {
+    padding: 10px 0 2px;
+}
+.jc-console .reply-card .acct-head .acct-name {
+    font-family: var(--m);
+    font-size: 14px;
+    font-weight: 650;
+}
 .jc-console .grow {
     flex: 1;
     min-width: 0;
