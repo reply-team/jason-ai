@@ -197,9 +197,9 @@ test('every act runs as the account it names, its profile before the verb and no
     assert.equal(acts.length, 9);
     for (const entry of acts) assert.deepEqual(entry.args.slice(0, 3), ['--profile', 'outbound', 'account'], entry.args.join(' '));
     // No account named, as a page of an earlier version asks: the default, here the profile default, by its rows alone.
-    const bare = b.record().length;
+    const unnamed = b.record().length;
     assert.deepEqual(await h.setup.replyUnblock('12'), { done: true });
-    assert.deepEqual(b.record().slice(bare).filter((entry) => entry.name === 'reply').map((entry) => entry.args.slice(0, 3)), [['--profile', 'default', 'account']]);
+    assert.deepEqual(b.record().slice(unnamed).filter((entry) => entry.name === 'reply').map((entry) => entry.args.slice(0, 3)), [['--profile', 'default', 'account']]);
     // A row is its own account's: ada's mailbox is no row of bea's, nor bea's of ada's; and an account the read did not
     // list, or a value of another shape, is refused before reply starts.
     const none = b.record().length;

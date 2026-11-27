@@ -220,7 +220,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.disconnectPlugin', ['slack']],
         ['setup.replyConnect', ['email', { provider: 'gmail', copy: true }, outbound]],
         ['setup.replyReconnect', ['linkedin', '34', { copy: false }]],
-        ['setup.replyLimits', ['12', undefined, outbound]],
+        ['setup.replyLimits', ['12', 200, outbound]],
         ['setup.replyPause', ['34', outbound]],
         ['setup.replyResume', ['34']],
         ['setup.replyUnblock', ['12', outbound]],

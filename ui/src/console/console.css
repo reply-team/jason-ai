@@ -290,7 +290,7 @@
     flex-direction: column;
     gap: 12px;
 }
-/* An account's head: Reply and the profile's name, its team, and the Default mark or Make default, on one line that
+/* An account's head: Reply and the profile's name, and the Default mark or Make default, on one line that
    wraps; on the one card outside the Accounts page it stands under the CLI's lines. */
 .jc-console .reply-card .acct-head {
     display: flex;
