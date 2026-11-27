@@ -36,6 +36,7 @@ import {
     notedOf,
     readAccountNotes,
     sameSignIn,
+    restsOnPin,
     unchangedSince,
     whoCanBeAsked,
     withNote,
@@ -1065,15 +1066,21 @@ export class Setup {
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
         // With no sign-in since the note, nothing is taken to have changed: the noted login in the noted team, named as the
         // note names it, and no teams asked of Reply. Only Reply refusing the account's own read there gives a sign-in away.
+        const files = { pin: auth.team, login: auth.user, keyTeam: auth.keyTeam };
         let listed: Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'> | null = null;
-        if (unchangedSince(auth, noted, this.#toCheck.has(account.name))) {
+        let refused = false;
+        if (unchangedSince(files, noted, this.#toCheck.has(account.name))) {
             const { lists, outOfTeam } = await this.#lists(account);
             if (!outOfTeam) return { state: { ...signedIn, ...lists, user: noted.user, team: noted.team }, pin: auth.team };
-            listed = lists;
+            [listed, refused] = [lists, true];
         }
         const teams = await this.#teams(account);
-        const asked = whoCanBeAsked({ pin: auth.team, login: auth.user, keyTeam: auth.keyTeam, teams });
-        const seen: SignInSeen = { pin: auth.team, login: asked ? await this.#whoami(account) : auth.user, keyTeam: auth.keyTeam, teams };
+        if (listed === null && restsOnPin({ ...files, teams }, noted)) {
+            const { lists, outOfTeam } = await this.#lists(account);
+            [listed, refused] = [lists, outOfTeam];
+        }
+        const asked = whoCanBeAsked({ ...files, teams });
+        const seen: SignInSeen = { ...files, login: asked ? await this.#whoami(account) : auth.user, refused, teams };
         const binding = bindingOf(seen, noted);
         let { login } = seen;
         let team = binding.team;
@@ -1095,7 +1102,7 @@ export class Setup {
         const pin = binding.bind !== null && team !== null ? team.id : auth.team;
         if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin };
         if (!binding.lists) return { state: now, pin };
-        // A read refused in the pin, made before the teams were read, stands for the same pin.
+        // The account's own read made before it was decided stands for the same pin.
         return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin };
     }
 
@@ -1630,8 +1637,9 @@ export class Setup {
      * change of sign-in, if any, answered. The pin that read saw is written over; one a terminal set since to a team
      * offered is that account's team now, and is refused as bound. The pick is the person's, and is noted at once with the
      * login, asked of Reply where the last read did not know it: it is never said as a change made outside. Nothing is
-     * asked of the person first, since nothing is lost by it. The answer is done, or the desktop's own sentence, and the
-     * page reads the accounts again either way.
+     * asked of the person first, since nothing is lost by it. The answer is done, or the desktop's sentence and the Reply
+     * CLI's reason, but where the CLI refuses the team, whose words number it: the desktop's sentence alone. The page reads
+     * the accounts again either way.
      */
     chooseTeam(named: unknown, teamId: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
@@ -1649,10 +1657,10 @@ export class Setup {
                 const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
                 this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
                 if (result.exit === 0) return null;
-                // The Reply CLI's own words name the team by its number: the desktop's sentence is said instead.
+                // Where the Reply CLI refuses the team, its words name it by its number: the desktop's sentence is said alone.
                 const ending = replyCliEnding(result);
-                const code = ending.kind === 'refused' ? ending.code : null;
-                return { refused: code === 'usage.team' ? accountSentences.teamGone : accountSentences.teamNotChosen, code, offer: null, reread: true };
+                if (ending.kind === 'refused' && ending.code === 'usage.team') return { refused: accountSentences.teamGone, code: ending.code, offer: null, reread: true };
+                return cliRefusal(result, accountSentences.teamNotChosen);
             });
             if (chosen !== null) return chosen;
             const login = account.user ?? (await this.#whoami(account));

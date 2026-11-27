@@ -313,7 +313,8 @@ if (process.env.STUB_HANG === name) {
     const seats = login ? ((world.seats ?? {})[login] ?? [3]) : null;
     const listed = (seats ?? []).map((id) => ({ team_id: id, team_name: (world.teams ?? {})[String(id)] ?? '' }));
     const pinned = ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? null;
-    if (seats === null) answer({ code: 'auth.required', exit: 2 });
+    // No sign-in under the profile, as reply-cli says it (src/auth/resolve.ts `not_authenticated`).
+    if (seats === null) answer({ code: 'auth.required', exit: 2, error: { title: 'Not authenticated.' } });
     else if (rest[1] === 'list') answer({ print: { current_team_id: pinned, teams: listed } });
     else if (!/^\d+$/.test(rest[2])) answer({ code: 'usage.team', error: { title: 'Team id must be a positive integer.' } });
     else if (!seats.includes(Number(rest[2]))) answer({ code: 'usage.team', error: { title: `Team ${rest[2]} isn't one you can act in.` } });

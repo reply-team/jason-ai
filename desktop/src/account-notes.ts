@@ -48,9 +48,14 @@ export interface SignInSeen {
     login: string | null;
     /** The team a key acts in, whatever team is asked (`ReplyAuth.keyTeam`); null for a browser's sign-in. */
     keyTeam: string | null;
+    /** Whether Reply refused the account's own read in its pin at this look, the sign-in not acting in that team. */
+    refused: boolean;
     /** The teams `team list` gave; null where they could not be read. */
     teams: readonly ReplyTeam[] | null;
 }
+
+/** What the Reply CLI's own files say of a sign-in, read with no call to Reply. */
+export type SignInFiles = Pick<SignInSeen, 'pin' | 'login' | 'keyTeam'>;
 
 /**
  * How a sign-in differs from the note: another login; the same login, no longer in the noted team; the same login,
@@ -70,20 +75,14 @@ export interface Binding {
     change: Change | null;
 }
 
-/**
- * Whether a look takes a signed-in account as its note says, with no sign-in since: not marked to be checked (a sign-in on
- * its card, or a change not answered yet), the Reply CLI's own files (read with no call to Reply) holding the noted login,
- * or none, and the noted team pinned, and that team's name read. Then no teams are asked of Reply; only Reply refusing the
- * account's own read in that team gives a sign-in away.
- */
-export const unchangedSince = (auth: { user: string | null; team: string | null }, noted: Noted, marked: boolean): noted is SignIn =>
-    noted !== null && noted !== 'fresh' && !marked && noted.team.name !== null && auth.team === noted.team.id && (auth.user ?? noted.user) === noted.user;
+/** The team a sign-in's runs act in: a key's own, whatever team is asked; a browser's, its pin. */
+export const runsIn = ({ pin, keyTeam }: Pick<SignInSeen, 'pin' | 'keyTeam'>): string | null => keyTeam ?? pin;
 
 /**
  * The teams a sign-in acts in: a key's own team alone, which Reply acts in whatever team is asked, named where `team list`
  * names it; a browser's, as `team list` gave them. Null where a browser's could not be read.
  */
-export function actsIn({ keyTeam, teams }: SignInSeen): BoundTeam[] | null {
+export function actsIn({ keyTeam, teams }: Pick<SignInSeen, 'keyTeam' | 'teams'>): BoundTeam[] | null {
     if (keyTeam !== null) return [teams?.find((each) => each.id === keyTeam) ?? { id: keyTeam, name: teams === null ? null : '' }];
     return teams === null ? null : [...teams];
 }
@@ -92,17 +91,41 @@ export function actsIn({ keyTeam, teams }: SignInSeen): BoundTeam[] | null {
  * Whether who a sign-in is can be asked where the Reply CLI does not name it: Reply names it only in a team it acts in, so
  * only where its pin is one of its teams, or may be, its teams not read.
  */
-export function whoCanBeAsked(seen: SignInSeen): boolean {
+export function whoCanBeAsked(seen: Omit<SignInSeen, 'refused'>): boolean {
     const own = actsIn(seen);
     return seen.login === null && seen.pin !== null && (own === null || own.some((each) => each.id === seen.pin));
 }
 
 /**
- * What a look makes of a signed-in account's team, after a sign-in, decided here and nowhere else. Case by case:
+ * The rule's first case, `bindingOf`'s with no sign-in since, decided before anything is asked of Reply: a look takes a
+ * signed-in account as its note says where it is not marked to be checked (a sign-in on its card, or a change not
+ * answered yet), and the Reply CLI's own files hold the noted login, or none, and the noted team both pinned and as the
+ * team its runs act in (`runsIn`: a key acts in its own, whatever is pinned), the team's name read. Then no teams are asked
+ * of Reply; only Reply refusing the account's own read in that team gives a sign-in away.
+ */
+export const unchangedSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
+    noted !== null &&
+    noted !== 'fresh' &&
+    !marked &&
+    noted.team.name !== null &&
+    files.pin === noted.team.id &&
+    runsIn(files) === noted.team.id &&
+    (files.login ?? noted.user) === noted.user;
+
+/**
+ * Whether what is decided of a signed-in account rests on its pin alone: nothing noted, a browser's sign-in whose teams
+ * could not be read, and a pin. Its own read in that pin, made in any case then, is made before it is decided, so a
+ * refusal there is part of what is decided (`SignInSeen.refused`).
+ */
+export const restsOnPin = (seen: Omit<SignInSeen, 'refused'>, noted: Noted): boolean => noted === null && actsIn(seen) === null && seen.pin !== null;
+
+/**
+ * What a look makes of a signed-in account's team, after a sign-in (with none since, `unchangedSince`), decided here and
+ * nowhere else. Case by case:
  * - nothing noted, or its team picked afresh after Keep it: it is bound as a first sign-in is. A pinned team it acts in is
- *   its team; a pin of a team it does not act in, or the pin Keep it set aside, is none, and then a sign-in in one team is
- *   bound to it now, and one in several is offered them. Where its teams could not be read a pin stands and nothing is
- *   bound; with its team picked afresh, nothing is read in the pin set aside;
+ *   its team; a pin of a team it does not act in, one Reply has just refused, or the pin Keep it set aside, is none, and
+ *   then a sign-in in one team is bound to it now, and one in several is offered them. Where its teams could not be read
+ *   a pin stands and nothing is bound; with its team picked afresh, nothing is read in the pin set aside;
  * - noted, and who it is cannot be known: the Reply CLI does not name it, and it has no pin it acts in to be asked in. That
  *   is a change, and until it is answered it has no team and nothing is listed. Where it could be asked and the answer did
  *   not come, nothing is decided and nothing listed;
@@ -120,7 +143,7 @@ export function bindingOf(seen: SignInSeen, noted: Noted): Binding {
     const unbound = (change: Change | null): Binding => ({ team: null, bind: null, choose: null, lists: false, change });
 
     if (noted === null || noted === 'fresh') {
-        const pin = noted === 'fresh' ? null : seen.pin;
+        const pin = noted === 'fresh' || seen.refused ? null : seen.pin;
         if (own === null) return pin !== null ? bound({ id: pin, name: null }) : noted === null ? bound(null) : unbound(null);
         const pinned = ownTeam(pin);
         if (pinned !== undefined) return bound(pinned);
