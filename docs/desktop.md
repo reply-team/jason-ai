@@ -625,8 +625,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   One account is the default, marked **Default**: the one the global default route names, which every campaign with no
   route of its own sends through. **Make default** on any other card makes it the default, replacing the default there
   was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the
-  account that would be, and changes nothing where the default changed while you were asked. The runtime writes the
-  route (`jason route set --global`, journaled as yours) and refuses it, and the card says why, while a search still
+  account that would be, and changes nothing where the default changed meanwhile. The runtime writes the
+  route (`jason route set --global`, journaled as yours, with a reason that tells a click on Make default from a default
+  made at a sign-in) and refuses it, and the card says why, while a search still
   followed or a send Reply holds for later runs on the account that is the default now, or for a profile name the
   settings file cannot hold as written. The global default cannot name a team, so a card with a team offers no Make
   default, and a campaign is routed to such an account with `jason route set`. Every other route, a campaign's own or an
@@ -634,7 +635,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first sign-in on a
   card where no default is set, which makes that account the default (an account with a team aside), or at Make
   default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
-  it fetches nothing and leaves the settings file to the runtime. A sign-in where a default is set leaves it as it is.
+  it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a Reply CLI
+  installed or updated outside Jason Desktop, is loaded again. A sign-in where a default is set leaves it as it is.
+  A sign-in or a key that is refused is said on the card it was asked on; a sign-in that went through and could not
+  place the plugin says that first, then the refusing program's own words.
   A card signs its own profile in, with `reply auth login` or with a key on standard input that only the Reply CLI
   keeps; a profile only a route names is made in the Reply CLI first (`reply profile add`), and a profile the Reply CLI
   holds never is. A card says "configured" when the runtime accepted it, never "connected". What the desktop tells
