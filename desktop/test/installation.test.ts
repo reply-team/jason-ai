@@ -268,6 +268,23 @@ test('not signed in to Reply, or no Reply CLI, a start runs no install of the Re
     await start(out);
     assert.equal(replySkillCalls(out).length, 0);
     assert.ok(!existsSync(replyRecordFile(out)));
+    // Signed in is any profile the Reply CLI holds, each asked by its name, as the cards read them: the profile the CLI
+    // is set to decides nothing. Here it is set to one with no sign-in, and another holds one.
+    const world = join(out.root, 'reply-world.json');
+    writeFileSync(world, JSON.stringify({ current: 'quiet', profiles: { quiet: {}, outbound: {} }, credentials: { outbound: 'bea@example.test' } }));
+    const other = bench(t, { programs: ['reply'], env: { STUB_REPLY_WORLD: world } });
+    runtimeAlreadyUp(other);
+    await start(other);
+    assert.equal(replySkillCalls(other).length, 1, 'deployed for the profile that is signed in');
+    assert.deepEqual(
+        other.record().filter((entry) => entry.name === 'reply' && entry.args.includes('status')).map((entry) => entry.args.join(' ')),
+        ['--profile default auth status --json', '--profile quiet auth status --json', '--profile outbound auth status --json'],
+    );
+    writeFileSync(world, JSON.stringify({ current: 'outbound', profiles: { outbound: {} }, credentials: {} }));
+    const nobody = bench(t, { programs: ['reply'], env: { STUB_REPLY_WORLD: world } });
+    runtimeAlreadyUp(nobody);
+    await start(nobody);
+    assert.equal(replySkillCalls(nobody).length, 0, 'no profile signed in');
     const none = bench(t);
     runtimeAlreadyUp(none);
     await start(none);

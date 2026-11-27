@@ -103,6 +103,7 @@ import {
     pluginRuntimes,
     programInstalls,
     replyMinimumVersion,
+    replyPlacement,
     replyPluginValid,
     Refused,
     versionAtLeast,
@@ -1128,7 +1129,7 @@ export class Setup {
             const account = await this.#signingIn(named);
             const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(accountSentences.signInRefused);
+            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
             await this.#signedIn(account);
         });
     }
@@ -1141,7 +1142,7 @@ export class Setup {
             const account = await this.#signingIn(named);
             const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(accountSentences.keyRefused);
+            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not accept that key.'));
             await this.#signedIn(account);
         });
     }
@@ -1149,11 +1150,18 @@ export class Setup {
     /**
      * The account a sign-in is for, as the last read listed it, with its profile in the Reply CLI: a profile only a route
      * names is made there first (`reply profile add`), and only where the CLI, asked again now, does not hold it, since an
-     * add of a name it holds would replace that profile's settings without a word.
+     * add of a name it holds would replace that profile's settings without a word. With no account named and none listed,
+     * as a page of an earlier version asks, the refusal says why there is none.
      */
     async #signingIn(named: unknown): Promise<AccountRef> {
         const account = this.#accountOf(named);
-        if (account === null) throw new Refused(accountSentences.badAccount);
+        if (account === null && named !== undefined) throw new Refused(accountSentences.badAccount);
+        if (account === null) {
+            if (this.#deps.programs.find('reply') === null) throw new Refused(accountSentences.cliMissing);
+            const version = await this.#replyVersion();
+            if (version === null || !versionAtLeast(version, replyMinimumVersion)) throw new Refused(belowMinimumSentence(replyMinimumVersion));
+            throw new Refused(accountSentences.profilesUnread);
+        }
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
         if (profiles === null) throw new Refused(accountSentences.profilesUnread);
         if (!profiles.available.includes(account.name)) {
@@ -1174,23 +1182,50 @@ export class Setup {
     }
 
     /**
-     * Places Jason's Reply plugin with the CLI and grants it the Reply CLI, as the golden path does by hand; then, where the
-     * routes name no global default at all, has the runtime name the account signed in that default, as Make default does.
-     * A default already set, whatever its plugin, is left as it is.
+     * Places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no global default at
+     * all, has the runtime name the account signed in that default, as Make default does. A default already set, whatever
+     * its plugin, is left as it is, and so is one an account with a team cannot be, since the global default cannot name a
+     * team: the section then says that no account is the default yet. Routes that could not be read are said.
      */
     async #wireReply(account: AccountRef): Promise<void> {
-        await this.#placeReply();
+        await this.#placeMissing('program');
+        if (account.team !== null) {
+            this.#deps.log.info('reply_wired', { Default: 'team' });
+            return;
+        }
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null)) === null ? 'made' : 'refused';
         this.#deps.log.info('reply_wired', { Default: outcome });
+        if (outcome === 'unread') throw new Refused(accountSentences.routesUnreadAtSignIn);
         if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
     }
 
-    /** Jason's Reply plugin placed and granted the Reply CLI, and the runtime's plugins loaded again; a refusal is thrown. */
-    async #placeReply(): Promise<void> {
-        await this.#placeAndEdit('reply', withReplyGranted);
+    /**
+     * Jason's Reply plugin placed and granted the Reply CLI where either is missing, as `jason plugin list` answers it now:
+     * the package fetched with `jason plugin install` only where the runtime lists none, the grant written only where it
+     * does not hold `reply`, and the plugins loaded again only where either was. So an installation where the plugin is
+     * listed and granted asks no release feed, and its settings file is neither read nor written by the desktop, one with
+     * comments included. A list the runtime did not give places both, as a sign-in always did. A refusal is thrown in the
+     * words of the program that refused (`program`, a sign-in's, as on release 51.2) or in the desktop's own sentence
+     * (`desktop`, Make default's); a settings file the desktop cannot parse is refused in its own words either way.
+     */
+    async #placeMissing(say: 'program' | 'desktop'): Promise<void> {
+        const placement = replyPlacement(await this.#deps.cli.run(['plugin', 'list']));
+        const placed = placement?.placed === true;
+        const granted = placement?.granted === true;
+        if (placed && granted) return;
+        // A file the edit cannot keep is refused before anything is fetched.
+        if (!granted) this.#readForEdit();
+        if (!placed) {
+            const install = await this.#deps.cli.run(['plugin', 'install', 'reply', ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
+            if (install.exit !== 0) throw new Refused(say === 'program' ? words(install, 'jason plugin install reply did not place the plugin.') : accountSentences.notPlaced);
+        }
+        if (!granted) {
+            const { file, settings } = this.#readForEdit();
+            writeAtomically(file, `${JSON.stringify(withReplyGranted(settings), null, 2)}\n`);
+        }
         const reload = await this.#reloadPlugins();
-        if (reload.exit !== 0) throw this.#reloadRefused(reload);
+        if (reload.exit !== 0) throw say === 'program' ? this.#reloadRefused(reload) : new Refused(accountSentences.notPlaced);
     }
 
     /**
@@ -1210,43 +1245,45 @@ export class Setup {
     /**
      * Make default: the account named becomes the global default, replacing the default there was, whatever plugin it named.
      * Where one is set, the person is asked first in the main process's own box, which names it and the account that would
-     * be. Then Jason's Reply plugin and its grant are placed where they are missing, and the runtime names the account
-     * (`#setDefault`), keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence,
-     * and the runtime writes nothing it refuses.
+     * be; the box is asked before the queue the setup's other changes wait in, so none of them waits on the answer. Then,
+     * in that queue, the routes are read again: a default that is no longer the one the box named changes nothing. What is
+     * missing of the plugin and its grant is placed (`#placeMissing`), and the runtime names the account (`#setDefault`),
+     * keeping of a Reply default before it `derive_first_name` alone. An account with a team is refused before anything,
+     * since the global default cannot name a team. A refusal is the desktop's sentence, and the runtime writes nothing it
+     * refuses.
      */
-    makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#serial(async () => {
-            const account = named === undefined ? null : this.#accountOf(named);
-            if (account === null) return refusal(accountSentences.badAccount);
-            const answer = await this.#makeDefault(account);
-            this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
-            this.#changed();
-            return answer;
-        });
+    async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return refusal(accountSentences.badAccount);
+        if (account.team !== null) return refusal(accountSentences.teamDefault);
+        const answer = await this.#makeDefault(account);
+        this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
+        this.#changed();
+        return answer;
     }
 
     async #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
         if (!usableAccount(this.#deps.account)) return refusal(accountSentences.noActor);
-        try {
-            this.#readForEdit();
-        } catch (error) {
-            if (error instanceof Refused) return refusal(error.message);
-            throw error;
-        }
-        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
-        if (routes === null) return refusal(accountSentences.routesUnread);
-        const was = routes.globalDefault;
-        const now = defaultAccount(routes, this.#current);
+        const asked = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        if (asked === null) return refusal(accountSentences.routesUnread);
+        const now = defaultAccount(asked, this.#current);
         if (now !== null && sameAccount(now, account)) return { done: true };
-        if (was !== null && !(await this.#confirmed(defaultBox(defaultWords(was, this.#current), accountNamed(account))))) return refusal(said.notConfirmed);
-        try {
-            await this.#placeReply();
-        } catch (error) {
-            if (error instanceof Refused) return refusal(accountSentences.notPlaced);
-            throw error;
+        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault, this.#current), accountNamed(account))))) {
+            return refusal(said.notConfirmed);
         }
-        const refused = await this.#setDefault(account, was);
-        return refused === null ? { done: true } : refusal(refused);
+        return this.#serial(async () => {
+            const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+            if (routes === null) return refusal(accountSentences.routesUnread);
+            if (JSON.stringify(routes.globalDefault) !== JSON.stringify(asked.globalDefault)) return refusal(accountSentences.changedMeanwhile);
+            try {
+                await this.#placeMissing('desktop');
+            } catch (error) {
+                if (error instanceof Refused) return refusal(error.message);
+                throw error;
+            }
+            const refused = await this.#setDefault(account, routes.globalDefault);
+            return refused === null ? { done: true } : refusal(refused);
+        });
     }
 
     /**

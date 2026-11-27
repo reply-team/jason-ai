@@ -66,17 +66,39 @@ test('every card that writes the settings file has its recorded bytes, and nothi
     assert.deepEqual([...recorded.keys()], rows.map((row) => row.card));
 });
 
+/**
+ * The route the Reply card wrote into the file before the stamp, as it wrote it, which the runtime writes now through its
+ * own writer of the file (`jason route set --global`): the bytes held of the Reply card are the recorded ones without it.
+ */
+const recordedRoute = ',\n    "Default": {\n      "Plugin": "reply",\n      "Binding": {\n        "profile": "default"\n      }\n    }';
+
 for (const row of rows) {
     test(`with no layout stamp, ${row.card} writes the settings file byte for byte as it did before the stamp`, async (t) => {
         const b = bench(t, { programs: ['reply'] });
         mkdirSync(dirname(settingsFile(b)), { recursive: true });
         writeFileSync(settingsFile(b), written);
-        // A card's click follows a read of what it shows: the Reply sign-in names an account that read listed. The
-        // default it makes is the runtime's to write, through its one writer of the file, as the desktop wrote it then.
-        const setup = setupOn(b);
+        // What the desktop wrote is held as the file stands when the runtime is asked for the default, before the
+        // stand-in's `route set` writes the file whole in a form of its own; a card that asks for none is held at its end.
+        let desktopWrote: string | null = null;
+        const cli = {
+            run: (args: readonly string[], options?: Parameters<Bench['cli']['run']>[1]) => {
+                if (args[0] === 'route' && args[1] === 'set') desktopWrote = readFileSync(settingsFile(b), 'utf8');
+                return b.cli.run(args, options);
+            },
+        };
+        // A card's click follows a read of what it shows: the Reply sign-in names an account that read listed.
+        const setup = setupOn({ ...b, cli });
         await setup.status();
         await row.act(setup);
-        assert.equal(readFileSync(settingsFile(b), 'utf8'), recorded.get(row.card));
+        const recordedBytes = recorded.get(row.card) ?? '';
+        if (row.card === 'Reply, after a sign-in') {
+            assert.ok(recordedBytes.includes(recordedRoute), 'the recording holds the route the card wrote then');
+            assert.notEqual(desktopWrote, null, 'the runtime was asked for the default');
+            assert.equal(desktopWrote, recordedBytes.replace(recordedRoute, ''));
+        } else {
+            assert.equal(desktopWrote, null);
+            assert.equal(readFileSync(settingsFile(b), 'utf8'), recordedBytes);
+        }
     });
 }
 

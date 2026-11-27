@@ -17,12 +17,31 @@ const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 /** The name a key has in an object, matched in any letter case as the runtime's configuration reads it; `name` where none. */
 const keyOf = (object, name) => Object.keys(object ?? {}).find((key) => key.toLowerCase() === name.toLowerCase()) ?? name;
 
+/**
+ * The installation's settings file as the runtime reads it, comments and trailing commas allowed (the stand-in drops a
+ * line's `//` comment and a comma before a closing bracket, which is all the tests write); none where it is not there.
+ */
+function settingsRead() {
+    try {
+        const text = readFileSync(join(data, 'config', 'settings.json'), 'utf8');
+        return JSON.parse(text.replace(/^\s*\/\/.*$/gm, '').replace(/\/\/[^"\n]*$/gm, '').replace(/,(\s*[}\]])/g, '$1'));
+    } catch {
+        return {};
+    }
+}
+
+/** The programs `Plugins:Grants:reply:Exec` grants Jason's Reply plugin, as the runtime's load resolves the grant. */
+function replyExecGranted() {
+    const plugins = settingsRead()[keyOf(settingsRead(), 'Plugins')] ?? {};
+    const grants = plugins[keyOf(plugins, 'Grants')] ?? {};
+    const reply = grants[keyOf(grants, 'reply')] ?? {};
+    const exec = reply[keyOf(reply, 'Exec')];
+    return Array.isArray(exec) ? exec : [];
+}
+
 /** The routes as the runtime answers `route.list`: the settings file's global default, and STUB_CAMPAIGN_ROUTES's campaigns. */
 function routesAnswer() {
-    let settings = {};
-    try {
-        settings = JSON.parse(readFileSync(join(data, 'config', 'settings.json'), 'utf8'));
-    } catch {}
+    const settings = settingsRead();
     const routes = settings[keyOf(settings, 'Routes')];
     const route = routes && routes[keyOf(routes, 'Default')];
     const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
@@ -85,11 +104,13 @@ if (args[0] === 'status') {
         process.exit(0);
     }
     const granted = (http, env) => ({ exec: null, http: { requested: [], granted: http }, env: { requested: [], granted: env }, api: null, subscriptions: null });
-    // STUB_REPLY_PLUGIN=<status> lists the Reply plugin in that state; =absent lists none.
+    // STUB_REPLY_PLUGIN=<status> lists the Reply plugin in that state; =absent lists none. Its Exec grant is the one the
+    // settings file holds, as the last load resolved it.
     const replyStatus = process.env.STUB_REPLY_PLUGIN || 'valid';
+    const replyExec = { requested: [{ name: 'reply', path: '<bin>/reply', version: '0.23.2', min_version: '0.23.2', launch: null }], granted: replyExecGranted() };
     print({
         plugins: [
-            ...(replyStatus === 'absent' ? [] : [{ id: 'reply', status: replyStatus, capabilities: granted([], []) }]),
+            ...(replyStatus === 'absent' ? [] : [{ id: 'reply', status: replyStatus, capabilities: { ...granted([], []), exec: replyExec } }]),
             { id: 'slack', status: 'valid', capabilities: granted(['slack.com'], ['SLACK_PROXY']) },
             { id: 'ntfy', status: 'invalid', capabilities: granted([], []) },
         ],
@@ -103,6 +124,10 @@ if (args[0] === 'status') {
             details: [{ field: 'settings.json', code: 'settings_file_unreadable', message: 'the settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.' }],
         },
     });
+    process.exit(1);
+} else if (verb === 'plugin install' && process.env.STUB_PLUGIN_INSTALL_FAILS === 'yes') {
+    // A release feed that does not answer: the package is not fetched, and nothing is placed.
+    process.stderr.write('The release could not be reached.\n');
     process.exit(1);
 } else if (verb === 'ui install' && process.env.STUB_UI_INSTALL_FAILS === 'yes') {
     process.stderr.write('The release could not be reached.\n');
@@ -128,9 +153,11 @@ if (args[0] === 'status') {
 } else if (verb === 'route set') {
     // `route set --global`, as the runtime's route.set takes it: refused before anything is written as STUB_ROUTE_SET
     // names ({"code", "details"?, "exit"?}; exit 3 is no runtime answering), or for a binding the settings file cannot keep
-    // as written (validation_failed, its detail not_representable_globally); else the route written into the settings file
-    // through its one writer, every other key kept, and the routes answered. The CLI itself refuses a change of route
-    // that names nobody who made it.
+    // as written (validation_failed, its detail not_representable_globally); else the route written into the settings
+    // file and the routes answered. The CLI itself refuses a change of route that names nobody who made it. The file's
+    // bytes after it are the stand-in's, not the runtime's: the stand-in writes the whole file again, pretty-printed and
+    // without its comments, where the runtime's one writer of the file edits the members it owns in place and keeps every
+    // other byte. A test holds the desktop's own bytes before this write, never after it.
     const option = (flag) => (args.indexOf(flag) >= 0 ? args[args.indexOf(flag) + 1] : undefined);
     if (!args.includes('--global') || option('--plugin') === undefined) {
         process.stderr.write('The stub answers route set --global alone.\n');
@@ -153,10 +180,7 @@ if (args[0] === 'status') {
         process.exit(1);
     }
     const file = join(data, 'config', 'settings.json');
-    let settings = {};
-    try {
-        settings = JSON.parse(readFileSync(file, 'utf8'));
-    } catch {}
+    const settings = settingsRead();
     const routesKey = keyOf(settings, 'Routes');
     const routes = settings[routesKey] ?? {};
     settings[routesKey] = { ...routes, [keyOf(routes, 'Default')]: { Plugin: option('--plugin'), ...(binding === null ? {} : { Binding: binding }) } };

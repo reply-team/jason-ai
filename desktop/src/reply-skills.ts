@@ -10,6 +10,7 @@ import { ownAgentFolder, realSkillsFolder, recordReplySkills, replyRecord, skill
 import type { Logger } from './log.ts';
 import type { DesktopPaths } from './paths.ts';
 import type { Programs, RunResult } from './programs.ts';
+import { accountArguments, readProfiles } from './accounts.ts';
 import { parseReplyAuth } from './setup-model.ts';
 
 /** How the routine runs the Reply CLI: by its verb's words, for the log, and its arguments. */
@@ -51,9 +52,11 @@ export async function deployReplySkills(run: RunReply, paths: DesktopPaths, ownC
 
 /**
  * At the start, in the step that deploys Jason's skills: when no record of the Reply skills is kept, the Reply CLI is on
- * the PATH and `reply auth status` says it is signed in, the Reply skills are deployed and recorded as the sign-in does.
- * Soft: a failure is logged by its exit code and the start goes on without them, and the next start tries again, since
- * the record is still absent. Not signed in, or no Reply CLI: nothing is run past the status, and nothing is recorded.
+ * the PATH and any profile it holds is signed in, each asked by its name (`reply --profile <name> auth status`) as the
+ * cards read them, so the profile the CLI is set to decides nothing, the Reply skills are deployed and recorded as the
+ * sign-in does. Soft: a failure is logged by its exit code and the start goes on without them, and the next start tries
+ * again, since the record is still absent. No profile signed in, profiles that could not be read, or no Reply CLI:
+ * nothing is run past the reads, and nothing is recorded.
  */
 export async function replySkillsAtStart(programs: Pick<Programs, 'find' | 'run'>, paths: DesktopPaths, log: Logger): Promise<void> {
     if (existsSync(join(paths.skillsRecords, replyRecord))) return;
@@ -65,8 +68,14 @@ export async function replySkillsAtStart(programs: Pick<Programs, 'find' | 'run'
         return result;
     };
     try {
-        const status = await run('auth status', ['auth', 'status', '--json'], { timeoutMs: 30_000 });
-        if (!parseReplyAuth(status.stdout).signedIn) return;
+        const profiles = readProfiles(await run('profile list', ['profile', 'list', '--json'], { timeoutMs: 30_000 }));
+        let signedIn = false;
+        for (const name of profiles?.available ?? []) {
+            const status = await run('auth status', [...accountArguments({ type: 'reply', name, team: null }), 'auth', 'status', '--json'], { timeoutMs: 30_000 });
+            signedIn = parseReplyAuth(status.stdout).signedIn;
+            if (signedIn) break;
+        }
+        if (!signedIn) return;
         const exit = await deployReplySkills(run, paths);
         log.info('skills_deployed', { Target: 'chat_reply', Exit: exit });
     } catch {

@@ -597,6 +597,25 @@ export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
 }
 
 /**
+ * What of Jason's Reply plugin is in place, as `jason plugin list` answered: whether the runtime lists its package, in any
+ * state, and whether its Exec grant holds the Reply CLI (`capabilities.exec.granted`, as the load resolved the grant).
+ * Null where the runtime gave no list.
+ */
+export function replyPlacement(result: { exit: number; stdout: string }): { placed: boolean; granted: boolean } | null {
+    if (result.exit !== 0) return null;
+    let raw: { plugins?: unknown } | null;
+    try {
+        raw = JSON.parse(result.stdout) as { plugins?: unknown } | null;
+    } catch {
+        return null;
+    }
+    if (!Array.isArray(raw?.plugins)) return null;
+    const reply = (raw.plugins as { id?: unknown; capabilities?: { exec?: { granted?: unknown } | null } | null }[]).find((plugin) => plugin?.id === 'reply');
+    const granted = reply?.capabilities?.exec?.granted;
+    return { placed: reply !== undefined, granted: Array.isArray(granted) && granted.includes('reply') };
+}
+
+/**
  * Whether the runtime holds Jason's Reply plugin valid, as `jason plugin list` answered: false for one it lists in another
  * state or does not list; null where it gave no list (an exit other than 0, or no `plugins` list printed).
  */
