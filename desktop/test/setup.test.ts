@@ -389,11 +389,12 @@ test('the accounts are every profile the Reply CLI holds and every profile a rou
     const route = (stdout: string) => readRoutes({ exit: 0, stdout })!;
     const named = (name: string) => ({ type: 'reply', name });
     const cli = { current: 'outbound', available: ['default', 'outbound', 'quiet'] };
-    const listing = (accounts: string[], fallback: string | null, routed: string[] | null, defaultFor: [string, unknown[]][] = []) => ({
+    const listing = (accounts: string[], fallback: string | null, routed: string[] | null, defaultFor: [string, unknown[]][] = [], followed: string | null = null) => ({
         accounts: accounts.map(named),
         default: fallback === null ? null : named(fallback),
         routed: routed === null ? null : new Set(routed),
         defaultFor: new Map(defaultFor),
+        followed,
     });
     // Each global route to Reply but the default marks the account it names, one that names no profile the CLI's current one.
     assert.deepEqual(
@@ -401,12 +402,12 @@ test('the accounts are every profile the Reply CLI holds and every profile a rou
         listing(['default', 'outbound', 'quiet', 'research', 'Made-up Ops'], null, ['research', 'outbound', 'Made-up Ops'], [
             ['research', [{ kind: 'operation', operation: 'contact.find' }]],
             ['outbound', [{ kind: 'operation', operation: 'sender.list' }, { kind: 'channel', operation: 'message.send', channel: 'email' }]],
-        ]),
-        'a global default to another plugin marks no Reply account',
+        ], 'outbound'),
+        'a global default to another plugin marks no Reply account; the routes that name no profile follow the current one',
     );
     assert.deepEqual(accountsOf(cli, route(routeList(replyRoute({ profile: 'research' })))), listing(['research', 'default', 'outbound', 'quiet'], 'research', ['research']), 'the default is the binding’s account, held by the CLI or not');
-    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound', ['outbound']), 'a default that names no profile is the profile the CLI is set to');
-    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet', ['quiet']), 'and moves with it');
+    assert.deepEqual(accountsOf(cli, route(routeList(replyRoute(null)))), listing(['outbound', 'default', 'quiet'], 'outbound', ['outbound'], [], 'outbound'), 'a default that names no profile is the profile the CLI is set to, which it follows');
+    assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet', ['quiet'], [], 'quiet'), 'and moves with it');
     const teamed = [{ campaign_id: 'cmp_9', default: replyRoute({ profile: 'quiet', team_id: '7' }), operations: {}, channels: {} }];
     assert.deepEqual(accountsOf(cli, route(routeList(null, teamed))), listing(['default', 'outbound', 'quiet'], null, ['quiet']), 'a team in a binding is no part of the account');
     assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null, null), 'routes not read: the CLI’s profiles, none marked, and which a route names not known');
@@ -960,7 +961,7 @@ test('Sign out asks first in the desktop’s own box, naming the Reply account, 
     assert.deepEqual(await refused.signOut(outbound), no('The Reply CLI did not sign it out. Could not write the credential store.', 'store.write', true));
 });
 
-test('Remove, never for the Reply CLI’s own default, asks first in the desktop’s own box, naming the Reply account, saying that the Reply CLI itself deletes its profile and sign-in and, where a route names it, that campaigns sending through it stop and its card stays; on a yes it deletes that profile and changes no route', async (t) => {
+test('Remove, never for the Reply CLI’s own default nor for the account a route that names no profile follows, asks first in the desktop’s own box, naming the Reply account, saying that the Reply CLI itself deletes its profile and sign-in and, where a route names it, that campaigns sending through it stop and its card stays; on a yes it deletes that profile and changes no route', async (t) => {
     const boxes: ReplyBox[] = [];
     let yes = false;
     const b = replyBench(t, {
@@ -983,7 +984,7 @@ test('Remove, never for the Reply CLI’s own default, asks first in the desktop
     yes = true;
     from = b.record().length;
     assert.deepEqual(await setup.removeAccount(outbound), { done: true });
-    assert.deepEqual(b.record().slice(from).filter((entry) => entry.name === 'reply').map((entry) => entry.args), [['profile', 'delete', 'outbound', '--yes', '--json']]);
+    assert.deepEqual(b.record().slice(from).filter((entry) => entry.name === 'reply').map((entry) => entry.args), [['profile', 'list', '--json'], ['profile', 'delete', 'outbound', '--yes', '--json']]);
     assert.deepEqual([b.world().profiles, b.world().credentials], [{ default: { team_id: 3 }, spare: { team_id: 4 } }, { default: 'ada@example.test', spare: 'cy@example.test' }]);
     // A route names it, so its card stays, not signed in; one no route names is told nothing of campaigns, and goes.
     await setup.removeAccount({ type: 'reply', name: 'spare' });
@@ -1003,6 +1004,29 @@ test('Remove, never for the Reply CLI’s own default, asks first in the desktop
     const refused = new Setup({ ...setupDeps(refusing), confirm: () => Promise.resolve(true) });
     await refused.status();
     assert.deepEqual(await refused.removeAccount({ type: 'reply', name: 'spare' }), no('The Reply CLI did not remove the profile. Could not write the configuration.', 'config.write', true));
+    // A route that names no profile follows the Reply CLI's current profile, and `reply profile delete` of that profile
+    // resets the current one to `default`: such a route would then send as `default`'s login. That account is not removed,
+    // before any box, whether the last read showed it so or the Reply CLI, asked again, says so now; its Sign out stays.
+    const followedBy = 'A route of Jason’s follows this Reply account as the Reply CLI’s current profile, and removing it would move that route to another Reply account, so nothing was removed.';
+    const following = replyBench(t, {
+        current: 'outbound',
+        profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, quiet: {} },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+    });
+    writeInstallationSettings(following, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply' } } });
+    const followedBoxes: ReplyBox[] = [];
+    const follows = new Setup({ ...setupDeps(following), confirm: (each) => (followedBoxes.push(each), Promise.resolve(true)) });
+    const read = (await follows.status()).accounts?.accounts.map((each) => `${each.name} ${each.default ? 'default' : '-'} ${each.followed ? 'followed' : '-'}`);
+    assert.deepEqual(read, ['outbound default followed', 'default - -', 'quiet - -']);
+    from = following.record().length;
+    assert.deepEqual(await follows.removeAccount(outbound), no(followedBy));
+    // The last read showed `quiet` as no one's; a terminal's `reply profile use quiet` makes it the current profile meanwhile.
+    writeFileSync(following.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...following.world(), current: 'quiet' }));
+    assert.deepEqual(await follows.removeAccount({ type: 'reply', name: 'quiet' }), no(followedBy, null, true));
+    assert.deepEqual([followedBoxes, runsAfter(following, from, 'reply').filter((run) => run.startsWith('profile delete'))], [[], []]);
+    assert.deepEqual(Object.keys(following.world().profiles ?? {}), ['default', 'outbound', 'quiet']);
+    assert.equal(following.world().credentials?.['outbound'], 'bea@example.test');
 });
 
 test('the desktop notes who each Reply account was last signed in as, and in which team, in a file of its own: at the look that finds it signed in and bound with nothing noted, and at Keep it; a look that finds another login or team says what it was, at every look until Keep it; a sign-out keeps the note, a removal forgets it, and the note never decides which accounts there are', async (t) => {
@@ -1435,7 +1459,7 @@ test('each account is read under its own profile’s name alone, a profile only 
     const setup = setupOn(b);
     const { accounts } = await setup.status();
     const state = (name: string, over: Record<string, unknown>) => ({
-        type: 'reply', name, default: false, defaultFor: [], held: true, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false, ...over,
+        type: 'reply', name, default: false, defaultFor: [], held: true, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false, ...over,
     });
     const bea = { signedIn: true, user: 'bea@example.test' };
     const asListed = (row: typeof mailbox) => ({ id: String(row.id), channel: row.channel, name: row.name, address: row.address, status: row.reply_status });
@@ -1450,7 +1474,7 @@ test('each account is read under its own profile’s name alone, a profile only 
             // A second team is a second profile, pinned to it in the Reply CLI, and shown by its name.
             state('outbound-nine', { ...bea, defaultFor: [{ kind: 'operation', operation: 'contact.find' }], team: { id: '9', name: 'Made-up Nine' }, senders: [asListed(linkedIn)], lastSignIn: { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } } }),
             // The profile the CLI is set to is an account like any other, and the route naming no profile marks it.
-            state('quiet', { defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'email' }] }),
+            state('quiet', { defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'email' }], followed: true }),
             state('routed-only', { held: false }),
         ],
         notRead: [],

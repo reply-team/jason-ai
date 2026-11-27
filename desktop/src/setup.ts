@@ -17,6 +17,7 @@ import {
     accountSentences,
     defaultBinding,
     defaultReason,
+    followedProfile,
     signInReason,
     defaultRefusal,
     isAccountRef,
@@ -258,6 +259,11 @@ export interface AccountState extends AccountRef {
     defaultFor?: DefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
+    /**
+     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile:
+     * then it is not removed, since that would move the route to `default`'s login.
+     */
+    followed: boolean;
     signedIn: boolean;
     user: string | null;
     /**
@@ -942,6 +948,7 @@ export class Setup {
                 ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
                 default: listing?.default != null && sameAccount(account, listing.default),
                 defaultFor: listing?.defaultFor.get(account.name) ?? [],
+                followed: listing?.followed === account.name,
             })),
         );
         // Noted in the listing's order once every account is read, so the note is written in one order.
@@ -984,7 +991,7 @@ export class Setup {
      * nothing.
      */
     async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
-        const read: AccountState = { ...account, default: false, held, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
+        const read: AccountState = { ...account, default: false, held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
         if (!held) return read;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
         const auth = readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
@@ -1496,13 +1503,19 @@ export class Setup {
     /**
      * Remove, never for the Reply CLI's own profile `default`, on the person's yes to the box that names the Reply account
      * (`accountBox`): its profile and its sign-in deleted in the Reply CLI itself (`reply profile delete <name> --yes`).
-     * No route changes, so an account a route names keeps its card, not signed in.
+     * No route changes, so an account a route names keeps its card, not signed in. Never either for the account a route
+     * that names no profile follows, as the last read showed it or the Reply CLI and the routes, asked again before the box,
+     * say now: the delete would reset the CLI's current profile, and that route would send as another login.
      */
     removeAccount(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         if (account.name === 'default') return Promise.resolve(refusal(accountSentences.defaultKept));
+        if (account.followed) return Promise.resolve(refusal(accountSentences.followed));
         return this.#acting(async () => {
+            const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+            if (profiles !== null && followedProfile(profiles, routes) === account.name) return refusal(accountSentences.followed, true);
             if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
             const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
             this.#deps.log.info('reply_account_removed', { Exit: result.exit });

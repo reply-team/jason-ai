@@ -139,6 +139,8 @@ const account = {
     // Every other global route to Reply that names it: the kind, the operation and the channel, never a sentence.
     defaultFor: true,
     held: true,
+    // Whether a route that names no profile follows it as the Reply CLI's current profile, which Remove then refuses.
+    followed: true,
     signedIn: true,
     user: true,
     // The team it is bound to, its profile's pin, by its id and name.
@@ -312,6 +314,7 @@ describe('the desktop seam', () => {
             'default',
             'defaultFor',
             'held',
+            'followed',
             'signedIn',
             'user',
             'team',

@@ -608,6 +608,11 @@ export interface DesktopAccount extends DesktopAccountRef {
     defaultFor?: DesktopDefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
+    /**
+     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile:
+     * it is not removed then (`setup.removeAccount`), since that route would move to another Reply account.
+     */
+    followed: boolean;
     signedIn: boolean;
     /** The address the profile is signed in as; null when it is not. */
     user: string | null;

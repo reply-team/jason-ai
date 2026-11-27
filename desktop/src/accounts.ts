@@ -196,7 +196,17 @@ export interface Listing {
     routed: Set<string> | null;
     /** The marks of each account a global route to `reply` other than the default names, by its profile. */
     defaultFor: Map<string, DefaultFor[]>;
+    /** The profile a route that names none follows (`followedProfile`), or null. */
+    followed: string | null;
 }
+
+/**
+ * The profile a route to `reply` that names none follows: the one the Reply CLI is set to, where any such route is; null
+ * where none is, or the routes were not read. Removing that profile would reset the CLI's current profile to `default`, and
+ * move every such route to `default`'s login.
+ */
+export const followedProfile = (profiles: Profiles, routes: Routes | null): string | null =>
+    routes !== null && routes.reply.includes(null) ? profiles.current : null;
 
 /**
  * The accounts, one for each profile, the profiles only a route names in the order the routes name them, and the marks of
@@ -214,7 +224,7 @@ export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
         const name = profile ?? unnamed;
         defaultFor.set(name, [...(defaultFor.get(name) ?? []), mark]);
     }
-    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback, routed, defaultFor };
+    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback, routed, defaultFor, followed: followedProfile(profiles, routes) };
 }
 
 /**
@@ -256,6 +266,7 @@ export const accountSentences = {
     notSignedOut: 'The Reply CLI did not sign it out.',
     notRemoved: 'The Reply CLI did not remove the profile.',
     defaultKept: 'The Reply CLI’s own profile default is always there, so nothing was removed.',
+    followed: 'A route of Jason’s follows this Reply account as the Reply CLI’s current profile, and removing it would move that route to another Reply account, so nothing was removed.',
     nothingToKeep: 'That Reply account shows no change to keep.',
     notKept: 'Jason Desktop could not write its note of this Reply account, so nothing was changed.',
 } as const;

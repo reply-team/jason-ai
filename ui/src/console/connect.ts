@@ -113,6 +113,8 @@ interface AccountView {
     defaultFor: readonly DesktopDefaultFor[];
     /** Whether the Reply CLI holds its profile; false for one only a route names. */
     held: boolean;
+    /** Whether a route that names no profile follows it as the Reply CLI's current profile, so it is not removed. */
+    followed: boolean;
     signedIn: boolean;
     user: string | null;
     /** The team its sign-in is bound to; null where it is bound to none, or the desktop does not say. */
@@ -150,6 +152,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             isDefault: each.default === true,
             defaultFor: listOf(each.defaultFor),
             held: each.held === true,
+            followed: each.followed === true,
             signedIn: each.signedIn === true,
             user: each.user,
             team: each.team ?? null,
@@ -172,6 +175,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             isDefault: false,
             defaultFor: [],
             held: true,
+            followed: false,
             signedIn: reply.signedIn,
             user: reply.user,
             team: null,
@@ -1631,8 +1635,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
 
 /**
  * The acts on the card's account as a whole, beside its name: Sign in with Reply while it is not signed in, Sign out once it
- * is, and Remove where the Reply CLI holds its profile and it is not the Reply CLI's own `default`; each only where the
- * desktop has it.
+ * is, and Remove where the Reply CLI holds its profile, it is not the Reply CLI's own `default` and no route that names no
+ * profile follows it; each only where the desktop has it.
  */
 function accountActs(view: AccountView, place: Place, real: Html | null): Html[] {
     const signIn = signInButton(view, place, real);
@@ -1640,7 +1644,7 @@ function accountActs(view: AccountView, place: Place, real: Html | null): Html[]
     if (view.ref === null) return acts;
     if (view.signedIn && signsOut())
         acts.push(html`<button class="btn" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>`);
-    if (view.held && view.ref.name !== 'default' && removesAccount())
+    if (view.held && !view.followed && view.ref.name !== 'default' && removesAccount())
         acts.push(
             html`<button class="btn" type="button" ${real} ${act('connect.removeAccount', place)}>Remove</button>`,
         );

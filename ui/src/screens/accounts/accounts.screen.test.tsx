@@ -691,18 +691,30 @@ describe('Reply accounts, one card per profile', () => {
     });
 
     it('offers Sign out on a signed-in card and Remove on a card whose profile the Reply CLI holds, never default’s, asks the desktop as that card’s account, and says on its card how it ended', async () => {
-        const four = withReplyAccounts(setupFound, [...three.accounts!.accounts, replyAccount('spare')]);
+        const four = withReplyAccounts(setupFound, [
+            ...three.accounts!.accounts,
+            replyAccount('spare'),
+            // The Reply CLI's current profile, which a route naming no profile follows: Remove would move that route.
+            replyAccount('quiet', { signedIn: true, user: 'cy@example.test', followed: true }),
+        ]);
         const desktop = inDesktop(four);
         const notRemoved = 'The Reply CLI did not remove the profile. Could not write the configuration.';
         desktop.actAnswers.set('setup.removeAccount', [{ ...refusal(notRemoved), reread: true }, { done: true }]);
         const page = await openAccounts('.reply-account');
         const card = (name: string) => cardOf(page, `Reply account ${name}`);
         const topActs = (name: string) => Array.from(card(name).querySelectorAll('.reply-top button'), words);
-        expect([topActs('default'), topActs('outbound'), topActs('routed-only'), topActs('spare')]).toEqual([
+        expect([
+            topActs('default'),
+            topActs('outbound'),
+            topActs('routed-only'),
+            topActs('spare'),
+            topActs('quiet'),
+        ]).toEqual([
             ['Sign out'],
             ['Sign out', 'Remove'],
             ['Sign in with Reply'],
             ['Sign in with Reply', 'Remove'],
+            ['Sign out'],
         ]);
         const outbound = { type: 'reply', name: 'outbound' };
         fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Sign out' }));
