@@ -638,25 +638,38 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   look that shows that Reply account's sign-in changed. A sign-in a card could not read is said on it ("The Reply
   sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in" only where the
   Reply CLI answers that the profile holds no credential, or does not hold the profile.
-  Every signed-in Reply account is bound to one Reply team, the one its profile pins in the Reply CLI, and its card says
-  it beside the sign-in ("Signed in as ada@example.com in Sales"), by the name Reply gives the team, else by its id.
-  Where the profile pins none, a sign-in that can act in one team is bound to it at the look that finds it (`reply team
-  use`), with no question, since it may have two tomorrow, and Jason Desktop's log says so; one that can act in several
-  is one Reply will not list: its card says so and shows the teams in place of its mailboxes and LinkedIn accounts, each
-  by its name with its id beside it, and **Choose** pins that team on the profile, with no question, since nothing is
-  lost by it. Nothing in the window changes a pinned team, and no page says how it is changed elsewhere: a pick for a
-  Reply account bound already is refused. The teams are read at each look, beside the mailboxes and LinkedIn accounts;
-  where they could not be read, the card says so ("The teams of this sign-in could not be read.") with **Check again**,
-  its pinned team by its id and its other reads standing.
-  Jason Desktop notes, for each Reply account, the login and the team it last saw there, in a file of its own
-  (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the account signed in and bound with
-  nothing noted, and at **Keep it**; a removal takes the note away. The note decides nothing of which Reply accounts
-  there are or what a card lists. A card that is not signed in says who it was last signed in as. Where a look finds
-  another login or another team than the note says, after a sign-in on the card (the browser decides who signs in) or a
-  change made in a terminal, the card says what the Reply account was and what it is now, and that campaigns sending
-  through it now send as the new one, and offers **Keep it**, which makes the Reply account as it now is the noted one,
-  and **Sign out**, which keeps the note, so the card then says who it was. Until one is chosen the card says it at
-  every look, and lists the Reply account as it now is. Nothing prevents such a change: the Reply CLI is yours.
+  Every signed-in Reply account is bound to one Reply team, which its profile pins in the Reply CLI, and its card says
+  it beside the sign-in ("Signed in as ada@example.com in Sales"), by the name Reply gives the team, never by a number;
+  where no name can be known, it says that the team's name could not be read. A sign-in bound to none of its own teams,
+  whether its profile pins none or pins a team the sign-in is not in, is bound as a first sign-in is: one that can act
+  in one team is bound to it at the look that finds it (`reply team use`), with no question, since it may have two
+  tomorrow, and Jason Desktop's log says so; one that can act in several is one Reply will not list: its card says so
+  and shows the teams by their names in place of its mailboxes and LinkedIn accounts, and **Choose** pins that team on
+  the profile, with no question, since nothing is lost by it. Nothing in the window changes the team a sign-in is bound
+  to, and no page says how it is changed elsewhere: a pick for a Reply account bound already is refused. Where the Reply
+  CLI holds no login for a sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed
+  in, and once it is bound Jason Desktop asks the Reply CLI who it is (`reply auth whoami`); where that could not be
+  read, the card says so ("The login of this sign-in could not be read.") with **Check again**.
+  Jason Desktop notes, for each Reply account, the login and the team it last saw there, the team's name with it, in a
+  file of its own (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the account signed in,
+  bound and named with nothing noted, and at **Keep it**; a removal takes the note away. The note decides nothing of
+  which Reply accounts there are or what a card lists. A card that is not signed in says who it was last signed in as.
+  With no sign-in since, nothing is taken to have changed: a look that finds the noted login in the noted pinned team,
+  as the Reply CLI's own files give them, asks Reply for no teams and names the team from the note, and a sign-in the
+  Reply CLI holds no login for is taken as the noted one while its pin is the noted team. A sign-in is one made on the
+  card (the browser decides who signs in), one made in a terminal that the Reply CLI's files show as another login or
+  another pinned team, or one Reply gives away by refusing the Reply account's own read because the sign-in cannot act
+  in its pinned team. After it the teams are read and the Reply account is checked against the note. The same login,
+  still in the noted team, is said nothing of. Another login: the card says what the Reply account was and who it is
+  now, and that campaigns sending through it now send as the new one, and shows no team and lists nothing until you
+  answer. The noted login, or one the Reply CLI does not name, no longer in the noted team: the card says that the Reply
+  account was in that team and that this sign-in can no longer work in it, and lists nothing until you answer. The same
+  login in another of its teams: the card says what the Reply account was and is now, and lists it as it now is. Each
+  offers **Keep it** and **Sign out**, which keeps the note, so the card then says who it was. **Keep it** makes the
+  Reply account as it now is the noted one; after another login, or a team the sign-in is no longer in, it binds the
+  sign-in as a first sign-in is bound, then notes it. Until one is chosen the card says it at every look. Where the
+  teams could not be read, nothing is rebound: the card says so ("The teams of this sign-in could not be read.") with
+  **Check again**, its other reads standing. Nothing prevents such a change: the Reply CLI is yours.
   A signed-in card lists its Reply account's mailboxes and LinkedIn accounts, each channel read on its own, so a Reply
   account without LinkedIn still shows its mailboxes. A channel that Reply account's plan or role does not have says so
   ("This Reply account has no LinkedIn."), and one that could not be read says that and offers **Check again**; what the
@@ -688,25 +701,25 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   One Reply account is the default, marked **Default**: the one the global default route names, the route a campaign's
   work falls back to last. Every other global route to Jason's Reply plugin is marked on the card of the Reply account
   it names: "Default for LinkedIn" or "Default for email" for a channel's sends, and for any other work the operation's
-  name as Jason has it, with its channel where the route is one channel's ("Default for contact.find"). Where the routes
-  could not be read, the cards stay, none is marked and none offers Make default, and the Reply section says so ("Which
-  Reply account is the default could not be read."). Jason Desktop makes a default only where Jason has none, and never
-  replaces one: a campaign with no route of its own follows the default at every step, so another default would carry
-  running campaigns with it, and whoever means that does it with `jason route set --global`. Where no default is set,
-  the first sign-in on a card makes that Reply account the default, and every card offers **Make default** until one is;
-  the Reply section says meanwhile that no Reply account is the default yet and that campaigns have nothing to send
-  through until you make one the default. A Make default that finds a default set, at its click or once it has placed
-  the plugin, changes nothing and says so, and so does a sign-in, whatever that default's plugin or binding. The runtime
-  writes the route (`jason route set --global`, by the Reply account's profile, journaled as yours, with a reason that
-  tells a click on Make default from a default made at a sign-in) and refuses it, and the card says why, for a profile
-  name the settings file cannot hold as written. Nothing is installed and no route is written without your click:
-  Jason's Reply plugin, its grant of the `reply` program and the first default appear at that first sign-in, or at Make
-  default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
-  it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a Reply CLI
-  installed or updated outside Jason Desktop, is loaded again. A placing that fails is said in Jason Desktop's sentence,
-  then the refusing program's reason. Every other route, a campaign's own or an operation's, is `jason route set`'s, and
-  no card makes one. No card on the Accounts screen, nor the one Reply card outside it, says who uses a Reply account:
-  which Reply account a campaign sends through is its routes', which `jason route resolve` answers.
+  name as Jason has it, with its channel where the route is one channel's ("Default for audience.search"). Where the
+  routes could not be read, the cards stay, none is marked and none offers Make default, and the Reply section says so
+  ("Which Reply account is the default could not be read."). Jason Desktop makes a default only where Jason has none,
+  and never replaces one: a campaign with no route of its own follows the default at every step, so another default
+  would carry running campaigns with it, and whoever means that does it with `jason route set --global`. Where no
+  default is set, the first sign-in on a card makes that Reply account the default, and every card offers **Make
+  default** until one is; the Reply section says meanwhile that no Reply account is the default yet and that campaigns
+  have nothing to send through until you make one the default. A Make default that finds a default set, at its click or
+  once it has placed the plugin, changes nothing and says so, and so does a sign-in, whatever that default's plugin or
+  binding. The runtime writes the route (`jason route set --global`, by the Reply account's profile, journaled as yours,
+  with a reason that tells a click on Make default from a default made at a sign-in) and refuses it, and the card says
+  why, for a profile name the settings file cannot hold as written. Nothing is installed and no route is written without
+  your click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at that first sign-in,
+  or at Make default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both
+  are there it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a
+  Reply CLI installed or updated outside Jason Desktop, is loaded again. A placing that fails is said in Jason Desktop's
+  sentence, then the refusing program's reason. Every other route, a campaign's own or an operation's, is `jason route
+  set`'s, and no card makes one. No card on the Accounts screen, nor the one Reply card outside it, says who uses a
+  Reply account: which Reply account a campaign sends through is its routes', which `jason route resolve` answers.
   A route to Jason's Reply plugin that names no profile acts as whichever profile the Reply CLI is set to when it runs,
   as the plugin runs it. Its Reply account is that profile's at each look: where the global default is such a route, the
   card of the Reply CLI's current profile carries the Default mark, whichever profile a `reply profile use` in a
