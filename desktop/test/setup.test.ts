@@ -414,7 +414,7 @@ test('the accounts are every profile the Reply CLI holds and every profile a rou
     assert.deepEqual(accountsOf({ ...cli, current: 'quiet' }, route(routeList(replyRoute({})))), listing(['quiet', 'default', 'outbound'], 'quiet', ['quiet'], [], 'quiet'), 'and moves with it');
     const teamed = [{ campaign_id: 'cmp_9', default: replyRoute({ profile: 'quiet', team_id: '7' }), operations: {}, channels: {} }];
     assert.deepEqual(accountsOf(cli, route(routeList(null, teamed))), listing(['default', 'outbound', 'quiet'], null, ['quiet']), 'a team in a binding is no part of the account');
-    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null, null), 'routes not read: the CLI’s profiles, none marked, and which a route names not known');
+    assert.deepEqual(accountsOf(cli, null), listing(['default', 'outbound', 'quiet'], null, null, [], 'outbound'), 'routes not read: the CLI’s profiles, none marked, which a route names not known, and the current one taken as followed');
     assert.deepEqual(accountsOf({ current: 'default', available: ['default'] }, route(routeList(null))), listing(['default'], null, []), 'a fresh installation: one account, no default, no route');
 });
 
@@ -1035,6 +1035,21 @@ test('Remove, never for the Reply CLI’s own default nor for the account a rout
     assert.deepEqual([followedBoxes, runsAfter(following, from, 'reply').filter((run) => run.startsWith('profile delete'))], [[], []]);
     assert.deepEqual(Object.keys(following.world().profiles ?? {}), ['default', 'outbound', 'quiet']);
     assert.equal(following.world().credentials?.['outbound'], 'bea@example.test');
+    // Where the routes could not be read, nothing tells whether such a route follows the Reply CLI's current profile, so
+    // that account is taken as followed: no Remove, as the last read showed it or as the Reply CLI says now, in a sentence
+    // that says why; any other account is removed as before.
+    const routesUnread = 'Jason’s routes could not be read, so Jason Desktop cannot tell whether one follows this Reply account as the Reply CLI’s current profile, and nothing was removed.';
+    writeFileSync(following.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...following.world(), current: 'outbound', profiles: { ...following.world().profiles, spare: {} } }));
+    following.env['STUB_ROUTE_LIST'] = 'unreachable';
+    const unread = (await follows.status()).accounts;
+    assert.deepEqual([unread?.notRead, unread?.accounts.map((each) => `${each.name} ${each.followed ? 'followed' : '-'}`)], [['routes'], ['default -', 'outbound followed', 'quiet -', 'spare -']]);
+    from = following.record().length;
+    assert.deepEqual(await follows.removeAccount(outbound), no(routesUnread));
+    writeFileSync(following.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...following.world(), current: 'quiet' }));
+    assert.deepEqual(await follows.removeAccount({ type: 'reply', name: 'quiet' }), no(routesUnread, null, true));
+    assert.deepEqual([followedBoxes, runsAfter(following, from, 'reply').filter((run) => run.startsWith('profile delete'))], [[], []]);
+    assert.deepEqual(await follows.removeAccount({ type: 'reply', name: 'spare' }), { done: true });
+    assert.deepEqual([followedBoxes.length, Object.keys(following.world().profiles ?? {})], [1, ['default', 'outbound', 'quiet']]);
 });
 
 test('the desktop notes who each Reply account was last signed in as, and in which team, in a file of its own: at the look that finds it signed in and bound with nothing noted, and at Keep it; a look that finds another login or team says what it was, at every look until Keep it; a sign-out keeps the note, a removal forgets it, and the note never decides which accounts there are', async (t) => {

@@ -757,6 +757,26 @@ describe('Reply accounts, one card per profile', () => {
             ['setup.removeAccount', outbound],
         ]);
         cleanup();
+        // Where the routes could not be read, the desktop takes the Reply CLI's current profile as followed: its card
+        // offers no Remove, and every other card whose profile the Reply CLI holds still does.
+        inDesktop(
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', { signedIn: true, user: 'ada@example.test' }),
+                    replyAccount('outbound', { signedIn: true, user: 'bea@example.test', followed: true }),
+                    replyAccount('spare'),
+                ],
+                { notRead: ['routes'] },
+            ),
+        );
+        const unread = await openAccounts('.reply-account');
+        expect(
+            ['default', 'outbound', 'spare'].map((name) =>
+                Array.from(cardOf(unread, `Reply account ${name}`).querySelectorAll('.reply-top button'), words),
+            ),
+        ).toEqual([['Sign out'], ['Sign out'], ['Sign in with Reply', 'Remove']]);
+        cleanup();
         // A desktop of an earlier version, without them, is asked for neither.
         const older = chatDesktop(four);
         delete (older.setup as Partial<typeof older.setup>).signOut;

@@ -201,12 +201,12 @@ export interface Listing {
 }
 
 /**
- * The profile a route to `reply` that names none follows: the one the Reply CLI is set to, where any such route is; null
- * where none is, or the routes were not read. Removing that profile would reset the CLI's current profile to `default`, and
- * move every such route to `default`'s login.
+ * The profile a route to `reply` that names none follows: the one the Reply CLI is set to, where any such route is, or
+ * where the routes were not read and so might be; null where none is. Removing that profile would reset the CLI's current
+ * profile to `default`, and move every such route to `default`'s login.
  */
 export const followedProfile = (profiles: Profiles, routes: Routes | null): string | null =>
-    routes !== null && routes.reply.includes(null) ? profiles.current : null;
+    routes === null || routes.reply.includes(null) ? profiles.current : null;
 
 /**
  * The accounts, one for each profile, the profiles only a route names in the order the routes name them, and the marks of
@@ -268,6 +268,7 @@ export const accountSentences = {
     defaultKept: 'The Reply CLI’s own profile default is always there, so nothing was removed.',
     notHeld: 'The Reply CLI holds no profile for this Reply account, so nothing was removed.',
     followed: 'A route of Jason’s follows this Reply account as the Reply CLI’s current profile, and removing it would move that route to another Reply account, so nothing was removed.',
+    followedUnread: 'Jason’s routes could not be read, so Jason Desktop cannot tell whether one follows this Reply account as the Reply CLI’s current profile, and nothing was removed.',
     nothingToKeep: 'That Reply account shows no change to keep.',
     notKept: 'Jason Desktop could not write its note of this Reply account, so nothing was changed.',
 } as const;

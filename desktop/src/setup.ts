@@ -259,8 +259,8 @@ export interface AccountState extends AccountRef {
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
     /**
-     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile:
-     * then it is not removed, since that would move the route to `default`'s login.
+     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile,
+     * or might, the routes not read: then it is not removed, since that would move the route to `default`'s login.
      */
     followed: boolean;
     signedIn: boolean;
@@ -1572,18 +1572,19 @@ export class Setup {
      * Reply CLI itself (`reply profile delete <name> --yes`). No route changes, so an account a route names keeps its
      * card, not signed in. Never either for the account a route that names no profile follows, as the last read showed it
      * or the Reply CLI and the routes, asked again before the box, say now: the delete would reset the CLI's current
-     * profile, and that route would send as another login.
+     * profile, and that route would send as another login. Where the routes could not be read, the current profile is
+     * taken as followed.
      */
     removeAccount(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         if (account.name === 'default') return Promise.resolve(refusal(accountSentences.defaultKept));
         if (!account.held) return Promise.resolve(refusal(accountSentences.notHeld));
-        if (account.followed) return Promise.resolve(refusal(accountSentences.followed));
+        if (account.followed) return Promise.resolve(refusal(this.#routed === null ? accountSentences.followedUnread : accountSentences.followed));
         return this.#acting(async () => {
             const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
             const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
-            if (profiles !== null && followedProfile(profiles, routes) === account.name) return refusal(accountSentences.followed, true);
+            if (profiles !== null && followedProfile(profiles, routes) === account.name) return refusal(routes === null ? accountSentences.followedUnread : accountSentences.followed, true);
             if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
             const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
             this.#deps.log.info('reply_account_removed', { Exit: result.exit });
