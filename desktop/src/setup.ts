@@ -254,10 +254,9 @@ export interface AccountState extends AccountRef {
     default: boolean;
     /**
      * Every other global route to Jason's Reply plugin that names it, as closed data: the operation it routes, and the
-     * channel where it is one channel's route; a route that names no profile names the Reply CLI's current one. Always
-     * sent; optional as the page reads it.
+     * channel where it is one channel's route; a route that names no profile names the Reply CLI's current one.
      */
-    defaultFor?: DefaultFor[];
+    defaultFor: DefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
     /**
@@ -270,9 +269,9 @@ export interface AccountState extends AccountRef {
     /**
      * The team the account is bound to, the one its profile pins in the Reply CLI, by its id and the name Reply gives it,
      * empty where it gives none or its teams could not be read; null while it is not signed in, or signed in and bound to
-     * none. Always sent; optional as the page reads it.
+     * none.
      */
-    team?: ReplyTeam | null;
+    team: ReplyTeam | null;
     senders: ReplySender[];
     absent: ReplyChannel[];
     unread: ReplyChannel[];
@@ -290,14 +289,14 @@ export interface AccountState extends AccountRef {
     teams?: ReplyTeam[];
     /**
      * Who the account was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is
-     * noted. Always sent; optional as the page reads it.
+     * noted.
      */
-    lastSignIn?: SignIn | null;
+    lastSignIn: SignIn | null;
     /**
      * Whether this look found it signed in as another login, or bound to another team, than the note says: so until Keep
-     * it, or a sign-out. Always sent; optional as the page reads it.
+     * it, or a sign-out.
      */
-    changed?: boolean;
+    changed: boolean;
 }
 
 /**
@@ -1000,7 +999,7 @@ export class Setup {
      * nothing.
      */
     async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
-        const read: AccountState = { ...account, default: false, held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
+        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false };
         if (!held) return read;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
         const auth = await this.#pinned(account);

@@ -603,9 +603,9 @@ export interface DesktopAccount extends DesktopAccountRef {
     default: boolean;
     /**
      * Every other global route to Jason's Reply plugin that names it, each a mark of its card; a route that names no profile
-     * names the Reply CLI's current one. Always sent by this desktop; optional as the page reads it.
+     * names the Reply CLI's current one.
      */
-    defaultFor?: DesktopDefaultFor[];
+    defaultFor: DesktopDefaultFor[];
     /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
     held: boolean;
     /**
@@ -618,10 +618,9 @@ export interface DesktopAccount extends DesktopAccountRef {
     user: string | null;
     /**
      * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it, empty where it
-     * gives none or the teams could not be read; null while it is not signed in, or signed in and bound to none. Always
-     * sent by this desktop; optional as the page reads it.
+     * gives none or the teams could not be read; null while it is not signed in, or signed in and bound to none.
      */
-    team?: DesktopReplyTeam | null;
+    team: DesktopReplyTeam | null;
     /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
     senders: DesktopReplySender[];
     /** As `DesktopReply`'s, of this account. */
@@ -641,14 +640,13 @@ export interface DesktopAccount extends DesktopAccountRef {
     teams?: DesktopReplyTeam[];
     /**
      * Who it was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is noted.
-     * Always sent by this desktop; optional as the page reads it.
      */
-    lastSignIn?: DesktopReplySignIn | null;
+    lastSignIn: DesktopReplySignIn | null;
     /**
      * Whether the last read found it signed in as another login, or bound to another team, than the note says: so until
-     * `setup.keepChange` or a sign-out. Always sent by this desktop; optional as the page reads it.
+     * `setup.keepChange` or a sign-out.
      */
-    changed?: boolean;
+    changed: boolean;
 }
 
 /**

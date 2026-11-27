@@ -228,6 +228,8 @@ export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): 
     pending: [],
     pendingUnread: [],
     notRead: [],
+    lastSignIn: null,
+    changed: false,
     ...over,
 });
 
