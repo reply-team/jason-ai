@@ -720,14 +720,15 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   Reply CLI holds, asked again just before, is refused under the field, and nothing is made: the Reply CLI would replace
   that profile's settings without a word. A signed-in card offers **Sign out**, and a card whose profile the Reply CLI
   holds offers **Remove**, but not on `default`, nor on the Reply CLI's current profile while a route to Jason's Reply
-  plugin names no profile: removing that profile would make `default` the current one, and such a route would send as
-  another login. Each asks first in a box of Jason Desktop's own that names the Reply account and says that it is done
-  in the Reply CLI itself, so `reply` in a terminal loses the sign-in, or the profile and its sign-in, too, and, where a
-  route names the Reply account, that campaigns sending through it stop; a removed Reply account a route names keeps its
-  card, not signed in. They run `reply --profile <name> auth logout` and `reply profile delete <name> --yes`, and change
-  no route. A refusal is said on the card in Jason Desktop's sentence, then the reason the Reply CLI gives. The acts on
-  a Reply account, these, its sign-ins, Choose, Make default, Keep it and the acts on its mailboxes and LinkedIn
-  accounts, run one at a time: one asked while another runs is refused, and the cards' acts are off meanwhile.
+  plugin names no profile, or while the routes could not be read, so one might: removing that profile would make
+  `default` the current one, and such a route would send as another login. Each asks first in a box of Jason Desktop's
+  own that names the Reply account and says that it is done in the Reply CLI itself, so `reply` in a terminal loses the
+  sign-in, or the profile and its sign-in, too, and, where a route names the Reply account, that campaigns sending
+  through it stop; a removed Reply account a route names keeps its card, not signed in. They run `reply --profile <name>
+  auth logout` and `reply profile delete <name> --yes`, and change no route. A refusal is said on the card in Jason
+  Desktop's sentence, then the reason the Reply CLI gives. The acts on a Reply account, these, its sign-ins, Choose,
+  Make default, Keep it and the acts on its mailboxes and LinkedIn accounts, run one at a time: one asked while another
+  runs is refused, and the cards' acts are off meanwhile.
   The acts that run the Reply CLI are offered only from the Reply CLI that has them. Below that version the Reply
   section says to update the Reply CLI and offers **Update**, where npm is there to update it with; a Reply CLI whose
   version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**, never
