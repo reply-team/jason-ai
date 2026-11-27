@@ -17,6 +17,7 @@ import { ProviderKeys } from '../src/providers.ts';
 import { npmLine, readUpdateSwitch, replyAtWork, replyStartCheck, runtimeReplyVersion, updateSwitch, versionUnsaid } from '../src/reply-update.ts';
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
+import type { Cli } from '../src/cli.ts';
 import { installLimit, Setup, writeAtomically, type SetupDeps } from '../src/setup.ts';
 import {
     bundledPlugin,
@@ -1277,7 +1278,7 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
 });
 
-test('Make default, only while Jason has no global default, places what is missing of the plugin and its grant and has the runtime name the account by its profile, under the person’s name, asking nothing; while a default is set, whatever its plugin or account, it is refused in the desktop’s sentence and nothing runs past the routes', async (t) => {
+test('Make default, only while Jason has no global default, places what is missing of the plugin and its grant, reads the routes again and has the runtime name the account by its profile, under the person’s name, asking nothing; while a default is set, whatever its plugin or account, at the click or by the time it is placed, it is refused in the desktop’s sentence and the runtime names nobody', async (t) => {
     const make = async (env: Record<string, string>, settings: unknown, options: { account?: string | null; named?: string } = {}) => {
         const b = replyBench(t, twoSignIns, env);
         writeInstallationSettings(b, settings);
@@ -1300,11 +1301,12 @@ test('Make default, only while Jason has no global default, places what is missi
     const set = `route set --global --plugin reply --binding {"profile":"outbound"} --actor human:made-up-person --reason ${defaultReason}`;
     const named = { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } };
     const granted = { Plugins: { Grants: { reply: { Exec: ['reply'] } } } };
-    // No default: what is missing is placed, as the plugin list says, then the runtime names the account by its profile.
-    assert.deepEqual(await make({ STUB_REPLY_PLUGIN: 'absent' }, {}), { answer: 'done', routes: named, runs: ['route list', 'plugin list', 'plugin install reply', 'plugin reload', set] });
-    assert.deepEqual((await make({}, {})).runs, ['route list', 'plugin list', 'plugin reload', set], 'listed and not granted: the grant alone, and its load');
-    assert.deepEqual((await make({ STUB_REPLY_PLUGIN: 'unavailable' }, granted)).runs, ['route list', 'plugin list', 'plugin reload', set], 'listed and granted, but not valid: the load alone');
-    assert.deepEqual((await make({}, granted)).runs, ['route list', 'plugin list', set], 'all in place: the route alone');
+    // No default: what is missing is placed, as the plugin list says, the routes read again, then the runtime names the
+    // account by its profile.
+    assert.deepEqual(await make({ STUB_REPLY_PLUGIN: 'absent' }, {}), { answer: 'done', routes: named, runs: ['route list', 'plugin list', 'plugin install reply', 'plugin reload', 'route list', set] });
+    assert.deepEqual((await make({}, {})).runs, ['route list', 'plugin list', 'plugin reload', 'route list', set], 'listed and not granted: the grant alone, and its load');
+    assert.deepEqual((await make({ STUB_REPLY_PLUGIN: 'unavailable' }, granted)).runs, ['route list', 'plugin list', 'plugin reload', 'route list', set], 'listed and granted, but not valid: the load alone');
+    assert.deepEqual((await make({}, granted)).runs, ['route list', 'plugin list', 'route list', set], 'all in place: the route alone');
     // A default set, whatever its plugin or binding, the account's own included, or set by the time of the click though the
     // last read showed none: refused, and nothing runs past the routes.
     const exists = 'Jason has a default already, and Jason Desktop does not move it, so nothing was changed.';
@@ -1322,6 +1324,23 @@ test('Make default, only while Jason has no global default, places what is missi
     await lateSetup.status();
     writeInstallationSettings(late, { ...granted, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     assert.deepEqual(await lateSetup.makeDefault({ type: 'reply', name: 'outbound' }), { refused: exists, code: null, offer: null, reread: false });
+    // Set while it placed: a terminal's `jason route set --global` lands while the package is fetched. Placed, and refused,
+    // and the default set meanwhile stays.
+    const placing = replyBench(t, twoSignIns, { STUB_REPLY_PLUGIN: 'absent' });
+    writeInstallationSettings(placing, {});
+    const theirs = { Plugin: 'slack', Binding: { channel: 'C1' } };
+    const meanwhile: Cli = {
+        run: (args, options) => {
+            if (args[0] === 'plugin' && args[1] === 'install') writeInstallationSettings(placing, { ...readInstallationSettings(placing), Routes: { Default: theirs } });
+            return placing.cli.run(args, options);
+        },
+    };
+    const whilePlacing = new Setup({ ...setupDeps(placing), cli: meanwhile });
+    await whilePlacing.status();
+    const placingFrom = placing.record().length;
+    assert.deepEqual(await whilePlacing.makeDefault({ type: 'reply', name: 'outbound' }), { refused: exists, code: null, offer: null, reread: false });
+    assert.deepEqual((readInstallationSettings(placing) as { Routes?: unknown }).Routes, { Default: theirs });
+    assert.equal(runsAfter(placing, placingFrom, 'jason').some((run) => run.startsWith('route set')), false);
     // Every other refusal is the desktop's sentence, and the default stays unset.
     const refusals: [Record<string, string>, unknown, string][] = [
         [{ STUB_ROUTE_SET: JSON.stringify({ exit: 3 }) }, granted, 'Jason is not running, so nothing was changed. Start it, then try again.'],

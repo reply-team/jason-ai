@@ -1549,8 +1549,9 @@ export class Setup {
      * Make default, only while Jason has no global default: in the setup's queue the routes are read, and a default set by
      * then, whatever its plugin or account, is left as it is, since a campaign with no route of its own follows the default
      * at every step and moving it would move running campaigns. Otherwise what is missing of the plugin and its grant is
-     * placed (`#placeMissing`) and the runtime names the account (`#setDefault`). Nothing is asked of the person. A refusal
-     * is the desktop's sentence, and the runtime writes nothing it refuses.
+     * placed (`#placeMissing`), the routes are read again, and a default set while it placed is left as it is too; then the
+     * runtime names the account (`#setDefault`). Nothing is asked of the person. A refusal is the desktop's sentence, and
+     * the runtime writes nothing it refuses.
      */
     async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
@@ -1564,15 +1565,21 @@ export class Setup {
     #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
         if (!usableAccount(this.#deps.account)) return Promise.resolve(refusal(accountSentences.noActor));
         return this.#serial(async () => {
-            const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
-            if (routes === null) return refusal(accountSentences.routesUnread);
-            if (routes.globalDefault !== null) return refusal(accountSentences.defaultExists);
+            const unset = async () => {
+                const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+                return routes === null ? refusal(accountSentences.routesUnread) : routes.globalDefault !== null ? refusal(accountSentences.defaultExists) : null;
+            };
+            const before = await unset();
+            if (before !== null) return before;
             try {
                 await this.#placeMissing(accountSentences.notPlaced);
             } catch (error) {
                 if (error instanceof Refused) return refusal(error.message);
                 throw error;
             }
+            // A placing may fetch the package for minutes: a default set meanwhile is left as it is too.
+            const placed = await unset();
+            if (placed !== null) return placed;
             const refused = await this.#setDefault(account, defaultReason);
             return refused === null ? { done: true } : refusal(refused);
         });
