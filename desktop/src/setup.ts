@@ -1565,16 +1565,18 @@ export class Setup {
     }
 
     /**
-     * Remove, never for the Reply CLI's own profile `default`, on the person's yes to the box that names the Reply account
-     * (`accountBox`): its profile and its sign-in deleted in the Reply CLI itself (`reply profile delete <name> --yes`).
-     * No route changes, so an account a route names keeps its card, not signed in. Never either for the account a route
-     * that names no profile follows, as the last read showed it or the Reply CLI and the routes, asked again before the box,
-     * say now: the delete would reset the CLI's current profile, and that route would send as another login.
+     * Remove, never for the Reply CLI's own profile `default` nor for an account whose profile it does not hold, on the
+     * person's yes to the box that names the Reply account (`accountBox`): its profile and its sign-in deleted in the
+     * Reply CLI itself (`reply profile delete <name> --yes`). No route changes, so an account a route names keeps its
+     * card, not signed in. Never either for the account a route that names no profile follows, as the last read showed it
+     * or the Reply CLI and the routes, asked again before the box, say now: the delete would reset the CLI's current
+     * profile, and that route would send as another login.
      */
     removeAccount(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         if (account.name === 'default') return Promise.resolve(refusal(accountSentences.defaultKept));
+        if (!account.held) return Promise.resolve(refusal(accountSentences.notHeld));
         if (account.followed) return Promise.resolve(refusal(accountSentences.followed));
         return this.#acting(async () => {
             const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));

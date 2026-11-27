@@ -992,6 +992,10 @@ test('Remove, never for the Reply CLI’s own default nor for the account a rout
     assert.deepEqual(boxes.at(-1), box('spare', itself));
     const left = (await setup.status()).accounts?.accounts.map((each) => `${each.name} ${each.held ? 'held' : 'routed'} ${each.signedIn ? 'in' : 'out'}`);
     assert.deepEqual(left, ['default held in', 'outbound routed out']);
+    // A Reply account only a route names has no profile to remove: refused, with no box and no run.
+    const before = [boxes.length, b.record().length];
+    assert.deepEqual(await setup.removeAccount(outbound), no('The Reply CLI holds no profile for this Reply account, so nothing was removed.'));
+    assert.deepEqual([boxes.length, runsAfter(b, before[1]!, 'reply')], [before[0], []]);
     assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), settingsBefore, 'no route changes');
     // The Reply CLI's own default is never removed: refused with no box and no run.
     const asked = boxes.length;
