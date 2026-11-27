@@ -471,6 +471,22 @@ export function readReplyAuth(result: { exit: number; stdout: string }): ReplyAu
     return parseReplyAuth(result.stdout);
 }
 
+/**
+ * The login a sign-in is, as `reply auth whoami --json` answered it, or null where it did not. reply-cli 0.23.2 prints
+ * the body of Reply's /v3/whoami as it came, `{userId, username, teamId}`, and ends 0 (src/commands/auth.ts
+ * `handle_whoami`); it asks in the profile's pinned team, so Reply refuses it for a login in several teams with none
+ * pinned, or in a team it is not in, and every failure ends with its error line on stderr alone. Nothing is stored.
+ */
+export function readReplyWhoami(result: { exit: number; stdout: string }): string | null {
+    if (result.exit !== 0) return null;
+    try {
+        const raw = JSON.parse(result.stdout) as { username?: unknown } | null;
+        return typeof raw?.username === 'string' && raw.username !== '' ? raw.username : null;
+    } catch {
+        return null;
+    }
+}
+
 export function parseReplySenders(stdout: string): ReplySender[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };
@@ -487,7 +503,7 @@ export function parseReplySenders(stdout: string): ReplySender[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; senders: ReplySender[] } | { kind: 'absent' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; senders: ReplySender[] } | { kind: 'absent' } | { kind: 'outOfTeam' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
@@ -498,10 +514,17 @@ export type ReplyChannelRead = { kind: 'listed'; senders: ReplySender[] } | { ki
 const channelAbsentCode = 'access.feature_unavailable';
 
 /**
- * One channel's read, in three outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
- * and nothing else); and unread for every other ending, a network failure, an expired sign-in, Reply refusing a sign-in
- * in several teams that names none (`access.denied` carrying `TEAM_REQUIRED`), an exit nobody explained, a timeout
- * (exit -1) or an answer that is no list. The CLI's own words are read for the code only, never kept.
+ * Reply's own code, which reply-cli 0.23.2 carries as `reply_code` beside `access.denied` (src/operations/call.ts
+ * `refusal`), for a sign-in that cannot act in the team the run asks in: its profile's pinned team.
+ */
+const outOfTeamCodes: ReadonlySet<unknown> = new Set(['TEAM_NOT_ACCESSIBLE']);
+
+/**
+ * One channel's read, in four outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
+ * and nothing else); out of its team, Reply refusing the sign-in in its pinned team (`access.denied` carrying one of the
+ * codes above); and unread for every other ending, a network failure, an expired sign-in, Reply refusing a sign-in in
+ * several teams that names none (`access.denied` carrying `TEAM_REQUIRED`), an exit nobody explained, a timeout (exit -1)
+ * or an answer that is no list. The CLI's own words are read for the codes only, never kept.
  */
 export function readReplyChannel(result: { exit: number; stdout: string; stderr: string }): ReplyChannelRead {
     if (result.exit === 0) {
@@ -515,8 +538,9 @@ export function readReplyChannel(result: { exit: number; stdout: string; stderr:
     if (result.exit !== 1) return { kind: 'unread' };
     const last = result.stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '').pop();
     try {
-        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown } }).error;
-        return error?.code === channelAbsentCode ? { kind: 'absent' } : { kind: 'unread' };
+        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown; reply_code?: unknown } }).error;
+        if (error?.code === channelAbsentCode) return { kind: 'absent' };
+        return error?.code === 'access.denied' && outOfTeamCodes.has(error.reply_code) ? { kind: 'outOfTeam' } : { kind: 'unread' };
     } catch {
         return { kind: 'unread' };
     }

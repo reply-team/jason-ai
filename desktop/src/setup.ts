@@ -30,7 +30,7 @@ import {
     type ReplyTeam,
     withReason,
 } from './accounts.ts';
-import { readAccountNotes, sameSignIn, writeAccountNotes, type AccountNote, type SignIn } from './account-notes.ts';
+import { bindingOf, readAccountNotes, sameSignIn, writeAccountNotes, type AccountNote, type SignIn } from './account-notes.ts';
 import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
@@ -101,6 +101,7 @@ import {
     parseInstallationSettings,
     parseReplySenders,
     readReplyAuth,
+    readReplyWhoami,
     readReplyChannel,
     type ReplyAuth,
     replyChannels,
@@ -266,8 +267,8 @@ export interface AccountState extends AccountRef {
     signedIn: boolean;
     user: string | null;
     /**
-     * The team the account is bound to, the one its profile pins in the Reply CLI, by its id and the name Reply gives it,
-     * empty where it gives none or its teams could not be read; null while it is not signed in, or signed in and bound to
+     * The team the account is bound to (`bindingOf`), by its id and the name Reply gives it, or the note keeps where its
+     * teams were not read; the name empty where neither says it. Null while it is not signed in, or signed in and bound to
      * none.
      */
     team: ReplyTeam | null;
@@ -278,12 +279,13 @@ export interface AccountState extends AccountRef {
     pendingUnread: ReplyChannel[];
     /**
      * `auth` where its sign-in could not be read: no sign-in then, and nothing listed; `teams` where the teams of its
-     * sign-in could not be read, its other reads standing.
+     * sign-in could not be read, its other reads standing; `login` where `auth status` did not name the sign-in and the
+     * Reply CLI could not say who it is once it was bound.
      */
-    notRead: ('auth' | 'teams')[];
+    notRead: ('auth' | 'teams' | 'login')[];
     /**
-     * The teams its sign-in can act in, where it can act in more than one and its profile pins none: the choice the card
-     * offers. Absent otherwise; its channels are unread then, since Reply lists none of them without a team.
+     * The teams its sign-in can act in, where it can act in more than one and is bound to none (`bindingOf`): the choice
+     * the card offers. Absent otherwise; its channels are unread then, since Reply lists none of them without a team.
      */
     teams?: ReplyTeam[];
     /**
@@ -292,8 +294,8 @@ export interface AccountState extends AccountRef {
      */
     lastSignIn: SignIn | null;
     /**
-     * Whether this look found it signed in as another login, or bound to another team, than the note says: so until Keep
-     * it, or a sign-out.
+     * Whether this look found it signed in as another login, no longer a member of the noted team, or bound to another of
+     * its teams, than the note says (`bindingOf`): so until Keep it, or a sign-out.
      */
     changed: boolean;
 }
@@ -626,6 +628,11 @@ export class Setup {
     #reloadRefusal: string | null = null;
     /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
     #acts = false;
+    /**
+     * The accounts signed in on their cards in this run whose sign-in's teams no look has read since: the next look
+     * checks them against their note (`bindingOf`) whatever their login and pin.
+     */
+    #signedInHere = new Set<string>();
     /**
      * The accounts the last read gave, each with the senders it listed: an act names only one of them and one of its
      * senders, and its box names the sender as the list does.
@@ -969,16 +976,20 @@ export class Setup {
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
         const listing = profiles === null ? null : accountsOf(profiles, routes);
         const notes = readAccountNotes(this.#deps.paths.replyAccountNotes);
+        const noteOf = (account: AccountRef): SignIn | null => {
+            const kept = notes.find((each) => sameAccount(each, account));
+            return kept === undefined ? null : { user: kept.user, team: kept.team };
+        };
         const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => ({
-                ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
+                ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noteOf(account))),
                 default: listing?.default != null && sameAccount(account, listing.default),
                 defaultFor: listing?.defaultFor.get(account.name) ?? [],
                 followed: listing?.followed === account.name,
             })),
         );
         // Noted in the listing's order once every account is read, so the note is written in one order.
-        const accounts = read.map((account) => this.#noted(account, notes));
+        const accounts = read.map((account) => this.#noted(account));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#keepListing(begun, accounts, listing?.routed ?? null);
         const acting = actingOf(accounts);
@@ -1015,38 +1026,54 @@ export class Setup {
      * profile is bound to, each channel's accounts and its links still waiting. A profile the CLI does not hold is asked
      * nothing.
      */
-    async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
-        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: null, changed: false };
+    async #readAccount(account: AccountRef, held: boolean, noted: SignIn | null): Promise<AccountState> {
+        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: noted, changed: false };
         if (!held) return read;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
         const auth = await this.#pinned(account);
         if (auth === null) return { ...read, notRead: ['auth'] };
         if (!auth.signedIn) return read;
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
-        const unreadTeams = (teams: ReplyTeam[] | null): AccountState['notRead'] => (teams === null ? ['teams'] : []);
-        // A pinned team is named from the list of the sign-in's teams, read beside its mailboxes and LinkedIn accounts so
-        // it holds them up by no more than the longer of the two.
-        if (auth.team !== null) {
-            const pinned = auth.team;
-            const [teams, lists] = await Promise.all([this.#teams(account), this.#lists(account)]);
-            return { ...signedIn, ...lists, team: teams?.find((each) => each.id === pinned) ?? { id: pinned, name: '' }, notRead: unreadTeams(teams) };
+        // With no sign-in since the note, nothing is taken to have changed: the noted login in the noted team, whose name
+        // the note keeps, and no teams asked of Reply. A sign-in the Reply CLI does not name is taken as the noted one while
+        // its pin is the noted team. Only Reply refusing its own read in that team gives a sign-in away.
+        if (noted !== null && !this.#signedInHere.has(account.name) && auth.team === noted.team.id && (auth.user ?? noted.user) === noted.user) {
+            const { lists, outOfTeam } = await this.#lists(account);
+            if (!outOfTeam) return { ...signedIn, ...lists, user: noted.user, team: noted.team };
         }
-        // None pinned: a sign-in in one team is bound to it with no question, one in several is offered them, and Reply
-        // is asked for no list it would refuse without a team.
         const teams = await this.#teams(account);
-        if (teams !== null && teams.length > 1) return { ...signedIn, unread: [...replyChannels], teams };
-        const team = teams?.length === 1 ? await this.#bind(account, teams[0]!) : null;
-        return { ...signedIn, ...(await this.#lists(account)), team, notRead: unreadTeams(teams) };
+        const unreadTeams: AccountState['notRead'] = teams === null ? ['teams'] : [];
+        const seen = { pin: auth.team, teams };
+        let login = auth.user;
+        let binding = bindingOf({ ...seen, login }, noted);
+        // Who a sign-in `auth status` does not name is, asked once it has a team to be asked in, which Reply needs.
+        if (login === null && binding.team !== null) {
+            login = await this.#whoami(account);
+            binding = bindingOf({ ...seen, login }, noted);
+        }
+        const now = { ...signedIn, user: login, changed: binding.change !== null };
+        if (binding.choose !== null) return { ...now, unread: [...replyChannels], teams: binding.choose, notRead: unreadTeams };
+        // A sign-in on the card is checked once a look has read its teams and found its change, or bound it with its login.
+        if (!binding.lists) {
+            if (teams !== null) this.#signedInHere.delete(account.name);
+            return { ...now, notRead: unreadTeams };
+        }
+        const team = binding.bind === null ? binding.team : await this.#bind(account, binding.bind, auth.team);
+        if (login === null && binding.bind !== null && team !== null) login = await this.#whoami(account);
+        if (teams !== null && team !== null && login !== null) this.#signedInHere.delete(account.name);
+        const loginUnread: AccountState['notRead'] = auth.user === null && team !== null && login === null ? ['login'] : [];
+        return { ...now, ...(await this.#lists(account)).lists, user: login, team, notRead: [...unreadTeams, ...loginUnread] };
     }
 
     /**
-     * An account as the desktop's note says it was (`account-notes.ts`): who it was last seen signed in as, and whether this
-     * look found another login or another team. One signed in and bound to a team, with nothing noted, is noted now.
+     * An account as the desktop's note says it was (`account-notes.ts`): one signed in and bound to a team, with nothing
+     * noted, is noted now; where another look noted it meanwhile, that note is the one it is read against.
      */
-    #noted(account: AccountState, notes: readonly AccountNote[]): AccountState {
-        const now = account.signedIn && account.user !== null && account.team != null ? { user: account.user, team: account.team } : null;
-        const kept = notes.find((each) => sameAccount(each, account)) ?? (now === null ? null : this.#note(account, now, 'look'));
-        return { ...account, lastSignIn: kept === null ? null : { user: kept.user, team: kept.team }, changed: kept !== null && now !== null && !sameSignIn(kept, now) };
+    #noted(account: AccountState): AccountState {
+        if (account.lastSignIn !== null || !account.signedIn || account.user === null || account.team == null) return account;
+        const now = { user: account.user, team: account.team };
+        const kept = this.#note(account, now, 'look');
+        return kept === null ? account : { ...account, lastSignIn: kept, changed: !sameSignIn(kept, now) };
     }
 
     /**
@@ -1071,20 +1098,26 @@ export class Setup {
         return signIn;
     }
 
+    /** Who an account's sign-in is (`reply --profile <name> auth whoami --json`), asked in its pinned team; null where not said. */
+    async #whoami(account: AccountRef): Promise<string | null> {
+        return readReplyWhoami(await this.#run('reply', 'auth whoami', [...accountArguments(account), 'auth', 'whoami', '--json'], { timeoutMs: replyActLimitMs }));
+    }
+
     /** The teams an account's sign-in can act in (`reply --profile <name> team list --json`); null where they were not read. */
     async #teams(account: AccountRef): Promise<ReplyTeam[] | null> {
         return readTeams(await this.#run('reply', 'team list', [...accountArguments(account), 'team', 'list', '--json'], { timeoutMs: replyActLimitMs }));
     }
 
     /**
-     * Binds an account whose profile pins no team to the one team of its sign-in (`reply --profile <name> team use <id>`),
-     * with no question, since nothing is lost by it; the log says that it was done. The pin is read again in the write's
-     * own turn, and one found by then, a terminal's, is left as it is. The team bound, or null where none is.
+     * Binds an account to the one team of its sign-in (`reply --profile <name> team use <id>`), where its profile pins
+     * none of the sign-in's teams (`bindingOf`), with no question, since nothing is lost by it; the log says that it was
+     * done. The pin is read again in the write's own turn, and one other than the look saw, a terminal's, is left as it
+     * is. The team bound, or null where none is.
      */
-    async #bind(account: AccountRef, team: ReplyTeam): Promise<ReplyTeam | null> {
+    async #bind(account: AccountRef, team: ReplyTeam, seen: string | null): Promise<ReplyTeam | null> {
         return this.#writingConfig(async () => {
             const pinned = (await this.#pinned(account))?.team ?? null;
-            if (pinned !== null) return pinned === team.id ? team : { id: pinned, name: '' };
+            if (pinned !== seen) return pinned === null ? null : pinned === team.id ? team : { id: pinned, name: '' };
             const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
             this.#deps.log.info('reply_team_bound', { Exit: result.exit });
             return result.exit === 0 ? team : null;
@@ -1113,16 +1146,19 @@ export class Setup {
 
     /**
      * An account's mailboxes and LinkedIn accounts, each channel read on its own, and the links still waiting of each
-     * channel that was listed.
+     * channel that was listed; and whether Reply refused a channel's read because the sign-in cannot act in the team it
+     * was asked in, its pinned one.
      */
-    async #lists(account: AccountRef): Promise<Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'>> {
+    async #lists(account: AccountRef): Promise<{ lists: Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'>; outOfTeam: boolean }> {
         const as = accountArguments(account);
         const lists: Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'> = { senders: [], absent: [], unread: [], pending: [], pendingUnread: [] };
+        let outOfTeam = false;
         // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
         for (const channel of replyChannels) {
             const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
             if (listed.kind === 'listed') lists.senders.push(...listed.senders);
             else (listed.kind === 'absent' ? lists.absent : lists.unread).push(channel);
+            outOfTeam ||= listed.kind === 'outOfTeam';
         }
         // A read that fails lists none and names its channel, unless the CLI's refusal says the channel has none here.
         for (const channel of replyChannels) {
@@ -1133,7 +1169,7 @@ export class Setup {
             if (rows === null) lists.pendingUnread.push(channel);
             else lists.pending.push(...rows.filter((row) => row.channel === channel));
         }
-        return lists;
+        return { lists, outOfTeam };
     }
 
     /**
@@ -1450,6 +1486,7 @@ export class Setup {
 
     /** After a sign-in: Jason's Reply plugin placed, the first default made, and the Reply skills deployed either way. */
     async #signedIn(account: AccountRef): Promise<void> {
+        this.#signedInHere.add(account.name);
         try {
             await this.#placeAndMakeFirstDefault(account);
         } finally {
@@ -1527,9 +1564,10 @@ export class Setup {
 
     /**
      * Pins a team on an account's profile in the Reply CLI (`reply --profile <name> team use <id>`, which checks the id
-     * against the sign-in's own teams): only a team the last read offered that account, which its profile pinned none of.
-     * A team pinned is never changed: an account the last read showed bound is refused, and so is one the Reply CLI,
-     * asked again just before, holds bound by now. Nothing is asked of the person first, since nothing is lost by it. The
+     * against the sign-in's own teams): only a team the last read offered that account, bound to none of them. A team
+     * bound is never changed: an account the last read showed bound is refused, and so is one the Reply CLI, asked again
+     * just before, holds pinned to one of the teams offered by now; a pin of a team the sign-in is not in is no team.
+     * Nothing is asked of the person first, since nothing is lost by it. The
      * answer is done, or the desktop's sentence and then the Reply CLI's own reason, and the page reads the accounts again
      * either way.
      */
@@ -1540,7 +1578,8 @@ export class Setup {
         if (typeof teamId !== 'string' || !(account.teams ?? []).some((team) => team.id === teamId)) return Promise.resolve(refusal(accountSentences.teamNotOffered));
         return this.#acting(async () => {
             return this.#writingConfig(async () => {
-                if ((await this.#pinned(account))?.team != null) return refusal(accountSentences.teamPinned, true);
+                const pinned = (await this.#pinned(account))?.team ?? null;
+                if (pinned !== null && (account.teams ?? []).some((team) => team.id === pinned)) return refusal(accountSentences.teamPinned, true);
                 const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs });
                 this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
                 return result.exit === 0 ? { done: true } : cliRefusal(result, accountSentences.teamNotChosen);
@@ -1611,18 +1650,24 @@ export class Setup {
     }
 
     /**
-     * Keep it, where the last read found the account signed in as another login, or bound to another team, than the
-     * desktop's note says: the account as it now is becomes the noted one, and the card no longer says the change. Nothing
-     * is run, and nothing of the Reply CLI's changes.
+     * Keep it, where the last read found the account changed from what the desktop's note says (`bindingOf`). Bound to
+     * another of its sign-in's teams, the account as it now is becomes the noted one. Signed in as another login, or no
+     * longer a member of the noted team, and so bound to none, the note is forgotten: the next look binds the account as a
+     * first sign-in is bound, one team by itself and several by Choose, and notes it. Nothing is run, and nothing of the
+     * Reply CLI's changes.
      */
     keepChange(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
-        if (account.changed !== true || account.user === null || account.team == null) return Promise.resolve(refusal(accountSentences.nothingToKeep));
-        const { user, team } = account;
+        if (account.changed !== true || (account.team != null && account.user === null)) return Promise.resolve(refusal(accountSentences.nothingToKeep));
+        const now = account.team == null || account.user === null ? null : { user: account.user, team: account.team };
         return this.#oneAct<ReplyDone | ReplyRefusal>(
             () => refusal(said.busy),
-            async () => (this.#note(account, { user, team }, 'keep') !== null ? this.#announced({ done: true }) : refusal(accountSentences.notKept)),
+            async () => {
+                const kept = this.#note(account, now, 'keep');
+                const written = now === null ? !readAccountNotes(this.#deps.paths.replyAccountNotes).some((each) => sameAccount(each, account)) : kept !== null;
+                return written ? this.#announced({ done: true }) : refusal(accountSentences.notKept);
+            },
         );
     }
 

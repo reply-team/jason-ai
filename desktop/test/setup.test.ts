@@ -71,7 +71,8 @@ const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(dataLayou
 interface ReplyWorld {
     current?: string;
     profiles?: Record<string, { team_id?: number }>;
-    credentials?: Record<string, string>;
+    /** A sign-in by its login, or one a browser made that Reply did not name, which `auth status` holds no login for. */
+    credentials?: Record<string, string | { login: string; unnamed: true }>;
     seats?: Record<string, number[]>;
     lists?: Record<string, { email?: unknown[]; linkedin?: unknown[] }>;
     browser?: string;
@@ -1079,17 +1080,24 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     world((current) => ({ ...current, credentials: { default: 'ada@example.test' } }));
     assert.deepEqual((await seen())['outbound'], { last: bea9, changed: false });
     // Signed in again in a terminal as another login, in its own team: the note is the old one, and every look says the
-    // change, the lists those of the account as it now is; another team of the same login is a change too.
+    // change. The old team is not the new login's: the account shows no team and lists nothing until Keep it. Another of
+    // the same login's teams pinned is a change too, the account listed as it now is.
     world((current) => ({ ...current, profiles: { ...current.profiles, outbound: { team_id: 4 }, default: { team_id: 6 } }, credentials: { ...current.credentials, outbound: 'cy@example.test' } }));
     for (const look of ['the first look', 'the next look']) {
         const now = await seen();
         assert.deepEqual([now['outbound'], now['default']], [{ last: bea9, changed: true }, { last: ada3, changed: true }], look);
     }
-    const outbound = (await setup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
-    assert.deepEqual({ user: outbound?.user, team: outbound?.team, ids: outbound?.senders.map((each) => each.id) }, { ...cy4, ids: ['12'] });
-    // Keep it makes the account as it now is the noted one; an account that shows no change has nothing to keep.
+    const shown = async (name: string) => {
+        const each = (await setup.status()).accounts?.accounts.find((one) => one.name === name);
+        return { user: each?.user, team: each?.team, ids: each?.senders.map((sender) => sender.id) };
+    };
+    assert.deepEqual(await shown('outbound'), { user: 'cy@example.test', team: null, ids: [] });
+    assert.deepEqual(await shown('default'), { user: 'ada@example.test', team: { id: '6', name: 'Made-up Six' }, ids: [] });
+    // Keep it on another login forgets the note: the next look binds it as a first sign-in is, here to the pin, a team of
+    // its own, and notes it. An account that shows no change has nothing to keep.
     assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'outbound' }), { done: true });
     assert.deepEqual((await seen())['outbound'], { last: cy4, changed: false });
+    assert.deepEqual(await shown('outbound'), { ...cy4, ids: ['12'] });
     assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'outbound' }), no('That Reply account shows no change to keep.'));
     assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'nobody' }), no('That is not a Reply account the desktop listed.'));
     // Sign out keeps the note, so the card says who it was; Remove forgets it.
@@ -1131,21 +1139,119 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     const late = (await older).accounts?.accounts[0];
     const ada = { user: 'ada@example.test', team: { id: '3', name: '' } };
     assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.changed], [ada, ada, false]);
+    // A sign-in the Reply CLI holds no login for, a browser's of a login in several teams, is named once a team is bound,
+    // and the notice comes for it as for any other: a browser's sign-in that came back as another login than the note
+    // says, and another team pinned in a terminal.
+    const unnamed = replyBench(t, {
+        profiles: { web: {} },
+        seats: { 'bea@example.test': [5], 'cy@example.test': [4, 5] },
+        teams: { '4': 'Made-up Four', '5': 'Made-up Five' },
+        browser: 'cy@example.test',
+    });
+    writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
+    mkdirSync(dirname(unnamed.paths.replyAccountNotes), { recursive: true });
+    const bea5 = { user: 'bea@example.test', team: { id: '5', name: 'Made-up Five' } };
+    const cy5 = { user: 'cy@example.test', team: { id: '5', name: 'Made-up Five' } };
+    writeFileSync(unnamed.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', ...bea5 }] }));
+    const web = { type: 'reply', name: 'web' } as const;
+    const webSetup = new Setup({ ...setupDeps(unnamed), confirm: () => Promise.resolve(true) });
+    const webSeen = async () => {
+        const each = (await webSetup.status()).accounts?.accounts.find((one) => one.name === 'web');
+        return { user: each?.user, team: each?.team, last: each?.lastSignIn, changed: each?.changed };
+    };
+    await webSetup.status();
+    await webSetup.connectReply(web);
+    assert.deepEqual(await webSeen(), { user: null, team: null, last: bea5, changed: false }, 'who it is is not known before a team is bound');
+    assert.deepEqual(await webSetup.chooseTeam(web, '5'), { done: true });
+    assert.deepEqual(await webSeen(), { user: 'cy@example.test', team: null, last: bea5, changed: true }, 'another login: no team until Keep it');
+    assert.deepEqual(await webSetup.keepChange(web), { done: true });
+    assert.deepEqual(await webSeen(), { ...cy5, last: cy5, changed: false });
+    writeFileSync(unnamed.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...unnamed.world(), profiles: { web: { team_id: 4 } } }));
+    assert.deepEqual(await webSeen(), { user: 'cy@example.test', team: { id: '4', name: 'Made-up Four' }, last: cy5, changed: true });
+
+    // The binding is one login's, checked after a sign-in: one made on the card, by a key or a browser, or one a read gives
+    // away. `web` is noted as bea in team 5, which its profile pins. Each case is the card as the look after it shows it,
+    // `login team [listed] same|changed last <noted>`, then as the look after Keep it shows it, where there is a change.
+    const bea = 'bea@example.test';
+    const cy = 'cy@example.test';
+    const dee = 'dee@example.test';
+    const room: ReplyWorld = {
+        profiles: { web: { team_id: 5 } },
+        seats: { [bea]: [5], [cy]: [4, 5], [dee]: [7] },
+        teams: { '4': 'Made-up Four', '5': 'Made-up Five', '6': 'Made-up Six', '7': 'Made-up Seven', '8': 'Made-up Eight' },
+        keys: { 'k-bea': bea, 'k-cy': cy, 'k-dee': dee },
+        lists: { [`${bea}#5`]: { email: [mailbox] } },
+    };
+    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, env: Record<string, string> = {}) => {
+        const each = replyBench(t, world, env);
+        writeInstallationSettings(each, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
+        if (noted !== null) {
+            mkdirSync(dirname(each.paths.replyAccountNotes), { recursive: true });
+            writeFileSync(each.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: noted, team: { id: '5', name: 'Made-up Five' } }] }));
+        }
+        const setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
+        await setup.status();
+        await act(setup, (to) => writeFileSync(each.env['STUB_REPLY_WORLD']!, JSON.stringify(to)));
+        const view = async () => {
+            const card = (await setup.status()).accounts?.accounts.find((one) => one.name === 'web');
+            const last = card?.lastSignIn ? `${card.lastSignIn.user} ${card.lastSignIn.team.id}` : '-';
+            return `${card?.user ?? '?'} ${card?.team?.id ?? '-'} [${card?.senders.map((sender) => sender.id).join()}] ${card?.changed ? 'changed' : 'same'} last ${last}`;
+        };
+        const seen = await view();
+        if (!seen.includes('changed')) return [seen];
+        assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'web' }), { done: true });
+        return [seen, await view(), await view()];
+    };
+    const byKey = (login: string) => (setup: Setup) => setup.connectReplyWithKey(`k-${login}`, { type: 'reply', name: 'web' });
+    const byBrowser = (setup: Setup) => setup.connectReply({ type: 'reply', name: 'web' });
+    const cases: [string, ReplyWorld, string | null, (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, string[], Record<string, string>?][] = [
+        ['the same login, still in the noted team, by a key', room, bea, byKey('bea'), [`${bea} 5 [12] same last ${bea} 5`]],
+        ['the same login, still in the noted team, by a browser', { ...room, browser: bea }, bea, byBrowser, [`${bea} 5 [12] same last ${bea} 5`]],
+        ['another login, by a key', room, bea, byKey('cy'), [`${cy} - [] changed last ${bea} 5`, `${cy} 5 [] same last ${cy} 5`, `${cy} 5 [] same last ${cy} 5`]],
+        ['another login, by a browser', { ...room, browser: cy }, bea, byBrowser, [`${cy} - [] changed last ${bea} 5`, `${cy} 5 [] same last ${cy} 5`, `${cy} 5 [] same last ${cy} 5`]],
+        ['another login not in the pinned team, by a key', room, bea, byKey('dee'), [`${dee} - [] changed last ${bea} 5`, `${dee} 7 [] same last ${dee} 7`, `${dee} 7 [] same last ${dee} 7`]],
+        // Reply does not name it, in a team it is not in: who it is is not known until a team is bound.
+        ['another login not in the pinned team, by a browser', { ...room, browser: dee }, bea, byBrowser, [`? - [] changed last ${bea} 5`, `${dee} 7 [] same last ${dee} 7`, `${dee} 7 [] same last ${dee} 7`]],
+        ['the same login, no longer in the noted team, by a key', { ...room, seats: { ...room.seats, [bea]: [8] } }, bea, byKey('bea'), [`${bea} - [] changed last ${bea} 5`, `${bea} 8 [] same last ${bea} 8`, `${bea} 8 [] same last ${bea} 8`]],
+        ['the same login, no longer in the noted team, by a browser', { ...room, seats: { ...room.seats, [bea]: [8] }, browser: bea }, bea, byBrowser, [`? - [] changed last ${bea} 5`, `${bea} 8 [] same last ${bea} 8`, `${bea} 8 [] same last ${bea} 8`]],
+        ['the same login in another of its teams, pinned in a terminal, signed in by a key', { ...room, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: bea } }, bea, async (_, change) => change({ ...room, profiles: { web: { team_id: 6 } }, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: bea } }), [`${bea} 6 [] changed last ${bea} 5`, `${bea} 6 [] same last ${bea} 6`, `${bea} 6 [] same last ${bea} 6`]],
+        ['the same login in another of its teams, pinned in a terminal, signed in by a browser', { ...room, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: { login: bea, unnamed: true } } }, bea, async (_, change) => change({ ...room, profiles: { web: { team_id: 6 } }, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: { login: bea, unnamed: true } } }), [`${bea} 6 [] changed last ${bea} 5`, `${bea} 6 [] same last ${bea} 6`, `${bea} 6 [] same last ${bea} 6`]],
+        ['a pin of a team the sign-in is not in, nothing noted, by a key', room, null, byKey('dee'), [`${dee} 7 [] same last ${dee} 7`]],
+        ['a pin of a team the sign-in is not in, nothing noted, by a browser', { ...room, browser: dee }, null, byBrowser, [`${dee} 7 [] same last ${dee} 7`]],
+        // No sign-in: the same login, which lost the noted team. Only Reply refusing the account's own read in its pinned
+        // team gives it away, for a sign-in the Reply CLI names and for one it does not.
+        ['no sign-in, the same login refused in the noted team, named', { ...room, credentials: { web: bea } }, bea, async (_, change) => change({ ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: bea } }), [`${bea} - [] changed last ${bea} 5`, `${bea} 8 [] same last ${bea} 8`, `${bea} 8 [] same last ${bea} 8`]],
+        ['no sign-in, the same login refused in the noted team, unnamed', { ...room, credentials: { web: { login: bea, unnamed: true } } }, bea, async (_, change) => change({ ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: { login: bea, unnamed: true } } }), [`? - [] changed last ${bea} 5`, `${bea} 8 [] same last ${bea} 8`, `${bea} 8 [] same last ${bea} 8`]],
+        // A read that failed otherwise, for the network, gives nothing away: the noted login in the noted team, nothing rebound.
+        ['no sign-in, a read that failed for the network', { ...room, credentials: { web: { login: bea, unnamed: true } } }, bea, async () => undefined, [`${bea} 5 [] same last ${bea} 5`], { STUB_REPLY_ACCOUNT_LIST: JSON.stringify({ code: 'reply.unavailable' }) }],
+    ];
+    for (const [name, world, noted, act, expected, env] of cases) assert.deepEqual(await checked(world, noted, act, env), expected, name);
+    // Keep it on a sign-in in several teams, none of them the pinned one: its teams are offered, and Choose binds it over
+    // the pin of a team it is not in, then names it and notes it.
+    const several = await checked({ ...room, seats: { ...room.seats, [cy]: [4, 6] }, browser: cy }, bea, async (setup) => {
+        await byBrowser(setup);
+        await setup.status();
+        await setup.keepChange({ type: 'reply', name: 'web' });
+        const offered = (await setup.status()).accounts?.accounts.find((one) => one.name === 'web')?.teams?.map((team) => team.id);
+        assert.deepEqual(offered, ['4', '6']);
+        assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'web' }, '6'), { done: true });
+    });
+    assert.deepEqual(several, [`${cy} 6 [] same last ${cy} 6`]);
 });
 
 test('one act on a Reply account at a time, whatever it is: while Make default or a sign-in places the plugin, every other act on a Reply account, a sign-in, Make default and Keep it among them, is refused as busy and runs nothing', async (t) => {
-    // `default` noted as another login, so it shows a change to keep; `several` offered its two teams.
+    // `default` noted in another of its login's teams, so it shows a change to keep; `several` offered its two teams.
     const b = replyBench(t, {
         profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, several: {}, spare: {} },
         credentials: { default: 'ada@example.test', outbound: 'bea@example.test', several: 'bea@example.test' },
-        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+        seats: { 'ada@example.test': [3, 6], 'bea@example.test': [5, 9] },
         lists: { 'ada@example.test#3': { email: [mailbox] } },
         keys: { 'planted-reply-key': 'cy@example.test' },
         browser: 'cy@example.test',
     }, { STUB_REPLY_PLUGIN: 'absent' });
     writeInstallationSettings(b, {});
     mkdirSync(dirname(b.paths.replyAccountNotes), { recursive: true });
-    writeFileSync(b.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'old@example.test', team: { id: '3', name: '' } }] }));
+    writeFileSync(b.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'ada@example.test', team: { id: '6', name: '' } }] }));
     let release: () => void = () => undefined;
     let fetching: () => void = () => undefined;
     const fetched = () => new Promise<void>((resolve) => (fetching = resolve));
@@ -1207,7 +1313,7 @@ test('one act on a Reply account at a time, whatever it is: while Make default o
     assert.deepEqual([b.world().profiles?.['outbound'], b.world().profiles?.['several']], [{ team_id: 9 }, {}], 'nothing of the refused acts was done');
 });
 
-test('every signed-in Reply account is bound to one team, which it shows: a profile that pins none is pinned at the look that finds its sign-in in one team, and the log says so; a sign-in in several is offered them, and a pick pins one; the team is shown by its name, else its id; teams that could not be read are said, the other reads standing; and a pick for an account bound already is refused', async (t) => {
+test('every signed-in Reply account is bound to one team, which it shows: a profile that pins none is pinned at the look that finds its sign-in in one team, and the log says so; a sign-in in several is offered them, and a pick pins one; the team is named as Reply names it, or as the note keeps it; teams that could not be read are said, the other reads standing; and a pick for an account bound already is refused', async (t) => {
     const log = memoryLog();
     const b = replyBench(t, {
         profiles: { outbound: {} },
@@ -1220,17 +1326,18 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const accountOf = async (setup: Setup, name: string) => (await setup.status()).accounts?.accounts.find((each) => each.name === name);
     const bound = (account: Awaited<ReturnType<typeof accountOf>>) => ({ team: account?.team, teams: account?.teams, notRead: account?.notRead, ids: account?.senders.map((each) => each.id), unread: account?.unread });
     // ada's sign-in can act in team 3 alone and `default` pins none: the first look pins it, with no question, and reads the
-    // account as that team, shown by its id since Reply gives it no name.
+    // account as that team, with no name since Reply gives it none.
     let from = b.record().length;
     const setup = setupOn(b, log);
     assert.deepEqual(bound(await accountOf(setup, 'default')), { team: { id: '3', name: '' }, teams: undefined, notRead: [], ids: ['12'], unread: [] });
     assert.deepEqual(b.world().profiles?.['default'], { team_id: 3 });
     assert.deepEqual(runsAfter(b, from, 'reply').filter((run) => run.startsWith('--profile default team')), ['--profile default team list --json', '--profile default team use 3 --json']);
     assert.deepEqual(log.lines.filter((line) => line.name === 'reply_team_bound').map((line) => line.fields), [{ Exit: 0 }]);
-    // The next look finds it pinned and asks for its teams only to name it, beside the reads of its mailboxes.
+    // The next look finds it as noted, the same login in the same pinned team: no sign-in since, so nothing is taken to have
+    // changed, its team is named from the note, and Reply is asked for no teams.
     from = b.record().length;
-    await setup.status();
-    assert.deepEqual(runsAfter(b, from, 'reply').filter((run) => run.startsWith('--profile default team')).sort(), ['--profile default team list --json']);
+    assert.deepEqual(bound(await accountOf(setup, 'default')), { team: { id: '3', name: '' }, teams: undefined, notRead: [], ids: ['12'], unread: [] });
+    assert.deepEqual(runsAfter(b, from, 'reply').filter((run) => run.startsWith('--profile default team')), []);
     // bea's sign-in by a key can act in two teams and `outbound` pins none: the look right after it offers its teams, by id
     // and name, and asks Reply for none of its mailboxes or LinkedIn accounts, which Reply would refuse without a team.
     await setup.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'outbound' });
@@ -1262,7 +1369,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(b.world().profiles?.['outbound'], { team_id: 9 });
     // The account then reads as that team, shown by its name, and offers none.
     assert.deepEqual(bound(await accountOf(setup, 'outbound')), { team: { id: '9', name: 'Made-up Nine' }, teams: undefined, notRead: [], ids: ['34'], unread: [] });
-    // Teams that could not be read are said, and the account's other reads stand: its pinned team by its id alone.
+    // Teams that could not be read are said, and the account's other reads stand: its pinned team, with no name.
     const unread = replyBench(t, { ...b.world(), credentials: { ...b.world().credentials } }, { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) });
     assert.deepEqual(bound(await accountOf(setupOn(unread), 'outbound')), { team: { id: '9', name: '' }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [] });
     // A profile that pins none, whose teams could not be read, is bound to none, and is read all the same.
@@ -1295,6 +1402,46 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const raced = await accountOf(new Setup({ ...setupDeps(racing), programs: terminal }), 'default');
     assert.equal(replyRuns(racing).some((run) => run.includes(' team use ')), false);
     assert.deepEqual([racing.world().profiles?.['default'], raced?.team], [{ team_id: 6 }, { id: '6', name: '' }]);
+    // A browser's sign-in of a login in several teams, on a profile that pins none, is one Reply does not name, so the Reply
+    // CLI's `auth status` holds no login for it: signed in, its teams offered, and nobody asked who it is, which Reply
+    // answers only in a team. Once a team is bound, the Reply CLI is asked who it is as that account, wherever `auth status`
+    // did not say and nowhere else; where that could not be read, it is said, the other reads standing.
+    const several = replyBench(t, {
+        profiles: { default: { team_id: 3 }, teams: {} },
+        credentials: { default: 'ada@example.test' },
+        seats: { 'ada@example.test': [3], 'cy@example.test': [4, 6] },
+        teams: { '4': 'Made-up Four', '6': 'Made-up Six' },
+        lists: { 'cy@example.test#6': { email: [mailbox] } },
+        browser: 'cy@example.test',
+    });
+    const browsing = setupOn(several);
+    await browsing.status();
+    await browsing.connectReply({ type: 'reply', name: 'teams' });
+    assert.deepEqual(several.world().credentials?.['teams'], { login: 'cy@example.test', unnamed: true });
+    const asWho = async () => {
+        const each = await accountOf(browsing, 'teams');
+        return { signedIn: each?.signedIn, user: each?.user, team: each?.team, teams: each?.teams?.map((team) => team.id), ids: each?.senders.map((sender) => sender.id), notRead: each?.notRead };
+    };
+    const whoami = (since: number) => runsAfter(several, since, 'reply').filter((run) => run.includes('auth whoami'));
+    from = several.record().length;
+    assert.deepEqual(await asWho(), { signedIn: true, user: null, team: null, teams: ['4', '6'], ids: [], notRead: [] });
+    assert.deepEqual(whoami(from), []);
+    assert.deepEqual(await browsing.chooseTeam({ type: 'reply', name: 'teams' }, '6'), { done: true });
+    // Where the Reply CLI could not say who it is, that is said, its other reads standing, and nothing is noted.
+    const whoUnread = replyBench(t, several.world(), { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
+    const unreadWho = (await setupOn(whoUnread).status()).accounts?.accounts.find((each) => each.name === 'teams');
+    assert.deepEqual(
+        { user: unreadWho?.user, team: unreadWho?.team, ids: unreadWho?.senders.map((sender) => sender.id), notRead: unreadWho?.notRead },
+        { user: null, team: { id: '6', name: 'Made-up Six' }, ids: ['12'], notRead: ['login'] },
+    );
+    assert.equal(readFileSync(whoUnread.paths.replyAccountNotes, 'utf8').includes('"teams"'), false, 'nothing noted');
+    from = several.record().length;
+    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });
+    assert.deepEqual(whoami(from), ['--profile teams auth whoami --json'], 'asked as that account alone');
+    // Noted, the next look takes it as the noted login in the noted team, and asks Reply nothing of it.
+    from = several.record().length;
+    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });
+    assert.deepEqual(runsAfter(several, from, 'reply').filter((run) => run.startsWith('--profile teams') && /whoami|team list/.test(run)), []);
 });
 
 test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; a default already set, whatever its plugin or binding, is left as it is', async (t) => {
@@ -1634,7 +1781,7 @@ test('each account is read under its own profile’s name alone, a profile only 
             // The default, whatever team a campaign's route names beside it: bea's profile with no team pinned, which Reply
             // will not list until one is; it is offered the login's teams, its channels unread.
             state('outbound', { ...bea, default: true, defaultFor: [{ kind: 'channel', operation: 'message.send', channel: 'linkedin' }], unread: ['email', 'linkedin'], teams: [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'Made-up Nine' }] }),
-            // ada's sign-in in one team, bound to it by this look, shown by its id since Reply names it not.
+            // ada's sign-in in one team, bound to it by this look, with no name since Reply names it not.
             // Each account signed in and bound is noted as who it was signed in as at this first look.
             state('default', { signedIn: true, user: 'ada@example.test', team: { id: '3', name: '' }, senders: [asListed(mailbox)], lastSignIn: { user: 'ada@example.test', team: { id: '3', name: '' } } }),
             // A second team is a second profile, pinned to it in the Reply CLI, and shown by its name.
@@ -1861,7 +2008,7 @@ test('the Reply card keeps three outcomes per channel: listed, not in the plan o
     assert.deepEqual(await read(email, linkedin, undefined, { email: { code: 'reply.unavailable' }, linkedin: linkedInWaiting }), { ids: ['e1', 'l1'], absent: [], unread: [], pendingUnread: ['email'], waiting: ['linkedin 7'] });
 });
 
-test('a channel read is the plan-or-role refusal only by the code reply-cli gives for it; a sign-in with no team chosen and a timeout are reads that did not answer', () => {
+test('a channel read is the plan-or-role refusal only by the code reply-cli gives for it, and a refusal in a team the sign-in cannot act in only by Reply’s own code; a sign-in with no team chosen and a timeout are reads that did not answer', () => {
     const json = (code: string, more: Record<string, unknown> = {}) => JSON.stringify({ error: { code, ...more } }) + String.fromCharCode(10);
     assert.deepEqual(readReplyChannel({ exit: 1, stdout: '', stderr: json('access.feature_unavailable') }), { kind: 'absent' });
     // Reply's 403 TEAM_REQUIRED, which reply-cli 0.23.2 answers as access.denied carrying Reply's code (src/operations/call.ts
@@ -1870,10 +2017,15 @@ test('a channel read is the plan-or-role refusal only by the code reply-cli give
     const teamRequired = { status: 403, title: 'Reply refused access.', reply_code: 'TEAM_REQUIRED', hint: 'You belong to multiple teams. Choose one:' };
     for (const result of [
         { exit: 1, stdout: '', stderr: json('access.denied', teamRequired) },
-        { exit: 1, stdout: '', stderr: json('access.denied', { ...teamRequired, reply_code: 'TEAM_NOT_ACCESSIBLE' }) },
+        { exit: 1, stdout: '', stderr: json('reply.refused', { ...teamRequired, reply_code: 'TEAM_NOT_ACCESSIBLE' }) },
         { exit: 1, stdout: '', stderr: json('reply.refused', teamRequired) },
         { exit: 2, stdout: '', stderr: json('access.denied', teamRequired) },
+        { exit: 2, stdout: '', stderr: json('access.denied', { ...teamRequired, reply_code: 'TEAM_NOT_ACCESSIBLE' }) },
     ]) assert.deepEqual(readReplyChannel(result), { kind: 'unread' }, JSON.stringify(result));
+    // Reply's 403 TEAM_NOT_ACCESSIBLE, as reply-cli 0.23.2 printed it for a browser sign-in in a team it is not in: the
+    // sign-in cannot act in the profile's pinned team.
+    const notAccessible = { status: 403, title: 'Reply refused access.', detail: 'The requested team is not one you can act in.', reply_code: 'TEAM_NOT_ACCESSIBLE' };
+    assert.deepEqual(readReplyChannel({ exit: 1, stdout: '', stderr: json('access.denied', notAccessible) }), { kind: 'outOfTeam' });
     // Progress lines may come first; the last line is the verdict.
     assert.deepEqual(readReplyChannel({ exit: 1, stdout: '', stderr: 'checking' + String.fromCharCode(10) + json('access.feature_unavailable') }), { kind: 'absent' });
     for (const result of [

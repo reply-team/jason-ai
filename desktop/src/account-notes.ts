@@ -22,6 +22,47 @@ export interface AccountNote extends AccountRef, SignIn {}
 /** Whether two sign-ins are one: the same login in the same team, whatever the team's name is now. */
 export const sameSignIn = (a: SignIn, b: SignIn): boolean => a.user === b.user && a.team.id === b.team.id;
 
+/** What a look found of a signed-in account: the team its profile pins, its sign-in's own teams, and its login. */
+export interface SignInSeen {
+    pin: string | null;
+    /** Null where they could not be read: then nothing is rebound. */
+    teams: readonly ReplyTeam[] | null;
+    /** Null where the Reply CLI did not say. */
+    login: string | null;
+}
+
+/** What a look makes of a signed-in account's team and of its note (`bindingOf`). */
+export interface Binding {
+    team: ReplyTeam | null;
+    /** The team to pin now, with no question. */
+    bind: ReplyTeam | null;
+    choose: ReplyTeam[] | null;
+    /** Whether its mailboxes and LinkedIn accounts are read. */
+    lists: boolean;
+    change: 'login' | 'left' | 'team' | null;
+}
+
+/**
+ * What a look makes of a signed-in account's team, decided here and nowhere else. The binding is one login's:
+ * - another login than the note's (`login`), or a sign-in that is no longer a member of the noted team (`left`), is bound
+ *   to no team and lists nothing until Keep it, which forgets the note so the account is bound as a first sign-in is;
+ * - a pin the sign-in is a member of is its team, another of its teams than the note's being a change (`team`);
+ * - otherwise, a pin it is not a member of counting as none, a sign-in in one team is bound to it now, and one in several
+ *   is offered them.
+ * Membership is read from the sign-in's own teams alone: where they could not be read, the pin stands.
+ */
+export function bindingOf({ pin, teams, login }: SignInSeen, noted: SignIn | null): Binding {
+    const unbound = { team: null, bind: null, choose: null, lists: false };
+    if (noted !== null && login !== null && login !== noted.user) return { ...unbound, change: 'login' };
+    if (noted !== null && teams !== null && !teams.some((each) => each.id === noted.team.id)) return { ...unbound, change: 'left' };
+    if (pin !== null && (teams === null || teams.some((each) => each.id === pin))) {
+        const team = teams?.find((each) => each.id === pin) ?? (noted?.team.id === pin ? noted.team : { id: pin, name: '' });
+        return { team, bind: null, choose: null, lists: true, change: noted !== null && noted.team.id !== pin ? 'team' : null };
+    }
+    if (teams !== null && teams.length > 1) return { ...unbound, choose: [...teams], change: null };
+    return { team: null, bind: teams?.length === 1 ? teams[0]! : null, choose: null, lists: true, change: null };
+}
+
 /** The largest note read, in bytes: a file past it is read as no note. */
 const noteFileLimit = 1_000_000;
 

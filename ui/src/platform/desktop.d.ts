@@ -618,8 +618,9 @@ export interface DesktopAccount extends DesktopAccountRef {
     /** The address the profile is signed in as; null when it is not. */
     user: string | null;
     /**
-     * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it, empty where it
-     * gives none or the teams could not be read; null while it is not signed in, or signed in and bound to none.
+     * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it or the desktop's
+     * note keeps, empty where neither says it, which the page says in words; null while it is not signed in, or signed in
+     * and bound to none.
      */
     team: DesktopReplyTeam | null;
     /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
@@ -631,11 +632,12 @@ export interface DesktopAccount extends DesktopAccountRef {
     pendingUnread: DesktopReplyChannel[];
     /**
      * `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed; `teams` where the teams
-     * of its sign-in could not be read, its other reads standing.
+     * of its sign-in could not be read, its other reads standing; `login` where the Reply CLI could not say who a sign-in it
+     * does not name is, once it was bound, `user` being null.
      */
-    notRead: ('auth' | 'teams')[];
+    notRead: ('auth' | 'teams' | 'login')[];
     /**
-     * The teams its sign-in can act in, where it can act in more than one and its profile pins none: the choice the card
+     * The teams its sign-in can act in, where it can act in more than one and is bound to none of them: the choice the card
      * offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` then.
      */
     teams?: DesktopReplyTeam[];
@@ -644,8 +646,9 @@ export interface DesktopAccount extends DesktopAccountRef {
      */
     lastSignIn: DesktopReplySignIn | null;
     /**
-     * Whether the last read found it signed in as another login, or bound to another team, than the note says: so until
-     * `setup.keepChange` or a sign-out.
+     * Whether the last read found it changed from what the note says, so until `setup.keepChange` or a sign-out: signed in
+     * as another login (`user` another than `lastSignIn`'s), or no longer a member of the noted team, `team` being null
+     * then, and nothing listed; or bound to another of its sign-in's teams.
      */
     changed: boolean;
 }
