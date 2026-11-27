@@ -245,9 +245,10 @@ describe('Reply accounts, one card per profile', () => {
         inDesktop(three);
         const page = await openAccounts('.reply-account');
         expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
+        // A card with a team offers no Make default: the global default cannot name a team.
         expect(cards(page)).toEqual([
             'Reply default Default',
-            'Reply outbound team 9 Make default',
+            'Reply outbound team 9',
             'Reply routed-only Make default',
         ]);
         const ada = cardOf(page, 'Reply account default');
@@ -268,14 +269,67 @@ describe('Reply accounts, one card per profile', () => {
     });
 
     it('asks every act on a card as that card’s account, and a sign-in or a key for that account alone', async () => {
-        const desktop = inDesktop(three);
+        const disconnected = {
+            id: 'm_2',
+            channel: 'email',
+            name: 'Made-up Ops',
+            address: 'ops@example.test',
+            status: 'disconnected',
+        };
+        const disabled = { id: 'l_2', channel: 'linkedin', name: 'Made-up Cy', address: '', status: 'disabled' };
+        const desktop = inDesktop(
+            withReplyAccounts(setupFound, [
+                replyAccount('default', {
+                    default: true,
+                    signedIn: true,
+                    user: 'ada@example.test',
+                    senders: [mailbox],
+                }),
+                replyAccount('outbound', {
+                    team: '9',
+                    signedIn: true,
+                    user: 'bea@example.test',
+                    senders: [disconnected, linkedIn, disabled],
+                }),
+                replyAccount('routed-only', { held: false }),
+            ]),
+        );
         const page = await openAccounts('.reply-account');
         const bea = () => cardOf(page, 'Reply account outbound, team 9');
         const outbound = { type: 'reply', name: 'outbound', team: '9' };
-        const row = bea().querySelector<HTMLElement>('.acct')!;
-        fireEvent.click(within(row).getByRole('button', { name: 'Pause' }));
-        await waitFor(() => expect(words(within(bea()).getByRole('dialog'))).toMatch(/Done\./));
+        const rowOf = (name: string) =>
+            Array.from(bea().querySelectorAll<HTMLElement>('.acct')).find(
+                (each) => words(each.querySelector('b')!) === name,
+            )!;
+        const answered = async (text: RegExp) =>
+            waitFor(() => expect(words(within(bea()).getByRole('dialog'))).toMatch(text));
+        fireEvent.click(within(rowOf('Made-up Bea')).getByRole('button', { name: 'Pause' }));
+        await answered(/Done\./);
         expect(within(cardOf(page, 'Reply account default')).queryByRole('dialog')).toBeNull();
+        fireEvent.click(within(rowOf('Made-up Cy')).getByRole('button', { name: 'Resume' }));
+        await answered(/Done\./);
+        fireEvent.click(within(rowOf('Made-up Ops')).getByRole('button', { name: 'Reconnect' }));
+        await answered(/The link opened in your browser\./);
+        fireEvent.click(within(rowOf('Made-up Ops')).getByRole('button', { name: 'Limits' }));
+        const field = await waitFor(() => within(bea()).getByRole('textbox', { name: 'Daily limit' }));
+        fireEvent.input(field, { target: { value: '40' } });
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Set' }));
+        await answered(/Done\./);
+        fireEvent.click(within(rowOf('Made-up Ops')).getByRole('button', { name: 'Delete' }));
+        await answered(/Done\./);
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(await waitFor(() => within(bea()).getByRole('button', { name: 'Gmail' })));
+        await answered(/The link opened in your browser\./);
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(await waitFor(() => within(bea()).getByRole('button', { name: 'LinkedIn' })));
+        fireEvent.input(
+            await waitFor(() => within(bea()).getByRole('textbox', { name: 'Name for the LinkedIn account' })),
+            {
+                target: { value: 'Made-up Dee' },
+            },
+        );
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Make the link' }));
+        await answered(/The link opened in your browser\./);
         fireEvent.click(within(bea()).getByRole('button', { name: 'Sign in with Reply' }));
         await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
         fireEvent.input(
@@ -292,6 +346,13 @@ describe('Reply accounts, one card per profile', () => {
                 .map((call) => [call.name, ...call.args]),
         ).toEqual([
             ['setup.replyPause', 'l_1', outbound],
+            ['setup.replyResume', 'l_2', outbound],
+            ['setup.replyReconnect', 'email', 'm_2', undefined, outbound],
+            ['setup.replyLimits', 'm_2', undefined, outbound],
+            ['setup.replyLimits', 'm_2', 40, outbound],
+            ['setup.replyDelete', 'email', 'm_2', undefined, outbound],
+            ['setup.replyConnect', 'email', { provider: 'gmail' }, outbound],
+            ['setup.replyConnect', 'linkedin', { name: 'Made-up Dee' }, outbound],
             ['setup.connectReply', outbound],
             ['setup.connectReplyWithKey', 'made-up-key', { type: 'reply', name: 'routed-only', team: null }],
         ]);
@@ -385,5 +446,21 @@ describe('Reply accounts, one card per profile', () => {
         inDesktop(three, desktop);
         const page = await openAccounts('.reply-account');
         expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound team 9', 'Reply routed-only']);
+    });
+
+    it('offers no Make default on a card with a team, which the global default cannot name, whatever else the card has', async () => {
+        inDesktop(
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', { signedIn: true, user: 'ada@example.test' }),
+                    replyAccount('default', { team: '9', signedIn: true, user: 'ada@example.test' }),
+                ],
+                { noDefault: true },
+            ),
+        );
+        const page = await openAccounts('.reply-account');
+        expect(cards(page)).toEqual(['Reply default Make default', 'Reply default team 9']);
+        expect(words(section(page))).toContain('No account is the default yet.');
     });
 });

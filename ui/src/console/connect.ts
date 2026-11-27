@@ -1234,11 +1234,18 @@ const manageInReply = (): Html =>
 
 /**
  * An account's head: Reply and its name exactly as the Reply CLI has it, its team beside it, and the default mark, or
- * Make default where the desktop has it and read the routes. None for an earlier desktop's account, which has no name.
+ * Make default where the desktop has it, read the routes and the account has no team. None for an earlier desktop's
+ * account, which has no name.
  */
 function accountHead(state: DesktopSetup, view: AccountView, place: Place, real: Html | null): Html | null {
     if (view.ref === null) return null;
-    const offered = !view.isDefault && !listOf(state.accounts?.notRead).includes('routes') && makesDefault();
+    // The global default cannot name a team, so a card with one offers no Make default; a campaign is routed to it with
+    // `jason route set`.
+    const offered =
+        !view.isDefault &&
+        view.ref.team === null &&
+        !listOf(state.accounts?.notRead).includes('routes') &&
+        makesDefault();
     return html`<div class="acct-head">
         <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>
         ${view.ref.team === null ? null : html`<span class="meta acct-team">team ${view.ref.team}</span>`}
