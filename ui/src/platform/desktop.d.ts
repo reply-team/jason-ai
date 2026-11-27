@@ -621,11 +621,6 @@ export interface DesktopAccounts {
     notRead: DesktopAccountsFact[];
     /** Whether the routes were read and no global default is set at all, whatever its plugin. */
     noDefault: boolean;
-    /**
-     * How many campaigns have a route of their own to Jason's Reply plugin that names a Reply team beside its profile, each
-     * once: its work goes to that team, while the profile's card shows the profile's own team.
-     */
-    campaignsWithTeam: number;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */

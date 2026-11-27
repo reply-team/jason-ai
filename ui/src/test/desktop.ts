@@ -244,7 +244,6 @@ export function withReplyAccounts(
             accounts,
             notRead: [],
             noDefault: false,
-            campaignsWithTeam: 0,
             ...over,
         },
         reply: {

@@ -4,9 +4,9 @@
  * provider, and a name, the Reply CLI profile's exactly, and nothing else: Jason knows nothing of teams, and a profile
  * acts in the team the Reply CLI holds for it. The accounts are every profile the CLI holds and every profile a route to
  * the plugin `reply` names, at any level, global or a campaign's; a team a binding holds is ignored. A route's profile is
- * the one its binding names; else the one the Reply plugin's setting `Plugins:Config:reply:profile` remembers; else the
- * one the Reply CLI is set to, as Jason's Reply plugin runs it. The default is the account of the global default route's
- * profile, where that route is the plugin `reply`'s, and no account otherwise.
+ * the one its binding names, else the one the Reply CLI is set to at that read, as Jason's Reply plugin runs it. The
+ * default is the account of the global default route's profile, where that route is the plugin `reply`'s, and no account
+ * otherwise.
  */
 
 /** An account as a member of the seam names it: the provider, and the profile's name exactly. */
@@ -91,14 +91,12 @@ export interface GlobalDefault {
 }
 
 /**
- * What `jason route list` answered: the global default, or none; the profile every route to `reply` there is names, the
- * global ones first, null for one that names none; and how many campaigns have a route of their own that names a Reply
- * team beside its profile, each once.
+ * What `jason route list` answered: the global default, or none; and the profile every route to `reply` there is names,
+ * the global ones first, null for one that names none.
  */
 export interface Routes {
     globalDefault: GlobalDefault | null;
     reply: (string | null)[];
-    campaignsWithTeam: number;
 }
 
 const objectOf = (value: unknown): Record<string, unknown> | null =>
@@ -108,13 +106,6 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 
 /** The profile a binding of a route to `reply` names, a team beside it ignored; null where it names none. */
 const profileOf = (binding: Record<string, unknown> | null): string | null => text(binding?.['profile']);
-
-/** Whether a route is one to `reply` whose binding names a Reply team beside its profile. */
-const namesTeam = (route: Record<string, unknown>): boolean => {
-    const binding = objectOf(route['binding']);
-    const team = binding?.['team_id'];
-    return route['plugin_id'] === 'reply' && profileOf(binding) !== null && team !== undefined && team !== null;
-};
 
 /** The profile each route to `reply` of these names, null for one that names none. */
 const replyProfiles = (routes: Record<string, unknown>[]): (string | null)[] =>
@@ -155,7 +146,6 @@ export function readRoutes(result: { exit: number; stdout: string }): Routes | n
     return {
         globalDefault: defaulted === null ? null : { plugin: text(defaulted['plugin_id'])!, binding: objectOf(defaulted['binding']) },
         reply: [global, ...campaigns].flatMap((scope) => replyProfiles(routesOf(scope))),
-        campaignsWithTeam: campaigns.filter((campaign) => routesOf(campaign).some(namesTeam)).length,
     };
 }
 
@@ -168,18 +158,27 @@ export function defaultAccount(routes: Routes, unnamed: string): AccountRef | nu
     return fallback === null || fallback.plugin !== 'reply' ? null : { type: 'reply', name: profileOf(fallback.binding) ?? unnamed };
 }
 
-/**
- * The accounts in the order the page shows them, one for each profile: the default first, then the CLI's own order, then
- * the profiles only a route names, in the order the routes name them. A route that names no profile is the one the Reply
- * plugin's setting remembers (`remembered`), else the one the CLI is set to.
- */
-export function accountsOf(profiles: Profiles, routes: Routes | null, remembered: string | null): { accounts: AccountRef[]; default: AccountRef | null } {
-    const unnamed = remembered ?? profiles.current;
+/** The accounts as one read of the profiles and the routes gives them. */
+export interface Listing {
+    /** In the order the page shows them: the default first, then the CLI's own order, then the profiles only a route names. */
+    accounts: AccountRef[];
+    default: AccountRef | null;
+    /** The profile a route that names none acts as at this read: the one the Reply CLI is set to. */
+    unnamed: string;
+}
+
+/** The accounts, one for each profile, the profiles only a route names in the order the routes name them. */
+export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
+    const unnamed = profiles.current;
     const names = [...new Set([...profiles.available, ...(routes?.reply ?? []).map((profile) => profile ?? unnamed)])];
     const fallback = routes === null ? null : defaultAccount(routes, unnamed);
     const first = fallback === null ? -1 : names.indexOf(fallback.name);
     const ordered = first < 0 ? names : [names[first]!, ...names.filter((_, at) => at !== first)];
-    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback };
+    return {
+        accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })),
+        default: first < 0 ? null : fallback,
+        unnamed,
+    };
 }
 
 /**

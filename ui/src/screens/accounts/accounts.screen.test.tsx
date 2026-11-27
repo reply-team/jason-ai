@@ -442,24 +442,8 @@ describe('Reply accounts, one card per profile', () => {
             withReplyAccounts(setupFound, [replyAccount('default', { signedIn: true, user: 'ada@example.test' })]),
         );
         page = await openAccounts('.reply-account');
-        expect(words(section(page))).not.toMatch(/could not be read|no account is the default|names a Reply team/i);
+        expect(words(section(page))).not.toMatch(/could not be read|no account is the default/i);
         expect(cards(page)).toEqual(['Reply default Make default']);
-        cleanup();
-
-        // A campaign's route that names a Reply team beside its profile still works there, and is said, with the way off it.
-        const accounts = [replyAccount('default', { signedIn: true, user: 'ada@example.test' }), replyAccount('quiet')];
-        inDesktop(withReplyAccounts(setupFound, accounts, { campaignsWithTeam: 1 }));
-        page = await openAccounts('.reply-account');
-        const teamLine = () => Array.from(section(page).querySelectorAll<HTMLElement>('.team-routes')).map(words);
-        expect(teamLine()).toEqual([
-            '1 campaign has a route that names a Reply team beside its profile. Its work goes to that team, and the profile’s card shows the profile’s own. Route it to a profile pinned to that team instead.',
-        ]);
-        cleanup();
-        inDesktop(withReplyAccounts(setupFound, accounts, { campaignsWithTeam: 2 }));
-        page = await openAccounts('.reply-account');
-        expect(teamLine()).toEqual([
-            '2 campaigns have a route that names a Reply team beside its profile. Their work goes to that team, and the profile’s card shows the profile’s own. Route each to a profile pinned to that team instead.',
-        ]);
     });
 
     it('with no usable Reply CLI draws the section alone, saying what it says today of the CLI', async () => {

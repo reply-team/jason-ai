@@ -1289,9 +1289,8 @@ function cliLines(reply: DesktopSetup['reply'], real: Html | null): Html {
 }
 
 /**
- * What of the accounts as a whole the desktop could not read, said as that and never as a state; that no account is the
- * default yet where the routes were read and name none; and the campaigns whose route names a team: from a desktop of
- * this version alone.
+ * What of the accounts as a whole the desktop could not read, said as that and never as a state; and that no account is
+ * the default yet where the routes were read and name none: from a desktop of this version alone.
  */
 function accountsLines(state: DesktopSetup): Html | null {
     if (!accountsSent(state)) return null;
@@ -1311,21 +1310,7 @@ function accountsLines(state: DesktopSetup): Html | null {
                   No account is the default yet. Campaigns have nothing to send through until you make one the default.
               </div>`
             : null
-    }
-    ${teamRoutesLine(state.accounts!.campaignsWithTeam)}`;
-}
-
-/**
- * The campaigns whose own route to Jason's Reply plugin names a Reply team beside its profile: their work goes to that
- * team, which no card shows, so the line says so and how to leave it.
- */
-function teamRoutesLine(campaigns: number | undefined): Html | null {
-    if (campaigns === undefined || campaigns < 1) return null;
-    const said =
-        campaigns === 1
-            ? '1 campaign has a route that names a Reply team beside its profile. Its work goes to that team, and the profile’s card shows the profile’s own. Route it to a profile pinned to that team instead.'
-            : `${campaigns} campaigns have a route that names a Reply team beside its profile. Their work goes to that team, and the profile’s card shows the profile’s own. Route each to a profile pinned to that team instead.`;
-    return html`<div class="setrow meta team-routes" role="note">${said}</div>`;
+    }`;
 }
 
 /** Where what the card does not do is managed. */

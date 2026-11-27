@@ -124,7 +124,6 @@ const accounts = {
     accounts: true,
     notRead: true,
     noDefault: true,
-    campaignsWithTeam: true,
 } as const satisfies Record<keyof DesktopAccounts, true>;
 const account = {
     type: true,
@@ -285,7 +284,7 @@ describe('the desktop seam', () => {
             'startUpdate',
             'startCheck',
         ]);
-        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault', 'campaignsWithTeam']);
+        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault']);
         expect(Object.keys(account)).toEqual([
             'type',
             'name',

@@ -305,27 +305,6 @@ function derivedHost(server: unknown): string | null {
  * writes it by hand. No route is written here: a default is the runtime's to write, at a person's click (`route set`).
  * Every other key stays as it was, and the input is not changed.
  */
-/**
- * The profile Jason's Reply plugin acts as for a route that names none, as the installation's settings remember it
- * (`Plugins:Config:reply:profile`); null where none is.
- */
-export function rememberedProfile(settings: unknown): string | null {
-    const profile = at(settings, ['Plugins', 'Config', 'reply', 'profile']);
-    return typeof profile === 'string' && profile !== '' ? profile : null;
-}
-
-/** Whether the installation's settings hold anything at `Plugins:Config:reply:profile`, which the desktop never changes. */
-export const remembersProfile = (settings: unknown): boolean => at(settings, ['Plugins', 'Config', 'reply', 'profile']) !== undefined;
-
-/** The installation's settings with `profile` remembered for Jason's Reply plugin, where nothing is there yet. */
-export function withReplyProfile(settings: Json, profile: string): Json {
-    if (remembersProfile(settings)) return settings;
-    const next = structuredClone(settings);
-    const config = section(next, ['Plugins', 'Config', 'reply']);
-    config[keyOf(config, 'profile')] = profile;
-    return next;
-}
-
 export function withReplyGranted(settings: Json): Json {
     const next = structuredClone(settings);
     const exec = at(next, ['Plugins', 'Grants', 'reply', 'Exec']);
