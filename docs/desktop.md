@@ -614,26 +614,31 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   desktop's own. A chat that chose a model before keeps it.
 - **Reply.** A Reply account is one profile of the Reply CLI, and the Accounts screen draws one card for each: every
   profile the Reply CLI holds and every profile a route to Jason's Reply plugin names, global or a campaign's, the
-  default first. A card is that profile, named exactly as the Reply CLI names it, `default` included, with the team a
-  route names for it beside it, and two teams a route names for one profile are two cards. Everything on a card is read
-  and done as Jason's own work does it: the Reply CLI runs with the card's `--profile` and, where it has a team,
-  `--team-id`, and is never handed `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, so neither
+  default first. A card is that profile, named exactly as the Reply CLI names it, `default` included, and nothing beside
+  it: Jason knows nothing of Reply teams. A profile works in the team the Reply CLI holds for it, so a second team is a
+  second profile, pinned to that team in the Reply CLI (`reply --profile <name> team use <id>`). Everything on a card is
+  read and done as Jason's own work does it: the Reply CLI runs with the card's `--profile` alone, and is never handed
+  `REPLY_PROFILE`, `REPLY_API_KEY`, `REPLY_TEAM_ID` or `REPLY_CONFIG_DIR`, so neither
   the profile a terminal's `reply` is set to nor Jason Desktop's own environment decides what a card shows. Jason keeps
   no list of the accounts: they are read again at each look. Jason takes the computer to have one Reply CLI
   configuration; a runtime started with another `XDG_CONFIG_HOME` than Jason Desktop's would read other profiles and
   sign-ins than the cards show.
   One account is the default, marked **Default**: the one the global default route names, which every campaign with no
-  route of its own sends through. **Make default** on any other card makes it the default, replacing the default there
+  route of its own sends through. A route to Jason's Reply plugin that names no profile is no account and cannot send,
+  and the screen says so: where the global default is one, it names the Reply CLI's current profile, which that route has
+  been sending through, so that Make default on its card keeps it so; a campaign's own route, or a global route for one
+  kind of work, that names none is counted, with the `jason route set` that names a profile in it. A campaign's route that
+  names a Reply team beside its profile still sends in that team, which no card shows, and is on its way out: the screen
+  counts such campaigns, and says to route each to a profile pinned to that team instead. **Make default** on any other card makes it the default, replacing the default there
   was, whatever plugin it named; where one is set it asks you first, in a box of the desktop's own that names it and the
   account that would be, and changes nothing where the default changed meanwhile. The runtime writes the
   route (`jason route set --global`, journaled as yours, with a reason that tells a click on Make default from a default
   made at a sign-in) and refuses it, and the card says why, while a search still
   followed or a send Reply holds for later runs on the account that is the default now, or for a profile name the
-  settings file cannot hold as written. The global default cannot name a team, so a card with a team offers no Make
-  default, and a campaign is routed to such an account with `jason route set`. Every other route, a campaign's own or an
+  settings file cannot hold as written. Every other route, a campaign's own or an
   operation's, is `jason route set`'s, and no card makes one. Nothing is installed and no route is written without your
   click: Jason's Reply plugin, its grant of the `reply` program and the first default appear at the first sign-in on a
-  card where no default is set, which makes that account the default (an account with a team aside), or at Make
+  card where no default is set, which makes that account the default, or at Make
   default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
   it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a Reply CLI
   installed or updated outside Jason Desktop, is loaded again. A sign-in where a default is set leaves it as it is.
@@ -652,6 +657,11 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   accounts stay in every case. A channel that was read and holds no account and no link still waiting shows no line:
   the card says what it could not read, never that a channel is empty. The list is read again when the window takes the
   focus back, at most once in 30 seconds.
+  A sign-in that belongs to more than one Reply team, on a profile that pins none, is one Reply will not list: its card
+  says so and shows the teams in place of its mailboxes and LinkedIn accounts, each by its name with its id beside it, from
+  the look right after a sign-in on the card or at any later look. **Choose** pins that team on the profile in the Reply
+  CLI (`reply --profile <name> team use <id>`), with no question, since nothing is lost by it, and the card then reads as
+  that team. A team already pinned is changed in a terminal (`reply team use`).
   The same goes for what the screen reads before the lists. A sign-in it could not read is said on its card as that
   ("The Reply sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in"
   only where the Reply CLI answers that the profile holds no credential, or does not hold the profile, and asks for no
