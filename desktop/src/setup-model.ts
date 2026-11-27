@@ -469,23 +469,6 @@ export function readReplyAuth(result: { exit: number; stdout: string }): { signe
     return parseReplyAuth(result.stdout);
 }
 
-/**
- * The plugin `jason route list` names as the global default, null for none; or null for the whole where the list was
- * not read: an exit other than 0 (3 where no runtime answered, 1 where it refused, -1 at the time limit), or an answer
- * without `global.default`, which the runtime prints as null where no default is set.
- */
-export function readGlobalDefault(result: { exit: number; stdout: string }): { plugin: string | null } | null {
-    if (result.exit !== 0) return null;
-    try {
-        const raw = JSON.parse(result.stdout) as { global?: { default?: { plugin_id?: unknown } | null } } | null;
-        const fallback = raw?.global?.default;
-        if (fallback === null) return { plugin: null };
-        return typeof fallback?.plugin_id === 'string' ? { plugin: fallback.plugin_id } : null;
-    } catch {
-        return null;
-    }
-}
-
 export function parseReplyAccounts(stdout: string): ReplyAccount[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };

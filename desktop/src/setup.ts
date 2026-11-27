@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
+import { accountArguments, accountsOf, isAccountRef, readProfiles, readRoutes, sameAccount, type AccountRef } from './accounts.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
@@ -77,7 +78,6 @@ import {
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
-    readGlobalDefault,
     readReplyAuth,
     readReplyChannel,
     replyChannels,
@@ -171,6 +171,10 @@ export interface HostState {
  */
 export type ReplyFact = 'version' | 'auth' | 'route';
 
+/**
+ * The Reply connection as a page of an earlier version reads it: the Reply CLI, and of the accounts the default one, or the
+ * profile `default`'s where no Reply account is the default, so the one card such a page draws is true of it.
+ */
 export interface ReplyState {
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
@@ -212,6 +216,41 @@ export interface ReplyState {
      * holds the Reply plugin's line back in the mode strip until then. Always sent; optional as the page reads it.
      */
     startCheck?: 'pending' | 'ended';
+}
+
+/** What of the accounts as a whole was asked and could not be read: the Reply CLI's profiles, or the routes. */
+export type AccountsFact = 'profiles' | 'routes';
+
+/**
+ * One Reply account, one profile of the Reply CLI, as Jason's work acts as it, and what was read of it under its own name
+ * and team: its sign-in and, signed in, its mailboxes and LinkedIn accounts and the links still waiting.
+ */
+export interface AccountState extends AccountRef {
+    /** Whether the global default route names this account. */
+    default: boolean;
+    /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
+    held: boolean;
+    signedIn: boolean;
+    user: string | null;
+    senders: ReplyAccount[];
+    absent: ReplyChannel[];
+    unread: ReplyChannel[];
+    pending: ReplyCliPending[];
+    pendingUnread: ReplyChannel[];
+    /** `auth` where its sign-in could not be read: no sign-in then, and nothing listed. */
+    notRead: 'auth'[];
+}
+
+/**
+ * The accounts, read at each status and kept nowhere: none without a Reply CLI at the minimum; else the default first, then
+ * the CLI's own order, then the profiles only a route names.
+ */
+export interface AccountsState {
+    accounts: AccountState[];
+    /** What could not be read: no account where the profiles were not, none marked default where the routes were not. */
+    notRead: AccountsFact[];
+    /** Whether the routes were read and no global default is set at all, whatever its plugin. */
+    noDefault: boolean;
 }
 
 /**
@@ -263,6 +302,8 @@ export interface PluginState {
 export interface SetupState {
     hosts: HostState[];
     reply: ReplyState;
+    /** The Reply accounts, one per profile. Always sent; optional as the page reads it, since an earlier desktop sends none. */
+    accounts?: AccountsState;
     runtimeVersion: string | null;
     bundleVersion: string;
     /**
@@ -480,8 +521,11 @@ export class Setup {
     #reloadRefusal: string | null = null;
     /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
     #acts = false;
-    /** The accounts the last listing gave: an act names only one of them, and its box names it as the list does. */
-    #listed: ReplyAccount[] = [];
+    /**
+     * The accounts the last read gave, each with the mailboxes and LinkedIn accounts it listed: an act names only one of
+     * them and one of its rows, and its box names the row as the list does.
+     */
+    #listed: AccountState[] = [];
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -682,9 +726,11 @@ export class Setup {
         const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
+        const { reply, accounts } = await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
         return {
             hosts: [...programHosts, ...providerHosts],
-            reply: await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null),
+            reply,
+            accounts,
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
             versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null, this.#deps.deb ?? false),
@@ -727,70 +773,116 @@ export class Setup {
     }
 
     /**
-     * Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. `valid` is null where the
-     * runtime gave no plugin list, which leaves whether Jason uses the sign-in unread, as a route list that did not answer.
+     * The Reply CLI, and the accounts: the Reply CLI's profiles and every profile a route to Reply names, each read under its
+     * own name and team as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account. A
+     * profile only a route names is asked nothing. What a page of an earlier version reads is the default account's state,
+     * or the profile `default`'s where no Reply account is the default; it is wired where Jason's Reply plugin is valid and
+     * the global default names that very account. `valid` is null where the runtime gave no plugin list.
      */
-    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<ReplyState> {
+    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
+        const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() };
+            return {
+                reply: { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() },
+                accounts: none,
+            };
         }
-        const route = valid === true ? readGlobalDefault(await this.#deps.cli.run(['route', 'list'])) : null;
-        const wired = route?.plugin === 'reply';
-        const routeUnread = valid === null || (valid && route === null);
         const version = await this.#replyVersion();
-        // Older than the card's acts need, the CLI is offered the update, is not asked for its accounts, and the card
-        // offers no act.
+        // Older than the acts and Jason's Reply plugin need, or of a version not read, the CLI is offered the update and
+        // asked nothing of an account.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         // What came of the start's update, but a failure only while a CLI below the minimum is still in use, here or by the runtime.
         const startUpdate =
             this.#startUpdate !== null && (this.#startUpdate.updated || !current || (runtimeVersion !== null && !versionAtLeast(runtimeVersion, replyMinimumVersion)))
                 ? this.#startUpdate.said
                 : null;
-        // A sign-in that could not be read is named, and is no sign-in: no account is asked for.
-        const authRead = readReplyAuth(await this.#run('reply', 'auth status', ['auth', 'status', '--json']));
-        const auth = authRead ?? { signedIn: false, user: null, profile: null };
-        const accounts: ReplyAccount[] = [];
-        const absent: ReplyChannel[] = [];
-        const unread: ReplyChannel[] = [];
-        const pending: ReplyCliPending[] = [];
-        const pendingUnread: ReplyChannel[] = [];
-        if (auth.signedIn && current) {
-            // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
-            for (const channel of replyChannels) {
-                const read = readReplyChannel(await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']));
-                if (read.kind === 'listed') accounts.push(...read.accounts);
-                else (read.kind === 'absent' ? absent : unread).push(channel);
-            }
-            // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its
-            // channel, unless the CLI's refusal says the channel has none here.
-            for (const channel of replyChannels) {
-                if (absent.includes(channel) || unread.includes(channel)) continue;
-                const ending = replyCliEnding(await this.#run('reply', 'account pending', pendingArguments(channel), { timeoutMs: replyActLimitMs }));
-                if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
-                const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
-                if (rows === null) pendingUnread.push(channel);
-                else pending.push(...rows.filter((row) => row.channel === channel));
-            }
+        const cli = { found, version, install: current ? null : this.#installable('reply') };
+        const tail = { belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion), ...(startUpdate === null ? {} : { startUpdate }), startCheck: this.#startCheck() };
+        const nobody = { signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [] };
+        if (!current) {
+            this.#listed = [];
+            // Nothing was asked of a sign-in: an earlier page says so, never that nobody is signed in.
+            return { reply: { cli, ...nobody, notRead: [...(version === null ? ['version' as const] : []), 'auth'], ...tail }, accounts: none };
         }
+        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+        const listing = profiles === null ? { accounts: [], default: null } : accountsOf(profiles, routes);
+        const accounts = await Promise.all(
+            listing.accounts.map(async (account) => ({
+                ...(await this.#readAccount(account, profiles?.available.includes(account.name) ?? false)),
+                default: listing.default !== null && sameAccount(account, listing.default),
+            })),
+        );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
-        this.#listed = auth.signedIn && current ? accounts : [];
+        this.#listed = accounts;
+        const acting = this.#accountOf(undefined);
+        const routeUnread = valid === null || routes === null ? ['route' as const] : [];
+        const reply: ReplyState =
+            acting === null
+                ? { cli, ...nobody, notRead: ['auth', ...routeUnread], ...tail }
+                : {
+                      cli,
+                      signedIn: acting.signedIn,
+                      user: acting.user,
+                      wired: valid === true && acting.default,
+                      accounts: acting.senders,
+                      absent: acting.absent,
+                      unread: acting.unread,
+                      pending: acting.pending,
+                      pendingUnread: acting.pendingUnread,
+                      notRead: [...acting.notRead, ...routeUnread],
+                      ...tail,
+                  };
         return {
-            cli: { found, version, install: current ? null : this.#installable('reply') },
-            signedIn: auth.signedIn,
-            user: auth.user,
-            wired,
-            accounts,
-            absent,
-            unread,
-            pending,
-            pendingUnread,
-            notRead: [...(version === null ? ['version' as const] : []), ...(authRead === null ? ['auth' as const] : []), ...(routeUnread ? ['route' as const] : [])],
-            belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
-            ...(startUpdate === null ? {} : { startUpdate }),
-            startCheck: this.#startCheck(),
+            reply,
+            accounts: {
+                accounts,
+                notRead: [...(profiles === null ? ['profiles' as const] : []), ...(routes === null ? ['routes' as const] : [])],
+                noDefault: routes !== null && routes.globalDefault === null,
+            },
         };
+    }
+
+    /**
+     * One account's reads, each run naming its profile and its team: the sign-in, and, signed in, each channel's accounts
+     * and its links still waiting. A profile the CLI does not hold is asked nothing.
+     */
+    async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
+        const read: AccountState = { ...account, default: false, held, signedIn: false, user: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
+        if (!held) return read;
+        const as = accountArguments(account);
+        // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
+        const auth = readReplyAuth(await this.#run('reply', 'auth status', [...as, 'auth', 'status', '--json']));
+        if (auth === null) return { ...read, notRead: ['auth'] };
+        if (!auth.signedIn) return read;
+        // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
+        for (const channel of replyChannels) {
+            const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
+            if (listed.kind === 'listed') read.senders.push(...listed.accounts);
+            else (listed.kind === 'absent' ? read.absent : read.unread).push(channel);
+        }
+        // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its
+        // channel, unless the CLI's refusal says the channel has none here.
+        for (const channel of replyChannels) {
+            if (read.absent.includes(channel) || read.unread.includes(channel)) continue;
+            const ending = replyCliEnding(await this.#run('reply', 'account pending', [...as, ...pendingArguments(channel)], { timeoutMs: replyActLimitMs }));
+            if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
+            const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
+            if (rows === null) read.pendingUnread.push(channel);
+            else read.pending.push(...rows.filter((row) => row.channel === channel));
+        }
+        return { ...read, signedIn: true, user: auth.user };
+    }
+
+    /**
+     * The account an act names, among those the last read listed: the one named, or where none is named, as a page of an
+     * earlier version asks, the default, else the profile `default`. Null for a name the last read did not list.
+     */
+    #accountOf(named: unknown): AccountState | null {
+        if (named === undefined) return this.#listed.find((each) => each.default) ?? this.#listed.find((each) => each.name === 'default') ?? null;
+        return isAccountRef(named) ? (this.#listed.find((each) => sameAccount(each, named)) ?? null) : null;
     }
 
     #startCheck(): 'pending' | 'ended' {
@@ -810,7 +902,7 @@ export class Setup {
     /** The account the last listing gave on that channel by that id, or null: an act names only an account Reply listed. */
     #account(channel: ReplyCliChannel, id: unknown): ReplyAccount | null {
         if (!isReplyId(id)) return null;
-        return this.#listed.find((each) => each.channel === channel && each.id === id) ?? null;
+        return (this.#accountOf(undefined)?.senders ?? []).find((each) => each.channel === channel && each.id === id) ?? null;
     }
 
     /**

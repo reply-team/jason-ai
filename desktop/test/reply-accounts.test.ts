@@ -54,6 +54,12 @@ const listed = {
 };
 const print = (value: unknown) => JSON.stringify({ print: value });
 const refused = (code: string, extra: Record<string, unknown> = {}) => JSON.stringify({ code, ...extra });
+/** A run's own command, after the arguments that name the account it acts as (`--profile <name>`, `--team-id <id>`). */
+const bare = (args: readonly string[]): readonly string[] => {
+    let rest = args;
+    while ((rest[0] === '--profile' || rest[0] === '--team-id') && rest.length > 1) rest = rest.slice(2);
+    return rest;
+};
 /** What a refusal said, read off an answer of either kind. */
 const why = (answer: unknown) => answer as { refused?: string; offer?: string | null };
 
@@ -105,7 +111,11 @@ function harness(
         runtimeVersion: () => '0.37.0',
         settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
     });
-    const verbs = () => b.record().filter((entry) => entry.name === 'reply' && entry.args[0] === 'account' && entry.args[1] !== 'list' && entry.args[1] !== 'pending').map((entry) => entry.args);
+    const verbs = () =>
+        b
+            .record()
+            .filter((entry) => entry.name === 'reply' && bare(entry.args)[0] === 'account' && bare(entry.args)[1] !== 'list' && bare(entry.args)[1] !== 'pending')
+            .map((entry) => [...bare(entry.args)]);
     return { setup, boxes, opened, copied, log, verbs };
 }
 
@@ -577,7 +587,7 @@ test('below the Reply CLI the acts need, the card says to update it and offers n
     assert.deepEqual([reply.accounts, reply.pending], [[], []]);
     assert.deepEqual(await h.setup.replyConnect('linkedin', { name: 'x' }), { refused: reply.belowMinimum, code: null, offer: null, reread: false });
     assert.deepEqual(await h.setup.replyDelete('email', '12'), { refused: said.badId, code: null, offer: null, reread: false }, 'nothing listed, so nothing to name');
-    assert.equal(b.record().some((entry) => entry.name === 'reply' && entry.args[0] === 'account'), false);
+    assert.equal(b.record().some((entry) => entry.name === 'reply' && bare(entry.args)[0] === 'account'), false);
     assert.equal(h.boxes.length, 0);
     // At the minimum there is nothing to say.
     const current = await listedHarness(t, {});
@@ -593,7 +603,7 @@ test('an act clicked while the list is being read again names the accounts the l
     const programs: Programs = {
         find: (name) => b.programs.find(name),
         run: async (name, args, options) => {
-            if (args[0] === 'account' && args[1] === 'list' && hold !== null) {
+            if (bare(args)[0] === 'account' && bare(args)[1] === 'list' && hold !== null) {
                 arrived();
                 await hold;
             }
@@ -644,12 +654,12 @@ test('the links made and not used yet are read for each channel that was listed,
         { channel: 'email', id: '52', name: '', kind: 'reconnect', expiresAt: '2026-11-01T12:00:00Z', expired: true },
         { channel: 'linkedin', id: '7', name: 'Made-up LinkedIn', kind: 'connect', expiresAt: '2026-11-19T00:00:00Z', expired: false },
     ]);
-    const asked = h.b.record().filter((entry) => entry.args[1] === 'pending').map((entry) => entry.args);
+    const asked = h.b.record().filter((entry) => bare(entry.args)[1] === 'pending').map((entry) => [...bare(entry.args)]);
     assert.deepEqual(asked.slice(0, 2), [pendingArguments('email'), pendingArguments('linkedin')]);
     // A channel the plan lacks is not read; a read that fails lists none.
     const absent = await listedHarness(t, { STUB_REPLY_ACCOUNTS_LINKEDIN: 'refused', STUB_REPLY_ACCOUNT_PENDING: refused('reply.unavailable') });
     assert.deepEqual((await absent.setup.status()).reply.pending, []);
-    assert.deepEqual(absent.b.record().filter((entry) => entry.args[1] === 'pending').map((entry) => entry.args[3]), ['email', 'email']);
+    assert.deepEqual(absent.b.record().filter((entry) => bare(entry.args)[1] === 'pending').map((entry) => bare(entry.args)[3]), ['email', 'email']);
 });
 
 test('one act at a time: a second click while one runs is refused, and a verb is stopped at thirty seconds', async (t) => {
@@ -664,7 +674,7 @@ test('one act at a time: a second click while one runs is refused, and a verb is
     const programs: Programs = {
         find: (name) => b.programs.find(name),
         run: (name, args, options) => {
-            if (args[0] === 'account' && args[1] === 'delete') {
+            if (bare(args)[0] === 'account' && bare(args)[1] === 'delete') {
                 limits.push(options?.timeoutMs);
                 return Promise.resolve({ exit: -1, stdout: '', stderr: '' });
             }

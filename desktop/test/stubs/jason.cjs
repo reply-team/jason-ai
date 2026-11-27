@@ -14,6 +14,18 @@ const origin = process.env.STUB_ORIGIN || 'http://127.0.0.1:41234';
 const verb = args.slice(0, 2).join(' ');
 const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 
+/** The routes as the runtime answers `route.list`: the settings file's global default, and STUB_CAMPAIGN_ROUTES's campaigns. */
+function routesAnswer() {
+    let settings = {};
+    try {
+        settings = JSON.parse(readFileSync(join(data, 'config', 'settings.json'), 'utf8'));
+    } catch {}
+    const route = settings.Routes && settings.Routes.Default;
+    const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
+    const campaigns = process.env.STUB_CAMPAIGN_ROUTES ? JSON.parse(process.env.STUB_CAMPAIGN_ROUTES) : [];
+    return { routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {}, channels: {} }, campaigns };
+}
+
 if (args[0] === 'status') {
     const up = existsSync(runFile);
     print({
@@ -106,14 +118,45 @@ if (args[0] === 'status') {
         process.stdout.write('not json\n');
         process.exit(0);
     }
-    // The global default is the one the settings file holds, as the runtime's reload froze it.
+    // The global default is the one the settings file holds, as the runtime's reload froze it; the campaigns' own routes
+    // are the ones STUB_CAMPAIGN_ROUTES holds, as `route.list` answers them (`CampaignRoutesDto`), and none otherwise.
+    print(routesAnswer());
+} else if (verb === 'route set') {
+    // `route set --global`, as the runtime's route.set takes it: refused before anything is written as STUB_ROUTE_SET
+    // names ({"code", "details"?, "exit"?}; exit 3 is no runtime answering), or for a binding the settings file cannot keep
+    // as written (validation_failed, its detail not_representable_globally); else the route written into the settings file
+    // through its one writer, every other key kept, and the routes answered. The CLI itself refuses a change of route
+    // that names nobody who made it.
+    const option = (flag) => (args.indexOf(flag) >= 0 ? args[args.indexOf(flag) + 1] : undefined);
+    if (!args.includes('--global') || option('--plugin') === undefined) {
+        process.stderr.write('The stub answers route set --global alone.\n');
+        process.exit(2);
+    }
+    if (option('--actor') === undefined) {
+        process.stderr.write('route set: the CLI will not put this account\'s name on a change of route by itself; name who does it.\n');
+        process.exit(2);
+    }
+    if (process.env.STUB_ROUTE_SET) {
+        const given = JSON.parse(process.env.STUB_ROUTE_SET);
+        if (given.exit === 3) print({ error: { code: 'runtime_unreachable', message: 'No runtime answered.', retryable: true } });
+        else print({ error: { code: given.code, message: 'Words of the runtime the desktop never shows.', retryable: false, details: given.details ?? [] } });
+        process.exit(given.exit ?? 1);
+    }
+    const binding = option('--binding') === undefined ? null : JSON.parse(option('--binding'));
+    const spelledOtherwise = Object.values(binding ?? {}).some((value) => typeof value === 'string' && /^(?:-?\d+(?:\.\d+)?|true|false)$/i.test(value));
+    if (spelledOtherwise) {
+        print({ error: { code: 'validation_failed', message: 'Validation failed: binding: not_representable_globally.', retryable: false, details: [{ field: 'binding', code: 'not_representable_globally', message: 'Words of the runtime the desktop never shows.' }] } });
+        process.exit(1);
+    }
+    const file = join(data, 'config', 'settings.json');
     let settings = {};
     try {
-        settings = JSON.parse(readFileSync(join(data, 'config', 'settings.json'), 'utf8'));
+        settings = JSON.parse(readFileSync(file, 'utf8'));
     } catch {}
-    const route = settings.Routes && settings.Routes.Default;
-    const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
-    print({ routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {} }, campaigns: [] });
+    settings.Routes = { ...(settings.Routes ?? {}), Default: { Plugin: option('--plugin'), ...(binding === null ? {} : { Binding: binding }) } };
+    mkdirSync(join(data, 'config'), { recursive: true });
+    writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
+    print(routesAnswer());
 } else if (verb === 'campaign get') {
     // The fields of the campaign DTO the chat reads; the folder is the one a test names, or none.
     if (process.env.STUB_CAMPAIGN_MISSING === 'yes') {

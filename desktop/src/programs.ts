@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { endProgram } from './chat-process.ts';
 import { findOnPath, launchOf, type Launch } from './program-path.ts';
-import { withReplyClient } from './reply-client.ts';
+import { replyEnvironment } from './reply-client.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
@@ -133,12 +133,13 @@ export function programLaunch(env: Readonly<Record<string, string | undefined>>,
 /**
  * The programs on a PATH. The environment is the desktop's own with that PATH, less a parent Claude Code session's
  * markers (`sessionMarkers`); nothing is added to it, except that `reply` is given the harness's label built from the
- * bundle's version (`withReplyClient`) in place of any `REPLY_CLIENT` the desktop inherited.
+ * bundle's version in place of any `REPLY_CLIENT` the desktop inherited, and is not given the variables that would choose
+ * its account (`replyEnvironment`).
  */
 export function programsOn(env: Readonly<Record<string, string | undefined>>, bundleVersion: string | null): Programs {
     const path = pathOf(env);
     const childEnv = withPath(withoutSessionMarkers(env), path);
-    const replyEnv = withReplyClient(childEnv, bundleVersion);
+    const replyEnv = replyEnvironment(childEnv, bundleVersion);
     const lookup = { platform: process.platform, path, pathext: env.PATHEXT ?? env.PathExt, isProgram };
     const find = (name: ProgramName) => findOnPath(name, lookup);
     return {

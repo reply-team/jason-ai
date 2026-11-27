@@ -508,14 +508,17 @@ export type DesktopReplyChannel = 'email' | 'linkedin';
 /** A fact of the Reply connection the desktop reads: the Reply CLI's version, its sign-in, and whether Jason uses that. */
 export type DesktopReplyFact = 'version' | 'auth' | 'route';
 
-/** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
+/**
+ * The Reply connection as a page of an earlier version reads it: the Reply CLI, and of the accounts the default one, or the
+ * profile `default`'s where no Reply account is the default (`accounts` holds them all).
+ */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
-    /** The address the CLI is signed in as; null when it is not. */
+    /** The address that account is signed in as; null when it is not. */
     user: string | null;
-    /** Whether the runtime has the Reply plugin set up with this sign-in. */
+    /** Whether Jason's Reply plugin is valid and the global default route names that very account. */
     wired: boolean;
     accounts: DesktopReplyAccount[];
     /** The channels the Reply CLI says are not in this account's plan or role. */
@@ -555,6 +558,54 @@ export interface DesktopReply {
      * earlier version.
      */
     startCheck?: 'pending' | 'ended';
+}
+
+/**
+ * How a member of the seam names an account: its type, the provider; its name, the Reply CLI profile's exactly, `default`
+ * included; and the team a route names for that profile, or null. The desktop takes it only as one its last read listed.
+ */
+export interface DesktopAccountRef {
+    type: 'reply';
+    name: string;
+    team: string | null;
+}
+
+/** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
+export type DesktopAccountsFact = 'profiles' | 'routes';
+
+/**
+ * One Reply account: one profile of the Reply CLI, read as Jason's work acts as it, under its own name and team, and never
+ * as the Reply CLI's current profile or the desktop's own environment would choose.
+ */
+export interface DesktopAccount extends DesktopAccountRef {
+    /** Whether the global default route names this account: campaigns with no route of their own send through it. */
+    default: boolean;
+    /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
+    held: boolean;
+    signedIn: boolean;
+    /** The address the profile is signed in as; null when it is not. */
+    user: string | null;
+    /** Its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
+    senders: DesktopReplyAccount[];
+    /** As `DesktopReply`'s, of this account. */
+    absent: DesktopReplyChannel[];
+    unread: DesktopReplyChannel[];
+    pending: DesktopReplyPending[];
+    pendingUnread: DesktopReplyChannel[];
+    /** `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed. */
+    notRead: 'auth'[];
+}
+
+/**
+ * The Reply accounts, read at each status and kept nowhere: none without a Reply CLI at the minimum; else every profile the
+ * Reply CLI holds and every profile a route to Jason's Reply plugin names, the default first, then the CLI's own order.
+ */
+export interface DesktopAccounts {
+    accounts: DesktopAccount[];
+    /** What could not be read: no account where the profiles were not, none marked default where the routes were not. */
+    notRead: DesktopAccountsFact[];
+    /** Whether the routes were read and no global default is set at all, whatever its plugin. */
+    noDefault: boolean;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */
@@ -650,6 +701,8 @@ export interface DesktopSetup {
     /** The agent hosts and key providers, found or not. */
     hosts: DesktopHost[];
     reply: DesktopReply;
+    /** The Reply accounts, one per profile; absent from a desktop of an earlier version. */
+    accounts?: DesktopAccounts;
     /** The version of the runtime the desktop drives; null while it is not running. */
     runtimeVersion: string | null;
     /** The version of the release the desktop carries. */

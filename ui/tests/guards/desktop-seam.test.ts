@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopReply, DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
+import type { DesktopAccount, DesktopAccounts, DesktopReply, DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
 
 // The seam is the whole of what the page may ask of the desktop, and the desktop's main process is written to it. A
 // member added or dropped is a change of the seam, so each object below names exactly the members of its part:
@@ -84,6 +84,8 @@ const setup = {
 const status = {
     hosts: true,
     reply: true,
+    // The Reply accounts, one per profile, which a desktop of an earlier version does not send.
+    accounts: true,
     runtimeVersion: true,
     bundleVersion: true,
     versionsDiffer: true,
@@ -106,6 +108,23 @@ const reply = {
     startUpdate: true,
     startCheck: true,
 } as const satisfies Record<keyof DesktopReply, true>;
+// And the accounts, each one profile of the Reply CLI with what was read of it, and what of them could not be read.
+const accounts = { accounts: true, notRead: true, noDefault: true } as const satisfies Record<keyof DesktopAccounts, true>;
+const account = {
+    type: true,
+    name: true,
+    team: true,
+    default: true,
+    held: true,
+    signedIn: true,
+    user: true,
+    senders: true,
+    absent: true,
+    unread: true,
+    pending: true,
+    pendingUnread: true,
+    notRead: true,
+} as const satisfies Record<keyof DesktopAccount, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -118,13 +137,15 @@ const held: [
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof reply, keyof DesktopReply>,
+    Exactly<keyof typeof accounts, keyof DesktopAccounts>,
+    Exactly<keyof typeof account, keyof DesktopAccount>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
@@ -205,6 +226,7 @@ describe('the desktop seam', () => {
         expect(Object.keys(status)).toEqual([
             'hosts',
             'reply',
+            'accounts',
             'runtimeVersion',
             'bundleVersion',
             'versionsDiffer',
@@ -225,6 +247,22 @@ describe('the desktop seam', () => {
             'belowMinimum',
             'startUpdate',
             'startCheck',
+        ]);
+        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault']);
+        expect(Object.keys(account)).toEqual([
+            'type',
+            'name',
+            'team',
+            'default',
+            'held',
+            'signedIn',
+            'user',
+            'senders',
+            'absent',
+            'unread',
+            'pending',
+            'pendingUnread',
+            'notRead',
         ]);
     });
 });

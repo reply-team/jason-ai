@@ -15,7 +15,42 @@ const naming = (name === 'claude' && args.includes('--no-session-persistence')) 
 // The Windows check of Codex's sandbox is recorded by a name of its own too, so a test's turns are the turns alone.
 const sandboxCheck = name === 'codex' && args[0] === 'sandbox';
 record(naming ? `${name}-naming` : sandboxCheck ? 'codex-sandbox' : name, args, stdin);
-const said = args.join(' ');
+
+// The Reply CLI's global options name the profile and the team a run acts as. reply-cli 0.23.2 takes them anywhere
+// (src/index.ts); the desktop puts them first, as Jason's Reply plugin does, and the stand-in reads them only there, so a
+// run that names them anywhere else is a form it does not answer.
+let replyProfile = null;
+let replyTeam = null;
+let rest = args;
+while (name === 'reply' && (rest[0] === '--profile' || rest[0] === '--team-id') && rest[1] !== undefined) {
+    if (rest[0] === '--profile') replyProfile = rest[1];
+    else replyTeam = rest[1];
+    rest = rest.slice(2);
+}
+const said = rest.join(' ');
+
+// The Reply CLI's profiles and sign-ins, as a world the file STUB_REPLY_WORLD holds, read and written as reply-cli 0.23.2
+// keeps its own (src/profile.ts, src/commands/auth.ts):
+//   {"current": "default", "profiles": {"outbound": {"team_id"?: 9}}, "credentials": {"default": "ada@example.test"},
+//    "seats": {"ada@example.test": [3, 9]}, "lists": {"ada@example.test#3": {"email": [...], "linkedin": [...]}},
+//    "browser": "ada@example.test", "keys": {"made-up-key": "bea@example.test"}}
+// `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
+// replaces a profile's settings and never its sign-in. Without the file the CLI holds `default` alone, or the profiles
+// STUB_REPLY_PROFILES names as `profile list --json` prints them, or `default` and STUB_REPLY_PROFILE, which is then the
+// current one; and the sign-in and lists are the variables' below, whichever profile a run names.
+const worldFile = name === 'reply' ? process.env.STUB_REPLY_WORLD : undefined;
+const world = worldFile ? JSON.parse(require('node:fs').readFileSync(worldFile, 'utf8')) : null;
+const keepWorld = () => writeFileSync(worldFile, JSON.stringify(world, null, 2));
+const listedProfiles = world !== null
+    ? { current: world.current || 'default', available: ['default', ...Object.keys(world.profiles ?? {}).filter((each) => each !== 'default')] }
+    : process.env.STUB_REPLY_PROFILES
+      ? JSON.parse(process.env.STUB_REPLY_PROFILES)
+      : process.env.STUB_REPLY_PROFILE
+        ? { current: process.env.STUB_REPLY_PROFILE, available: ['default', process.env.STUB_REPLY_PROFILE] }
+        : { current: 'default', available: ['default'] };
+const declared = (profile) => profile === 'default' || listedProfiles.available.includes(profile);
+const inUse = () => replyProfile ?? listedProfiles.current;
+const usageProfile = (profile) => answer({ code: 'usage.profile', error: { hint: `Create it with \`profile add ${profile}\`.` } });
 
 // An ending a test names as JSON: {"print": <result>} on stdout and exit 0; {"code": <code>, "exit"?} as the Reply CLI's
 // error line on stderr and exit 1 (2 for a usage.* code); or {"exit", "stdout"?, "stderr"?} as it is.
@@ -116,22 +151,70 @@ if (process.env.STUB_HANG === name) {
     answer(JSON.parse(process.env.STUB_REPLY_VERSION_ENDS));
 } else if (said === '--version') {
     process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.23.2'}\n` :'10.9.2\n');
+} else if (name === 'reply' && said === 'profile list --json') {
+    // `profile list` ignores --profile (src/commands/profile.ts): exactly {"current", "available"}, `default` first; a
+    // configuration it cannot read ends as STUB_REPLY_PROFILE_LIST names it, as `config.read` or `config.corrupt`, exit 1.
+    if (process.env.STUB_REPLY_PROFILE_LIST) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_LIST));
+    else answer({ print: listedProfiles });
+} else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'add' && rest.length === 4 && rest[3] === '--json') {
+    // `profile add <name>` refuses `default` and a blank name, and replaces a profile of that name whole, with no word,
+    // leaving its sign-in, which is kept apart (src/profile.ts `add_profile`).
+    const added = rest[2];
+    if (added.trim() === '' || added === 'default') answer({ code: 'usage.profile' });
+    else {
+        if (world !== null) {
+            world.profiles = { ...(world.profiles ?? {}), [added]: {} };
+            keepWorld();
+        }
+        answer({ print: { added } });
+    }
+} else if (name === 'reply' && rest[0] !== 'skills' && !declared(inUse())) {
+    // Every other command resolves its profile first, and an undeclared one but `default` is a usage error before
+    // anything else (src/profile.ts `resolve_profile`).
+    usageProfile(inUse());
 } else if (name === 'reply' && said === 'auth status --json' && process.env.STUB_REPLY_AUTH_STATUS) {
     // A read of the sign-in that ended as STUB_REPLY_AUTH_STATUS names it.
     answer(JSON.parse(process.env.STUB_REPLY_AUTH_STATUS));
 } else if (name === 'reply' && said === 'auth status --json') {
-    // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
-    const signedIn = process.env.STUB_REPLY_SIGNED_IN === 'yes';
-    const profile = process.env.STUB_REPLY_PROFILE || 'default';
-    process.stdout.write(JSON.stringify(signedIn ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } } : { authenticated: false, profile }));
-    if (!signedIn) process.exitCode = 1;
+    // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there; a team the run
+    // names is said as the header it would send.
+    const profile = inUse();
+    const login = world !== null ? (world.credentials ?? {})[profile] : process.env.STUB_REPLY_SIGNED_IN === 'yes' ? 'someone@example.com' : undefined;
+    const seat = world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3;
+    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat }, ...(replyTeam === null ? {} : { team_id: Number(replyTeam) }) } : { authenticated: false, profile }));
+    if (!login) process.exitCode = 1;
 } else if (name === 'reply' && said === 'auth login') {
+    // The browser's sign-in is kept under the profile the run names, replacing what it held; the current profile stays.
+    if (world !== null) {
+        world.credentials = { ...(world.credentials ?? {}), [inUse()]: world.browser || 'browser@example.test' };
+        keepWorld();
+    }
     process.exit(0);
 } else if (name === 'reply' && said === 'auth login --with-token') {
-    process.exit(stdin.trim() === '' ? 1 : 0);
+    // A key on standard input, checked as Reply's whoami would and kept under the profile only when it answers.
+    const key = stdin.trim();
+    if (key === '') answer({ code: 'usage.stdin' });
+    else if (world === null) process.exit(0);
+    else if (!Object.hasOwn(world.keys ?? {}, key)) answer({ code: 'auth.invalid_key' });
+    else {
+        world.credentials = { ...(world.credentials ?? {}), [inUse()]: world.keys[key] };
+        keepWorld();
+    }
+} else if (name === 'reply' && rest[0] === 'account' && world !== null && !(world.credentials ?? {})[inUse()]) {
+    // No sign-in under the profile: `auth.required`, exit 2, before Reply is asked (src/operations/call.ts).
+    answer({ code: 'auth.required', exit: 2 });
+} else if (name === 'reply' && world !== null && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
+    // What Reply lists for the sign-in in the team the run acts in: the team named, else the profile's own, else the one
+    // seat a sign-in holds; a sign-in with two seats and no team named, or a team it has no seat in, is refused as Reply
+    // refuses it (403, `access.denied`, exit 1).
+    const login = world.credentials[inUse()];
+    const seats = (world.seats ?? {})[login] ?? [3];
+    const team = replyTeam !== null ? Number(replyTeam) : ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
+    if (team === null || !seats.includes(team)) answer({ code: 'access.denied' });
+    else answer({ print: { items: ((world.lists ?? {})[`${login}#${team}`] ?? {})[rest[3]] ?? [] } });
 } else if (name === 'reply' && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
     // Per channel, as reply-cli prints it: the items of that channel, or a refusal when the plan or role has none.
-    const channel = args[3];
+    const channel = rest[3];
     const raw = process.env[`STUB_REPLY_ACCOUNTS_${channel.toUpperCase()}`];
     // The endings reply-cli 0.20.0 has: JSON error line on stderr and exit 1 (--json), here the plan/role refusal, a
     // network failure and an expired sign-in; an exit nobody explained; and an answer that is not a list.
@@ -147,15 +230,15 @@ if (process.env.STUB_HANG === name) {
     } else {
         process.stdout.write(JSON.stringify({ items: raw ? JSON.parse(raw) : [] }));
     }
-} else if (name === 'reply' && args[0] === 'account' && args[1] !== 'list') {
+} else if (name === 'reply' && rest[0] === 'account' && rest[1] !== 'list') {
     // The account verbs as the Reply CLI ends them under --json: the result on stdout and exit 0, a refusal as one line
     // {"error":{...}} on stderr and exit 1 (2 for a usage.* code), exit 3 for a write whose outcome it does not know. The
     // answer is named per verb by STUB_REPLY_ACCOUNT_<VERB>, with _FORCE where --force was passed: {"print": <result>}, {"code": <code>, "exit"?}, or {"exit", "stdout"?, "stderr"?} as it is.
     // `pending` may be answered per channel by STUB_REPLY_ACCOUNT_PENDING_<CHANNEL>, read before the verb's own answer, and
     // lists nothing when none is named.
-    const verb = (args[1] ?? '').toUpperCase();
-    const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--force') ? '_FORCE' : ''}`;
-    const perChannel = verb === 'PENDING' && args[2] === '--channel' ? process.env[`${key}_${(args[3] ?? '').toUpperCase()}`] : undefined;
+    const verb = (rest[1] ?? '').toUpperCase();
+    const key = `STUB_REPLY_ACCOUNT_${verb}${rest.includes('--force') ? '_FORCE' : ''}`;
+    const perChannel = verb === 'PENDING' && rest[2] === '--channel' ? process.env[`${key}_${(rest[3] ?? '').toUpperCase()}`] : undefined;
     const named = perChannel || process.env[key];
     const given = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
     if (given === null) {
