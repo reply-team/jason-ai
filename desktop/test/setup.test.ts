@@ -28,7 +28,7 @@ import {
     readReplyChannel,
     Refused,
     replyMinimumVersion,
-    replyPluginValid,
+    replyPlacement,
     serverPattern,
     withPluginConfigured,
     withReplyGranted,
@@ -52,7 +52,7 @@ function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSetting
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
         settings: () => settings,
-        account: 'made-up-person',
+        person: 'made-up-person',
     };
 }
 
@@ -375,11 +375,14 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     for (const [exit, stdout] of [[0, '{'], [0, '{}'], [0, '{"global":{}}'], [0, '{"global":{"default":{}}}'], [0, 'null'], [3, unreachable], [1, routeList(null)], [-1, '']] as const) {
         assert.equal(route(exit, stdout), null, `${exit} ${stdout}`);
     }
-    // The Reply plugin as the runtime's plugin list holds it: valid, in another state or not listed, or no list given.
-    const plugins = (exit: number, stdout: string) => replyPluginValid({ exit, stdout });
-    assert.equal(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'valid' }] })), true);
-    assert.equal(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'unavailable' }, { id: 'slack', status: 'valid' }] })), false);
-    assert.equal(plugins(0, JSON.stringify({ plugins: [{ id: 'slack', status: 'valid' }] })), false);
+    // The Reply plugin as the runtime's plugin list holds it, read once for the card and for a placing: listed or not,
+    // valid or in another state, its Exec grant holding the Reply CLI or not; or no list given.
+    const plugins = (exit: number, stdout: string) => replyPlacement({ exit, stdout });
+    const granted = { exec: { granted: ['reply'] } };
+    assert.deepEqual(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'valid', capabilities: granted }] })), { placed: true, valid: true, granted: true });
+    assert.deepEqual(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'valid' }] })), { placed: true, valid: true, granted: false });
+    assert.deepEqual(plugins(0, JSON.stringify({ plugins: [{ id: 'reply', status: 'unavailable', capabilities: granted }, { id: 'slack', status: 'valid' }] })), { placed: true, valid: false, granted: true });
+    assert.deepEqual(plugins(0, JSON.stringify({ plugins: [{ id: 'slack', status: 'valid' }] })), { placed: false, valid: false, granted: false });
     for (const [exit, stdout] of [[3, unreachable], [3, ''], [1, JSON.stringify({ plugins: [] })], [-1, ''], [0, 'not json'], [0, '{}'], [0, '{"plugins":{}}'], [0, 'null']] as const) {
         assert.equal(plugins(exit, stdout), null, `${exit} ${stdout}`);
     }
@@ -1408,12 +1411,12 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
 });
 
 test('Make default, only while Jason has no global default, places what is missing of the plugin and its grant, reads the routes again and has the runtime name the account by its profile, under the person’s name, asking nothing; while a default is set, whatever its plugin or account, at the click or by the time it is placed, it is refused in the desktop’s sentence and the runtime names nobody', async (t) => {
-    const make = async (env: Record<string, string>, settings: unknown, options: { account?: string | null; named?: string } = {}) => {
+    const make = async (env: Record<string, string>, settings: unknown, options: { person?: string | null; named?: string } = {}) => {
         const b = replyBench(t, twoSignIns, env);
         writeInstallationSettings(b, settings);
         const boxes: ReplyBox[] = [];
         const log = memoryLog();
-        const setup = new Setup({ ...setupDeps(b, log), ...(options.account === undefined ? {} : { account: options.account }), confirm: (box) => (boxes.push(box), Promise.resolve(true)) });
+        const setup = new Setup({ ...setupDeps(b, log), ...(options.person === undefined ? {} : { person: options.person }), confirm: (box) => (boxes.push(box), Promise.resolve(true)) });
         await setup.status();
         const from = b.record().length;
         const answer = await setup.makeDefault({ type: 'reply', name: options.named ?? 'outbound' });
@@ -1489,7 +1492,7 @@ test('Make default, only while Jason has no global default, places what is missi
     assert.match(unparsed.answer, /^Jason’s Reply plugin could not be placed or loaded, so nothing was changed\. The settings file is not plain JSON, so the desktop left it as it is: .* Edit it by hand, then press Reload\.$/);
     assert.deepEqual(unparsed.runs, ['route list', 'plugin list']);
     // Nobody can be named as having made the change, or the routes could not be read: nothing runs, or nothing past them.
-    assert.deepEqual(await make({}, granted, { account: null }), { answer: 'Jason Desktop could not read the name you are signed in to this computer as, which a change of the default is recorded under, so nothing was changed.', routes: undefined, runs: [] });
+    assert.deepEqual(await make({}, granted, { person: null }), { answer: 'Jason Desktop could not read the name you are signed in to this computer as, which a change of the default is recorded under, so nothing was changed.', routes: undefined, runs: [] });
     assert.deepEqual(await make({ STUB_ROUTE_LIST: 'unreachable' }, granted), { answer: 'Which Reply account is the default could not be read, so nothing was changed.', routes: undefined, runs: ['route list'] });
     // An account the last read did not list, or a value of another shape, is refused before anything runs.
     const b = replyBench(t, twoSignIns);

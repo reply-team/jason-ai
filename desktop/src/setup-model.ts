@@ -629,18 +629,3 @@ export function replyPlacement(result: { exit: number; stdout: string }): { plac
     return { placed: reply !== undefined, valid: reply?.status === 'valid', granted: Array.isArray(granted) && granted.includes('reply') };
 }
 
-/**
- * Whether the runtime holds Jason's Reply plugin valid, as `jason plugin list` answered: false for one it lists in another
- * state or does not list; null where it gave no list (an exit other than 0, or no `plugins` list printed).
- */
-export function replyPluginValid(result: { exit: number; stdout: string }): boolean | null {
-    if (result.exit !== 0) return null;
-    try {
-        const raw = JSON.parse(result.stdout) as { plugins?: unknown } | null;
-        if (!Array.isArray(raw?.plugins)) return null;
-    } catch {
-        return null;
-    }
-    return pluginRuntimes(result.stdout).get('reply')?.valid ?? false;
-}
-

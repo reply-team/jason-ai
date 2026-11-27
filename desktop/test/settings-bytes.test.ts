@@ -27,7 +27,7 @@ function setupOn(b: Bench, log: Logger = memoryLog()) {
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
         settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
-        account: 'made-up-person',
+        person: 'made-up-person',
     });
 }
 

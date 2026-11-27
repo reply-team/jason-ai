@@ -109,7 +109,6 @@ import {
     programInstalls,
     replyMinimumVersion,
     replyPlacement,
-    replyPluginValid,
     Refused,
     versionAtLeast,
     versionIn,
@@ -403,10 +402,11 @@ export interface SetupDeps {
     /** The desktop's own environment, where a `JASON_` variable may set the switch of the start's update (`updateSwitch`). */
     environment: Readonly<Record<string, string | undefined>>;
     /**
-     * This account's name as the operating system gives it: a change of the global default is journaled as the person's,
-     * `human:<name>`. Absent, or a name an actor cannot hold (`usableAccount`), no default is changed.
+     * The name of the person signed in to this computer, as the operating system gives it: a change of the global default
+     * is journaled as theirs, `human:<name>`. Absent, or a name an actor cannot hold (`usableAccount`), no default is
+     * changed.
      */
-    account?: string | null;
+    person?: string | null;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -500,11 +500,12 @@ function words(result: RunResult, otherwise: string): string {
 }
 
 /**
- * A refused sign-in: the desktop's sentence, then the Reply CLI's own reason as the error it prints last under `--json`
- * gives it, its detail, else its title. Never its hint, which tells the person to sign in with no profile named, nor its
- * other fields; an ending that does not read as that error is the sentence alone.
+ * A refusal of the Reply CLI's in the desktop's words: the desktop's sentence, then the Reply CLI's own reason as the error
+ * it prints last under `--json` gives it, its detail, else its title. Never its hint, which tells the person to run another
+ * command (to sign in with no profile named, say), nor its other fields; an ending that does not read as that error is the
+ * sentence alone.
  */
-function signInWords(result: RunResult, sentence: string): string {
+function withCliReason(result: RunResult, sentence: string): string {
     const last = result.stderr.trim().split('\n').pop() ?? '';
     let error: { detail?: unknown; title?: unknown } | undefined;
     try {
@@ -587,12 +588,12 @@ function refusal(refused: string, reread = false): ReplyRefusal {
 }
 
 /**
- * An act on a Reply account the Reply CLI refused: the desktop's sentence and the CLI's reason (`signInWords`), its code,
+ * An act on a Reply account the Reply CLI refused: the desktop's sentence and the CLI's reason (`withCliReason`), its code,
  * and the accounts read again to show where they stand.
  */
 function cliRefusal(result: RunResult, sentence: string): ReplyRefusal {
     const ending = replyCliEnding(result);
-    return { refused: signInWords(result, sentence), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
+    return { refused: withCliReason(result, sentence), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
 }
 
 /**
@@ -868,7 +869,7 @@ export class Setup {
         const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
-        const { reply, accounts } = await this.#reply(begun, replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
+        const { reply, accounts } = await this.#reply(begun, replyPlacement(listed)?.valid ?? null, listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
         return {
             hosts: [...programHosts, ...providerHosts],
             reply,
@@ -1390,7 +1391,7 @@ export class Setup {
             const account = await this.#signingIn(named);
             const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login', '--json'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(signInWords(result, 'Reply did not sign in.'));
+            if (result.exit !== 0) throw new Refused(withCliReason(result, 'Reply did not sign in.'));
             await this.#signedIn(account);
         });
     }
@@ -1403,7 +1404,7 @@ export class Setup {
             const account = await this.#signingIn(named);
             const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token', '--json'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(signInWords(result, 'Reply did not accept that key.'));
+            if (result.exit !== 0) throw new Refused(withCliReason(result, 'Reply did not accept that key.'));
             await this.#signedIn(account);
         });
     }
@@ -1500,7 +1501,7 @@ export class Setup {
      * did, else the desktop's sentence why not.
      */
     async #setDefault(account: AccountRef, reason: string): Promise<string | null> {
-        const person = this.#deps.account;
+        const person = this.#deps.person;
         if (!usableAccount(person)) return accountSentences.noActor;
         const binding = JSON.stringify(defaultBinding(account));
         const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', reason]);
@@ -1632,7 +1633,7 @@ export class Setup {
     }
 
     #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
-        if (!usableAccount(this.#deps.account)) return Promise.resolve(refusal(accountSentences.noActor));
+        if (!usableAccount(this.#deps.person)) return Promise.resolve(refusal(accountSentences.noActor));
         return this.#serial(async () => {
             const unset = async () => {
                 const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));

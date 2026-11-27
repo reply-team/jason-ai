@@ -681,7 +681,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
         environment: process.env,
         // The person a change of the global default is journaled as, as the chat's header names them.
-        account: accountName(),
+        person: accountName(),
         models,
         bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
