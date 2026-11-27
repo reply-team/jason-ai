@@ -593,6 +593,12 @@ export interface DesktopAccount extends DesktopAccountRef {
     signedIn: boolean;
     /** The address the profile is signed in as; null when it is not. */
     user: string | null;
+    /**
+     * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it, empty where it
+     * gives none or the teams could not be read; null while it is not signed in, or signed in and bound to none. Always
+     * sent by this desktop; optional as the page reads it.
+     */
+    team?: DesktopReplyTeam | null;
     /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
     senders: DesktopReplySender[];
     /** As `DesktopReply`'s, of this account. */
@@ -600,11 +606,14 @@ export interface DesktopAccount extends DesktopAccountRef {
     unread: DesktopReplyChannel[];
     pending: DesktopReplyPending[];
     pendingUnread: DesktopReplyChannel[];
-    /** `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed. */
-    notRead: 'auth'[];
     /**
-     * The teams its sign-in can act in, where Reply would not list the account for want of one and its profile pins none:
-     * the choice the card offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` either way.
+     * `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed; `teams` where the teams
+     * of its sign-in could not be read, its other reads standing.
+     */
+    notRead: ('auth' | 'teams')[];
+    /**
+     * The teams its sign-in can act in, where it can act in more than one and its profile pins none: the choice the card
+     * offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` then.
      */
     teams?: DesktopReplyTeam[];
 }
@@ -1133,8 +1142,9 @@ export interface JasonDesktop {
         makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
          * Pins a team the account's last read offered (`teams`) on its profile in the Reply CLI (`reply --profile <name> team
-         * use <id>`), with no question first. The account then reads as that team. A refusal is the desktop's sentence and
-         * the Reply CLI's reason. Absent from a desktop of an earlier version.
+         * use <id>`), with no question first. The account then reads as that team. An account bound to a team already is
+         * refused: the desktop never changes a pinned team. A refusal is the desktop's sentence and the Reply CLI's reason.
+         * Absent from a desktop of an earlier version.
          */
         chooseTeam(account: DesktopAccountRef, teamId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */

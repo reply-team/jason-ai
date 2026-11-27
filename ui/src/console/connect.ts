@@ -109,8 +109,12 @@ interface AccountView {
     isDefault: boolean;
     signedIn: boolean;
     user: string | null;
+    /** The team its sign-in is bound to; null where it is bound to none, or the desktop does not say. */
+    team: DesktopReplyTeam | null;
     /** Its sign-in could not be read: said as that, and no sign-in. */
     authUnread: boolean;
+    /** The teams of its sign-in could not be read: said as that, its other reads standing. */
+    teamsUnread: boolean;
     senders: readonly DesktopReplySender[];
     absent: readonly DesktopReplyChannel[];
     unread: readonly DesktopReplyChannel[];
@@ -136,7 +140,9 @@ function accountViews(state: DesktopSetup): AccountView[] {
             isDefault: each.default === true,
             signedIn: each.signedIn === true,
             user: each.user,
+            team: each.team ?? null,
             authUnread: listOf(each.notRead).includes('auth'),
+            teamsUnread: listOf(each.notRead).includes('teams'),
             senders: listOf(each.senders),
             absent: listOf(each.absent),
             unread: listOf(each.unread),
@@ -152,7 +158,9 @@ function accountViews(state: DesktopSetup): AccountView[] {
             isDefault: false,
             signedIn: reply.signedIn,
             user: reply.user,
+            team: null,
             authUnread: listOf(reply.notRead).includes('auth'),
+            teamsUnread: false,
             senders: listOf(reply.accounts),
             absent: listOf(reply.absent),
             unread: listOf(reply.unread),
@@ -205,13 +213,17 @@ const choosesTeam = (): boolean => mounted() && typeof earlier(here().desktop).s
 /** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
 
+/** A team as the card names it: by the name Reply gives it, else by its id. */
+const teamWords = (team: DesktopReplyTeam): string => (team.name === '' ? `team ${team.id}` : team.name);
+
 /**
- * The one line for each channel the desktop did not wholly read, from its lists of closed words: the channels the CLI
- * says are not in the plan or role, the channels that could not be read, then the listed channels whose links still
- * waiting could not be read. A channel read and empty has none: an error is said, an empty state is not. Only the
- * card's own sentences, never the CLI's.
+ * The one line for each read the desktop did not wholly make, from its lists of closed words: the teams of the sign-in
+ * that could not be read, the channels the CLI says are not in the plan or role, the channels that could not be read,
+ * then the listed channels whose links still waiting could not be read. A channel read and empty has none: an error is
+ * said, an empty state is not. Only the card's own sentences, never the CLI's.
  */
 const unlisted = (view: AccountView): string[] => [
+    ...(view.signedIn && view.teamsUnread ? ['The teams of this sign-in could not be read. Check again.'] : []),
     ...view.absent.map((channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`),
     ...view.unread.map(
         (channel) => `${channel === 'linkedin' ? 'LinkedIn accounts' : 'Mailboxes'} could not be read. Check again.`,
@@ -1390,7 +1402,13 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                     ? html`<div class="grow">The Reply sign-in could not be read.</div>
                           <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>`
                     : html`<div class="grow">
-                          ${view.signedIn ? html`Signed in as <b>${view.user ?? ''}</b>` : 'Not signed in'}
+                          ${
+                              view.signedIn
+                                  ? html`Signed in as <b>${view.user ?? ''}</b>${
+                                            view.team === null ? null : html` in <b>${teamWords(view.team)}</b>`
+                                        }`
+                                  : 'Not signed in'
+                          }
                       </div>`
             }
         </div>

@@ -431,13 +431,26 @@ export interface ReplySender {
 /** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
 const profileLimit = 64;
 
-export function parseReplyAuth(stdout: string): { signedIn: boolean; user: string | null; profile: string | null } {
+/**
+ * A sign-in as `reply auth status --json` prints it: whether there is one, as whom, under which profile, and the team its
+ * runs send, the top-level `team_id`, which is the profile's pin where the run names no team and the environment holds no
+ * `REPLY_TEAM_ID`, as the desktop's runs never do: by its id, digits only, or null for none.
+ */
+export interface ReplyAuth {
+    signedIn: boolean;
+    user: string | null;
+    profile: string | null;
+    team: string | null;
+}
+
+export function parseReplyAuth(stdout: string): ReplyAuth {
     try {
-        const raw = JSON.parse(stdout) as { authenticated?: unknown; profile?: unknown; user?: { username?: unknown } };
+        const raw = JSON.parse(stdout) as { authenticated?: unknown; profile?: unknown; user?: { username?: unknown }; team_id?: unknown };
         const profile = typeof raw.profile === 'string' && raw.profile.length > 0 && raw.profile.length <= profileLimit ? raw.profile : null;
-        return { signedIn: raw.authenticated === true, user: typeof raw.user?.username === 'string' ? raw.user.username : null, profile };
+        const team = typeof raw.team_id === 'number' && Number.isSafeInteger(raw.team_id) && raw.team_id > 0 ? String(raw.team_id) : null;
+        return { signedIn: raw.authenticated === true, user: typeof raw.user?.username === 'string' ? raw.user.username : null, profile, team };
     } catch {
-        return { signedIn: false, user: null, profile: null };
+        return { signedIn: false, user: null, profile: null, team: null };
     }
 }
 
@@ -447,7 +460,7 @@ export function parseReplyAuth(stdout: string): { signedIn: boolean; user: strin
  * before it prints, with its error line on stderr alone: a profile it does not know (`usage.profile`, exit 2), a
  * credential store it cannot read (`store.read`, `store.corrupt`, exit 1). A time limit is exit -1.
  */
-export function readReplyAuth(result: { exit: number; stdout: string }): { signedIn: boolean; user: string | null; profile: string | null } | null {
+export function readReplyAuth(result: { exit: number; stdout: string }): ReplyAuth | null {
     if (result.exit !== 0 && result.exit !== 1) return null;
     try {
         const raw: unknown = JSON.parse(result.stdout);
@@ -474,7 +487,7 @@ export function parseReplyAccounts(stdout: string): ReplySender[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; accounts: ReplySender[] } | { kind: 'absent' } | { kind: 'teamless' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; accounts: ReplySender[] } | { kind: 'absent' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
@@ -485,16 +498,10 @@ export type ReplyChannelRead = { kind: 'listed'; accounts: ReplySender[] } | { k
 const channelAbsentCode = 'access.feature_unavailable';
 
 /**
- * reply-cli 0.23.2 answers Reply's 403 `TEAM_REQUIRED`, Reply refusing a sign-in that belongs to more than one team and
- * names none, as `access.denied` carrying Reply's own code in `reply_code` (src/operations/call.ts `refusal`), exit 1.
- */
-const teamRequiredCode = 'TEAM_REQUIRED';
-
-/**
- * One channel's read, in four outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
- * and nothing else); teamless, Reply's own code above; and unread for every other ending, a network failure, an expired
- * sign-in, an exit nobody explained, a timeout (exit -1) or an answer that is no list. The CLI's own words are read for
- * the codes only, never kept.
+ * One channel's read, in three outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
+ * and nothing else); and unread for every other ending, a network failure, an expired sign-in, Reply refusing a sign-in
+ * in several teams that names none (`access.denied` carrying `TEAM_REQUIRED`), an exit nobody explained, a timeout
+ * (exit -1) or an answer that is no list. The CLI's own words are read for the code only, never kept.
  */
 export function readReplyChannel(result: { exit: number; stdout: string; stderr: string }): ReplyChannelRead {
     if (result.exit === 0) {
@@ -508,9 +515,8 @@ export function readReplyChannel(result: { exit: number; stdout: string; stderr:
     if (result.exit !== 1) return { kind: 'unread' };
     const last = result.stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '').pop();
     try {
-        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown; reply_code?: unknown } }).error;
-        if (error?.code === channelAbsentCode) return { kind: 'absent' };
-        return error?.code === 'access.denied' && error.reply_code === teamRequiredCode ? { kind: 'teamless' } : { kind: 'unread' };
+        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown } }).error;
+        return error?.code === channelAbsentCode ? { kind: 'absent' } : { kind: 'unread' };
     } catch {
         return { kind: 'unread' };
     }

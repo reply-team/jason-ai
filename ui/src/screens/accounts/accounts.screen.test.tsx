@@ -229,8 +229,20 @@ describe('Reply accounts, one card per profile', () => {
     };
     const linkedIn = { id: 'l_1', channel: 'linkedin', name: 'Made-up Bea', address: '', status: 'enabled' };
     const three = withReplyAccounts(setupFound, [
-        replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test', senders: [mailbox] }),
-        replyAccount('outbound', { signedIn: true, user: 'bea@example.test', senders: [linkedIn] }),
+        replyAccount('default', {
+            default: true,
+            signedIn: true,
+            user: 'ada@example.test',
+            team: { id: '3', name: 'Made-up Three' },
+            senders: [mailbox],
+        }),
+        replyAccount('outbound', {
+            signedIn: true,
+            user: 'bea@example.test',
+            team: { id: '9', name: '' },
+            notRead: ['teams'],
+            senders: [linkedIn],
+        }),
         replyAccount('routed-only', { held: false }),
     ]);
     const cardOf = (page: HTMLElement, label: string) => within(page).getByRole('region', { name: label });
@@ -241,18 +253,24 @@ describe('Reply accounts, one card per profile', () => {
     const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
     const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
 
-    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, and no Make default once a default is set', async () => {
+    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, its sign-in with the team it is bound to, and no Make default once a default is set', async () => {
         inDesktop(three);
         const page = await openAccounts('.reply-account');
         expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
         expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound', 'Reply routed-only']);
         const ada = cardOf(page, 'Reply account default');
-        expect(words(ada.querySelector('.reply-state')!)).toBe('Signed in as ada@example.test');
+        expect(words(ada.querySelector('.reply-state')!)).toBe('Signed in as ada@example.test in Made-up Three');
         expect(words(ada.querySelector('.acct')!)).toContain('Sales inbox');
         expect(within(ada).queryByRole('button', { name: 'Make default' })).toBeNull();
+        expect(words(ada)).not.toContain('could not be read');
+        // A team Reply gives no name, or whose name could not be read, by its id; teams that could not be read said as
+        // that, the account's mailboxes and LinkedIn accounts standing.
         const bea = cardOf(page, 'Reply account outbound');
-        expect(words(bea.querySelector('.reply-state')!)).toBe('Signed in as bea@example.test');
+        expect(words(bea.querySelector('.reply-state')!)).toBe('Signed in as bea@example.test in team 9');
         expect(words(bea.querySelector('.acct')!)).toContain('Made-up Bea');
+        expect(Array.from(bea.querySelectorAll('.acct-none')).map((line) => words(line))).toEqual([
+            'The teams of this sign-in could not be read. Check again.',
+        ]);
         // A profile only a route names, which the Reply CLI does not hold: not signed in, with the sign-in that makes it.
         const routed = cardOf(page, 'Reply account routed-only');
         expect(words(routed.querySelector('.reply-state')!)).toBe('Not signed in');

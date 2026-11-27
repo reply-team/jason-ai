@@ -132,6 +132,8 @@ const account = {
     held: true,
     signedIn: true,
     user: true,
+    // The team it is bound to, its profile's pin, by its id and name.
+    team: true,
     senders: true,
     absent: true,
     unread: true,
@@ -292,6 +294,7 @@ describe('the desktop seam', () => {
             'held',
             'signedIn',
             'user',
+            'team',
             'senders',
             'absent',
             'unread',

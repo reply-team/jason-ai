@@ -250,16 +250,25 @@ export interface AccountState extends AccountRef {
     held: boolean;
     signedIn: boolean;
     user: string | null;
+    /**
+     * The team the account is bound to, the one its profile pins in the Reply CLI, by its id and the name Reply gives it,
+     * empty where it gives none or its teams could not be read; null while it is not signed in, or signed in and bound to
+     * none. Always sent; optional as the page reads it.
+     */
+    team?: ReplyTeam | null;
     senders: ReplySender[];
     absent: ReplyChannel[];
     unread: ReplyChannel[];
     pending: ReplyCliPending[];
     pendingUnread: ReplyChannel[];
-    /** `auth` where its sign-in could not be read: no sign-in then, and nothing listed. */
-    notRead: 'auth'[];
     /**
-     * The teams its sign-in can act in, where Reply would not list the account for want of one, the profile pinning none:
-     * the choice the card offers. Absent otherwise; its channels are unread either way.
+     * `auth` where its sign-in could not be read: no sign-in then, and nothing listed; `teams` where the teams of its
+     * sign-in could not be read, its other reads standing.
+     */
+    notRead: ('auth' | 'teams')[];
+    /**
+     * The teams its sign-in can act in, where it can act in more than one and its profile pins none: the choice the card
+     * offers. Absent otherwise; its channels are unread then, since Reply lists none of them without a team.
      */
     teams?: ReplyTeam[];
 }
@@ -568,6 +577,8 @@ export class Setup {
     #listeners = new Set<() => void>();
     #versions = new Map<ProgramName, string | null>();
     #queue: Promise<unknown> = Promise.resolve();
+    /** The writes of the Reply CLI's profiles, one after another (`#writingConfig`). */
+    #configWrites: Promise<unknown> = Promise.resolve();
     /** What the last reload said about the settings file, when it could not read it. */
     #reloadRefusal: string | null = null;
     /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
@@ -917,7 +928,8 @@ export class Setup {
                       unread: acting.unread,
                       pending: acting.pending,
                       pendingUnread: acting.pendingUnread,
-                      notRead: [...acting.notRead, ...routeUnread],
+                      // The teams are this desktop's own fact: a page of an earlier version knows none.
+                      notRead: [...acting.notRead.filter((fact) => fact === 'auth'), ...routeUnread],
                       ...tail,
                   };
         return {
@@ -931,47 +943,83 @@ export class Setup {
     }
 
     /**
-     * One account's reads, each run naming its profile: the sign-in, and, signed in, each channel's accounts and its links
-     * still waiting. A profile the CLI does not hold is asked nothing. A channel Reply refuses for want of a team ends the
-     * reads, and the account is offered the teams of its sign-in (`#teamless`).
+     * One account's reads, each run naming its profile: the sign-in, and, signed in, the teams of the sign-in, the team the
+     * profile is bound to, each channel's accounts and its links still waiting. A profile the CLI does not hold is asked
+     * nothing.
      */
     async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
-        const read: AccountState = { ...account, default: false, held, signedIn: false, user: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
+        const read: AccountState = { ...account, default: false, held, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
         if (!held) return read;
-        const as = accountArguments(account);
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
-        const auth = readReplyAuth(await this.#run('reply', 'auth status', [...as, 'auth', 'status', '--json']));
+        const auth = readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
         if (auth === null) return { ...read, notRead: ['auth'] };
         if (!auth.signedIn) return read;
-        // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
-        for (const [at, channel] of replyChannels.entries()) {
-            const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
-            if (listed.kind === 'teamless') return this.#teamless({ ...read, signedIn: true, user: auth.user, unread: [...read.unread, ...replyChannels.slice(at)] });
-            if (listed.kind === 'listed') read.senders.push(...listed.accounts);
-            else (listed.kind === 'absent' ? read.absent : read.unread).push(channel);
+        const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
+        const unreadTeams = (teams: ReplyTeam[] | null): AccountState['notRead'] => (teams === null ? ['teams'] : []);
+        // A pinned team is named from the list of the sign-in's teams, read beside its mailboxes and LinkedIn accounts so
+        // it holds them up by no more than the longer of the two.
+        if (auth.team !== null) {
+            const pinned = auth.team;
+            const [teams, lists] = await Promise.all([this.#teams(account), this.#lists(account)]);
+            return { ...signedIn, ...lists, team: teams?.find((each) => each.id === pinned) ?? { id: pinned, name: '' }, notRead: unreadTeams(teams) };
         }
-        // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its
-        // channel, unless the CLI's refusal says the channel has none here.
-        for (const channel of replyChannels) {
-            if (read.absent.includes(channel) || read.unread.includes(channel)) continue;
-            const ending = replyCliEnding(await this.#run('reply', 'account pending', [...as, ...pendingArguments(channel)], { timeoutMs: replyActLimitMs }));
-            if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
-            const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
-            if (rows === null) read.pendingUnread.push(channel);
-            else read.pending.push(...rows.filter((row) => row.channel === channel));
-        }
-        return { ...read, signedIn: true, user: auth.user };
+        // None pinned: a sign-in in one team is bound to it with no question, one in several is offered them, and Reply
+        // is asked for no list it would refuse without a team.
+        const teams = await this.#teams(account);
+        if (teams !== null && teams.length > 1) return { ...signedIn, unread: [...replyChannels], teams };
+        const team = teams?.length === 1 ? await this.#bind(account, teams[0]!) : null;
+        return { ...signedIn, ...(await this.#lists(account)), team, notRead: unreadTeams(teams) };
+    }
+
+    /** The teams an account's sign-in can act in (`reply --profile <name> team list --json`); null where they were not read. */
+    async #teams(account: AccountRef): Promise<ReplyTeam[] | null> {
+        return readTeams(await this.#run('reply', 'team list', [...accountArguments(account), 'team', 'list', '--json'], { timeoutMs: replyActLimitMs }));
     }
 
     /**
-     * An account Reply would not list for want of a team: its sign-in belongs to more than one and its profile pins none.
-     * It is offered the teams the Reply CLI lists for that sign-in (`reply --profile <name> team list --json`), asked here
-     * alone, so a sign-in with one team, or a profile with one pinned, is never asked; a list that could not be read
-     * offers none, and the channels stay unread.
+     * Binds an account whose profile pins no team to the one team of its sign-in (`reply --profile <name> team use <id>`),
+     * with no question, since nothing is lost by it; the log says that it was done. The team, or null where the Reply CLI
+     * did not pin it.
      */
-    async #teamless(read: AccountState): Promise<AccountState> {
-        const teams = readTeams(await this.#run('reply', 'team list', [...accountArguments(read), 'team', 'list', '--json'], { timeoutMs: replyActLimitMs }));
-        return teams === null ? read : { ...read, teams };
+    async #bind(account: AccountRef, team: ReplyTeam): Promise<ReplyTeam | null> {
+        const result = await this.#writingConfig(() => this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs }));
+        this.#deps.log.info('reply_team_bound', { Exit: result.exit });
+        return result.exit === 0 ? team : null;
+    }
+
+    /**
+     * An account's mailboxes and LinkedIn accounts, each channel read on its own, and the links still waiting of each
+     * channel that was listed.
+     */
+    async #lists(account: AccountRef): Promise<Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'>> {
+        const as = accountArguments(account);
+        const lists: Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'> = { senders: [], absent: [], unread: [], pending: [], pendingUnread: [] };
+        // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
+        for (const channel of replyChannels) {
+            const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
+            if (listed.kind === 'listed') lists.senders.push(...listed.accounts);
+            else (listed.kind === 'absent' ? lists.absent : lists.unread).push(channel);
+        }
+        // A read that fails lists none and names its channel, unless the CLI's refusal says the channel has none here.
+        for (const channel of replyChannels) {
+            if (lists.absent.includes(channel) || lists.unread.includes(channel)) continue;
+            const ending = replyCliEnding(await this.#run('reply', 'account pending', [...as, ...pendingArguments(channel)], { timeoutMs: replyActLimitMs }));
+            if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
+            const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
+            if (rows === null) lists.pendingUnread.push(channel);
+            else lists.pending.push(...rows.filter((row) => row.channel === channel));
+        }
+        return lists;
+    }
+
+    /**
+     * One write of the Reply CLI's profiles at a time (`team use`, `profile add`, `profile delete`): reply-cli rewrites its
+     * configuration whole, so two at once would lose one, and a look binds accounts side by side.
+     */
+    #writingConfig<T>(work: () => Promise<T>): Promise<T> {
+        const next = this.#configWrites.then(work, work);
+        this.#configWrites = next.catch(() => undefined);
+        return next;
     }
 
     /**
@@ -1236,7 +1284,7 @@ export class Setup {
         const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
         if (profiles === null) throw new Refused(accountSentences.profilesUnread);
         if (!profiles.available.includes(account.name)) {
-            const added = await this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']);
+            const added = await this.#writingConfig(() => this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']));
             if (added.exit !== 0) throw new Refused(accountSentences.profileNotMade);
         }
         return { type: account.type, name: account.name };
@@ -1321,16 +1369,21 @@ export class Setup {
 
     /**
      * Pins a team on an account's profile in the Reply CLI (`reply --profile <name> team use <id>`, which checks the id
-     * against the sign-in's own teams): only a team the last read offered that account, which Reply would not list without
-     * one. Nothing is asked of the person first, since nothing is lost by it. The answer is done, or the desktop's sentence
-     * and then the Reply CLI's own reason, and the page reads the accounts again either way.
+     * against the sign-in's own teams): only a team the last read offered that account, which its profile pinned none of.
+     * A team pinned is never changed: an account the last read showed bound is refused, and so is one the Reply CLI,
+     * asked again just before, holds bound by now. Nothing is asked of the person first, since nothing is lost by it. The
+     * answer is done, or the desktop's sentence and then the Reply CLI's own reason, and the page reads the accounts again
+     * either way.
      */
     chooseTeam(named: unknown, teamId: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if ((account.team ?? null) !== null) return Promise.resolve(refusal(accountSentences.teamPinned));
         if (typeof teamId !== 'string' || !(account.teams ?? []).some((team) => team.id === teamId)) return Promise.resolve(refusal(accountSentences.teamNotOffered));
         return this.#acting(async () => {
-            const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs });
+            const auth = readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
+            if (auth?.team != null) return refusal(accountSentences.teamPinned, true);
+            const result = await this.#writingConfig(() => this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs }));
             this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
             if (result.exit === 0) return { done: true };
             const ending = replyCliEnding(result);

@@ -172,12 +172,22 @@ if (process.env.STUB_HANG === name) {
     // A read of the sign-in that ended as STUB_REPLY_AUTH_STATUS names it.
     answer(JSON.parse(process.env.STUB_REPLY_AUTH_STATUS));
 } else if (name === 'reply' && said === 'auth status --json') {
-    // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
+    // The shape reply-cli prints (src/auth/status.ts, src/commands/auth.ts), and its exit code: 1 when no credential is
+    // there. `team_id` at the top is the team the run would send, here the profile's pin, since the desktop hands the CLI
+    // no REPLY_TEAM_ID and no --team-id. Without the file, a sign-in is pinned to team 3.
     const profile = inUse();
     const login = world !== null ? (world.credentials ?? {})[profile] : process.env.STUB_REPLY_SIGNED_IN === 'yes' ? 'someone@example.com' : undefined;
     const seat = world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3;
-    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat } } : { authenticated: false, profile }));
+    const pinned = world !== null ? ((world.profiles ?? {})[profile] ?? {}).team_id : 3;
+    process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: 'api_key', user: { id: 7, username: login, team_id: seat }, ...(pinned === undefined ? {} : { team_id: pinned }) } : { authenticated: false, profile }));
     if (!login) process.exitCode = 1;
+} else if (name === 'reply' && said === 'team list --json' && process.env.STUB_REPLY_TEAM_LIST) {
+    // A read of the teams that ended as STUB_REPLY_TEAM_LIST names it, as reply-cli prints `teams.unavailable` and the like.
+    answer(JSON.parse(process.env.STUB_REPLY_TEAM_LIST));
+} else if (name === 'reply' && world === null && said === 'team list --json') {
+    // Without the file, a sign-in can act in team 3 alone, which its profile pins.
+    if (process.env.STUB_REPLY_SIGNED_IN === 'yes') answer({ print: { current_team_id: 3, teams: [{ team_id: 3, team_name: 'Made-up Three' }] } });
+    else answer({ code: 'auth.required', exit: 2 });
 } else if (name === 'reply' && said === 'auth login --json' && process.env.STUB_REPLY_LOGIN) {
     // A browser's sign-in that ended as STUB_REPLY_LOGIN names it, the way it was printed: {"exit", "stderr"?}.
     answer(JSON.parse(process.env.STUB_REPLY_LOGIN));

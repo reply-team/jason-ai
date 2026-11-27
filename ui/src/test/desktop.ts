@@ -219,6 +219,7 @@ export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): 
     held: true,
     signedIn: false,
     user: null,
+    team: null,
     senders: [],
     absent: [],
     unread: [],
@@ -257,7 +258,8 @@ export function withReplyAccounts(
             unread: acting?.unread ?? [],
             pending: acting?.pending ?? [],
             pendingUnread: acting?.pendingUnread ?? [],
-            notRead: acting === undefined ? ['auth'] : acting.notRead,
+            // The teams are this desktop's own fact, which a page of an earlier version knows none of.
+            notRead: acting === undefined ? ['auth'] : acting.notRead.filter((fact) => fact === 'auth'),
         },
     };
 }

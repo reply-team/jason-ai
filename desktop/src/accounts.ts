@@ -3,7 +3,8 @@
  * the Reply CLI's profiles (`reply profile list --json`) and the routes (`jason route list`). An account is a type, the
  * provider, and a name, the Reply CLI profile's exactly, and nothing else. It has no team of its own in Jason: the team is
  * the profile's, pinned in the Reply CLI, and the desktop names the profile alone, which is how Jason's Reply plugin runs a
- * route that names no team. Teams are read only to offer a pick where Reply asks for one (`readTeams`).
+ * route that names no team. A signed-in account is bound to one team, its profile's pin; the teams of its sign-in
+ * (`readTeams`) name that team, or are offered where it can act in several and pins none.
  *
  * The accounts are every profile the CLI holds and every profile a route to the plugin `reply` names, at any level, global
  * or a campaign's; a team a binding holds is no part of its account. A route's profile is the one its binding names, else
@@ -210,6 +211,7 @@ export const accountSentences = {
     notRepresentable: 'The settings file cannot hold this Reply account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.',
     teamNotOffered: 'That is not a team this Reply account was offered.',
     teamNotChosen: 'The team was not chosen.',
+    teamPinned: 'This Reply account is bound to its team already, and Jason Desktop does not change it, so nothing was changed.',
 } as const;
 
 /**
