@@ -33,7 +33,7 @@ import {
     withReplyGranted,
 } from '../src/setup-model.ts';
 import { claudeCodeModels } from '../src/chat-models.ts';
-import { accountsOf, defaultBinding, defaultReason, readProfiles, readRoutes } from '../src/accounts.ts';
+import { accountNamed, accountsOf, defaultBinding, defaultReason, readProfiles, readRoutes, readTeams } from '../src/accounts.ts';
 import { belowMinimumSentence, type ReplyBox } from '../src/reply-accounts.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 import { printed } from './reply-cli-account-fixture.ts';
@@ -311,6 +311,28 @@ test('Reply’s answers are read in the shapes reply-cli prints, the profiles an
     assert.deepEqual(profiles(0, JSON.stringify({ current: 'default', available: ['default'] })), { current: 'default', available: ['default'] }, 'a missing configuration holds default alone');
     for (const [exit, stdout] of [[1, ''], [2, ''], [-1, ''], [0, ''], [0, '{}'], [0, '{"current":"default"}'], [0, '{"current":7,"available":[]}'], [0, '{"current":"default","available":"default"}'], [0, 'null']] as const) {
         assert.equal(profiles(exit, stdout), null, `${exit} ${stdout}`);
+    }
+    // The teams a sign-in can act in, as reply-cli 0.23.2 prints `team list --json` (src/commands/team.ts): each once, by a
+    // positive whole id, its name with control and format characters made spaces, trimmed and cut to 100 characters, since
+    // the page draws it; a list with none of those, or any other ending, offers none.
+    const teams = (exit: number, stdout: string) => readTeams({ exit, stdout });
+    const listedTeams = (each: unknown[]) => JSON.stringify({ current_team_id: null, teams: each });
+    assert.deepEqual(
+        teams(0, listedTeams([
+            { team_id: 5, team_name: ' Made-up\u0007Five​ ' },
+            { team_id: 5, team_name: 'Made-up Five again' },
+            { team_id: 0, team_name: 'zero' },
+            { team_id: -9, team_name: 'below zero' },
+            { team_id: 2.5, team_name: 'a fraction' },
+            { team_id: 2 ** 53, team_name: 'past a safe integer' },
+            { team_id: '7', team_name: 'an id in words' },
+            { team_id: 9, team_name: 'N'.repeat(101) },
+            { team_id: 11 },
+        ])),
+        [{ id: '5', name: 'Made-up Five' }, { id: '9', name: 'N'.repeat(100) }, { id: '11', name: '' }],
+    );
+    for (const [exit, stdout] of [[1, listedTeams([{ team_id: 5, team_name: 'x' }])], [0, listedTeams([])], [0, listedTeams([{ team_id: 0 }])], [0, '{}'], [0, 'not json'], [0, 'null']] as const) {
+        assert.equal(teams(exit, stdout), null, `${exit} ${stdout}`);
     }
     // The routes, as the runtime answers route.list (RoutesDto): the global default, or none; and the profile every route
     // to Reply names, at any level, global or a campaign's, null where it names none, a team beside it or alone no part
@@ -1015,6 +1037,12 @@ test('Make default asks first where a default is set, naming it and the account 
     assert.deepEqual(boxes.map((box) => [box.message, box.detail, box.buttons[0]]), [
         ['Make the Reply account “quiet” the default?', 'Campaigns with no route of their own send through the Reply account “default” now. They will send through the Reply account “quiet” instead.', 'Make default'],
     ]);
+    // A profile's name is whatever was typed for it: the box shows it with control and format characters made spaces,
+    // trimmed, and past 64 characters cut, with an ellipsis.
+    const shownAs = (name: string) => accountNamed({ type: 'reply', name });
+    assert.equal(shownAs(` Made-up\u0007Ops​${'x'.repeat(70)} `), `the Reply account “Made-up Ops ${'x'.repeat(52)}…”`);
+    assert.equal(shownAs('x'.repeat(64)), `the Reply account “${'x'.repeat(64)}”`);
+    assert.equal(shownAs('x'.repeat(65)), `the Reply account “${'x'.repeat(64)}…”`);
 
     // The plugin listed and granted: nothing is placed or written by the desktop; the routes read again after the yes, and
     // the runtime names the account.
