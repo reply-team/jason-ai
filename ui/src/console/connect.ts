@@ -127,6 +127,8 @@ interface AccountView {
     authUnread: boolean;
     /** The teams of its sign-in could not be read: said as that, its other reads standing. */
     teamsUnread: boolean;
+    /** Who its sign-in is could not be read, once it was bound: said as that, `user` being null. */
+    loginUnread: boolean;
     senders: readonly DesktopReplySender[];
     absent: readonly DesktopReplyChannel[];
     unread: readonly DesktopReplyChannel[];
@@ -162,6 +164,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             team: each.team,
             authUnread: each.notRead.includes('auth'),
             teamsUnread: each.notRead.includes('teams'),
+            loginUnread: each.notRead.includes('login'),
             senders: each.senders,
             absent: each.absent,
             unread: each.unread,
@@ -185,6 +188,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             team: null,
             authUnread: listOf(reply.notRead).includes('auth'),
             teamsUnread: false,
+            loginUnread: false,
             senders: listOf(reply.accounts),
             absent: listOf(reply.absent),
             unread: listOf(reply.unread),
@@ -249,8 +253,9 @@ const usableCli = (reply: DesktopSetup['reply']): boolean =>
 /** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
 
-/** A team as the card names it: by the name Reply gives it, else by its id. */
-const teamWords = (team: DesktopReplyTeam): string => (team.name === '' ? `team ${team.id}` : team.name);
+/** A team as the card names it: by the name Reply gives it, never by its id. */
+const teamWords = (team: DesktopReplyTeam): string =>
+    team.name === '' ? 'a team whose name could not be read' : team.name;
 
 /** A sign-in as the card says it: the login, and the team it is bound to. */
 const signInWords = (signIn: DesktopReplySignIn): Html =>
@@ -258,8 +263,9 @@ const signInWords = (signIn: DesktopReplySignIn): Html =>
 
 /**
  * What the desktop's note of an account says: on a card not signed in, who it was last signed in as; on one the last read
- * found as another login or team, what the account was and what it is now, and that campaigns sending through it now send
- * as the new one, with Keep it and Sign out.
+ * found changed, with Keep it and Sign out, what the account was and what it is now: bound to another of its sign-in's
+ * teams, or signed in as another login and bound to none yet, campaigns sending through it now sending as the new one;
+ * or, its login the noted one or not known, bound to none since the sign-in can no longer work in the noted team.
  */
 function noteView(view: AccountView, place: Place, real: Html | null): Html | null {
     const last = view.lastSignIn;
@@ -268,11 +274,22 @@ function noteView(view: AccountView, place: Place, real: Html | null): Html | nu
         return html`<div class="setrow meta acct-last">
             <div class="grow">Last signed in as ${signInWords(last)}.</div>
         </div>`;
-    if (!view.changed || view.user === null || view.team === null || !keepsChange()) return null;
+    if (!view.changed || !keepsChange()) return null;
+    const now =
+        view.team !== null
+            ? html`${view.user === null ? null : html`<b>${view.user}</b> `}in <b>${teamWords(view.team)}</b>`
+            : view.user !== null && view.user !== last.user
+              ? html`<b>${view.user}</b>`
+              : null;
     return html`<div class="note am acct-changed" role="note">
         <div>
-            This Reply account was ${signInWords(last)}, and is now
-            ${signInWords({ user: view.user, team: view.team })}: campaigns sending through it now send as the new one.
+            ${
+                now === null
+                    ? html`This Reply account was in <b>${teamWords(last.team)}</b>, and this sign-in can no longer work
+                          in it.`
+                    : html`This Reply account was ${signInWords(last)}, and is now ${now}: campaigns sending through it
+                      now send as the new one.`
+            }
         </div>
         <div class="setrow">
             <button class="btn sm" type="button" ${real} ${act('connect.keepChange', place)}>Keep it</button>
@@ -289,6 +306,7 @@ function noteView(view: AccountView, place: Place, real: Html | null): Html | nu
  */
 const unlisted = (view: AccountView): string[] => [
     ...(view.signedIn && view.teamsUnread ? ['The teams of this sign-in could not be read. Check again.'] : []),
+    ...(view.signedIn && view.loginUnread ? ['The login of this sign-in could not be read. Check again.'] : []),
     ...view.absent.map((channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`),
     ...view.unread.map(
         (channel) => `${channel === 'linkedin' ? 'LinkedIn accounts' : 'Mailboxes'} could not be read. Check again.`,
@@ -1521,7 +1539,7 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
 
 /**
  * The teams of a sign-in that belongs to more than one, in place of its account's senders, where the profile pins none
- * and Reply would not list it without one: each by its name, its id beside it, with Choose.
+ * and Reply would not list it without one: each by its name, with Choose.
  */
 function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
     return html`<div class="acct-group acct-teams">
@@ -1532,7 +1550,7 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
             (team) =>
                 html`<div class="setrow acct-team">
                     <div class="grow">
-                        ${team.name === '' ? null : html`<b>${team.name}</b>`} <span class="meta">team ${team.id}</span>
+                        <b>${teamWords(team)}</b>
                     </div>
                     <button class="btn sm" type="button" ${asks} ${act('connect.chooseTeam', place, team.id)}>
                         Choose
@@ -1566,11 +1584,14 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                           <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>`
                     : html`<div class="grow">
                           ${
-                              view.signedIn
-                                  ? html`Signed in as <b>${view.user ?? ''}</b>${
-                                            view.team === null ? null : html` in <b>${teamWords(view.team)}</b>`
-                                        }`
-                                  : 'Not signed in'
+                              !view.signedIn
+                                  ? 'Not signed in'
+                                  : view.user === null
+                                    ? html`Signed
+                                      in${view.team === null ? null : html`, in <b>${teamWords(view.team)}</b>`}`
+                                    : html`Signed in as <b>${view.user}</b>${
+                                              view.team === null ? null : html` in <b>${teamWords(view.team)}</b>`
+                                          }`
                           }
                       </div>`
             }
