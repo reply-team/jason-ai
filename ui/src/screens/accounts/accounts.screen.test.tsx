@@ -270,6 +270,12 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(bea.querySelector('.reply-state')!)).toBe(
             'Signed in as bea@example.test in a team whose name could not be read',
         );
+        // Those are words of the sentence, not set as a team's name is.
+        const setAsNames = (card: HTMLElement) => Array.from(card.querySelectorAll('.reply-state b'), words);
+        expect([setAsNames(ada), setAsNames(bea)]).toEqual([
+            ['ada@example.test', 'Made-up Three'],
+            ['bea@example.test'],
+        ]);
         expect(words(bea.querySelector('.acct')!)).toContain('Made-up Bea');
         expect(Array.from(bea.querySelectorAll('.acct-none')).map((line) => words(line))).toEqual([
             'The teams of this sign-in could not be read. Check again.',
@@ -1014,6 +1020,7 @@ describe('Reply accounts, one card per profile', () => {
         await waitFor(() => expect(words(bea())).toContain(why));
         expect(words(bea())).not.toMatch(/could not be read/);
         expect(teamRows()).toEqual(['Made-up Five Choose', 'Made-up Nine Choose', 'A team with no name Choose']);
+        expect(Array.from(bea().querySelectorAll('.acct-team b'), words)).toEqual(['Made-up Five', 'Made-up Nine']);
         expect(within(bea()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         // A pick asks the desktop by the account and the team's id, with no question, and the card reads as that team.
         desktop.status = withReplyAccounts(setupFound, [

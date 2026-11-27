@@ -262,12 +262,20 @@ const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === nul
 
 /**
  * A team as the card names it: by the name Reply gives it, never by its id. Null where Reply gives it none, as for every
- * Reply account outside an organization: no team is named then. Where its name was not read, `unread` says so, as the
- * sign-in line does while the teams could not be read.
+ * Reply account outside an organization, or where its name was not read: no team is named then.
  */
-function teamWords(team: DesktopBoundTeam, unread: string | null = null): string | null {
-    if (team.name === null) return unread;
-    return team.name === '' ? null : team.name;
+function teamWords(team: DesktopBoundTeam): string | null {
+    return team.name === null || team.name === '' ? null : team.name;
+}
+
+/**
+ * A team as the sign-in line sets it: its name, set as a name is; where its name was not read, as the line says while the
+ * teams could not be read, words of the sentence that say so; nothing where Reply gives it none.
+ */
+function teamOnLine(team: DesktopBoundTeam): Html | null {
+    const name = teamWords(team);
+    if (name !== null) return html`<b>${name}</b>`;
+    return team.name === null ? html`a team whose name could not be read` : null;
 }
 
 /** A sign-in as the card says it: the login, and the team it is bound to where the card can name it. */
@@ -1606,7 +1614,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
     const usable = typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
     // While a change of its sign-in is not answered, nothing is done in the account: no act on a sender, no connect.
     const offering = view.signedIn && usable && view.change === null;
-    const team = view.team === null ? null : teamWords(view.team, 'a team whose name could not be read');
+    const team = view.team === null ? null : teamOnLine(view.team);
     // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
     const choosing = view.signedIn && view.teams !== null && choosesTeam();
     // Every act is off while one is being asked for.
@@ -1625,9 +1633,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                               !view.signedIn
                                   ? 'Not signed in'
                                   : view.user === null
-                                    ? html`Signed in${team === null ? null : html`, in <b>${team}</b>`}`
-                                    : html`Signed in as
-                                          <b>${view.user}</b>${team === null ? null : html` in <b>${team}</b>`}`
+                                    ? html`Signed in${team === null ? null : html`, in ${team}`}`
+                                    : html`Signed in as <b>${view.user}</b>${team === null ? null : html` in ${team}`}`
                           }
                       </div>`
             }

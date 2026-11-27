@@ -1599,6 +1599,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     from = several.record().length;
     assert.deepEqual(await asWho(), { signedIn: true, user: null, team: null, teams: ['4', '6'], ids: [], notRead: [] });
     assert.deepEqual(whoami(from), []);
+    const choosing = several.record().length;
     assert.deepEqual(await browsing.chooseTeam({ type: 'reply', name: 'teams' }, '6'), { done: true });
     // Where the Reply CLI could not say who it is, that is said, its other reads standing, and nothing is noted.
     const whoUnread = replyBench(t, several.world(), { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
@@ -1608,9 +1609,14 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
         { user: null, team: { id: '6', name: 'Made-up Six' }, ids: ['12'], notRead: ['login'] },
     );
     assert.equal(readFileSync(whoUnread.paths.replyAccountNotes, 'utf8').includes('"teams"'), false, 'nothing noted');
-    from = several.record().length;
+    // Choose asks who it is once its team is pinned, as that account alone, and notes the pick: the look after it asks Reply
+    // nothing of it again.
     assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });
-    assert.deepEqual(whoami(from), ['--profile teams auth whoami --json'], 'asked as that account alone');
+    assert.deepEqual(
+        runsAfter(several, choosing, 'reply').filter((run) => run.startsWith('--profile teams') && /whoami|team list/.test(run)),
+        ['--profile teams auth whoami --json'],
+        'asked once, by Choose',
+    );
     // Noted, the next look takes it as the noted login in the noted team, and asks Reply nothing of it.
     from = several.record().length;
     assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });

@@ -1663,7 +1663,8 @@ export class Setup {
      * id against the sign-in's own teams), only a team the last read offered that account, bound to none of them, its
      * change of sign-in, if any, answered. The pin that read saw is written over; one a terminal set since to a team
      * offered is that account's team now, and is refused as bound. The pick is the person's, and is noted at once with the
-     * login, asked of Reply where the last read did not know it: it is never said as a change made outside. Nothing is
+     * login, asked of Reply where the last read did not know it: it is never said as a change made outside, and it checks a
+     * sign-in made on the card before it, so the next look does not ask Reply again. Nothing is
      * asked of the person first, since nothing is lost by it. The answer is done, or the desktop's sentence and the Reply
      * CLI's reason, but where the CLI refuses the team, whose words number it: the desktop's sentence alone. The page reads
      * the accounts again either way.
@@ -1691,7 +1692,10 @@ export class Setup {
             });
             if (chosen !== null) return chosen;
             const login = account.user ?? (await this.#whoami(account));
-            this.#note(account, login === null ? null : { user: login, team }, 'choose');
+            const noted = this.#note(account, login === null ? null : { user: login, team }, 'choose');
+            // Named and noted, the pick is the check of the sign-in made on the card before it: the look after asks Reply
+            // nothing of it again.
+            if (login !== null && noted !== undefined) this.#checked(account, this.#marks);
             return { done: true };
         });
     }
