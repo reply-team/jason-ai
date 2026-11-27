@@ -685,10 +685,18 @@ describe('Reply in a chat', () => {
 
     it('with a desktop of this version, is asked for while no Reply account is the default or the default is not signed in, as the default account’s card, and not once it is signed in', async () => {
         const accounts = (defaulted: boolean, signedIn: boolean) =>
-            withReplyAccounts(setupFound, [
-                replyAccount('default', { default: defaulted, signedIn, user: signedIn ? 'ada@example.test' : null }),
-                replyAccount('outbound', { signedIn: true, user: 'bea@example.test' }),
-            ]);
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', {
+                        default: defaulted,
+                        signedIn,
+                        user: signedIn ? 'ada@example.test' : null,
+                    }),
+                    replyAccount('outbound', { signedIn: true, user: 'bea@example.test' }),
+                ],
+                { noDefault: !defaulted },
+            );
         for (const [defaulted, signedIn, head] of [
             [false, true, 'Reply default Make default'],
             [true, false, 'Reply default Default'],

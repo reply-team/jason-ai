@@ -1124,12 +1124,11 @@ export interface JasonDesktop {
             account?: DesktopAccountRef,
         ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Make default: the account `accounts` lists becomes the global default, the route every campaign with no route
-         * of its own sends through, replacing the default there was, whatever plugin it named. Where one is set, the
-         * desktop asks the person first in its own box, naming it and the account that would be. Jason's Reply plugin and
-         * its grant are placed where they are missing, and the runtime writes the route (`jason route set --global`),
-         * keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence, and the
-         * runtime writes nothing it refuses. Absent from a desktop of an earlier version.
+         * Make default, only while Jason has no global default: the account `accounts` lists becomes it. Jason's Reply
+         * plugin and its grant are placed where they are missing, and the runtime writes the route (`jason route set
+         * --global`) by the account's profile. Where a default is set by then, whatever its plugin or account, nothing is
+         * changed: the desktop never moves a default. A refusal is the desktop's sentence, and the runtime writes nothing
+         * it refuses. Absent from a desktop of an earlier version.
          */
         makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**

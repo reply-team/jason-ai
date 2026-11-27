@@ -476,15 +476,19 @@ describe('the Reply card, its acts', () => {
     it('draws the default account’s card, or the profile default’s where no Reply account is the default, and asks its acts as that account', async () => {
         const mailbox = sender('m_1', 'email', 'connected', 'Made-up Sales');
         const twoAccounts = (defaulted: string | null) =>
-            withReplyAccounts(setupFound, [
-                replyAccount('default', {
-                    default: defaulted === 'default',
-                    signedIn: true,
-                    user: 'ada@example.test',
-                    senders: [mailbox],
-                }),
-                replyAccount('outbound', { default: defaulted === 'outbound', signedIn: false }),
-            ]);
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', {
+                        default: defaulted === 'default',
+                        signedIn: true,
+                        user: 'ada@example.test',
+                        senders: [mailbox],
+                    }),
+                    replyAccount('outbound', { default: defaulted === 'outbound', signedIn: false }),
+                ],
+                { noDefault: defaulted === null },
+            );
         const desktop = renderConnect(twoAccounts('outbound'));
         let card = replyCard(await openConnect());
         expect(words(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');

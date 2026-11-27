@@ -241,15 +241,11 @@ describe('Reply accounts, one card per profile', () => {
     const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
     const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
 
-    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked and Make default on every other', async () => {
+    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, and no Make default once a default is set', async () => {
         inDesktop(three);
         const page = await openAccounts('.reply-account');
         expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
-        expect(cards(page)).toEqual([
-            'Reply default Default',
-            'Reply outbound Make default',
-            'Reply routed-only Make default',
-        ]);
+        expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound', 'Reply routed-only']);
         const ada = cardOf(page, 'Reply account default');
         expect(words(ada.querySelector('.reply-state')!)).toBe('Signed in as ada@example.test');
         expect(words(ada.querySelector('.acct')!)).toContain('Sales inbox');
@@ -356,20 +352,26 @@ describe('Reply accounts, one card per profile', () => {
         ]);
     });
 
-    it('asks the desktop to make an account the default, by that account, and says on its card what the desktop answered', async () => {
-        const desktop = inDesktop(three);
+    it('offers Make default on every card while no account is the default, asks the desktop by that account, says on its card what the desktop answered, and waits on the default being made', async () => {
+        const none = withReplyAccounts(
+            setupFound,
+            three.accounts!.accounts.map((each) => ({ ...each, default: false })),
+            { noDefault: true },
+        );
+        const desktop = inDesktop(none);
         desktop.actAnswers.set('setup.makeDefault', [
-            refusal(
-                'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.',
-            ),
+            refusal('Jason is not running, so nothing was changed. Start it, then try again.'),
             { done: true },
         ]);
         const page = await openAccounts('.reply-account');
+        expect(cards(page)).toEqual([
+            'Reply default Make default',
+            'Reply outbound Make default',
+            'Reply routed-only Make default',
+        ]);
         const routed = () => cardOf(page, 'Reply account routed-only');
         fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
-        await waitFor(() =>
-            expect(words(within(routed()).getByRole('alert'))).toMatch(/^A search still followed runs on the account/),
-        );
+        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toMatch(/^Jason is not running/));
         expect(within(cardOf(page, 'Reply account default')).queryByRole('dialog')).toBeNull();
         const reads = desktop.calls.filter((call) => call.name === 'setup.status').length;
         fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
@@ -381,26 +383,15 @@ describe('Reply accounts, one card per profile', () => {
             [{ type: 'reply', name: 'routed-only' }],
             [{ type: 'reply', name: 'routed-only' }],
         ]);
-        // While the desktop has not answered, the card says what it waits on, never that Reply is asked, which Make default
-        // never asks: where a default is set, the person's answer in the desktop's box; where none is, the default made.
-        const held: ((answer: DesktopReplyDone) => void)[] = [];
-        desktop.setup.makeDefault = () => new Promise((resolve) => held.push(resolve));
-        const waiting = async (line: string) => {
-            fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
-            await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toContain(line));
-            expect(words(routed())).not.toContain('Asking Reply');
-            held.shift()!({ done: true });
-            await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
-        };
-        await waiting('Answer the question Jason Desktop asks.');
-        desktop.status = withReplyAccounts(
-            setupFound,
-            three.accounts!.accounts.map((each) => ({ ...each, default: false })),
-            { noDefault: true },
-        );
-        desktop.changed();
-        await waitFor(() => expect(words(section(page))).toContain('No account is the default yet'));
-        await waiting('Making it the default…');
+        // While the desktop has not answered, the card says the default is being made, never that Reply is asked, which
+        // Make default never asks.
+        let held: (answer: DesktopReplyDone) => void = () => undefined;
+        desktop.setup.makeDefault = () => new Promise((resolve) => (held = resolve));
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
+        await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toContain('Making it the default…'));
+        expect(words(routed())).not.toContain('Asking Reply');
+        held({ done: true });
+        await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
     });
 
     it('says what of the accounts could not be read in the section, never as a state: no account where the profiles were not, no mark and no Make default where the routes were not; and that no account is the default yet', async () => {
@@ -437,13 +428,13 @@ describe('Reply accounts, one card per profile', () => {
         expect(cards(page)).toEqual(['Reply default Make default']);
         cleanup();
 
-        // A default of another plugin: no Reply account is marked, every card offers Make default, and nothing is missing.
+        // A default of another plugin: no Reply account is marked, none offers Make default, and nothing is missing.
         inDesktop(
             withReplyAccounts(setupFound, [replyAccount('default', { signedIn: true, user: 'ada@example.test' })]),
         );
         page = await openAccounts('.reply-account');
         expect(words(section(page))).not.toMatch(/could not be read|no account is the default/i);
-        expect(cards(page)).toEqual(['Reply default Make default']);
+        expect(cards(page)).toEqual(['Reply default']);
     });
 
     it('with no usable Reply CLI draws the section alone, saying what it says of the CLI', async () => {
@@ -545,13 +536,13 @@ describe('Reply accounts, one card per profile', () => {
                 { default: null, outbound: null, 'routed-only': null },
             ],
             [
-                'a key refused again, then the next act of any kind: Make default on another card',
+                'a key refused again, then the next act of any kind: an Unblock on another card',
                 async () => {
                     useKey('outbound');
                     await waitFor(() => expect(refused('outbound')).toBe(keyRefused));
-                    fireEvent.click(within(card('routed-only')).getByRole('button', { name: 'Make default' }));
+                    fireEvent.click(within(card('default')).getByRole('button', { name: 'Unblock' }));
                     await waitFor(() =>
-                        expect(desktop.calls.some((call) => call.name === 'setup.makeDefault')).toBe(true),
+                        expect(desktop.calls.some((call) => call.name === 'setup.replyUnblock')).toBe(true),
                     );
                 },
                 { default: null, outbound: null, 'routed-only': null },
@@ -609,12 +600,17 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(page)).not.toContain('Error invoking remote method');
     });
 
-    it('asks a desktop that lacks Make default for none: no card offers it', async () => {
-        const desktop = chatDesktop(three);
+    it('asks a desktop that lacks Make default for none: no card offers it, even with no default set', async () => {
+        const none = withReplyAccounts(
+            setupFound,
+            three.accounts!.accounts.map((each) => ({ ...each, default: false })),
+            { noDefault: true },
+        );
+        const desktop = chatDesktop(none);
         delete (desktop.setup as Partial<typeof desktop.setup>).makeDefault;
-        inDesktop(three, desktop);
+        inDesktop(none, desktop);
         const page = await openAccounts('.reply-account');
-        expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound', 'Reply routed-only']);
+        expect(cards(page)).toEqual(['Reply default', 'Reply outbound', 'Reply routed-only']);
     });
 
     it('offers the teams of a sign-in in more than one in place of its accounts, from the read right after a sign-in on the card, and pins the one picked', async () => {

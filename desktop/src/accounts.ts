@@ -155,7 +155,7 @@ export function readRoutes(result: { exit: number; stdout: string }): Routes | n
  * The account the global default names, where it is the plugin `reply`'s: its binding's profile, else `unnamed`, the
  * profile a route that names none acts as. Null otherwise.
  */
-export function defaultAccount(routes: Routes, unnamed: string): AccountRef | null {
+function defaultAccount(routes: Routes, unnamed: string): AccountRef | null {
     const fallback = routes.globalDefault;
     return fallback === null || fallback.plugin !== 'reply' ? null : { type: 'reply', name: profileOf(fallback.binding) ?? unnamed };
 }
@@ -165,22 +165,19 @@ export interface Listing {
     /** In the order the page shows them: the default first, then the CLI's own order, then the profiles only a route names. */
     accounts: AccountRef[];
     default: AccountRef | null;
-    /** The profile a route that names none acts as at this read: the one the Reply CLI is set to. */
-    unnamed: string;
 }
 
-/** The accounts, one for each profile, the profiles only a route names in the order the routes name them. */
+/**
+ * The accounts, one for each profile, the profiles only a route names in the order the routes name them. A route that
+ * names no profile acts as the one the Reply CLI is set to at this read.
+ */
 export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
     const unnamed = profiles.current;
     const names = [...new Set([...profiles.available, ...(routes?.reply ?? []).map((profile) => profile ?? unnamed)])];
     const fallback = routes === null ? null : defaultAccount(routes, unnamed);
     const first = fallback === null ? -1 : names.indexOf(fallback.name);
     const ordered = first < 0 ? names : [names[first]!, ...names.filter((_, at) => at !== first)];
-    return {
-        accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })),
-        default: first < 0 ? null : fallback,
-        unnamed,
-    };
+    return { accounts: ordered.map((name): AccountRef => ({ type: 'reply', name })), default: first < 0 ? null : fallback };
 }
 
 /**
@@ -189,33 +186,8 @@ export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
  */
 export const accountArguments = (account: AccountRef): string[] => ['--profile', account.name];
 
-/**
- * The binding Make default names the account by: its profile, and `derive_first_name` where the old default was a Reply
- * binding that held it; nothing else of the old route, a team included.
- */
-export function defaultBinding(account: AccountRef, was: GlobalDefault | null): Record<string, unknown> {
-    const derive = was?.plugin === 'reply' ? was.binding?.['derive_first_name'] : undefined;
-    return { profile: account.name, ...(typeof derive === 'boolean' ? { derive_first_name: derive } : {}) };
-}
-
-const shown = (value: string): string => {
-    const characters = [...value.replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()];
-    return characters.length > 64 ? `${characters.slice(0, 64).join('')}…` : characters.join('');
-};
-
-/**
- * `the Reply account “outbound”`: an account in the desktop's sentences, its name set off, since a profile is as often named
- * `default` as anything.
- */
-export const accountNamed = (account: AccountRef): string => `the Reply account “${shown(account.name)}”`;
-
-/**
- * The global default as the box of Make default names it: a Reply account, its binding's profile else `unnamed`, the profile
- * a route that names none acts as; or another plugin by its id.
- */
-export function defaultWords(fallback: GlobalDefault, unnamed: string): string {
-    return fallback.plugin === 'reply' ? accountNamed({ type: 'reply', name: profileOf(fallback.binding) ?? unnamed }) : `the plugin ${shown(fallback.plugin)}`;
-}
+/** The binding a default Jason Desktop names is written with: the account's profile, and nothing else. */
+export const defaultBinding = (account: AccountRef): Record<string, unknown> => ({ profile: account.name });
 
 /** The reasons the runtime journals with a default Jason Desktop names, by a click or at a sign-in; fixed text, never a person's. */
 export const defaultReason = 'Made the default with Jason Desktop';
@@ -228,14 +200,12 @@ export const accountSentences = {
     profileNotMade: 'The Reply CLI did not make the profile, so nobody was signed in.',
     cliMissing: 'The Reply CLI was not found, so nobody was signed in.',
     routesUnread: 'Which account is the default could not be read, so nothing was changed.',
-    changedMeanwhile: 'The default changed meanwhile, so nothing was changed: look at the cards again, then try again.',
+    defaultExists: 'Jason has a default already, and Jason Desktop does not move it, so nothing was changed.',
     routesUnreadAtSignIn: 'Signed in, but which account is the default could not be read, so none was made the default.',
     noActor: 'Jason Desktop could not read the name of this computer’s account, which a change of the default is recorded under, so nothing was changed.',
     notRunning: 'Jason is not running, so nothing was changed. Start it, then try again.',
     notPlaced: 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.',
     notPlacedAtSignIn: 'Signed in, but Jason’s Reply plugin could not be placed or loaded.',
-    orphansSearch: 'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.',
-    orphansSend: 'A send Reply holds for later runs on the account that is the default now, so nothing was changed: cancel it, or wait until it is sent, then try again.',
     notDefaultAtSignIn: 'Signed in, but this account was not made the default: Make default on its card says why.',
     notRepresentable: 'The settings file cannot hold this account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.',
     teamNotOffered: 'That is not a team this account was offered.',
@@ -275,8 +245,6 @@ export function defaultRefusal(result: { exit: number; stdout: string }): string
     } catch {
         // No error the runtime printed: said by no code.
     }
-    if (code === 'route_orphans_search' || details.includes('route_orphans_search')) return accountSentences.orphansSearch;
-    if (code === 'route_orphans_send' || details.includes('route_orphans_send')) return accountSentences.orphansSend;
     if (details.includes('not_representable_globally')) return accountSentences.notRepresentable;
     return otherDefaultRefusal(code);
 }

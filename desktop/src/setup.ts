@@ -11,22 +11,18 @@ import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
 import {
     accountArguments,
-    accountNamed,
     accountsOf,
     accountSentences,
-    defaultAccount,
     defaultBinding,
     defaultReason,
     signInReason,
     defaultRefusal,
-    defaultWords,
     isAccountRef,
     readProfiles,
     readRoutes,
     readTeams,
     sameAccount,
     type AccountRef,
-    type GlobalDefault,
     type ReplyTeam,
     withReason,
 } from './accounts.ts';
@@ -60,7 +56,6 @@ import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
     belowMinimumSentence,
-    defaultBox,
     dailyLimitMost,
     isOpenableLink,
     isReplyChannel,
@@ -582,8 +577,6 @@ export class Setup {
      * senders, and its box names the sender as the list does.
      */
     #listed: AccountState[] = [];
-    /** The profile a route that names none acts as, at the last read that listed the accounts; set with `#listed`. */
-    #unnamed: string | null = null;
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -909,7 +902,6 @@ export class Setup {
         );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
-        this.#unnamed = listing?.unnamed ?? null;
         const acting = this.#accountOf(undefined);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -1269,7 +1261,7 @@ export class Setup {
     async #placeAndMakeFirstDefault(account: AccountRef): Promise<void> {
         const placed = await this.#placeMissing(accountSentences.notPlacedAtSignIn);
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
-        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null, signInReason)) === null ? 'made' : 'refused';
+        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, signInReason)) === null ? 'made' : 'refused';
         this.#deps.log.info('reply_placed_after_sign_in', { Placed: placed, Default: outcome });
         if (outcome === 'unread') throw new Refused(accountSentences.routesUnreadAtSignIn);
         if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
@@ -1318,10 +1310,10 @@ export class Setup {
      * change under the person who made it, by this account's name, with the reason of the act that made it. Null where it
      * did, else the desktop's sentence why not.
      */
-    async #setDefault(account: AccountRef, was: GlobalDefault | null, reason: string): Promise<string | null> {
+    async #setDefault(account: AccountRef, reason: string): Promise<string | null> {
         const person = this.#deps.account;
         if (!usableAccount(person)) return accountSentences.noActor;
-        const binding = JSON.stringify(defaultBinding(account, was));
+        const binding = JSON.stringify(defaultBinding(account));
         const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', reason]);
         this.#deps.log.info('reply_default_set', { Exit: set.exit });
         return set.exit === 0 ? null : defaultRefusal(set);
@@ -1347,13 +1339,11 @@ export class Setup {
     }
 
     /**
-     * Make default: the account named becomes the global default, replacing the default there was, whatever plugin it named.
-     * Where one is set, the person is asked first in the main process's own box, which names it and the account that would
-     * be; the box is asked before the queue the setup's other changes wait in, so none of them waits on the answer. Then,
-     * in that queue, the routes are read again: a default other than the one the box named changes nothing. What is
-     * missing of the plugin and its grant is placed (`#placeMissing`), and the runtime names the account (`#setDefault`),
-     * keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence, and the runtime
-     * writes nothing it refuses.
+     * Make default, only while Jason has no global default: in the setup's queue the routes are read, and a default set by
+     * then, whatever its plugin or account, is left as it is, since a campaign with no route of its own follows the default
+     * at every step and moving it would move running campaigns. Otherwise what is missing of the plugin and its grant is
+     * placed (`#placeMissing`) and the runtime names the account (`#setDefault`). Nothing is asked of the person. A refusal
+     * is the desktop's sentence, and the runtime writes nothing it refuses.
      */
     async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
@@ -1364,28 +1354,19 @@ export class Setup {
         return answer;
     }
 
-    async #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
-        if (!usableAccount(this.#deps.account)) return refusal(accountSentences.noActor);
-        const asked = readRoutes(await this.#deps.cli.run(['route', 'list']));
-        if (asked === null) return refusal(accountSentences.routesUnread);
-        // An account Make default names came from a read that listed the accounts, which set this.
-        const unnamed = this.#unnamed!;
-        const now = defaultAccount(asked, unnamed);
-        if (now !== null && sameAccount(now, account)) return { done: true };
-        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault, unnamed), accountNamed(account))))) {
-            return refusal(said.notConfirmed);
-        }
+    #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
+        if (!usableAccount(this.#deps.account)) return Promise.resolve(refusal(accountSentences.noActor));
         return this.#serial(async () => {
             const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
             if (routes === null) return refusal(accountSentences.routesUnread);
-            if (JSON.stringify(routes.globalDefault) !== JSON.stringify(asked.globalDefault)) return refusal(accountSentences.changedMeanwhile);
+            if (routes.globalDefault !== null) return refusal(accountSentences.defaultExists);
             try {
                 await this.#placeMissing(accountSentences.notPlaced);
             } catch (error) {
                 if (error instanceof Refused) return refusal(error.message);
                 throw error;
             }
-            const refused = await this.#setDefault(account, routes.globalDefault, defaultReason);
+            const refused = await this.#setDefault(account, defaultReason);
             return refused === null ? { done: true } : refusal(refused);
         });
     }

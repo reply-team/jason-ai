@@ -589,9 +589,8 @@ defineReal('connect.chooseTeam', ([place, teamId]) => {
     void ask(place, 'Choose a team', null, () => here().desktop.setup.chooseTeam(ref, teamId));
 });
 
-// Make default: the desktop asks the person first where a default is set, in its own box, and says on the card how it
-// ended. Offered only where the desktop has it and read the routes. It asks Jason's runtime, never Reply, so meanwhile the
-// card says what it waits on: the person's answer where the last read shows a default set, else the default being made.
+// Make default, offered only while Jason has no default, and said on the card as it ended. It asks Jason's runtime, never
+// Reply, so meanwhile the card says the default is being made.
 defineReal('connect.makeDefault', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !makesDefault()) return;
@@ -603,9 +602,7 @@ defineReal('connect.makeDefault', ([place]) => {
         () => here().desktop.setup.makeDefault(ref),
         () => null,
         false,
-        setup.value?.accounts?.noDefault === true
-            ? 'Making it the default…'
-            : 'Answer the question Jason Desktop asks.',
+        'Making it the default…',
     );
 });
 
@@ -1320,11 +1317,12 @@ const manageInReply = (): Html =>
 
 /**
  * An account's head: Reply and its name exactly as the Reply CLI has it, and the default mark, or Make default where the
- * desktop has it and read the routes. None for an earlier desktop's account, which has no name.
+ * desktop has it and the routes were read and name no default at all. None for an earlier desktop's account, which has
+ * no name.
  */
 function accountHead(state: DesktopSetup, view: AccountView, place: Place, real: Html | null): Html | null {
     if (view.ref === null) return null;
-    const offered = !view.isDefault && !listOf(state.accounts?.notRead).includes('routes') && makesDefault();
+    const offered = state.accounts?.noDefault === true && makesDefault();
     return html`<div class="acct-head">
         <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>
         ${view.isDefault ? html`<span class="pillc green acct-default">Default</span>` : null}
