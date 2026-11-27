@@ -10,7 +10,14 @@ import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
 import type { DesktopSetup } from '../../platform/desktop';
-import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../../test/desktop';
+import {
+    chatDesktop,
+    replyAccount,
+    setupFound,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
 import { agentHeads } from '../../test/agent-head';
 import { renderApp } from '../../test/render-app';
@@ -70,7 +77,7 @@ describe('Accounts in a browser', () => {
     });
 });
 
-function inDesktop(status: DesktopSetup = setupFound): StubDesktop {
+function inDesktop(status: DesktopSetup = setupFound, given?: StubDesktop): StubDesktop {
     const fake = new FakeApi()
         .answer('system.info', 'system.info/with-ui')
         .answer('approval.list', 'approval.list/pending')
@@ -90,28 +97,31 @@ function inDesktop(status: DesktopSetup = setupFound): StubDesktop {
         'jason.ui.session',
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
-    const desktop = chatDesktop(status);
+    const desktop = given ?? chatDesktop(status);
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     return desktop;
 }
 
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 
-async function openAccounts(): Promise<HTMLElement> {
+async function openAccounts(drawn = '.card .acct'): Promise<HTMLElement> {
     await waitFor(() => side().getByRole('button', { name: /^Needs you/ }));
     bringForward('Accounts');
     return waitFor(() => {
         const page = screen.getByRole('heading', { name: 'Accounts', level: 1 }).closest<HTMLElement>('.main')!;
-        expect(page.querySelector('.card .acct')).not.toBeNull();
+        expect(page.querySelector(drawn)).not.toBeNull();
         return page;
     });
 }
+
+/** The card of the one account a desktop of an earlier version draws, whose name it cannot give. */
+const earlierCard = (where: HTMLElement) => within(where).getByRole('region', { name: 'Reply account' });
 
 describe('Accounts inside the desktop', () => {
     it('draws the Reply card with its accounts, and not the browsers sentence', async () => {
         inDesktop();
         const page = await openAccounts();
-        const card = within(page).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        const card = earlierCard(page);
         expect(words(card.querySelector('.acct')!)).toContain('Sales inbox');
         expect(words(page)).not.toContain('a browser cannot do them');
         expect(screen.queryByRole('heading', { name: /^Notifications/ })).toBeNull();
@@ -134,7 +144,7 @@ describe('Accounts inside the desktop', () => {
             },
         });
         const page = await openAccounts();
-        const card = () => within(page).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        const card = () => earlierCard(page);
         const row = Array.from(card().querySelectorAll<HTMLElement>('.acct')).find((each) =>
             words(each).includes('Outreach profile'),
         )!;
@@ -165,6 +175,7 @@ describe('Accounts inside the desktop', () => {
         });
         const page = await openAccounts();
         const cardIn = (where: HTMLElement) =>
+            where.querySelector<HTMLElement>('.reply-account') ??
             within(where).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
         const row = (where: HTMLElement) =>
             Array.from(cardIn(where).querySelectorAll<HTMLElement>('.acct')).find((each) =>
@@ -197,7 +208,7 @@ describe('Accounts inside the desktop', () => {
     it('drops a choice the card held open when the page stops drawing it', async () => {
         inDesktop();
         const page = await openAccounts();
-        const card = () => within(page).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        const card = () => earlierCard(page);
         fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
         await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' }));
         bringForward('System');
@@ -205,5 +216,174 @@ describe('Accounts inside the desktop', () => {
         bringForward('Accounts');
         const again = await openAccounts();
         expect(within(again).queryByRole('button', { name: 'Gmail' })).toBeNull();
+    });
+});
+
+describe('Reply accounts, one card per profile', () => {
+    const mailbox = {
+        id: 'm_1',
+        channel: 'email',
+        name: 'Sales inbox',
+        address: 'sales@example.test',
+        status: 'connected',
+    };
+    const linkedIn = { id: 'l_1', channel: 'linkedin', name: 'Made-up Bea', address: '', status: 'enabled' };
+    const three = withReplyAccounts(setupFound, [
+        replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test', senders: [mailbox] }),
+        replyAccount('outbound', { team: '9', signedIn: true, user: 'bea@example.test', senders: [linkedIn] }),
+        replyAccount('routed-only', { held: false }),
+    ]);
+    const cardOf = (page: HTMLElement, label: string) => within(page).getByRole('region', { name: label });
+    const cards = (page: HTMLElement) =>
+        Array.from(page.querySelectorAll<HTMLElement>('.reply-account')).map((card) =>
+            words(card.querySelector('.acct-head')!),
+        );
+    const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
+    const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
+
+    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names it with its team beside it, the default marked and Make default on the others', async () => {
+        inDesktop(three);
+        const page = await openAccounts('.reply-account');
+        expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
+        expect(cards(page)).toEqual([
+            'Reply default Default',
+            'Reply outbound team 9 Make default',
+            'Reply routed-only Make default',
+        ]);
+        const ada = cardOf(page, 'Reply account default');
+        expect(words(ada.querySelector('.reply-state')!)).toBe('Signed in as ada@example.test');
+        expect(words(ada.querySelector('.acct')!)).toContain('Sales inbox');
+        expect(within(ada).queryByRole('button', { name: 'Make default' })).toBeNull();
+        const bea = cardOf(page, 'Reply account outbound, team 9');
+        expect(words(bea.querySelector('.reply-state')!)).toBe('Signed in as bea@example.test');
+        expect(words(bea.querySelector('.acct')!)).toContain('Made-up Bea');
+        // A profile only a route names, which the Reply CLI does not hold: not signed in, with the sign-in that makes it.
+        const routed = cardOf(page, 'Reply account routed-only');
+        expect(words(routed.querySelector('.reply-state')!)).toBe('Not signed in');
+        expect(within(routed).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(true);
+        expect(within(routed).getByRole('button', { name: 'Use key' })).toBeTruthy();
+        expect(within(routed).queryByRole('button', { name: 'Add account' })).toBeNull();
+        // No card says who uses it.
+        expect(words(page)).not.toMatch(/uses this sign-in|does not use it yet|whether jason uses/i);
+    });
+
+    it('asks every act on a card as that card’s account, and a sign-in or a key for that account alone', async () => {
+        const desktop = inDesktop(three);
+        const page = await openAccounts('.reply-account');
+        const bea = () => cardOf(page, 'Reply account outbound, team 9');
+        const outbound = { type: 'reply', name: 'outbound', team: '9' };
+        const row = bea().querySelector<HTMLElement>('.acct')!;
+        fireEvent.click(within(row).getByRole('button', { name: 'Pause' }));
+        await waitFor(() => expect(words(within(bea()).getByRole('dialog'))).toMatch(/Done\./));
+        expect(within(cardOf(page, 'Reply account default')).queryByRole('dialog')).toBeNull();
+        fireEvent.click(within(bea()).getByRole('button', { name: 'Sign in with Reply' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
+        fireEvent.input(
+            within(cardOf(page, 'Reply account routed-only')).getByPlaceholderText('Or paste a Reply API key'),
+            {
+                target: { value: 'made-up-key' },
+            },
+        );
+        fireEvent.click(within(cardOf(page, 'Reply account routed-only')).getByRole('button', { name: 'Use key' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReplyWithKey')).toBe(true));
+        expect(
+            desktop.calls
+                .filter((call) => /^setup\.(reply|connectReply)/.test(call.name))
+                .map((call) => [call.name, ...call.args]),
+        ).toEqual([
+            ['setup.replyPause', 'l_1', outbound],
+            ['setup.connectReply', outbound],
+            ['setup.connectReplyWithKey', 'made-up-key', { type: 'reply', name: 'routed-only', team: null }],
+        ]);
+    });
+
+    it('asks the desktop to make an account the default, by that account, and says on its card what the desktop answered', async () => {
+        const desktop = inDesktop(three);
+        desktop.actAnswers.set('setup.makeDefault', [
+            refusal(
+                'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.',
+            ),
+            { done: true },
+        ]);
+        const page = await openAccounts('.reply-account');
+        const routed = () => cardOf(page, 'Reply account routed-only');
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
+        await waitFor(() =>
+            expect(words(within(routed()).getByRole('alert'))).toMatch(/^A search still followed runs on the account/),
+        );
+        expect(within(cardOf(page, 'Reply account default')).queryByRole('dialog')).toBeNull();
+        const reads = desktop.calls.filter((call) => call.name === 'setup.status').length;
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
+        await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
+        await waitFor(() =>
+            expect(desktop.calls.filter((call) => call.name === 'setup.status').length).toBeGreaterThan(reads),
+        );
+        expect(desktop.calls.filter((call) => call.name === 'setup.makeDefault').map((call) => call.args)).toEqual([
+            [{ type: 'reply', name: 'routed-only', team: null }],
+            [{ type: 'reply', name: 'routed-only', team: null }],
+        ]);
+    });
+
+    it('says what of the accounts could not be read in the section, never as a state: no account where the profiles were not, no mark and no Make default where the routes were not; and that no account is the default yet', async () => {
+        inDesktop(withReplyAccounts(setupFound, [], { notRead: ['profiles'] }));
+        let page = await openAccounts('.reply-section');
+        expect(words(section(page))).toContain('The Reply accounts could not be read.');
+        expect(within(section(page)).getByRole('button', { name: 'Check again' })).toBeTruthy();
+        expect(page.querySelector('.reply-account')).toBeNull();
+        cleanup();
+
+        inDesktop(
+            withReplyAccounts(
+                setupFound,
+                [replyAccount('default', { signedIn: true, user: 'ada@example.test' }), replyAccount('outbound')],
+                { notRead: ['routes'] },
+            ),
+        );
+        page = await openAccounts('.reply-account');
+        expect(words(section(page))).toContain('Which account is the default could not be read.');
+        expect(words(section(page))).not.toContain('No account is the default yet');
+        expect(cards(page)).toEqual(['Reply default', 'Reply outbound']);
+        expect(within(page).queryByRole('button', { name: 'Make default' })).toBeNull();
+        cleanup();
+
+        inDesktop(
+            withReplyAccounts(setupFound, [replyAccount('default', { signedIn: true, user: 'ada@example.test' })], {
+                noDefault: true,
+            }),
+        );
+        page = await openAccounts('.reply-account');
+        expect(words(section(page))).toContain(
+            'No account is the default yet. Campaigns have nothing to send through until you make one the default.',
+        );
+        expect(cards(page)).toEqual(['Reply default Make default']);
+        cleanup();
+
+        // A default of another plugin: no Reply account is marked, every card offers Make default, and nothing is missing.
+        inDesktop(
+            withReplyAccounts(setupFound, [replyAccount('default', { signedIn: true, user: 'ada@example.test' })]),
+        );
+        page = await openAccounts('.reply-account');
+        expect(words(section(page))).not.toMatch(/could not be read|no account is the default/i);
+        expect(cards(page)).toEqual(['Reply default Make default']);
+    });
+
+    it('with no usable Reply CLI draws the section alone, saying what it says today of the CLI', async () => {
+        const missing = withReplyAccounts(
+            { ...setupFound, reply: { ...setupFound.reply, cli: { found: false, version: null, install: 'reply' } } },
+            [],
+        );
+        inDesktop(missing);
+        const page = await openAccounts('.reply-section');
+        expect(words(section(page))).toContain('The Reply CLI was not found.');
+        expect(within(section(page)).getByRole('button', { name: 'Install' })).toBeTruthy();
+        expect(page.querySelector('.reply-account')).toBeNull();
+    });
+
+    it('asks a desktop that lacks Make default for none: no card offers it', async () => {
+        const desktop = chatDesktop(three);
+        delete (desktop.setup as Partial<typeof desktop.setup>).makeDefault;
+        inDesktop(three, desktop);
+        const page = await openAccounts('.reply-account');
+        expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound team 9', 'Reply routed-only']);
     });
 });

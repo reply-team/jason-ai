@@ -72,6 +72,8 @@ async function renderAt(
 }
 
 const replyCard = () => within(document.body).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+/** The Accounts page's card of the account, under its Reply section. */
+const accountCard = () => document.querySelector<HTMLElement>('.reply-account')!;
 const button = (inside: HTMLElement, name: string) => within(inside).getByRole('button', { name }) as HTMLButtonElement;
 const notes = () => screen.queryAllByRole('note').filter((each) => words(each) === sentence);
 const rowOf = (card: HTMLElement) =>
@@ -195,12 +197,13 @@ describe('The Reply CLI in the demo', () => {
 });
 
 describe('The Accounts page in the demo', () => {
-    it('keeps the bar, lists the accounts, and says once that the Reply card acts are off', async () => {
+    it('keeps the bar, lists the accounts, and says once, in the Reply section, that the Reply cards’ acts are off', async () => {
         await renderAt('demo', 'Accounts');
         expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
-        const card = replyCard();
+        const card = accountCard();
         expect(words(card)).toContain('Sales inbox');
-        expect(within(card).getAllByRole('note').map(words)).toEqual([sentence]);
+        expect(within(replyCard()).getAllByRole('note').map(words)).toEqual([sentence]);
+        expect(notes()).toHaveLength(1);
         expect(button(card, 'Add account').disabled).toBe(true);
     });
 });
@@ -223,6 +226,6 @@ describe('The same screens in Live', () => {
         await renderAt('live', 'Accounts');
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
-        expect(button(replyCard(), 'Add account').disabled).toBe(false);
+        expect(button(accountCard(), 'Add account').disabled).toBe(false);
     });
 });

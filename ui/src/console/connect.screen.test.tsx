@@ -6,7 +6,15 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, chatDesktop, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import {
+    replyAccount,
+    setupFound,
+    chatDesktop,
+    stubDesktop,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { listen } from './actions';
@@ -447,33 +455,61 @@ describe('the Reply card, its acts', () => {
         expect(words(replyCard(await openConnect()).querySelector('.reply-state')!)).toBe('Not signed in');
     });
 
-    it('keeps who is signed in beside the same card, and whether Jason uses that sign-in or that it could not be read', async () => {
+    it('keeps who is signed in beside the same card, and says nothing of who uses it, read or not', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
         const card = replyCard(await openConnect());
-        expect(words(card)).toContain('Signed in as ann@example.test');
-        expect(words(card)).toContain('Jason uses this sign-in');
+        expect(words(card.querySelector('.reply-state')!)).toBe('Signed in as ann@example.test');
         expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
         cleanup();
 
-        // Whether Jason uses it: read as not, said as not; not read, said as that, never as either.
-        const used = (card: HTMLElement) => words(card.querySelector('.reply-state .meta')!);
-        const signedIn = { ...setupFound.reply, signedIn: true, user: 'ann@example.test', wired: false };
-        renderConnect({ ...setupFound, reply: signedIn });
-        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
-        cleanup();
-        renderConnect({ ...setupFound, reply: { ...signedIn, notRead: ['route'] } });
-        const unread = replyCard(await openConnect());
-        expect(used(unread)).toBe('Whether Jason uses this sign-in could not be read');
-        expect(words(unread)).toContain('Signed in as ann@example.test');
-        expect(words(unread)).not.toContain('Jason does not use it yet');
+        // Not wired, or whether it is not read: an account says neither; the default is the Accounts page's mark alone.
+        for (const reply of [{ wired: false }, { wired: false, notRead: ['route' as const] }]) {
+            renderConnect({
+                ...setupFound,
+                reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test', ...reply },
+            });
+            const shown = replyCard(await openConnect());
+            expect(words(shown.querySelector('.reply-state')!)).toBe('Signed in as ann@example.test');
+            expect(words(shown)).not.toMatch(/uses this sign-in|does not use it yet|whether jason uses/i);
+            cleanup();
+        }
+    });
+
+    it('draws the default account’s card, or the profile default’s where no Reply account is the default, and asks its acts as that account', async () => {
+        const mailbox = account('m_1', 'email', 'connected', 'Made-up Sales');
+        const twoAccounts = (defaulted: string | null) =>
+            withReplyAccounts(setupFound, [
+                replyAccount('default', {
+                    default: defaulted === 'default',
+                    signedIn: true,
+                    user: 'ada@example.test',
+                    senders: [mailbox],
+                }),
+                replyAccount('outbound', { default: defaulted === 'outbound', signedIn: false }),
+            ]);
+        const desktop = renderConnect(twoAccounts('outbound'));
+        let card = replyCard(await openConnect());
+        expect(words(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');
+        expect(words(card.querySelector('.reply-state')!)).toBe('Not signed in');
+        expect(card.querySelector('.acct')).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: 'Sign in with Reply' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
+        expect(desktop.calls.find((call) => call.name === 'setup.connectReply')?.args).toEqual([
+            { type: 'reply', name: 'outbound', team: null },
+        ]);
         cleanup();
 
-        // A desktop of an earlier version sends no such word: not wired is said as it was.
-        const older: Partial<DesktopSetup['reply']> = { ...signedIn };
-        delete older.notRead;
-        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
-        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
+        const none = renderConnect(twoAccounts(null));
+        card = replyCard(await openConnect());
+        expect(words(card.querySelector('.acct-head')!)).toBe('Reply default Make default');
+        expect(words(card.querySelector('.acct')!)).toContain('Made-up Sales');
+        fireEvent.click(within(card.querySelector<HTMLElement>('.acct')!).getByRole('button', { name: 'Unblock' }));
+        await waitFor(() => expect(none.calls.some((call) => call.name === 'setup.replyUnblock')).toBe(true));
+        expect(none.calls.find((call) => call.name === 'setup.replyUnblock')?.args).toEqual([
+            'm_1',
+            { type: 'reply', name: 'default', team: null },
+        ]);
     });
 
     it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {

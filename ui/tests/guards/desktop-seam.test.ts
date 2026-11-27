@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopAccount, DesktopAccounts, DesktopReply, DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
+import type {
+    DesktopAccount,
+    DesktopAccounts,
+    DesktopReply,
+    DesktopSetup,
+    JasonDesktop,
+} from '../../src/platform/desktop';
 
 // The seam is the whole of what the page may ask of the desktop, and the desktop's main process is written to it. A
 // member added or dropped is a change of the seam, so each object below names exactly the members of its part:
@@ -111,7 +117,10 @@ const reply = {
     startCheck: true,
 } as const satisfies Record<keyof DesktopReply, true>;
 // And the accounts, each one profile of the Reply CLI with what was read of it, and what of them could not be read.
-const accounts = { accounts: true, notRead: true, noDefault: true } as const satisfies Record<keyof DesktopAccounts, true>;
+const accounts = { accounts: true, notRead: true, noDefault: true } as const satisfies Record<
+    keyof DesktopAccounts,
+    true
+>;
 const account = {
     type: true,
     name: true,
