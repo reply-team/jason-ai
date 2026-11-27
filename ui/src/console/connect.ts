@@ -51,6 +51,10 @@ const notInDemo = (): Html | null =>
 /** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
 const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
 
+/** `realBusy`, and disabled too while an act on a Reply account is asked: one act at a time, as the desktop holds it. */
+const asking = (busy: Html | null): Html | null =>
+    realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
+
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
 
@@ -1547,7 +1551,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
     // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
     const choosing = view.signedIn && view.teams !== null && choosesTeam();
     // Every act is off while one is being asked for.
-    const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
+    const asks = asking(busy);
     const real = realBusy(busy);
     const shownRefusal = cardRefused.value;
     const refused =
@@ -1707,13 +1711,13 @@ function replyCard(
         <div class="bd">
             <div class="reply-top">
                 <div class="grow">${replyHead()}</div>
-                ${view === null ? null : accountActs(view, place, real)}
+                ${view === null ? null : accountActs(view, place, asking(busy))}
             </div>
             ${notInDemo()}
             ${notes && setupBusy.value ? html`<div class="note" role="status"><span class="spin"></span>${setupBusy.value}</div>` : null}
             ${notes && failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
             ${cliLines(state.reply, real)} ${accountsLines(state)}
-            ${view === null ? null : html`${accountHead(state, view, place, real)}${accountBody(state.reply, view, busy, place)}`}
+            ${view === null ? null : html`${accountHead(state, view, place, asking(busy))}${accountBody(state.reply, view, busy, place)}`}
             ${manageInReply()}
         </div>
     </div>`;
@@ -1737,15 +1741,15 @@ function replySection(state: DesktopSetup, busy: Html | null): Html {
 /** One account's card on the Accounts page, at a place of its own. */
 function accountCard(state: DesktopSetup, view: AccountView, busy: Html | null): Html {
     const place = accountPlace(view);
-    const real = realBusy(busy);
+    const asks = asking(busy);
     const label = view.ref === null ? 'Reply account' : `Reply account ${view.ref.name}`;
     return html`<div class="card reply-card reply-account" role="region" aria-label="${label}">
         <div class="bd">
             <div class="reply-top">
                 <div class="grow">
-                    ${accountHead(state, view, place, real) ?? html`<div class="acct-head"><span class="acct-type">Reply</span></div>`}
+                    ${accountHead(state, view, place, asks) ?? html`<div class="acct-head"><span class="acct-type">Reply</span></div>`}
                 </div>
-                ${accountActs(view, place, real)}
+                ${accountActs(view, place, asks)}
             </div>
             ${accountBody(state.reply, view, busy, place)}
         </div>

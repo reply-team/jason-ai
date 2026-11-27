@@ -438,6 +438,16 @@ describe('Reply accounts, one card per profile', () => {
         fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
         await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toContain('Making it the default…'));
         expect(words(routed())).not.toContain('Asking Reply');
+        // Meanwhile Make default is off, on that card and on the others, as every act is while one is asked.
+        for (const name of ['routed-only', 'default'])
+            expect(
+                (
+                    within(cardOf(page, `Reply account ${name}`)).getByRole('button', {
+                        name: 'Make default',
+                    }) as HTMLButtonElement
+                ).disabled,
+                name,
+            ).toBe(true);
         held({ done: true });
         await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
     });
@@ -724,6 +734,16 @@ describe('Reply accounts, one card per profile', () => {
         fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Remove' }));
         await waitFor(() => expect(words(within(card('outbound')).getByRole('dialog'))).toMatch(/Done\./));
         expect(within(card('default')).queryByRole('dialog')).toBeNull();
+        // While the card's act is asked, its Sign out and Remove are off, as its other acts are.
+        let held: (answer: DesktopReplyDone) => void = () => undefined;
+        desktop.setup.signOut = () => new Promise((resolve) => (held = resolve));
+        fireEvent.click(within(card('outbound')).getByRole('button', { name: 'Sign out' }));
+        await waitFor(() => expect(words(within(card('outbound')).getByRole('dialog'))).toContain('Signing it out…'));
+        const off = (name: string) =>
+            (within(card('outbound')).getByRole('button', { name }) as HTMLButtonElement).disabled;
+        expect([off('Sign out'), off('Remove')]).toEqual([true, true]);
+        held({ done: true });
+        await waitFor(() => expect([off('Sign out'), off('Remove')]).toEqual([false, false]));
         expect(
             desktop.calls
                 .filter((call) => call.name === 'setup.signOut' || call.name === 'setup.removeAccount')

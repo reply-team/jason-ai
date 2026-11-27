@@ -1086,6 +1086,80 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false, 'nor into the installation’s settings');
 });
 
+test('one act on a Reply account at a time, whatever it is: while Make default or a sign-in places the plugin, every other act on a Reply account, a sign-in, Make default and Keep it among them, is refused as busy and runs nothing', async (t) => {
+    // `default` noted as another login, so it shows a change to keep; `several` offered its two teams.
+    const b = replyBench(t, {
+        profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, several: {}, spare: {} },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test', several: 'bea@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+        lists: { 'ada@example.test#3': { email: [mailbox] } },
+        keys: { 'planted-reply-key': 'cy@example.test' },
+        browser: 'cy@example.test',
+    }, { STUB_REPLY_PLUGIN: 'absent' });
+    writeInstallationSettings(b, {});
+    mkdirSync(dirname(b.paths.replyAccounts), { recursive: true });
+    writeFileSync(b.paths.replyAccounts, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'old@example.test', team: { id: '3', name: '' } }] }));
+    let release: () => void = () => undefined;
+    let fetching: () => void = () => undefined;
+    const fetched = () => new Promise<void>((resolve) => (fetching = resolve));
+    const held: Cli = {
+        run: async (args, options) => {
+            if (args[0] === 'plugin' && args[1] === 'install') {
+                fetching();
+                await new Promise<void>((resolve) => (release = resolve));
+            }
+            return b.cli.run(args, options);
+        },
+    };
+    const boxes: ReplyBox[] = [];
+    const setup = new Setup({ ...setupDeps(b), cli: held, confirm: (box) => (boxes.push(box), Promise.resolve(true)) });
+    await setup.status();
+    const busy = 'Another act on a Reply account is going; wait for it.';
+    const outbound = { type: 'reply', name: 'outbound' } as const;
+    const spare = { type: 'reply', name: 'spare' } as const;
+    // Each ask is answered at once, or said as still waiting after five seconds: one queued behind the held act.
+    const answered = (asked: Promise<unknown>) => Promise.race([asked, new Promise((resolve) => setTimeout(() => resolve('still waiting'), 5000))]);
+    const others = async () => {
+        const answers: unknown[] = [];
+        for (const act of [
+            () => setup.removeAccount(outbound),
+            () => setup.signOut(outbound),
+            () => setup.addAccount('Made-up Ops'),
+            () => setup.keepChange({ type: 'reply', name: 'default' }),
+            () => setup.chooseTeam({ type: 'reply', name: 'several' }, '5'),
+            () => setup.makeDefault(spare),
+            () => setup.replyLimits(String(mailbox.id), undefined, { type: 'reply', name: 'default' }),
+        ])
+            answers.push(await answered(act()));
+        for (const signIn of [() => setup.connectReply(spare), () => setup.connectReplyWithKey('planted-reply-key', spare)]) {
+            answers.push(await answered(signIn().then(() => 'signed in', (error: unknown) => (error instanceof Refused ? error.message : String(error)))));
+        }
+        return answers;
+    };
+    const refusedAll = [...Array.from({ length: 7 }, () => no(busy)), busy, busy];
+    // Make default held at the plugin's fetch.
+    let from = b.record().length;
+    let fetch = fetched();
+    const making = setup.makeDefault(spare);
+    await fetch;
+    assert.deepEqual(await others(), refusedAll);
+    assert.deepEqual([boxes, runsAfter(b, from, 'reply').filter((run) => !run.startsWith('--version'))], [[], []]);
+    release();
+    assert.deepEqual(await making, { done: true });
+    // A sign-in held at the plugin's fetch, after its login: the same.
+    writeInstallationSettings(b, {});
+    await setup.status();
+    fetch = fetched();
+    const signingIn = setup.connectReply(spare);
+    await fetch;
+    from = b.record().length;
+    assert.deepEqual(await others(), refusedAll);
+    assert.deepEqual([boxes, runsAfter(b, from, 'reply').filter((run) => !run.startsWith('--version'))], [[], []]);
+    release();
+    await signingIn;
+    assert.deepEqual([b.world().profiles?.['outbound'], b.world().profiles?.['several']], [{ team_id: 9 }, {}], 'nothing of the refused acts was done');
+});
+
 test('every signed-in Reply account is bound to one team, which it shows: a profile that pins none is pinned at the look that finds its sign-in in one team, and the log says so; a sign-in in several is offered them, and a pick pins one; the team is shown by its name, else its id; teams that could not be read are said, the other reads standing; and a pick for an account bound already is refused', async (t) => {
     const log = memoryLog();
     const b = replyBench(t, {

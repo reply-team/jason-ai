@@ -1131,20 +1131,44 @@ export class Setup {
     }
 
     /**
-     * One act at a time, at or above the Reply CLI the acts need; a second click meanwhile is refused. The answer is the
-     * act's, or the sentence it ended with.
+     * One act on a Reply account at a time, whatever it is: a sign-in, Make default, Choose, Add Reply account, Sign out,
+     * Remove, Keep it or an act on a sender. One asked while another goes is `busy`'s answer, and runs nothing; every act
+     * that ran ends a change.
      */
-    async #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
-        if (this.#acts) return refusal(said.busy);
+    async #oneAct<T>(busy: () => T, work: () => Promise<T>): Promise<T> {
+        if (this.#acts) return busy();
         this.#acts = true;
         try {
-            const version = await this.#replyVersion();
-            if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
             return await work();
         } finally {
             this.#acts = false;
             this.#ended += 1;
         }
+    }
+
+    /**
+     * An act of the Reply CLI's on a Reply account, one at a time (`#oneAct`), at or above the Reply CLI the acts need. The
+     * answer is the act's, or the sentence it ended with.
+     */
+    #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
+        return this.#oneAct<T | ReplyRefusal>(
+            () => refusal(said.busy),
+            async () => {
+                const version = await this.#replyVersion();
+                if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
+                return work();
+            },
+        );
+    }
+
+    /** A sign-in, one act at a time (`#oneAct`), in the setup's queue, since it ends in a write of the settings file. */
+    #signingInAct(work: () => Promise<void>): Promise<void> {
+        return this.#oneAct(
+            () => {
+                throw new Refused(said.busy);
+            },
+            () => this.#serial(work),
+        );
     }
 
     /** The person's yes in the main process's own box; no box to ask in is a no. */
@@ -1315,7 +1339,7 @@ export class Setup {
      * account), then places Jason's Reply plugin and, where no default is set, makes it the default (`#signedIn`).
      */
     connectReply(named?: unknown): Promise<void> {
-        return this.#serial(async () => {
+        return this.#signingInAct(async () => {
             // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
             this.#writableLayout();
             const account = await this.#signingIn(named);
@@ -1328,7 +1352,7 @@ export class Setup {
 
     /** The same with a Reply API key the person pasted, on the CLI's standard input and never in an argument. */
     connectReplyWithKey(key: unknown, named?: unknown): Promise<void> {
-        return this.#serial(async () => {
+        return this.#signingInAct(async () => {
             this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
             const account = await this.#signingIn(named);
@@ -1530,13 +1554,15 @@ export class Setup {
      * desktop's note says: the account as it now is becomes the noted one, and the card no longer says the change. Nothing
      * is run, and nothing of the Reply CLI's changes.
      */
-    async keepChange(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+    keepChange(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
-        if (account === null) return refusal(accountSentences.badAccount);
-        if (account.changed !== true || account.user === null || account.team == null) return refusal(accountSentences.nothingToKeep);
-        if (!this.#note(account, { user: account.user, team: account.team }, 'keep')) return refusal(accountSentences.notKept);
-        this.#ended += 1;
-        return this.#announced({ done: true });
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (account.changed !== true || account.user === null || account.team == null) return Promise.resolve(refusal(accountSentences.nothingToKeep));
+        const { user, team } = account;
+        return this.#oneAct<ReplyDone | ReplyRefusal>(
+            () => refusal(said.busy),
+            async () => (this.#note(account, { user, team }, 'keep') ? this.#announced({ done: true }) : refusal(accountSentences.notKept)),
+        );
     }
 
     /** An act's answer, once every page has been told the accounts changed: the acts on a Reply account as a whole. */
@@ -1556,7 +1582,7 @@ export class Setup {
     async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return refusal(accountSentences.badAccount);
-        const answer = await this.#makeDefault(account);
+        const answer = await this.#oneAct(() => refusal(said.busy), () => this.#makeDefault(account));
         this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
         this.#changed();
         return answer;
