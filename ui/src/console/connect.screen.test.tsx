@@ -410,6 +410,10 @@ describe('the Reply card, its acts', () => {
     it('draws the card as a recommended service, one sentence, the sign-in or that it could not be read, and a key field with its button', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } });
         const connect = await openConnect();
+        // The panel's own line names no bare "accounts".
+        expect(words(connect.querySelector('.ph p')!)).toBe(
+            'The AI that does the work, and the services it works through.',
+        );
         const card = replyCard(connect);
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
         expect(words(card.querySelector('.reply-why')!)).toBe(

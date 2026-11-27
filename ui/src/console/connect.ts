@@ -2009,7 +2009,7 @@ export function connectView(): Html {
     const header = html`<div class="ph">
         <div>
             <h1>Connect</h1>
-            <p>The AI that does the work, and the accounts it works through.</p>
+            <p>The AI that does the work, and the services it works through.</p>
         </div>
     </div>`;
     if (!state)
