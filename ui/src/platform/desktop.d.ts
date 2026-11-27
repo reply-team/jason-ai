@@ -505,7 +505,10 @@ export interface DesktopReplyAccount {
 /** A channel Reply lists accounts for. */
 export type DesktopReplyChannel = 'email' | 'linkedin';
 
-/** A fact of the Reply connection the desktop reads: the Reply CLI's version, its sign-in, and whether Jason uses that. */
+/**
+ * A fact of the Reply connection the desktop reads: the Reply CLI's version, the account's sign-in (or, with no account to
+ * read, that none was read), and whether Jason's Reply plugin is valid and the global default.
+ */
 export type DesktopReplyFact = 'version' | 'auth' | 'route';
 
 /**
@@ -537,8 +540,9 @@ export interface DesktopReply {
     pendingUnread: DesktopReplyChannel[];
     /**
      * What the desktop asked and could not read, as closed words: the Reply CLI's version (`belowMinimum` is then still
-     * set, so a page that reads no such word offers no act), its sign-in (`signedIn` is then false), and whether the
-     * runtime's Reply plugin uses that sign-in (`wired` is then false).
+     * set, so a page that reads no such word offers no act), the account's sign-in (`signedIn` is then false), said too
+     * where no account could be read, and whether Jason's Reply plugin is valid and the global default (`wired` is then
+     * false).
      */
     notRead: DesktopReplyFact[];
     /**

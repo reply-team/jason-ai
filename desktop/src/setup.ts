@@ -100,7 +100,6 @@ import {
     readReplyChannel,
     replyChannels,
     type ReplyChannel,
-    parseReplyAuth,
     pluginRuntimes,
     programInstalls,
     replyMinimumVersion,
@@ -183,9 +182,10 @@ export interface HostState {
 }
 
 /**
- * A fact of the Reply card that was asked and could not be read: `version`, the Reply CLI's, where `reply --version` said
- * none; `auth`, its sign-in, where `reply auth status` did not answer; `route`, whether Jason uses that sign-in, where the
- * runtime gave no plugin list or no route list.
+ * A fact of the Reply connection that was asked and could not be read, as a page of an earlier version reads it:
+ * `version`, the Reply CLI's, where `reply --version` said none; `auth`, the account's sign-in, where `reply auth status`
+ * did not answer, or no account could be read; `route`, whether Jason's Reply plugin is valid and the global default,
+ * where the runtime gave no plugin list or no route list.
  */
 export type ReplyFact = 'version' | 'auth' | 'route';
 
