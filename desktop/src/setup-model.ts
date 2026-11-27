@@ -482,22 +482,6 @@ export function readReplyAuth(result: { exit: number; stdout: string }): ReplyAu
     return parseReplyAuth(result.stdout);
 }
 
-/**
- * The login a sign-in is, as `reply auth whoami --json` answered it, or null where it did not. reply-cli 0.23.2 prints
- * the body of Reply's /v3/whoami as it came, `{userId, username, teamId}`, and ends 0 (src/commands/auth.ts
- * `handle_whoami`); it asks in the profile's pinned team, so Reply refuses it for a login in several teams with none
- * pinned, or in a team it is not in, and every failure ends with its error line on stderr alone. Nothing is stored.
- */
-export function readReplyWhoami(result: { exit: number; stdout: string }): string | null {
-    if (result.exit !== 0) return null;
-    try {
-        const raw = JSON.parse(result.stdout) as { username?: unknown } | null;
-        return typeof raw?.username === 'string' && raw.username !== '' ? raw.username : null;
-    } catch {
-        return null;
-    }
-}
-
 export function parseReplySenders(stdout: string): ReplySender[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };

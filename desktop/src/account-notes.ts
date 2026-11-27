@@ -1,22 +1,25 @@
 /**
  * The desktop's note of each Reply account: `<data>/desktop/reply-account-notes.json`, the desktop's alone, never in the
  * installation's settings or the Reply CLI's files. For an account it holds who it was last seen signed in as, and in which
- * team; or, after Keep it on a sign-in that was bound to no team, that its team is picked afresh. A look writes it for an
- * account signed in and bound with nothing noted, or whose noted team's name had not been read; Choose and Keep it write
- * it; removing the account takes it away. It is never used to tell which Reply accounts there are.
+ * team, with the team's name and organization as Reply last named them; or, after Keep it on a sign-in that was bound to
+ * no team, that its team is picked afresh. A look writes it for an account signed in and bound with nothing noted, or
+ * where it read of the noted sign-in's team what the note does not hold (`teamRead`); Choose and Keep it write it;
+ * removing the account takes it away. It is never used to tell which Reply accounts there are.
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AccountRef, ReplyTeam } from './accounts.ts';
+import type { AccountRef, ReplyOrg, ReplyTeam, ReplyWhoami } from './accounts.ts';
 
 /**
- * A team an account is bound to: its id, and its name as Reply gives it, empty where Reply gives it none, as for every
- * Reply account outside an organization; null where it was not read.
+ * A team an account is bound to: its id, and its name as Reply gives it, empty where Reply gives it none, null where it was
+ * not read; and the organization it belongs to, as Reply's whoami named it after a sign-in, null for a team outside one,
+ * absent where Reply has not said. The organization decides nothing of the binding.
  */
 export interface BoundTeam {
     id: string;
     name: string | null;
+    org?: ReplyOrg | null;
 }
 
 /** A sign-in as the note keeps it: the login, and the team it is bound to. */
@@ -36,9 +39,38 @@ export interface AccountNote extends AccountRef {
 /** Whether two sign-ins are one: the same login in the same team, whatever the team's name is now. */
 export const sameSignIn = (a: SignIn, b: SignIn): boolean => a.user === b.user && a.team.id === b.team.id;
 
-/** Whether two notes of an account hold the same, the team's name included. */
+/** Whether two teams are named alike: the same name, and the same organization or none said of either. */
+const sameWords = (a: BoundTeam, b: BoundTeam): boolean =>
+    a.name === b.name && (a.org === undefined || b.org === undefined || a.org === null || b.org === null ? a.org === b.org : a.org.id === b.org.id && a.org.name === b.org.name);
+
+/** Whether two notes of an account hold the same, the team's name and organization included. */
 const sameNoted = (a: Noted, b: Noted): boolean =>
-    a === null || b === null || a === 'fresh' || b === 'fresh' ? a === b : sameSignIn(a, b) && a.team.name === b.team.name;
+    a === null || b === null || a === 'fresh' || b === 'fresh' ? a === b : sameSignIn(a, b) && sameWords(a.team, b.team);
+
+/**
+ * A bound team as Reply's whoami names it besides, where it answered in that team (`said`, null where it was not asked or
+ * not answered): its organization where the answer carries one or says there is none, and its name where `team list`
+ * gave none or could not be read. Where both give a name, `team list`'s stands: the teams to choose from and the binding
+ * are named by it, so the card names a team as it offered it.
+ */
+export function namedBy(team: BoundTeam, said: ReplyWhoami | null): BoundTeam {
+    if (said === null || said.team !== team.id) return team;
+    const name = (team.name === null || team.name === '') && said.teamName !== undefined ? (said.teamName ?? '') : team.name;
+    return { ...team, name, ...(said.org === undefined ? {} : { org: said.org }) };
+}
+
+/**
+ * The team the note keeps of a noted sign-in after a look that read `now` of the same team: what this look read, and the
+ * note's own where it read nothing (a name not read, or none where the note holds one; an organization Reply did not say).
+ */
+export function teamKept(noted: BoundTeam, now: BoundTeam): BoundTeam {
+    const name = now.name === null || (now.name === '' && noted.name !== null) ? noted.name : now.name;
+    const org = now.org !== undefined ? now.org : noted.org;
+    return { id: now.id, name, ...(org === undefined ? {} : { org }) };
+}
+
+/** Whether a look read anything of a noted sign-in's team that its note does not hold. */
+export const teamRead = (noted: BoundTeam, now: BoundTeam): boolean => !sameWords(teamKept(noted, now), noted);
 
 /** What a look read of a signed-in account. */
 export interface SignInSeen {
@@ -97,20 +129,19 @@ export function whoCanBeAsked(seen: Omit<SignInSeen, 'refused'>): boolean {
 }
 
 /**
- * The rule's first case, `bindingOf`'s with no sign-in since, decided before anything is asked of Reply: a look takes a
- * signed-in account as its note says where it is not marked to be checked (a sign-in on its card, or a change not
- * answered yet), and the Reply CLI's own files hold the noted login, or none, and the noted team both pinned and as the
- * team its runs act in (`runsIn`: a key acts in its own, whatever is pinned), the team's name read. Then no teams are asked
- * of Reply; only Reply refusing the account's own read in that team gives a sign-in away.
+ * Whether no sign-in is seen since the note, before anything is asked of Reply: the account is not marked to be checked (a
+ * sign-in on its card, or a change not answered yet), and the Reply CLI's own files hold the noted login, or none, and the
+ * noted team both pinned and as the team its runs act in (`runsIn`: a key acts in its own, whatever is pinned).
  */
-export const unchangedSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
-    noted !== null &&
-    noted !== 'fresh' &&
-    !marked &&
-    noted.team.name !== null &&
-    files.pin === noted.team.id &&
-    runsIn(files) === noted.team.id &&
-    (files.login ?? noted.user) === noted.user;
+export const asNoted = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
+    noted !== null && noted !== 'fresh' && !marked && files.pin === noted.team.id && runsIn(files) === noted.team.id && (files.login ?? noted.user) === noted.user;
+
+/**
+ * The rule's first case, `bindingOf`'s with no sign-in since (`asNoted`), the noted team's name read: a look takes the
+ * signed-in account as its note says. Then no teams are asked of Reply; only Reply refusing the account's own read in that
+ * team gives a sign-in away.
+ */
+export const unchangedSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn => asNoted(files, noted, marked) && noted.team.name !== null;
 
 /**
  * Whether what is decided of a signed-in account rests on its pin alone: nothing noted, a browser's sign-in whose teams
@@ -166,14 +197,25 @@ const noteFileLimit = 1_000_000;
 const objectOf = (value: unknown): Record<string, unknown> | null =>
     typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
+const idShape = /^[1-9][0-9]{0,15}$/;
+
+/** A team's organization as an entry holds it: null for none; undefined where it holds none, or one of another shape. */
+function orgOf(value: unknown): ReplyOrg | null | undefined {
+    if (value === null) return null;
+    const org = objectOf(value);
+    const [id, name] = [org?.['id'], org?.['name']];
+    return typeof id === 'string' && idShape.test(id) && typeof name === 'string' ? { id, name } : undefined;
+}
+
 /** One entry's sign-in, or its team picked afresh; null for an entry of another shape. */
 function entryOf(note: Record<string, unknown>): SignIn | 'fresh' | null {
     if (note['pick'] === 'fresh') return 'fresh';
     const team = objectOf(note['team']);
     const [user, id, teamName] = [note['user'], team?.['id'], team?.['name']];
-    if (typeof user !== 'string' || user === '' || typeof id !== 'string' || !/^[1-9][0-9]{0,15}$/.test(id)) return null;
+    if (typeof user !== 'string' || user === '' || typeof id !== 'string' || !idShape.test(id)) return null;
     if (typeof teamName !== 'string' && teamName !== null) return null;
-    return { user, team: { id, name: teamName } };
+    const org = orgOf(team?.['org']);
+    return { user, team: { id, name: teamName, ...(org === undefined ? {} : { org }) } };
 }
 
 /** The notes a file's text holds, each account once, the first kept; an entry of another shape is left out. */
@@ -201,7 +243,9 @@ export const accountNotesText = (notes: readonly AccountNote[]): string =>
     `${JSON.stringify(
         {
             accounts: notes.map(({ type, name, noted }) =>
-                noted === 'fresh' ? { type, name, pick: 'fresh' } : { type, name, user: noted.user, team: { id: noted.team.id, name: noted.team.name } },
+                noted === 'fresh'
+                    ? { type, name, pick: 'fresh' }
+                    : { type, name, user: noted.user, team: { id: noted.team.id, name: noted.team.name, ...(noted.team.org === undefined ? {} : { org: noted.team.org }) } },
             ),
         },
         null,

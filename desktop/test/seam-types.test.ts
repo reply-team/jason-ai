@@ -26,6 +26,7 @@ import type {
     DesktopReplyOpened,
     DesktopReplyRefusal,
     DesktopReplySignIn,
+    DesktopReplyOrg,
     DesktopReplyTeam,
     DesktopSetup,
     DesktopUpdateItem,
@@ -43,7 +44,7 @@ import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
-import type { AccountRef, DefaultFor, ReplyTeam } from '../src/accounts.ts';
+import type { AccountRef, DefaultFor, ReplyOrg, ReplyTeam } from '../src/accounts.ts';
 import type { BoundTeam, Change, SignIn } from '../src/account-notes.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
@@ -210,6 +211,7 @@ type AccountIsTheSeam = [
     Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['addAccount' | 'signOut' | 'removeAccount' | 'keepChange']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<SignIn, DesktopReplySignIn>>,
     Holds<Equal<BoundTeam, DesktopBoundTeam>>,
+    Holds<Equal<ReplyOrg, DesktopReplyOrg>>,
     Holds<Equal<Change, DesktopAccountChange>>,
     Holds<Equal<DefaultFor, DesktopDefaultFor>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,

@@ -115,8 +115,14 @@ export interface ReplyTeam {
     name: string;
 }
 
-/** The longest team name the page is handed, in characters. */
+/** The longest team or organization name the page is handed, in characters. */
 const teamNameMost = 100;
+
+/** A name Reply gives a team or an organization, as the page is handed it: control characters taken out, and cut. */
+const replyName = (text: string): string => [...text.replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()].slice(0, teamNameMost).join('');
+
+/** A positive whole number Reply gives as an id, by its digits; null for anything else. */
+const replyId = (value: unknown): string | null => (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? String(value) : null);
 
 /**
  * The teams `reply --profile <name> team list --json` answered, as reply-cli 0.23.2 prints them (src/commands/team.ts):
@@ -138,10 +144,58 @@ export function readTeams(result: { exit: number; stdout: string }): ReplyTeam[]
         const team = objectOf(each);
         const id = team?.['team_id'];
         if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || teams.some((kept) => kept.id === String(id))) continue;
-        const name = typeof team?.['team_name'] === 'string' ? [...team['team_name'].replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()].slice(0, teamNameMost).join('') : '';
+        const name = typeof team?.['team_name'] === 'string' ? replyName(team['team_name']) : '';
         teams.push({ id: String(id), name });
     }
     return teams.length > 0 ? teams : null;
+}
+
+/** The Reply organization a team belongs to: its id, digits only, and its name as Reply gives it, held as a team's is. */
+export interface ReplyOrg {
+    id: string;
+    name: string;
+}
+
+/**
+ * Who a sign-in is, as Reply answered `auth whoami`: the login, the team it answered in, and, where Reply's answer carries
+ * them, the team's name and its organization. A member absent here is one the answer does not carry, as from a Reply
+ * that has none of them; null is Reply saying there is none.
+ */
+export interface ReplyWhoami {
+    login: string;
+    /** The team Reply answered in, the one the sign-in's runs act in; null where it named none. */
+    team: string | null;
+    /** The team's name; null where Reply gives it none. */
+    teamName?: string | null;
+    /** The organization the team belongs to; null for a team outside one. */
+    org?: ReplyOrg | null;
+}
+
+/**
+ * Who a sign-in is, as `reply auth whoami --json` answered it, or null where it did not. reply-cli 0.23.2 prints the body
+ * of Reply's /v3/whoami as it came and ends 0 (src/commands/auth.ts `handle_whoami`): `{userId, username, teamId}`, and
+ * from a Reply that carries them `teamName`, `orgId` and `orgName` too, null where there is none. It asks in the
+ * profile's pinned team, so Reply refuses it for a login in several teams with none pinned, or in a team it is not in,
+ * and every failure ends with its error line on stderr alone. An organization is read only whole, both members said or
+ * both null; nothing is stored.
+ */
+export function readReplyWhoami(result: { exit: number; stdout: string }): ReplyWhoami | null {
+    if (result.exit !== 0) return null;
+    let raw: Record<string, unknown> | null;
+    try {
+        raw = objectOf(JSON.parse(result.stdout));
+    } catch {
+        return null;
+    }
+    const login = raw?.['username'];
+    if (raw === null || typeof login !== 'string' || login === '') return null;
+    const said: ReplyWhoami = { login, team: replyId(raw['teamId']) };
+    const teamName = raw['teamName'];
+    if (teamName === null || typeof teamName === 'string') said.teamName = teamName === null || replyName(teamName) === '' ? null : replyName(teamName);
+    const [orgId, orgName] = [raw['orgId'], raw['orgName']];
+    if (orgId === null && orgName === null) said.org = null;
+    else if (replyId(orgId) !== null && typeof orgName === 'string') said.org = { id: replyId(orgId)!, name: replyName(orgName) };
+    return said;
 }
 
 /** The global default route as `jason route list` answered it: its plugin and its whole binding. */

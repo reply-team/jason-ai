@@ -4,6 +4,7 @@ import type {
     DesktopAccounts,
     DesktopBoundTeam,
     DesktopReply,
+    DesktopReplyOrg,
     DesktopReplySignIn,
     DesktopReplyTeam,
     DesktopSetup,
@@ -162,7 +163,9 @@ const account = {
 } as const satisfies Record<keyof DesktopAccount, true>;
 const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
 const accountSignIn = { user: true, team: true } as const satisfies Record<keyof DesktopReplySignIn, true>;
-const boundTeam = { id: true, name: true } as const satisfies Record<keyof DesktopBoundTeam, true>;
+// The organization a bound team belongs to, as Reply named it after a sign-in; absent where Reply has not said it.
+const boundTeam = { id: true, name: true, org: true } as const satisfies Record<keyof DesktopBoundTeam, true>;
+const replyOrg = { id: true, name: true } as const satisfies Record<keyof DesktopReplyOrg, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -180,13 +183,15 @@ const held: [
     Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
     Exactly<keyof typeof accountSignIn, keyof DesktopReplySignIn>,
     Exactly<keyof typeof boundTeam, keyof DesktopBoundTeam>,
+    Exactly<keyof typeof replyOrg, keyof DesktopReplyOrg>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
         expect(held).toEqual([
+            true,
             true,
             true,
             true,
@@ -337,6 +342,7 @@ describe('the desktop seam', () => {
         ]);
         expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
         expect(Object.keys(accountSignIn)).toEqual(['user', 'team']);
-        expect(Object.keys(boundTeam)).toEqual(['id', 'name']);
+        expect(Object.keys(boundTeam)).toEqual(['id', 'name', 'org']);
+        expect(Object.keys(replyOrg)).toEqual(['id', 'name']);
     });
 });

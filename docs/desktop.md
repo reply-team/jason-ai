@@ -285,8 +285,8 @@ runtime's start at logon is the machine set-up's, and no item of the menu's.
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
 - `<data>/desktop/reply-account-notes.json`: the login and the team each Reply account was last seen signed in and bound
-  to, or, after **Keep it**, that its team is to be picked afresh ([Connect](#connect), Reply), readable by your account
-  alone where the system has modes.
+  to, with the team's name and organization as Reply named them, or, after **Keep it**, that its team is to be picked
+  afresh ([Connect](#connect), Reply), readable by your account alone where the system has modes.
 - `<data>/desktop/full-access.json` and `full-access-taken-back`, which an earlier version kept for a standing choice of
   Full access, are removed when Jason starts; no mode is read from them.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
@@ -640,25 +640,35 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in" only where the
   Reply CLI answers that the profile holds no credential, or does not hold the profile.
   Every signed-in Reply account is bound to one Reply team, which its profile pins in the Reply CLI, and its card says
-  it beside the sign-in ("Signed in as ada@example.com in Sales"), by the name Reply gives the team, never by a number.
-  Reply gives no name to the team of a Reply account outside an organization, and the card then names no team ("Signed
-  in as ada@example.com"); only where the teams could not be read and no name is known does it say that the team's name
-  could not be read. A key acts in its own team, whatever team is pinned: the team Reply named it in when it signed in,
-  as the Reply CLI keeps it. A sign-in bound to none of its own teams, whether its profile pins none or pins a team the
-  sign-in does not act in, is bound as a first sign-in is: one that acts in one team, as a key always does, is bound to
-  it at the look that finds it (`reply team use`), with no question, since it may have two tomorrow, and Jason Desktop's
-  log says so; one that can act in several is one Reply will not list: its card says so and shows the teams by their
-  names in place of its mailboxes and LinkedIn accounts, and **Choose** pins that team on the profile, with no question,
-  since nothing is lost by it. Nothing in the window changes the team a sign-in is bound to, and no page says how it is
-  changed elsewhere: a pick for a Reply account bound already is refused. Where the Reply CLI holds no login for a
-  sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed in, and once it has a team
-  Jason Desktop asks the Reply CLI who it is (`reply auth whoami`); where that could not be read, the card says so ("The
-  login of this sign-in could not be read.") with **Check again**.
-  Jason Desktop notes, for each Reply account, the login and the team it last saw there, the team's name with it once
-  Reply named it, in a file of its own (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the
-  account signed in and bound with nothing noted, or reads the name of a noted team it had not read, at **Choose** and
-  at **Keep it**; a removal takes the note away. The note is never used to tell which Reply accounts there are. A card
-  that is not signed in says who it was last signed in as.
+  it beside the sign-in ("Signed in as ada@example.com in Sales (Acme)"), by the name Reply gives the team, never by a
+  number, then in brackets the organization the team belongs to. Where Reply gives the team no name, the card names no
+  team ("Signed in as ada@example.com"); only where the teams could not be read and no name is known does it say that
+  the team's name could not be read. A key acts in its own team, whatever team is pinned: the team Reply named it in
+  when it signed in, as the Reply CLI keeps it. A sign-in bound to none of its own teams, whether its profile pins none
+  or pins a team the sign-in does not act in, is bound as a first sign-in is: one that acts in one team, as a key always
+  does, is bound to it at the look that finds it (`reply team use`), with no question, since it may have two tomorrow,
+  and Jason Desktop's log says so; one that can act in several is one Reply will not list: its card says so and shows
+  the teams by their names in place of its mailboxes and LinkedIn accounts, and **Choose** pins that team on the
+  profile, with no question, since nothing is lost by it. Nothing in the window changes the team a sign-in is bound to,
+  and no page says how it is changed elsewhere: a pick for a Reply account bound already is refused. Where the Reply CLI
+  holds no login for a sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed in,
+  and once it has a team Jason Desktop asks the Reply CLI who it is; where that could not be read, the card says so
+  ("The login of this sign-in could not be read.") with **Check again**.
+  After a sign-in, once the Reply account is bound with nothing to answer, and at **Choose**, Jason Desktop asks the
+  Reply CLI once who the sign-in is (`reply auth whoami`, which prints Reply's answer as it comes, asked in the team the
+  Reply account is bound to), and takes from Reply's answer the organization the team belongs to, and the team's name
+  where `reply team list` gives none or was not read; where both name the team, the name `reply team list` gives stands,
+  the one the teams to choose from show. The organization follows the team in brackets wherever a team is named to you:
+  on the sign-in line, in a notice of a change and in who a card was last signed in as; the teams to choose from show
+  their names alone, and a team outside an organization stands alone. A Reply whose answer does not carry the
+  organization shows the team as before and says nothing of it; it is asked again once at each start of Jason Desktop,
+  at that Reply account's first look. The organization decides nothing: no notice says that an organization or a team
+  was renamed, and it is never logged.
+  Jason Desktop notes, for each Reply account, the login and the team it last saw there, with the team's name and
+  organization as Reply last named them, in a file of its own (`<data>/desktop/reply-account-notes.json`, below): at
+  the look that finds the account signed in and bound with nothing noted, or reads of the noted sign-in's team a name or
+  an organization the note does not hold, at **Choose** and at **Keep it**; a removal takes the note away. The note is
+  never used to tell which Reply accounts there are. A card that is not signed in says who it was last signed in as.
   With no sign-in since, nothing is taken to have changed: a look that finds the noted login in the noted pinned team,
   as the Reply CLI's own files give them, asks Reply for no teams and names the team from the note, and a sign-in the
   Reply CLI holds no login for is taken as the noted one while its pin is the noted team. A sign-in is one made on the

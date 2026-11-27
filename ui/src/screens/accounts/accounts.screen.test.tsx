@@ -240,7 +240,7 @@ describe('Reply accounts, one card per profile', () => {
             default: true,
             signedIn: true,
             user: 'ada@example.test',
-            team: { id: '3', name: 'Made-up Three' },
+            team: { id: '3', name: 'Made-up Three', org: { id: '4242', name: 'Made-up Org' } },
             senders: [mailbox],
         }),
         replyAccount('outbound', {
@@ -261,13 +261,17 @@ describe('Reply accounts, one card per profile', () => {
     const section = (page: HTMLElement) => within(page).getByRole('region', { name: 'Reply' });
     const refusal = (refused: string) => ({ refused, code: null, offer: null, reread: false });
 
-    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, one whose profile is not on Reply’s production marked with its address in the mark’s hint, its sign-in with the team it is bound to, and no Make default once a default is set', async () => {
+    it('draws one Reply section, then one card per account in the desktop’s order, each named as the Reply CLI names its profile and nothing beside it, the default marked, one whose profile is not on Reply’s production marked with its address in the mark’s hint, its sign-in with the team it is bound to and that team’s organization, and no Make default once a default is set', async () => {
         inDesktop(three);
         const page = await openAccounts('.reply-account');
         expect(words(section(page).querySelector('.reply-name')!)).toBe('Reply Recommended');
         expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound', 'Reply routed-only']);
+        // The team is named, then in brackets the organization it belongs to, each by its name and never by an id.
         const ada = cardOf(page, 'Reply account default');
-        expect(words(ada.querySelector('.reply-state')!)).toBe('Signed in as ada@example.test in Made-up Three');
+        expect(words(ada.querySelector('.reply-state')!)).toBe(
+            'Signed in as ada@example.test in Made-up Three (Made-up Org)',
+        );
+        expect(words(page)).not.toContain('4242');
         expect(words(ada.querySelector('.acct')!)).toContain('Sales inbox');
         expect(within(ada).queryByRole('button', { name: 'Make default' })).toBeNull();
         expect(words(ada)).not.toContain('could not be read');
@@ -280,7 +284,7 @@ describe('Reply accounts, one card per profile', () => {
         // Those are words of the sentence, not set as a team's name is.
         const setAsNames = (card: HTMLElement) => Array.from(card.querySelectorAll('.reply-state b'), words);
         expect([setAsNames(ada), setAsNames(bea)]).toEqual([
-            ['ada@example.test', 'Made-up Three'],
+            ['ada@example.test', 'Made-up Three', 'Made-up Org'],
             ['bea@example.test'],
         ]);
         expect(words(bea.querySelector('.acct')!)).toContain('Made-up Bea');
@@ -856,8 +860,9 @@ describe('Reply accounts, one card per profile', () => {
         ]);
     });
 
-    it('says who a card not signed in was last signed in as, and where the last read found its sign-in changed, the change the desktop found (another login, a team the same login is no longer in, another of its teams, or a login not known before it has a team), with Keep it and Sign out, and nothing to do in the account meanwhile; a team only by its name, and none where Reply gives it none', async () => {
-        const ada3 = { user: 'ada@example.test', team: { id: '3', name: 'Made-up Three' } };
+    it('says who a card not signed in was last signed in as, and where the last read found its sign-in changed, the change the desktop found (another login, a team the same login is no longer in, another of its teams, or a login not known before it has a team), with Keep it and Sign out, and nothing to do in the account meanwhile; a team only by its name, then its organization’s in brackets where Reply named one, and none where Reply gives it none', async () => {
+        const org = { id: '4242', name: 'Made-up Org' };
+        const ada3 = { user: 'ada@example.test', team: { id: '3', name: 'Made-up Three', org } };
         const bea9 = { user: 'bea@example.test', team: { id: '9', name: '' } };
         const desktop = inDesktop(
             withReplyAccounts(setupFound, [
@@ -866,7 +871,7 @@ describe('Reply accounts, one card per profile', () => {
                     default: true,
                     signedIn: true,
                     user: 'ada@example.test',
-                    team: { id: '6', name: 'Made-up Six' },
+                    team: { id: '6', name: 'Made-up Six', org },
                     lastSignIn: ada3,
                     change: 'team',
                     senders: [mailbox],
@@ -895,10 +900,11 @@ describe('Reply accounts, one card per profile', () => {
                     lastSignIn: bea9,
                     change: 'left',
                 }),
+                // A team outside an organization: its name alone.
                 replyAccount('team-nameless', {
                     signedIn: true,
                     user: 'bea@example.test',
-                    team: { id: '6', name: 'Made-up Six' },
+                    team: { id: '6', name: 'Made-up Six', org: null },
                     lastSignIn: bea9,
                     change: 'team',
                 }),
@@ -924,19 +930,19 @@ describe('Reply accounts, one card per profile', () => {
         const changed: [string, string][] = [
             [
                 'default',
-                'This Reply account was in Made-up Three, and is now in Made-up Six: campaigns sending through it now send in the new team. Keep it Sign out',
+                'This Reply account was in Made-up Three (Made-up Org), and is now in Made-up Six (Made-up Org): campaigns sending through it now send in the new team. Keep it Sign out',
             ],
             [
                 'moved',
-                'This Reply account was ada@example.test in Made-up Three, and is now dee@example.test: campaigns sending through it now send as the new one. Keep it Sign out',
+                'This Reply account was ada@example.test in Made-up Three (Made-up Org), and is now dee@example.test: campaigns sending through it now send as the new one. Keep it Sign out',
             ],
             [
                 'left',
-                'This Reply account was in Made-up Three, and this sign-in can no longer work in it. Keep it Sign out',
+                'This Reply account was in Made-up Three (Made-up Org), and this sign-in can no longer work in it. Keep it Sign out',
             ],
             [
                 'unknown',
-                'This Reply account was ada@example.test in Made-up Three, and who is signed in now cannot be known until it has a team. Keep it Sign out',
+                'This Reply account was ada@example.test in Made-up Three (Made-up Org), and who is signed in now cannot be known until it has a team. Keep it Sign out',
             ],
             [
                 'moved-nameless',
@@ -966,7 +972,7 @@ describe('Reply accounts, one card per profile', () => {
         for (const name of ['moved', 'left', 'unknown']) expect(card(name).querySelector('.acct'), name).toBeNull();
         expect(words(card('outbound').querySelector('.reply-state')!)).toBe('Not signed in');
         expect(words(card('outbound').querySelector('.reply-state + .acct-last')!)).toBe(
-            'Last signed in as ada@example.test in Made-up Three.',
+            'Last signed in as ada@example.test in Made-up Three (Made-up Org).',
         );
         expect(words(card('personal').querySelector('.reply-state + .acct-last')!)).toBe(
             'Last signed in as bea@example.test.',

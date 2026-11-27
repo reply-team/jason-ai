@@ -581,13 +581,25 @@ export interface DesktopReplyTeam {
     name: string;
 }
 
+/** The Reply organization a team belongs to: its id, digits only, and its name as Reply gives it, cut to 100 characters. */
+export interface DesktopReplyOrg {
+    id: string;
+    name: string;
+}
+
 /**
- * A team an account is bound to: its id, digits only, and its name as Reply gives it, empty where Reply gives it none (as
- * for every Reply account outside an organization), null where it was not read. The page names a team only by a name.
+ * A team an account is bound to: its id, digits only, and its name as Reply gives it, empty where Reply gives it none, null
+ * where it was not read. The page names a team only by a name.
  */
 export interface DesktopBoundTeam {
     id: string;
     name: string | null;
+    /**
+     * The organization the team belongs to, as Reply named it after a sign-in: null for a team outside one; absent where
+     * Reply has not said it, and from a desktop of an earlier version. The page names it after the team, in brackets, by
+     * its name alone.
+     */
+    org?: DesktopReplyOrg | null;
 }
 
 /** A sign-in as the desktop's note of an account keeps it: the login, and the team it was bound to. */

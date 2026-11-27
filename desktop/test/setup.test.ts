@@ -34,7 +34,7 @@ import {
     withReplyGranted,
 } from '../src/setup-model.ts';
 import { claudeCodeModels } from '../src/chat-models.ts';
-import { accountsOf, defaultReason, readProfiles, readRoutes, readTeams } from '../src/accounts.ts';
+import { accountsOf, defaultReason, readProfiles, readReplyWhoami, readRoutes, readTeams } from '../src/accounts.ts';
 import { belowMinimumSentence, type ReplyBox } from '../src/reply-accounts.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 import { printed } from './reply-cli-account-fixture.ts';
@@ -83,6 +83,11 @@ interface ReplyWorld {
     keys?: Record<string, { login: string; team: number }>;
     /** Each team's name, by its id, as Reply lists a login's teams. */
     teams?: Record<string, string>;
+    /**
+     * What Reply's whoami answers besides, by the team it answers in, where the Reply carries the team's name and its
+     * organization: absent for a Reply that does not.
+     */
+    whoami?: Record<string, { teamName?: string | null; orgId?: number | null; orgName?: string | null }>;
 }
 
 /** A bench whose Reply CLI holds `world`, read back as the CLI left it. */
@@ -367,6 +372,24 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     );
     for (const [exit, stdout] of [[1, listedTeams([{ team_id: 5, team_name: 'x' }])], [0, listedTeams([])], [0, listedTeams([{ team_id: 0 }])], [0, '{}'], [0, 'not json'], [0, 'null']] as const) {
         assert.equal(teams(exit, stdout), null, `${exit} ${stdout}`);
+    }
+    // Who a sign-in is, as `auth whoami --json` prints Reply's answer as it came: the login and the team it answered in;
+    // and where Reply's answer carries them, the team's name and its organization, null where there is none, a name held
+    // as a team's is. A member the answer does not carry is no part of what was read: a Reply that has none of them.
+    const whoami = (exit: number, body: unknown) => readReplyWhoami({ exit, stdout: JSON.stringify(body) });
+    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3 }), { login: 'ada@example.test', team: '3' });
+    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3, teamName: 'Default Team', orgId: null, orgName: null }), { login: 'ada@example.test', team: '3', teamName: 'Default Team', org: null });
+    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 9, teamName: ' Made-up\u0007Nine ', orgId: 4242, orgName: `${'O'.repeat(101)}​` }), {
+        login: 'ada@example.test',
+        team: '9',
+        teamName: 'Made-up Nine',
+        org: { id: '4242', name: 'O'.repeat(100) },
+    });
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, teamName: null, orgId: 0, orgName: 'Made-up Org' }), { login: 'ada@example.test', team: '9', teamName: null }, 'an organization of another shape is not read');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: '9', orgId: 4242 }), { login: 'ada@example.test', team: null }, 'nor one half said');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, orgId: 4242, orgName: null }), { login: 'ada@example.test', team: '9' }, 'nor one half null');
+    for (const [exit, body] of [[0, { userId: 7, teamId: 3 }], [0, { username: '' }], [0, null], [2, { username: 'ada@example.test' }]] as const) {
+        assert.equal(whoami(exit, body), null, `${exit} ${JSON.stringify(body)}`);
     }
     // The routes, as the runtime answers route.list (RoutesDto): the global default, or none; the profile every route to
     // Reply names, at any level, global or a campaign's, null where it names none, a team beside it or alone no part of it;
@@ -1586,7 +1609,9 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
         teams: { '4': 'Made-up Four', '6': 'Made-up Six' },
         lists: { 'cy@example.test#6': { email: [mailbox] } },
         browser: 'cy@example.test',
+        whoami: { '6': { orgId: 4242, orgName: 'Made-up Org' } },
     });
+    const sixOrg = { id: '4242', name: 'Made-up Org' };
     const browsing = setupOn(several);
     await browsing.status();
     await browsing.connectReply({ type: 'reply', name: 'teams' });
@@ -1609,9 +1634,9 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
         { user: null, team: { id: '6', name: 'Made-up Six' }, ids: ['12'], notRead: ['login'] },
     );
     assert.equal(readFileSync(whoUnread.paths.replyAccountNotes, 'utf8').includes('"teams"'), false, 'nothing noted');
-    // Choose asks who it is once its team is pinned, as that account alone, and notes the pick: the look after it asks Reply
-    // nothing of it again.
-    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });
+    // Choose asks who it is once its team is pinned, as that account alone, and notes the pick with the team's organization
+    // Reply names there: the look after it asks Reply nothing of it again.
+    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six', org: sixOrg }, teams: undefined, ids: ['12'], notRead: [] });
     assert.deepEqual(
         runsAfter(several, choosing, 'reply').filter((run) => run.startsWith('--profile teams') && /whoami|team list/.test(run)),
         ['--profile teams auth whoami --json'],
@@ -1619,8 +1644,87 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     );
     // Noted, the next look takes it as the noted login in the noted team, and asks Reply nothing of it.
     from = several.record().length;
-    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six' }, teams: undefined, ids: ['12'], notRead: [] });
+    assert.deepEqual(await asWho(), { signedIn: true, user: 'cy@example.test', team: { id: '6', name: 'Made-up Six', org: sixOrg }, teams: undefined, ids: ['12'], notRead: [] });
     assert.deepEqual(runsAfter(several, from, 'reply').filter((run) => run.startsWith('--profile teams') && /whoami|team list/.test(run)), []);
+
+    // After a sign-in, a look that binds the account with nothing to answer asks Reply who it is once, as that account in
+    // its team, and takes from the answer the team's organization, and the team's name where `team list` gives none (the
+    // name `team list` gives wins where both give one): noted with the team, and asked again only after a sign-in, not at
+    // the next look nor from a desktop started again. A Reply whose answer does not carry them leaves the organization
+    // not known: the team as `team list` names it, asked again once at each start of the desktop, at the account's first
+    // look, and once after a sign-in. Never logged.
+    const orgWorld: ReplyWorld = {
+        profiles: { outbound: { team_id: 9 } },
+        credentials: { default: 'ada@example.test', outbound: 'bea@example.test' },
+        seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+        teams: { '9': 'Made-up Nine' },
+        lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
+        whoami: { '3': { teamName: 'Default Team' }, '9': { teamName: 'Made-up Nine Too', orgId: 4242, orgName: 'Made-up Org' } },
+    };
+    const default3 = { id: '3', name: 'Default Team', org: null };
+    const nine = { id: '9', name: 'Made-up Nine', org: { id: '4242', name: 'Made-up Org' } };
+    const orgLog = memoryLog();
+    const carried = replyBench(t, orgWorld);
+    const looked = async (on: Bench, setup: Setup) => {
+        const since = on.record().length;
+        const teams = ((await setup.status()).accounts?.accounts ?? []).map((each) => [each.name, each.team]);
+        return { teams, whoami: runsAfter(on, since, 'reply').filter((run) => run.includes('auth whoami')).sort() };
+    };
+    const bothAsked = ['--profile default auth whoami --json', '--profile outbound auth whoami --json'];
+    const carriedSetup = setupOn(carried, orgLog);
+    assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: bothAsked });
+    const orgNoted = readFileSync(carried.paths.replyAccountNotes, 'utf8');
+    assert.deepEqual([notedAs(orgNoted, 'default'), notedAs(orgNoted, 'outbound')], [
+        { type: 'reply', name: 'default', user: 'ada@example.test', team: default3 },
+        { type: 'reply', name: 'outbound', user: 'bea@example.test', team: nine },
+    ]);
+    assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'the next look');
+    assert.deepEqual(await looked(carried, setupOn(carried, orgLog)), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'a desktop started again');
+    // Choose asks once too, where the Reply CLI names the login already, and notes the pick with what Reply said of it.
+    writeFileSync(carried.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...carried.world(), profiles: { ...carried.world().profiles, picking: {} }, credentials: { ...carried.world().credentials, picking: 'bea@example.test' } }));
+    assert.deepEqual((await looked(carried, carriedSetup)).teams[2], ['picking', null]);
+    from = carried.record().length;
+    assert.deepEqual(await carriedSetup.chooseTeam({ type: 'reply', name: 'picking' }, '9'), { done: true });
+    assert.deepEqual(runsAfter(carried, from, 'reply').filter((run) => run.includes('auth whoami')), ['--profile picking auth whoami --json']);
+    assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', team: nine });
+    assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine], ['picking', nine]], whoami: [] }, 'the look after Choose');
+    assert.equal(JSON.stringify(orgLog.lines).includes('Made-up Org'), false, 'the organization reaches no log');
+    // An answer in another team than the one bound, pinned in a terminal meanwhile, names nothing of it, and nothing of it
+    // is noted.
+    const racingOrg = replyBench(t, orgWorld);
+    let repinned = false;
+    const repinning: Programs = {
+        find: (name) => racingOrg.programs.find(name),
+        run: async (name, args, options) => {
+            if (!repinned && name === 'reply' && args.join(' ') === '--profile outbound auth whoami --json') {
+                repinned = true;
+                writeFileSync(racingOrg.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...racingOrg.world(), profiles: { ...racingOrg.world().profiles, outbound: { team_id: 5 } } }));
+            }
+            return racingOrg.programs.run(name, args, options);
+        },
+    };
+    const racedOrg = (await new Setup({ ...setupDeps(racingOrg), programs: repinning }).status()).accounts?.accounts.find((each) => each.name === 'outbound');
+    assert.deepEqual([repinned, racedOrg?.team, (notedAs(readFileSync(racingOrg.paths.replyAccountNotes, 'utf8'), 'outbound') as { team?: unknown } | undefined)?.team], [true, { id: '9', name: 'Made-up Nine' }, { id: '9', name: 'Made-up Nine' }]);
+    const { whoami: _carried, ...uncarriedWorld } = orgWorld;
+    const plain = replyBench(t, uncarriedWorld);
+    const asToday = [['default', { id: '3', name: '' }], ['outbound', { id: '9', name: 'Made-up Nine' }]];
+    let plainSetup = setupOn(plain);
+    assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: bothAsked }, 'after the first sign-in');
+    assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: [] }, 'the next look');
+    plainSetup = setupOn(plain);
+    assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: bothAsked }, 'a desktop started again');
+    assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: [] }, 'its next look');
+    // Another of the login's teams pinned in a terminal is a sign-in: once kept, the next look asks again, once.
+    writeFileSync(plain.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...plain.world(), profiles: { ...plain.world().profiles, outbound: { team_id: 5 } } }));
+    assert.deepEqual(await looked(plain, plainSetup), { teams: [asToday[0], ['outbound', { id: '5', name: '' }]], whoami: [] }, 'the change said');
+    assert.deepEqual(await plainSetup.keepChange({ type: 'reply', name: 'outbound' }), { done: true });
+    assert.deepEqual(await looked(plain, plainSetup), { teams: [asToday[0], ['outbound', { id: '5', name: '' }]], whoami: ['--profile outbound auth whoami --json'] }, 'kept');
+    assert.deepEqual((await looked(plain, plainSetup)).whoami, [], 'kept, the next look');
+    // A Reply that comes to carry them is asked at the next start, and they are noted: asked nothing after.
+    writeFileSync(plain.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...plain.world(), whoami: orgWorld.whoami }));
+    const fiveNoOrg = { id: '5', name: '', org: null };
+    assert.deepEqual(await looked(plain, setupOn(plain)), { teams: [['default', default3], ['outbound', fiveNoOrg]], whoami: bothAsked }, 'a Reply that carries them');
+    assert.deepEqual(await looked(plain, setupOn(plain)), { teams: [['default', default3], ['outbound', fiveNoOrg]], whoami: [] }, 'noted');
 });
 
 test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; a default already set, whatever its plugin or binding, is left as it is', async (t) => {

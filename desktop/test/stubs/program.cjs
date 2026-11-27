@@ -32,7 +32,7 @@ const said = rest.join(' ');
 //   {"current": "default", "profiles": {"outbound": {"team_id"?: 9}}, "credentials": {"default": "ada@example.test"},
 //    "seats": {"ada@example.test": [3, 9]}, "lists": {"ada@example.test#3": {"email": [...], "linkedin": [...]}},
 //    "browser": "ada@example.test", "keys": {"made-up-key": {"login": "bea@example.test", "team": 9}},
-//    "teams": {"9": "Made-up Nine"}}
+//    "teams": {"9": "Made-up Nine"}, "whoami": {"9": {"orgId": 12, "orgName": "Made-up Org"}}}
 // `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
 // replaces a profile's settings and never its sign-in. A browser's sign-in is its login, or {"login": …, "unnamed": true}
 // where Reply would not name it: reply-cli asks Reply's /v3/whoami in the profile's pinned team right after the browser
@@ -266,14 +266,17 @@ if (process.env.STUB_HANG === name) {
 } else if (name === 'reply' && world !== null && said === 'auth whoami --json') {
     // Reply's /v3/whoami as reply-cli 0.23.2 prints it, the body as it came (src/commands/auth.ts `handle_whoami`), asked
     // in the profile's pinned team, else in none: refused as Reply refuses a login in several teams with none, or a team
-    // it is not in. A key is answered in its own team.
+    // it is not in. A key is answered in its own team. A Reply that carries them, a world with `whoami` (by team id, what
+    // its answer says besides), also answers the team's name and its organization's id and name, null where there is
+    // none; a world without it is a Reply that answers the three members alone.
     const login = loginOf(inUse());
     const seats = (world.seats ?? {})[login] ?? [3];
     const team = actingTeam(inUse(), seats);
+    const carried = world.whoami === undefined ? {} : { teamName: (world.teams ?? {})[String(team)] || null, orgId: null, orgName: null, ...(world.whoami[String(team)] ?? {}) };
     if (!login) answer({ code: 'auth.required', exit: 2 });
     else if (team === null) refusedAccess('TEAM_REQUIRED');
     else if (keyTeamOf(inUse()) === undefined && !seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
-    else answer({ print: { userId: 7, username: login, teamId: team } });
+    else answer({ print: { userId: 7, username: login, teamId: team, ...carried } });
 } else if (name === 'reply' && said === 'team list --json' && process.env.STUB_REPLY_TEAM_LIST) {
     // A read of the teams that ended as STUB_REPLY_TEAM_LIST names it, as reply-cli prints `teams.unavailable` and the like.
     answer(JSON.parse(process.env.STUB_REPLY_TEAM_LIST));

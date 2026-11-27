@@ -261,11 +261,14 @@ const usableCli = (reply: DesktopSetup['reply']): boolean =>
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
 
 /**
- * A team as the card names it: by the name Reply gives it, never by its id. Null where Reply gives it none, as for every
- * Reply account outside an organization, or where its name was not read: no team is named then.
+ * A team as the card names it: by the name Reply gives it, set as a name is, then the organization it belongs to in
+ * brackets, by its name, where Reply named one; never by an id. Null where Reply gives the team no name, or its name was not
+ * read: no team is named then, nor its organization.
  */
-function teamWords(team: DesktopBoundTeam): string | null {
-    return team.name === null || team.name === '' ? null : team.name;
+function teamWords(team: DesktopBoundTeam): Html | null {
+    if (team.name === null || team.name === '') return null;
+    const org = team.org === undefined || team.org === null || team.org.name === '' ? null : team.org.name;
+    return html`<b>${team.name}</b>${org === null ? null : html` (<b>${org}</b>)`}`;
 }
 
 /**
@@ -273,15 +276,15 @@ function teamWords(team: DesktopBoundTeam): string | null {
  * teams could not be read, words of the sentence that say so; nothing where Reply gives it none.
  */
 function teamOnLine(team: DesktopBoundTeam): Html | null {
-    const name = teamWords(team);
-    if (name !== null) return html`<b>${name}</b>`;
+    const named = teamWords(team);
+    if (named !== null) return named;
     return team.name === null ? html`a team whose name could not be read` : null;
 }
 
 /** A sign-in as the card says it: the login, and the team it is bound to where the card can name it. */
 function signInWords(signIn: DesktopReplySignIn): Html {
     const team = teamWords(signIn.team);
-    return html`<b>${signIn.user}</b>${team === null ? null : html` in <b>${team}</b>`}`;
+    return html`<b>${signIn.user}</b>${team === null ? null : html` in ${team}`}`;
 }
 
 /** What a notice says of a change, by the kind the desktop gave it, each a sentence of the account as it was and as it is. */
@@ -294,12 +297,12 @@ function changeWords(view: AccountView, last: DesktopReplySignIn): Html {
         case 'left':
             return was === null
                 ? html`This Reply account’s sign-in can no longer work in the team it was in.`
-                : html`This Reply account was in <b>${was}</b>, and this sign-in can no longer work in it.`;
+                : html`This Reply account was in ${was}, and this sign-in can no longer work in it.`;
         case 'team': {
             const now = view.team === null ? null : teamWords(view.team);
-            const inNow = now === null ? html`in another team` : html`in <b>${now}</b>`;
-            return html`This Reply account ${was === null ? null : html`was in <b>${was}</b>, and `}is now ${inNow}:
-            campaigns sending through it now send in the new team.`;
+            const inNow = now === null ? html`in another team` : html`in ${now}`;
+            return html`This Reply account ${was === null ? null : html`was in ${was}, and `}is now ${inNow}: campaigns
+            sending through it now send in the new team.`;
         }
         default:
             return html`This Reply account was ${signInWords(last)}, and who is signed in now cannot be known until it
