@@ -585,10 +585,13 @@ describe('Reply accounts, one card per profile', () => {
                 { default: null, outbound: null, 'routed-only': notPlaced },
             ],
             [
-                'a read begun before the sign-in that lands after it',
+                'a read begun before the sign-in that lands after it, which the page drops: the card stays as the later read drew it',
                 async () => {
+                    const reads = desktop.calls.filter((call) => call.name === 'setup.status').length;
                     landEarlier(earlierState);
-                    await waitFor(() => expect(words(card('routed-only'))).toContain('Not signed in'));
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                    expect(desktop.calls.filter((call) => call.name === 'setup.status').length).toBe(reads);
+                    expect(words(card('routed-only'))).toContain('Signed in as bea@example.test');
                 },
                 { default: null, outbound: null, 'routed-only': notPlaced },
             ],

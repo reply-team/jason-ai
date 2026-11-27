@@ -577,6 +577,10 @@ export function unreadSentence(label: string, unread: 'waiting' | 'failed' | nul
     return null;
 }
 
+/** The account a page of an earlier version knows: the default, else the profile `default`; null where neither is listed. */
+const actingOf = (accounts: readonly AccountState[]): AccountState | null =>
+    accounts.find((each) => each.default) ?? accounts.find((each) => each.name === 'default') ?? null;
+
 /** An act refused by the desktop itself, before or after the CLI: its sentence, no code and nothing offered. */
 function refusal(refused: string, reread = false): ReplyRefusal {
     return { refused, code: null, offer: null, reread };
@@ -625,6 +629,9 @@ export class Setup {
     #listed: AccountState[] = [];
     /** The profiles a route named at the last read, at any level; null where the routes were not read, or none was read. */
     #routed: Set<string> | null = null;
+    /** How many reads of the setup have begun, and which of them gave `#listed` and `#routed`. */
+    #readsBegun = 0;
+    #listedBy = 0;
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -757,6 +764,8 @@ export class Setup {
     }
 
     async #status(): Promise<SetupState> {
+        this.#readsBegun += 1;
+        const begun = this.#readsBegun;
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
@@ -859,7 +868,7 @@ export class Setup {
         const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
-        const { reply, accounts } = await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
+        const { reply, accounts } = await this.#reply(begun, replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
         return {
             hosts: [...programHosts, ...providerHosts],
             reply,
@@ -912,11 +921,11 @@ export class Setup {
      * no Reply account is the default; its `wired` says that Jason's Reply plugin is valid and the global default names
      * that very account. `valid` is null where the runtime gave no plugin list.
      */
-    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
+    async #reply(begun: number, valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
         const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            this.#listed = [];
+            this.#keepListing(begun, [], null);
             return {
                 reply: { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() },
                 accounts: none,
@@ -935,7 +944,7 @@ export class Setup {
         const tail = { belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion), ...(startUpdate === null ? {} : { startUpdate }), startCheck: this.#startCheck() };
         const nobody = { signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [] };
         if (!current) {
-            this.#listed = [];
+            this.#keepListing(begun, [], null);
             // Nothing was asked of a sign-in: an earlier page says so, never that nobody is signed in.
             return { reply: { cli, ...nobody, notRead: [...(version === null ? ['version' as const] : []), 'auth'], ...tail }, accounts: none };
         }
@@ -954,9 +963,8 @@ export class Setup {
         // Noted in the listing's order once every account is read, so the note is written in one order.
         const accounts = read.map((account) => this.#noted(account, notes));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
-        this.#listed = accounts;
-        this.#routed = listing?.routed ?? null;
-        const acting = this.#accountOf(undefined);
+        this.#keepListing(begun, accounts, listing?.routed ?? null);
+        const acting = actingOf(accounts);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
             acting === null
@@ -1100,8 +1108,19 @@ export class Setup {
      * earlier version asks, the default, else the profile `default`. Null for a name the last read did not list.
      */
     #accountOf(named: unknown): AccountState | null {
-        if (named === undefined) return this.#listed.find((each) => each.default) ?? this.#listed.find((each) => each.name === 'default') ?? null;
+        if (named === undefined) return actingOf(this.#listed);
         return isAccountRef(named) ? (this.#listed.find((each) => sameAccount(each, named)) ?? null) : null;
+    }
+
+    /**
+     * Keeps a read's accounts as the ones acts are checked against, unless a read that began after it gave them already: an
+     * older read that ends last answers its own asker and changes nothing here.
+     */
+    #keepListing(begun: number, accounts: AccountState[], routed: Set<string> | null): void {
+        if (begun < this.#listedBy) return;
+        this.#listedBy = begun;
+        this.#listed = accounts;
+        this.#routed = routed;
     }
 
     #startCheck(): 'pending' | 'ended' {

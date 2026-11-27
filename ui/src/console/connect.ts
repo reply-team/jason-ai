@@ -976,12 +976,15 @@ export async function reload(): Promise<void> {
     const read = begun;
     try {
         const status = await here().desktop.setup.status();
+        // A read that began before the one shown answers last: what it read is older, and is dropped.
+        if (read < shownRead) return;
         shownRead = read;
         setup.value = { ...status, hosts: withModels(status.hosts) };
         setupReadFailed.value = false;
         if (readSaid) setupError.value = null;
         readSaid = false;
     } catch (error) {
+        if (read < shownRead) return;
         setupError.value = messageOf(error);
         setupReadFailed.value = true;
         readSaid = true;

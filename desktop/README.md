@@ -38,7 +38,8 @@ that a person needs.
 
 A listing of `Setup.status` asked while one is being read is answered by that read, unless a change ended since it
 began: an act of the setup's queue, an act on a Reply account, or a change the desktop announces (the models Codex
-offers and Full access's bypass among them).
+offers and Full access's bypass among them). Where two reads overlap, the acts are checked against the accounts of the read
+that began last, and the page drops an answer older than the one it shows.
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
 and names `jason update`. A `feed` in the desktop's settings is passed to every verb that takes `--feed`.

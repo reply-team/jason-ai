@@ -1632,6 +1632,33 @@ test('a listing asked while one is read is answered by that read, and one asked 
     }
     assert.ok(b.world().profiles?.['routed-only'] !== undefined, 'the refused sign-in made its profile');
     assert.deepEqual(b.world().profiles?.['outbound'], { team_id: 5 }, 'the pick pinned its team');
+    // A read that began before another and ends after it never replaces what the later one listed: the acts are checked
+    // against the accounts of the read that began last.
+    let release: () => void = () => undefined;
+    let holding = false;
+    const slow: Programs = {
+        find: (name) => b.programs.find(name),
+        run: async (name, args, options) => {
+            const result = await b.programs.run(name, args, options);
+            if (holding && name === 'reply' && args.join(' ') === 'profile list --json') {
+                holding = false;
+                await new Promise<void>((resolve) => (release = resolve));
+            }
+            return result;
+        },
+    };
+    const ordered = new Setup({ ...setupDeps(b), programs: slow, confirm: () => Promise.resolve(false) });
+    await ordered.status();
+    holding = true;
+    const older = ordered.status();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...b.world(), profiles: { ...b.world().profiles, later: {} } }));
+    ordered.announceChange();
+    const newer = await ordered.status();
+    assert.ok(newer.accounts?.accounts.some((each) => each.name === 'later'));
+    release();
+    assert.equal((await older).accounts?.accounts.some((each) => each.name === 'later'), false, 'the older read answers its own asker');
+    assert.deepEqual(await ordered.removeAccount({ type: 'reply', name: 'later' }), no('Nothing was done.'), 'an act on an account the later read listed');
 });
 
 test('what could not be read of the accounts is said, never drawn as a state: the profiles, the routes, a sign-in; and a default that is not set is told from one that is another plugin’s', async (t) => {
