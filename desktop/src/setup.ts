@@ -1024,11 +1024,8 @@ export class Setup {
                 return { account: marked, noted, pin, backend };
             }),
         );
-        // The Reply CLI's built-in address, as a profile that inherits it says it at this look; an account pointing at
-        // another is said to (`nonProductionApi`).
-        const builtIn = read.find(({ backend }) => backend?.inherited === true)?.backend?.api ?? null;
         for (const each of read) {
-            const elsewhere = nonProductionApi(each.backend, builtIn);
+            const elsewhere = nonProductionApi(each.backend);
             if (elsewhere !== null) each.account = { ...each.account, nonProductionApi: elsewhere };
         }
         // Noted in the listing's order once every account is read, so the note is written in one order.

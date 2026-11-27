@@ -223,7 +223,8 @@ if (process.env.STUB_HANG === name) {
 } else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'show' && rest.length === 4 && rest[3] === '--json') {
     // `profile show <name>` ignores --profile and asks Reply nothing (src/commands/profile.ts `handle_show`): the profile's
     // backend, each address its own or the built-in one it inherits (src/profile.ts `EMBEDDED`, `describe_profile`), its
-    // pin, and its stored sign-in without a secret. A name it does not hold is usage.profile, exit 2.
+    // pin, and its stored sign-in without a secret; an address without its trailing slashes (`strip_trailing_slash`). A
+    // name it does not hold is usage.profile, exit 2.
     // STUB_REPLY_PROFILE_SHOW names another ending.
     const shown = rest[2];
     const own = world !== null ? ((world.profiles ?? {})[shown] ?? {}) : {};
@@ -233,7 +234,7 @@ if (process.env.STUB_HANG === name) {
     else {
         const backend = {
             authority: own.authority ?? builtIn.authority,
-            api_base: own.api_base ?? builtIn.api_base,
+            api_base: (own.api_base ?? builtIn.api_base).replace(/\/+$/, ''),
             inherited: { authority: own.authority === undefined, api_base: own.api_base === undefined },
         };
         answer({ print: { name: shown, current: listedProfiles.current === shown, backend, team_id: own.team_id ?? null, authorization: { flag: false, env: false, stored: null, effective_source: null } } });

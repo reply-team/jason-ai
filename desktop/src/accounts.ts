@@ -84,14 +84,29 @@ export function readBackend(result: { exit: number; stdout: string }): ProfileBa
 }
 
 /**
- * The API address an account's profile points at where that is not Reply's production: set on the profile, and not the
- * Reply CLI's built-in address, which a profile that inherits it gives at the same look (`builtIn`; the desktop keeps no
- * address of its own). With no profile inheriting it at that look, an address set on a profile counts. Null on
- * production, or where the backend was not read.
+ * Reply's production API: the Reply CLI's built-in address, which a profile that sets none inherits (reply-cli 0.23.2,
+ * src/profile.ts `EMBEDDED.api_base`).
  */
-export function nonProductionApi(backend: ProfileBackend | null, builtIn: string | null): string | null {
+export const replyProductionApi = 'https://api.reply.io';
+
+/** An address as two are compared: the scheme and the host in any letter case, a default port and a trailing slash dropped. */
+function comparable(address: string): string | null {
+    try {
+        const url = new URL(address);
+        return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The API address an account's profile points at where that is not Reply's production: set on the profile, and not
+ * `replyProductionApi` however it is written. An address the profile inherits is production. Null on production, or
+ * where the backend was not read.
+ */
+export function nonProductionApi(backend: ProfileBackend | null): string | null {
     if (backend === null || backend.inherited) return null;
-    return builtIn !== null && backend.api === builtIn ? null : backend.api;
+    return comparable(backend.api) === comparable(replyProductionApi) ? null : backend.api;
 }
 
 /** A team a sign-in can act in, as the Reply CLI lists it: its id, digits only, and its name, held to a length. */

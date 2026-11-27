@@ -1992,6 +1992,16 @@ test('each account is read under its own profile’s name alone, a profile only 
     const unread = replyBench(t, world, { STUB_REPLY_PROFILE_SHOW: JSON.stringify({ code: 'config.read' }) });
     const quietUnread = (await setupOn(unread).status()).accounts?.accounts.find((each) => each.name === 'quiet');
     assert.deepEqual([quietUnread?.nonProductionApi, quietUnread?.notRead], [undefined, []]);
+    // Production is the Reply CLI's built-in address, never learned from another profile: where no profile inherits it,
+    // `default` pointing at another Reply is marked, and a profile that names production itself, in any way of writing it,
+    // is not.
+    const noneInherits = replyBench(t, {
+        profiles: { default: { api_base: 'https://api.dev.example.test' }, prod: { api_base: replyCliBuiltIn }, written: { api_base: 'https://API.Reply.io:443/' } },
+    });
+    assert.deepEqual(
+        ((await setupOn(noneInherits).status()).accounts?.accounts ?? []).map((each) => [each.name, each.nonProductionApi]),
+        [['default', 'https://api.dev.example.test'], ['prod', undefined], ['written', undefined]],
+    );
     // A global default that names no profile is, at each read, the account of the profile the Reply CLI is set to then: a
     // `reply profile use` in a terminal moves the mark. Jason's Reply plugin keeps no profile of its own for such a route,
     // so nothing in its configuration is read for one.

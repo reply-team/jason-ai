@@ -715,9 +715,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   it names: "Default for LinkedIn" or "Default for email" for a channel's sends, and for any other work the operation's
   name as Jason has it, with its channel where the route is one channel's ("Default for audience.search"). A Reply
   account whose profile points at another Reply than production, an address set on the profile other than the one the
-  Reply CLI ships with (`reply profile show`, which asks Reply nothing), carries a small mark beside its name, here and
-  on the one card outside the Accounts screen; its hint says it is not Reply's production and gives that address. A
-  profile on production shows nothing, and where that could not be read nothing is said of it. Where the routes could
+  Reply CLI ships with, `https://api.reply.io`, written in any letter case, with or without its default port or a
+  trailing slash (`reply profile show`, which asks Reply nothing), carries a small mark beside its name, here and on the
+  one card outside the Accounts screen; its hint says it is not Reply's production and gives that address. A profile on
+  production shows nothing, and where that could not be read nothing is said of it. Where the routes could
   not be read, the cards stay, none is marked and none offers Make default, and the Reply section says so ("Which Reply
   account is the default could not be read."). Jason Desktop makes a default only where Jason has none, and never
   replaces one: a campaign with no route of its own follows the default at every step, so another default would carry
