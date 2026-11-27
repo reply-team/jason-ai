@@ -14,13 +14,17 @@ const origin = process.env.STUB_ORIGIN || 'http://127.0.0.1:41234';
 const verb = args.slice(0, 2).join(' ');
 const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 
+/** The name a key has in an object, matched in any letter case as the runtime's configuration reads it; `name` where none. */
+const keyOf = (object, name) => Object.keys(object ?? {}).find((key) => key.toLowerCase() === name.toLowerCase()) ?? name;
+
 /** The routes as the runtime answers `route.list`: the settings file's global default, and STUB_CAMPAIGN_ROUTES's campaigns. */
 function routesAnswer() {
     let settings = {};
     try {
         settings = JSON.parse(readFileSync(join(data, 'config', 'settings.json'), 'utf8'));
     } catch {}
-    const route = settings.Routes && settings.Routes.Default;
+    const routes = settings[keyOf(settings, 'Routes')];
+    const route = routes && routes[keyOf(routes, 'Default')];
     const global = route ? { plugin_id: route.Plugin, binding: route.Binding || null, binding_identity: null } : null;
     const campaigns = process.env.STUB_CAMPAIGN_ROUTES ? JSON.parse(process.env.STUB_CAMPAIGN_ROUTES) : [];
     return { routing_snapshot_id: 'rts_1', plugin_snapshot_id: 'snp_1', global: { default: global, operations: {}, channels: {} }, campaigns };
@@ -153,7 +157,9 @@ if (args[0] === 'status') {
     try {
         settings = JSON.parse(readFileSync(file, 'utf8'));
     } catch {}
-    settings.Routes = { ...(settings.Routes ?? {}), Default: { Plugin: option('--plugin'), ...(binding === null ? {} : { Binding: binding }) } };
+    const routesKey = keyOf(settings, 'Routes');
+    const routes = settings[routesKey] ?? {};
+    settings[routesKey] = { ...routes, [keyOf(routes, 'Default')]: { Plugin: option('--plugin'), ...(binding === null ? {} : { Binding: binding }) } };
     mkdirSync(join(data, 'config'), { recursive: true });
     writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
     print(routesAnswer());

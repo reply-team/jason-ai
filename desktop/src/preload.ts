@@ -79,20 +79,26 @@ const desktop = {
     },
     setup: {
         status: () => ipcRenderer.invoke('jason:setup.status'),
-        connectReply: () => ipcRenderer.invoke('jason:setup.connectReply'),
-        connectReplyWithKey: (key: string) => ipcRenderer.invoke('jason:setup.connectReplyWithKey', key),
+        // An account goes on the channel only where the page names one, after the member's own arguments.
+        connectReply: (account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.connectReply') : ipcRenderer.invoke('jason:setup.connectReply', account)),
+        connectReplyWithKey: (key: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.connectReplyWithKey', key) : ipcRenderer.invoke('jason:setup.connectReplyWithKey', key, account)),
         setProviderKey: (providerId: string, key: string) => ipcRenderer.invoke('jason:setup.setProviderKey', providerId, key),
         installProgram: (programId: string) => ipcRenderer.invoke('jason:setup.installProgram', programId),
         useProgram: (programId: string) => ipcRenderer.invoke('jason:setup.useProgram', programId),
         configurePlugin: (pluginId: string, values: unknown) => ipcRenderer.invoke('jason:setup.configurePlugin', pluginId, values),
         disconnectPlugin: (pluginId: string) => ipcRenderer.invoke('jason:setup.disconnectPlugin', pluginId),
-        replyConnect: (channel: 'email' | 'linkedin', options: unknown) => ipcRenderer.invoke('jason:setup.replyConnect', channel, options),
-        replyReconnect: (channel: 'email' | 'linkedin', accountId: string, options?: unknown) => ipcRenderer.invoke('jason:setup.replyReconnect', channel, accountId, options),
-        replyLimits: (accountId: string, daily?: number) => ipcRenderer.invoke('jason:setup.replyLimits', accountId, daily),
-        replyPause: (accountId: string) => ipcRenderer.invoke('jason:setup.replyPause', accountId),
-        replyResume: (accountId: string) => ipcRenderer.invoke('jason:setup.replyResume', accountId),
-        replyUnblock: (accountId: string) => ipcRenderer.invoke('jason:setup.replyUnblock', accountId),
-        replyDelete: (channel: 'email' | 'linkedin', accountId: string, options?: unknown) => ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options),
+        replyConnect: (channel: 'email' | 'linkedin', options: unknown, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyConnect', channel, options) : ipcRenderer.invoke('jason:setup.replyConnect', channel, options, account),
+        replyReconnect: (channel: 'email' | 'linkedin', accountId: string, options?: unknown, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyReconnect', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyReconnect', channel, accountId, options, account),
+        replyLimits: (accountId: string, daily?: number, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyLimits', accountId, daily) : ipcRenderer.invoke('jason:setup.replyLimits', accountId, daily, account),
+        replyPause: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyPause', accountId) : ipcRenderer.invoke('jason:setup.replyPause', accountId, account)),
+        replyResume: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyResume', accountId) : ipcRenderer.invoke('jason:setup.replyResume', accountId, account)),
+        replyUnblock: (accountId: string, account?: unknown) => (account === undefined ? ipcRenderer.invoke('jason:setup.replyUnblock', accountId) : ipcRenderer.invoke('jason:setup.replyUnblock', accountId, account)),
+        replyDelete: (channel: 'email' | 'linkedin', accountId: string, options?: unknown, account?: unknown) =>
+            account === undefined ? ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options, account),
+        makeDefault: (account: unknown) => ipcRenderer.invoke('jason:setup.makeDefault', account),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

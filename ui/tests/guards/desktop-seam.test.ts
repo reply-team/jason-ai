@@ -78,6 +78,8 @@ const setup = {
     replyResume: true,
     replyUnblock: true,
     replyDelete: true,
+    // Make default: the account it names becomes the global default, after the person's yes in the desktop's own box.
+    makeDefault: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -221,6 +223,7 @@ describe('the desktop seam', () => {
             'setup.replyResume',
             'setup.replyUnblock',
             'setup.replyDelete',
+            'setup.makeDefault',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([

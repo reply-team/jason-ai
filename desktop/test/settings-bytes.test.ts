@@ -27,6 +27,7 @@ function setupOn(b: Bench, log: Logger = memoryLog()) {
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
         settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
+        account: 'made-up-person',
     });
 }
 
@@ -70,7 +71,11 @@ for (const row of rows) {
         const b = bench(t, { programs: ['reply'] });
         mkdirSync(dirname(settingsFile(b)), { recursive: true });
         writeFileSync(settingsFile(b), written);
-        await row.act(setupOn(b));
+        // A card's click follows a read of what it shows: the Reply sign-in names an account that read listed. The
+        // default it makes is the runtime's to write, through its one writer of the file, as the desktop wrote it then.
+        const setup = setupOn(b);
+        await setup.status();
+        await row.act(setup);
         assert.equal(readFileSync(settingsFile(b), 'utf8'), recorded.get(row.card));
     });
 }

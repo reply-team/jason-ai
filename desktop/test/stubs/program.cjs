@@ -36,8 +36,8 @@ const said = rest.join(' ');
 //    "browser": "ada@example.test", "keys": {"made-up-key": "bea@example.test"}}
 // `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
 // replaces a profile's settings and never its sign-in. Without the file the CLI holds `default` alone, or the profiles
-// STUB_REPLY_PROFILES names as `profile list --json` prints them, or `default` and STUB_REPLY_PROFILE, which is then the
-// current one; and the sign-in and lists are the variables' below, whichever profile a run names.
+// STUB_REPLY_PROFILES names as `profile list --json` prints them, and the sign-in and lists are the variables' below,
+// whichever profile a run names.
 const worldFile = name === 'reply' ? process.env.STUB_REPLY_WORLD : undefined;
 const world = worldFile ? JSON.parse(require('node:fs').readFileSync(worldFile, 'utf8')) : null;
 const keepWorld = () => writeFileSync(worldFile, JSON.stringify(world, null, 2));
@@ -45,9 +45,7 @@ const listedProfiles = world !== null
     ? { current: world.current || 'default', available: ['default', ...Object.keys(world.profiles ?? {}).filter((each) => each !== 'default')] }
     : process.env.STUB_REPLY_PROFILES
       ? JSON.parse(process.env.STUB_REPLY_PROFILES)
-      : process.env.STUB_REPLY_PROFILE
-        ? { current: process.env.STUB_REPLY_PROFILE, available: ['default', process.env.STUB_REPLY_PROFILE] }
-        : { current: 'default', available: ['default'] };
+      : { current: 'default', available: ['default'] };
 const declared = (profile) => profile === 'default' || listedProfiles.available.includes(profile);
 const inUse = () => replyProfile ?? listedProfiles.current;
 const usageProfile = (profile) => answer({ code: 'usage.profile', error: { hint: `Create it with \`profile add ${profile}\`.` } });

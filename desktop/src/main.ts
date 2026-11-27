@@ -201,21 +201,24 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
         ['setup.status', () => setup.status()],
-        ['setup.connectReply', () => setup.connectReply()],
-        ['setup.connectReplyWithKey', (key) => setup.connectReplyWithKey(key)],
+        ['setup.connectReply', (account) => setup.connectReply(account)],
+        ['setup.connectReplyWithKey', (key, account) => setup.connectReplyWithKey(key, account)],
         ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.useProgram', (id) => setup.useProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
-        // The Reply card's acts, each a verb of the Reply CLI on the person's click; a link goes to the browser, never here.
-        ['setup.replyConnect', (channel, options) => setup.replyConnect(channel, options)],
-        ['setup.replyReconnect', (channel, id, options) => setup.replyReconnect(channel, id, options)],
-        ['setup.replyLimits', (id, daily) => setup.replyLimits(id, daily)],
-        ['setup.replyPause', (id) => setup.replyPause(id)],
-        ['setup.replyResume', (id) => setup.replyResume(id)],
-        ['setup.replyUnblock', (id) => setup.replyUnblock(id)],
-        ['setup.replyDelete', (channel, id, options) => setup.replyDelete(channel, id, options)],
+        // The Reply card's acts, each a verb of the Reply CLI on the person's click as the account the page names; a link
+        // goes to the browser, never here.
+        ['setup.replyConnect', (channel, options, account) => setup.replyConnect(channel, options, account)],
+        ['setup.replyReconnect', (channel, id, options, account) => setup.replyReconnect(channel, id, options, account)],
+        ['setup.replyLimits', (id, daily, account) => setup.replyLimits(id, daily, account)],
+        ['setup.replyPause', (id, account) => setup.replyPause(id, account)],
+        ['setup.replyResume', (id, account) => setup.replyResume(id, account)],
+        ['setup.replyUnblock', (id, account) => setup.replyUnblock(id, account)],
+        ['setup.replyDelete', (channel, id, options, account) => setup.replyDelete(channel, id, options, account)],
+        // Make default: the runtime names the account the global default, after the person's yes in the main process's box.
+        ['setup.makeDefault', (account) => setup.makeDefault(account)],
     ];
     for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
     setup.onChanged(changed);
@@ -666,6 +669,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
         // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
         environment: process.env,
+        // The person a change of the global default is journaled as, as the chat's header names them.
+        account: accountName(),
         models,
         bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.

@@ -299,31 +299,20 @@ function derivedHost(server: unknown): string | null {
     }
 }
 
-/** The Reply plugin's binding as the golden path writes it: the reply-cli profile the route acts as. */
-export interface ReplyWiring {
-    settings: Json;
-    /** Whether `Routes:Default` was written, which it is only where the file holds none. */
-    routeWritten: boolean;
-}
-
 /**
  * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`, written
- * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept) and,
- * where the file names no global default at all, named the global default with the signed-in profile
- * (`Routes:Default`), as the golden path writes both by hand. A default a person set is never replaced; every other key
- * stays as it was, and the input is not changed.
+ * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept), as the golden path
+ * writes it by hand. No route is written here: a default is the runtime's to write, at a person's click (`route set`).
+ * Every other key stays as it was, and the input is not changed.
  */
-export function withReplyWired(settings: Json, profile: string): ReplyWiring {
+export function withReplyGranted(settings: Json): Json {
     const next = structuredClone(settings);
     const exec = at(next, ['Plugins', 'Grants', 'reply', 'Exec']);
     if (!(Array.isArray(exec) && exec.includes('reply'))) {
         const grant = section(next, ['Plugins', 'Grants', 'reply']);
         grant[keyOf(grant, 'Exec')] = ['reply'];
     }
-    const routes = existing(next, ['Routes']);
-    const routeWritten = routes === undefined || routes[keyOf(routes, 'Default')] === undefined;
-    if (routeWritten) section(next, ['Routes'])[keyOf(routes ?? {}, 'Default')] = { Plugin: 'reply', Binding: { profile } };
-    return { settings: next, routeWritten };
+    return next;
 }
 
 const present = (value: unknown) => typeof value === 'string' && value !== '';

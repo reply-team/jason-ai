@@ -1008,10 +1008,15 @@ export interface JasonDesktop {
     };
     setup: {
         status(): Promise<DesktopSetup>;
-        /** Signs the Reply CLI in through the browser, then sets Jason's Reply plugin up with it. */
-        connectReply(): Promise<void>;
+        /**
+         * Signs a Reply account in through the browser: the one `account` names, the default where it names none (or the
+         * profile `default` where no Reply account is the default), its profile made in the Reply CLI first where only a
+         * route names it. Then Jason's Reply plugin is placed and granted, and where no global default is set at all, that
+         * account becomes the default.
+         */
+        connectReply(account?: DesktopAccountRef): Promise<void>;
         /** The same with a Reply API key the person pasted, for an account the browser sign-in does not reach. */
-        connectReplyWithKey(key: string): Promise<void>;
+        connectReplyWithKey(key: string, account?: DesktopAccountRef): Promise<void>;
         /** Keeps a key provider's key in the operating system's keychain; an empty key removes it. */
         setProviderKey(providerId: string, key: string): Promise<void>;
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
@@ -1060,31 +1065,39 @@ export interface JasonDesktop {
         /**
          * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
          * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `copy` asks the
-         * desktop to put the link on the clipboard instead of opening it, for the person to hand on.
+         * desktop to put the link on the clipboard instead of opening it, for the person to hand on. Each act below acts
+         * in the Reply account `account` names, one `accounts` lists, and in the default one where it names none, as a
+         * page of an earlier version asks; a row it names is one of that account's own.
          */
         replyConnect(
             channel: DesktopReplyChannel,
             options: ({ name: string } | { provider: 'gmail' | 'office365' }) & {
                 copy?: boolean;
             },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /** Reconnects an account `accounts` lists, the same way, with `copy` as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
             accountId: string,
             options?: { copy?: boolean },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /**
          * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's
          * own box.
          */
-        replyLimits(accountId: string, daily?: number): Promise<{ daily: number | null } | DesktopReplyRefusal>;
+        replyLimits(
+            accountId: string,
+            daily?: number,
+            account?: DesktopAccountRef,
+        ): Promise<{ daily: number | null } | DesktopReplyRefusal>;
         /** Pauses a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyPause(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyPause(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Resumes a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyResume(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyResume(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Lets a mailbox its provider stopped send again, after the person's yes in the desktop's own box. */
-        replyUnblock(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyUnblock(accountId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
          * Deletes an account `accounts` lists from Reply, after the person's yes in the desktop's own box. `force` deletes
          * a LinkedIn account sequences use, only after a delete of it answered the offer `force`, and after a box of
@@ -1094,7 +1107,17 @@ export interface JasonDesktop {
             channel: DesktopReplyChannel,
             accountId: string,
             options?: { force?: boolean },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Make default: the account `accounts` lists becomes the global default, the route every campaign with no route
+         * of its own sends through, replacing the default there was, whatever plugin it named. Where one is set, the
+         * desktop asks the person first in its own box, naming it and the account that would be. Jason's Reply plugin and
+         * its grant are placed where they are missing, and the runtime writes the route (`jason route set --global`),
+         * keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence, and the
+         * runtime writes nothing it refuses. Absent from a desktop of an earlier version.
+         */
+        makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

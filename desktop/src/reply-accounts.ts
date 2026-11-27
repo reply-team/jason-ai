@@ -225,6 +225,19 @@ export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' 
 }
 
 /**
+ * The box of Make default: the account that would be the default, and what the default is now, a Reply account or another
+ * plugin, by what campaigns with no route of their own send through.
+ */
+export function defaultBox(now: string, next: string): ReplyBox {
+    return box(
+        'question',
+        `Make ${next} the default?`,
+        `Campaigns with no route of their own send through ${now} now. They will send through ${next} instead.`,
+        'Make default',
+    );
+}
+
+/**
  * Asks the person on the window with a box: yes only for its first button, and no where there is no window to ask on.
  * A box is closed when its window is hidden or closed (`gone` says when, and answers how to stop listening), and a box
  * closed so is a no whatever it answered, so no box waits unseen while the card's acts are held for it.

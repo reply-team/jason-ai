@@ -9,7 +9,24 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
-import { accountArguments, accountsOf, isAccountRef, readProfiles, readRoutes, sameAccount, type AccountRef } from './accounts.ts';
+import {
+    accountArguments,
+    accountNamed,
+    accountsOf,
+    accountSentences,
+    defaultAccount,
+    defaultBinding,
+    defaultReason,
+    defaultRefusal,
+    defaultWords,
+    isAccountRef,
+    readProfiles,
+    readRoutes,
+    sameAccount,
+    type AccountRef,
+    type GlobalDefault,
+} from './accounts.ts';
+import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
@@ -39,6 +56,7 @@ import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
     belowMinimumSentence,
+    defaultBox,
     dailyLimitMost,
     isOpenableLink,
     isReplyChannel,
@@ -92,7 +110,7 @@ import {
     versionIn,
     withPluginConfigured,
     withPluginDisconnected,
-    withReplyWired,
+    withReplyGranted,
     type PluginRuntime,
     type PluginValues,
     type ReplyAccount,
@@ -344,6 +362,11 @@ export interface SetupDeps {
     saveSettings?(next: DesktopSettings): void;
     /** The desktop's own environment, where a `JASON_` variable may set the switch of the start's update (`updateSwitch`). */
     environment: Readonly<Record<string, string | undefined>>;
+    /**
+     * This account's name as the operating system gives it: a change of the global default is journaled as the person's,
+     * `human:<name>`. Absent, or a name an actor cannot hold (`usableAccount`), no default is changed.
+     */
+    account?: string | null;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -526,6 +549,8 @@ export class Setup {
      * them and one of its rows, and its box names the row as the list does.
      */
     #listed: AccountState[] = [];
+    /** The profile the Reply CLI answered as current at the last read: a route whose binding names no profile is it. */
+    #current = 'default';
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -817,6 +842,7 @@ export class Setup {
         );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
+        this.#current = profiles?.current ?? 'default';
         const acting = this.#accountOf(undefined);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -899,10 +925,16 @@ export class Setup {
         return this.#version('reply');
     }
 
-    /** The account the last listing gave on that channel by that id, or null: an act names only an account Reply listed. */
-    #account(channel: ReplyCliChannel, id: unknown): ReplyAccount | null {
-        if (!isReplyId(id)) return null;
-        return (this.#accountOf(undefined)?.senders ?? []).find((each) => each.channel === channel && each.id === id) ?? null;
+    /**
+     * The account an act names and the row of it the act is on, as the last read listed both: an act names only an account
+     * and a row that read gave, the row by its channel and id among that account's own.
+     */
+    #named(named: unknown, channel: ReplyCliChannel, id: unknown): { account: AccountState; row: ReplyAccount } | ReplyRefusal {
+        const account = this.#accountOf(named);
+        // With no account named and none to act as, there is no row: said as a row the list did not give.
+        if (account === null) return refusal(named === undefined ? said.badId : accountSentences.badAccount);
+        const row = isReplyId(id) ? account.senders.find((each) => each.channel === channel && each.id === id) : undefined;
+        return row === undefined ? refusal(said.badId) : { account, row };
     }
 
     /**
@@ -927,11 +959,12 @@ export class Setup {
     }
 
     /**
-     * Runs one verb. The log says the act, the channel, the exit and the CLI's code, never what the verb printed or
-     * wrote on stderr: a link's stdout is never logged, recorded or put into an error.
+     * Runs one verb as the account it is on. The log says the act, the channel, the exit and the CLI's code, never the
+     * account, what the verb printed or what it wrote on stderr: a link's stdout is never logged, recorded or put into an
+     * error.
      */
-    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
-        const result = await this.#run('reply', `account ${act}`, args, { timeoutMs: replyActLimitMs });
+    async #verb(account: AccountRef, act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
+        const result = await this.#run('reply', `account ${act}`, [...accountArguments(account), ...args], { timeoutMs: replyActLimitMs });
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
@@ -973,82 +1006,87 @@ export class Setup {
     }
 
     /**
-     * Connects a new account by a link the CLI makes (`reply account connect`): LinkedIn under the name typed for it, a
-     * mailbox for its provider. With `copy`, the link is copied instead of opened, as `#open` says. `sharedPage`, the
-     * shared mailbox page an earlier desktop offered, is no option any more and is refused.
+     * Connects a new account by a link the CLI makes (`reply account connect`) in the Reply account named, the default where
+     * none is: LinkedIn under the name typed for it, a mailbox for its provider. With `copy`, the link is copied instead of
+     * opened, as `#open` says. `sharedPage`, the shared mailbox page an earlier desktop offered, is no option any more and
+     * is refused.
      */
-    replyConnect(channel: unknown, options: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
+    replyConnect(channel: unknown, options: unknown, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
         if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+        const account = this.#accountOf(named);
+        if (named !== undefined && account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        // With no account named and none to act as, the CLI below the minimum is said first, as the card's every act does.
+        const connect = (request: Parameters<typeof connectArguments>[0]) =>
+            this.#acting(async () => (account === null ? refusal(accountSentences.badAccount) : this.#open(await this.#verb(account, 'connect', request.channel, connectArguments(request), { write: true }), copy)));
         if (channel === 'linkedin') {
             const problem = linkedInNameProblem(asked['name']);
             if (problem !== null) return Promise.resolve(refusal(problem));
             if (asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
-            const name = (asked['name'] as string).trim();
-            return this.#acting(async () => this.#open(await this.#verb('connect', 'linkedin', connectArguments({ channel: 'linkedin', name }), { write: true }), copy));
+            return connect({ channel: 'linkedin', name: (asked['name'] as string).trim() });
         }
         const provider = asked['provider'];
         if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
-        return this.#acting(async () => this.#open(await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider }), { write: true }), copy));
+        return connect({ channel: 'email', provider });
     }
 
     /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
-    replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
+    replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
         if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
-        const account = this.#account(channel, accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
-        return this.#acting(async () => this.#open(await this.#verb('reconnect', channel, reconnectArguments(channel, account.id), { write: true }), copy));
+        const on = this.#named(named, channel, accountId);
+        if ('refused' in on) return Promise.resolve(on);
+        return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.row.id), { write: true }), copy));
     }
 
     /**
      * A mailbox's daily limit (`reply account limits --channel email`): read with no limit given, and set to the one
      * given only on the person's yes to the box that names the mailbox.
      */
-    replyLimits(accountId: unknown, daily?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
-        const account = this.#account('email', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    replyLimits(accountId: unknown, daily?: unknown, named?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
+        const on = this.#named(named, 'email', accountId);
+        if ('refused' in on) return Promise.resolve(on);
         if (daily !== undefined && (typeof daily !== 'number' || !Number.isSafeInteger(daily) || daily < 0 || daily > dailyLimitMost)) {
             return Promise.resolve(refusal(said.badLimit));
         }
         return this.#acting(async () => {
-            if (daily !== undefined && !(await this.#confirmed(actBox('limits', account, daily)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb('limits', 'email', limitsArguments(account.id, daily), { write: daily !== undefined });
+            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.row, daily)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, 'limits', 'email', limitsArguments(on.row.id, daily), { write: daily !== undefined });
             if ('refused' in answer) return answer;
             return readDailyLimit(answer.stdout) ?? refusal(said.outcomeUnknown, true);
         });
     }
 
     /** Pauses a LinkedIn account the list gave, on the person's yes (`reply account pause`). */
-    replyPause(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('pause', accountId);
+    replyPause(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('pause', accountId, named);
     }
 
     /** Resumes a LinkedIn account the list gave, on the person's yes (`reply account resume`). */
-    replyResume(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('resume', accountId);
+    replyResume(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('resume', accountId, named);
     }
 
-    #state(verb: 'pause' | 'resume', accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const account = this.#account('linkedin', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    #state(verb: 'pause' | 'resume', accountId: unknown, named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'linkedin', accountId);
+        if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox(verb, account)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb(verb, 'linkedin', stateArguments(verb, account.id), { write: true });
+            if (!(await this.#confirmed(actBox(verb, on.row)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, verb, 'linkedin', stateArguments(verb, on.row.id), { write: true });
             if ('refused' in answer) return answer;
             return readState(answer.stdout) === null ? refusal(said.outcomeUnknown, true) : { done: true };
         });
     }
 
     /** Lets a mailbox the list gave send again after its provider stopped it, on the person's yes (`reply account unblock`). */
-    replyUnblock(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const account = this.#account('email', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    replyUnblock(accountId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'email', accountId);
+        if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox('unblock', account)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb('unblock', 'email', unblockArguments(account.id), { write: true });
+            if (!(await this.#confirmed(actBox('unblock', on.row)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, 'unblock', 'email', unblockArguments(on.row.id), { write: true });
             if ('refused' in answer) return answer;
             return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(said.outcomeUnknown, true);
         });
@@ -1059,52 +1097,76 @@ export class Setup {
      * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that account
      * without it, and only on the person's yes to a box of its own that says sequences use it.
      */
-    replyDelete(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyDone | ReplyRefusal> {
+    replyDelete(channel: unknown, accountId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
         const force = asked['force'] === true;
         if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
-        const account = this.#account(channel, accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
-        const door = `delete:linkedin:${account.id}`;
+        const on = this.#named(named, channel, accountId);
+        if ('refused' in on) return Promise.resolve(on);
+        // A door is the one row's of the one Reply account: two profiles may list the same row.
+        const door = JSON.stringify(['delete', on.account.name, on.account.team, 'linkedin', on.row.id]);
         return this.#acting(async () => {
             if (force && !this.#doors.has(door)) return refusal(said.notOffered);
-            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', account)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.row)))) return refusal(said.notConfirmed);
             if (force) this.#doors.delete(door);
-            const answer = await this.#verb('delete', channel, deleteArguments(channel, account.id, force), { write: true, force });
+            const answer = await this.#verb(on.account, 'delete', channel, deleteArguments(channel, on.row.id, force), { write: true, force });
             if (channel === 'linkedin') this.#keepDoor(door, answer, 'force');
             if ('refused' in answer) return answer;
             return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(said.outcomeUnknown, true);
         });
     }
 
-    connectReply(): Promise<void> {
+    /**
+     * Signs the Reply account named in through the browser, the default where none is named (`reply auth login`, as that
+     * account), then places Jason's Reply plugin and, where no default is set, makes it the default (`#signedIn`).
+     */
+    connectReply(named?: unknown): Promise<void> {
         return this.#serial(async () => {
             // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
             this.#writableLayout();
-            const result = await this.#run('reply', 'auth login', ['auth', 'login'], { timeoutMs: signInLimit });
+            const account = await this.#signingIn(named);
+            const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
-            await this.#signedIn();
+            if (result.exit !== 0) throw new Refused(accountSentences.signInRefused);
+            await this.#signedIn(account);
         });
     }
 
-    connectReplyWithKey(key: unknown): Promise<void> {
+    /** The same with a Reply API key the person pasted, on the CLI's standard input and never in an argument. */
+    connectReplyWithKey(key: unknown, named?: unknown): Promise<void> {
         return this.#serial(async () => {
             this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
-            const result = await this.#run('reply', 'auth login --with-token', ['auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
+            const account = await this.#signingIn(named);
+            const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not accept that key.'));
-            await this.#signedIn();
+            if (result.exit !== 0) throw new Refused(accountSentences.keyRefused);
+            await this.#signedIn(account);
         });
     }
 
-    /** After a sign-in: Jason's Reply plugin wired to the profile signed in, and the Reply skills deployed either way. */
-    async #signedIn(): Promise<void> {
+    /**
+     * The account a sign-in is for, as the last read listed it, with its profile in the Reply CLI: a profile only a route
+     * names is made there first (`reply profile add`), and only where the CLI, asked again now, does not hold it, since an
+     * add of a name it holds would replace that profile's settings without a word.
+     */
+    async #signingIn(named: unknown): Promise<AccountRef> {
+        const account = this.#accountOf(named);
+        if (account === null) throw new Refused(accountSentences.badAccount);
+        const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+        if (profiles === null) throw new Refused(accountSentences.profilesUnread);
+        if (!profiles.available.includes(account.name)) {
+            const added = await this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']);
+            if (added.exit !== 0) throw new Refused(accountSentences.profileNotMade);
+        }
+        return { type: account.type, name: account.name, team: account.team };
+    }
+
+    /** After a sign-in: Jason's Reply plugin placed, the first default made, and the Reply skills deployed either way. */
+    async #signedIn(account: AccountRef): Promise<void> {
         try {
-            const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-            await this.#wireReply(auth.profile ?? 'default');
+            await this.#wireReply(account);
         } finally {
             await this.#deployReplySkills();
             this.#changed();
@@ -1112,19 +1174,79 @@ export class Setup {
     }
 
     /**
-     * Places Jason's Reply plugin with the CLI, grants it the Reply CLI and, where the settings file names no global
-     * default, names it that default for the profile signed in, as the golden path does by hand; then the reload.
+     * Places Jason's Reply plugin with the CLI and grants it the Reply CLI, as the golden path does by hand; then, where the
+     * routes name no global default at all, has the runtime name the account signed in that default, as Make default does.
+     * A default already set, whatever its plugin, is left as it is.
      */
-    async #wireReply(profile: string): Promise<void> {
-        let routeWritten = false;
-        await this.#placeAndEdit('reply', (settings) => {
-            const wired = withReplyWired(settings, profile);
-            routeWritten = wired.routeWritten;
-            return wired.settings;
-        });
+    async #wireReply(account: AccountRef): Promise<void> {
+        await this.#placeReply();
+        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null)) === null ? 'made' : 'refused';
+        this.#deps.log.info('reply_wired', { Default: outcome });
+        if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
+    }
+
+    /** Jason's Reply plugin placed and granted the Reply CLI, and the runtime's plugins loaded again; a refusal is thrown. */
+    async #placeReply(): Promise<void> {
+        await this.#placeAndEdit('reply', withReplyGranted);
         const reload = await this.#reloadPlugins();
-        this.#deps.log.info('reply_wired', { RouteWritten: routeWritten, Exit: reload.exit });
         if (reload.exit !== 0) throw this.#reloadRefused(reload);
+    }
+
+    /**
+     * Has the runtime name the account the global default (`jason route set --global`), which checks the route before it
+     * writes it, writes it through its one writer of the settings file, puts the file back on a refusal and journals the
+     * change under the person who made it, by this account's name. Null where it did, else the desktop's sentence why not.
+     */
+    async #setDefault(account: AccountRef, was: GlobalDefault | null): Promise<string | null> {
+        const person = this.#deps.account;
+        if (!usableAccount(person)) return accountSentences.noActor;
+        const binding = JSON.stringify(defaultBinding(account, was));
+        const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', defaultReason]);
+        this.#deps.log.info('reply_default_set', { Exit: set.exit });
+        return set.exit === 0 ? null : defaultRefusal(set);
+    }
+
+    /**
+     * Make default: the account named becomes the global default, replacing the default there was, whatever plugin it named.
+     * Where one is set, the person is asked first in the main process's own box, which names it and the account that would
+     * be. Then Jason's Reply plugin and its grant are placed where they are missing, and the runtime names the account
+     * (`#setDefault`), keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence,
+     * and the runtime writes nothing it refuses.
+     */
+    makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#serial(async () => {
+            const account = named === undefined ? null : this.#accountOf(named);
+            if (account === null) return refusal(accountSentences.badAccount);
+            const answer = await this.#makeDefault(account);
+            this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
+            this.#changed();
+            return answer;
+        });
+    }
+
+    async #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
+        if (!usableAccount(this.#deps.account)) return refusal(accountSentences.noActor);
+        try {
+            this.#readForEdit();
+        } catch (error) {
+            if (error instanceof Refused) return refusal(error.message);
+            throw error;
+        }
+        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        if (routes === null) return refusal(accountSentences.routesUnread);
+        const was = routes.globalDefault;
+        const now = defaultAccount(routes, this.#current);
+        if (now !== null && sameAccount(now, account)) return { done: true };
+        if (was !== null && !(await this.#confirmed(defaultBox(defaultWords(was, this.#current), accountNamed(account))))) return refusal(said.notConfirmed);
+        try {
+            await this.#placeReply();
+        } catch (error) {
+            if (error instanceof Refused) return refusal(accountSentences.notPlaced);
+            throw error;
+        }
+        const refused = await this.#setDefault(account, was);
+        return refused === null ? { done: true } : refusal(refused);
     }
 
     /**
