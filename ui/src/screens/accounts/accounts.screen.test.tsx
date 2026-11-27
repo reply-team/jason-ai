@@ -440,6 +440,72 @@ describe('Reply accounts, one card per profile', () => {
         expect(page.querySelector('.reply-account')).toBeNull();
     });
 
+    it('says a sign-in’s or a key’s refusal on the card it was clicked on, in the desktop’s words without the window’s wrapper, and nothing of it in the section', async () => {
+        const desktop = inDesktop(three);
+        const wrapped = (member: string, words: string) =>
+            `Error invoking remote method 'jason:setup.${member}': Error: ${words}`;
+        desktop.refuse.set(
+            'setup.connectReplyWithKey',
+            wrapped('connectReplyWithKey', 'Reply did not accept that key.'),
+        );
+        desktop.refuse.set('setup.connectReply', wrapped('connectReply', 'Reply did not sign in.'));
+        const page = await openAccounts('.reply-account');
+        const routed = () => cardOf(page, 'Reply account routed-only');
+        fireEvent.input(within(routed()).getByPlaceholderText('Or paste a Reply API key'), {
+            target: { value: 'made-up-key' },
+        });
+        fireEvent.click(within(routed()).getByRole('button', { name: 'Use key' }));
+        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toBe('Reply did not accept that key.'));
+        expect(within(section(page)).queryByRole('alert')).toBeNull();
+        expect(within(cardOf(page, 'Reply account default')).queryByRole('alert')).toBeNull();
+        // The next sign-in, on another card, says its own refusal there, and the first card's goes.
+        fireEvent.click(
+            within(cardOf(page, 'Reply account default')).getByRole('button', { name: 'Sign in with Reply' }),
+        );
+        await waitFor(() =>
+            expect(words(within(cardOf(page, 'Reply account default')).getByRole('alert'))).toBe(
+                'Reply did not sign in.',
+            ),
+        );
+        expect(within(routed()).queryByRole('alert')).toBeNull();
+        expect(words(page)).not.toContain('Error invoking remote method');
+    });
+
+    it('says an act with no card of its own, and a read that failed, in the section without the window’s wrapper; a good read takes the read’s line away', async () => {
+        const missing = withReplyAccounts(
+            { ...setupFound, reply: { ...setupFound.reply, cli: { found: false, version: null, install: 'reply' } } },
+            [],
+        );
+        const desktop = inDesktop(missing);
+        desktop.refuse.set(
+            'setup.installProgram',
+            "Error invoking remote method 'jason:setup.installProgram': Error: npm ended with code 1.",
+        );
+        let page = await openAccounts('.reply-section');
+        fireEvent.click(within(section(page)).getByRole('button', { name: 'Install' }));
+        await waitFor(() => expect(words(within(section(page)).getByRole('alert'))).toBe('npm ended with code 1.'));
+        cleanup();
+
+        const reading = inDesktop(three);
+        page = await openAccounts('.reply-account');
+        reading.refuse.set(
+            'setup.status',
+            "Error invoking remote method 'jason:setup.status': Error: This window may not ask that.",
+        );
+        fireEvent.click(
+            within(cardOf(page, 'Reply account default')).getAllByRole('button', { name: 'Check again' })[0]!,
+        );
+        await waitFor(() =>
+            expect(words(within(section(page)).getByRole('alert'))).toBe('This window may not ask that.'),
+        );
+        reading.refuse.delete('setup.status');
+        fireEvent.click(
+            within(cardOf(page, 'Reply account default')).getAllByRole('button', { name: 'Check again' })[0]!,
+        );
+        await waitFor(() => expect(within(section(page)).queryByRole('alert')).toBeNull());
+        expect(words(page)).not.toContain('Error invoking remote method');
+    });
+
     it('asks a desktop that lacks Make default for none: no card offers it', async () => {
         const desktop = chatDesktop(three);
         delete (desktop.setup as Partial<typeof desktop.setup>).makeDefault;

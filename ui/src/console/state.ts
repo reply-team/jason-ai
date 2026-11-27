@@ -74,8 +74,15 @@ export function chatOf(id: string): ReadonlySignal<Chat | undefined> {
     return held;
 }
 
+/**
+ * Electron's wrapper around a refusal the desktop threw across the seam: `Error invoking remote method '<channel>': ` and
+ * the error as a string, its name first (`desktop/src/chat-ipc.ts` says where each half comes from).
+ */
+const invokeWrapper = /^Error invoking remote method '[^']*': (?:\w*(?:Error|Refused): )?/;
+
+/** What an error says, for a line of the page: a refusal of the desktop's in its own words, without the window's wrapper. */
 export const messageOf = (error: unknown): string =>
-    error instanceof ApiError || error instanceof Error ? error.message : String(error);
+    (error instanceof ApiError || error instanceof Error ? error.message : String(error)).replace(invokeWrapper, '');
 
 /** The panels the console's one area shows, by their names; `page` holds the browser shell's screens. */
 export type PanelName = 'start' | 'dashboard' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
