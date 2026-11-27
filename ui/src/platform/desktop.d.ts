@@ -489,8 +489,8 @@ export interface DesktopHost {
     runsRoles: string | null;
 }
 
-/** An account Reply holds, as the Reply CLI lists it. */
-export interface DesktopReplyAccount {
+/** A sender of a Reply account, a mailbox or a LinkedIn account, as the Reply CLI lists it. */
+export interface DesktopReplySender {
     id: string;
     channel: string;
     name: string;
@@ -506,14 +506,15 @@ export interface DesktopReplyAccount {
 export type DesktopReplyChannel = 'email' | 'linkedin';
 
 /**
- * A fact of the Reply connection the desktop reads: the Reply CLI's version, the account's sign-in (or, with no account to
- * read, that none was read), and whether Jason's Reply plugin is valid and the global default.
+ * A fact of `DesktopReply` the desktop asked and could not read: the Reply CLI's version, the account's sign-in (or, with no
+ * account to read, that none was read), and whether Jason's Reply plugin is valid and the global default.
  */
 export type DesktopReplyFact = 'version' | 'auth' | 'route';
 
 /**
- * The Reply connection as a page of an earlier version reads it: the Reply CLI, and of the accounts the default one, or the
- * profile `default`'s where no Reply account is the default (`accounts` holds them all).
+ * The Reply connection as one card draws it: the Reply CLI, and of the accounts the default one, or the profile `default`'s
+ * where no Reply account is the default (`DesktopSetup.accounts` holds them all). A page of an earlier version reads it,
+ * and so does this page's chat until the chat's own part reads the accounts.
  */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
@@ -523,7 +524,7 @@ export interface DesktopReply {
     user: string | null;
     /** Whether Jason's Reply plugin is valid and the global default route names that very account. */
     wired: boolean;
-    accounts: DesktopReplyAccount[];
+    accounts: DesktopReplySender[];
     /** The channels the Reply CLI says are not in this account's plan or role. */
     absent: DesktopReplyChannel[];
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
@@ -566,8 +567,8 @@ export interface DesktopReply {
 
 /**
  * How a member of the seam names an account: its type, the provider, and its name, the Reply CLI profile's exactly,
- * `default` included; never a team, which is the profile's own in the Reply CLI. The desktop takes it only as one its
- * last read listed.
+ * `default` included. An account has no team of its own: the team is its profile's, in the Reply CLI. The desktop takes it
+ * only as one its last read listed.
  */
 export interface DesktopAccountRef {
     type: 'reply';
@@ -583,10 +584,7 @@ export interface DesktopReplyTeam {
 /** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
 export type DesktopAccountsFact = 'profiles' | 'routes';
 
-/**
- * One Reply account: one profile of the Reply CLI, read as Jason's work acts as it, under its own name alone, and never as
- * the Reply CLI's current profile or the desktop's own environment would choose.
- */
+/** One Reply account: one profile of the Reply CLI, read under its own name alone, as Jason's work acts as it. */
 export interface DesktopAccount extends DesktopAccountRef {
     /** Whether the global default route names this account: campaigns with no route of their own send through it. */
     default: boolean;
@@ -595,8 +593,8 @@ export interface DesktopAccount extends DesktopAccountRef {
     signedIn: boolean;
     /** The address the profile is signed in as; null when it is not. */
     user: string | null;
-    /** Its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
-    senders: DesktopReplyAccount[];
+    /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
+    senders: DesktopReplySender[];
     /** As `DesktopReply`'s, of this account. */
     absent: DesktopReplyChannel[];
     unread: DesktopReplyChannel[];
@@ -613,7 +611,8 @@ export interface DesktopAccount extends DesktopAccountRef {
 
 /**
  * The Reply accounts, read at each status and kept nowhere: none without a Reply CLI at the minimum; else every profile the
- * Reply CLI holds and every profile a route to Jason's Reply plugin names, the default first, then the CLI's own order.
+ * Reply CLI holds and every profile a route to Jason's Reply plugin names, the default first, then the CLI's own order,
+ * then the profiles only a route names.
  */
 export interface DesktopAccounts {
     accounts: DesktopAccount[];

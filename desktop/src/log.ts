@@ -39,7 +39,7 @@ export const templates = {
     provider_key_stored: 'The key of provider {ProviderId} was stored',
     provider_key_removed: 'The key of provider {ProviderId} was removed',
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
-    reply_wired: 'Jason’s Reply plugin was placed and granted reply after a sign-in; the global default {Default}',
+    reply_placed_after_sign_in: 'After a sign-in, Jason’s Reply plugin: {Placed}; the global default: {Default}',
     reply_default_set: 'jason route set --global for a Reply account exited {Exit}',
     reply_default_made: 'Make default on a Reply account ended; done {Done}',
     reply_team_chosen: 'reply team use for a Reply account’s profile exited {Exit}',

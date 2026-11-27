@@ -464,7 +464,7 @@ describe('Reply accounts, one card per profile', () => {
             `Error invoking remote method 'jason:setup.${member}': Error: ${words}`;
         const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
         const notPlaced =
-            'Signed in, but Jason’s Reply plugin could not be placed: The update feed at http://127.0.0.1:9/manifest.json could not be reached.';
+            'Signed in, but Jason’s Reply plugin could not be placed or loaded. The update feed at http://127.0.0.1:9/manifest.json could not be reached.';
         desktop.refuse.set('setup.connectReplyWithKey', wrapped('connectReplyWithKey', keyRefused));
         desktop.refuse.set('setup.connectReply', wrapped('connectReply', notPlaced));
         const [ada, bea, routedOnly] = three.accounts!.accounts as [DesktopAccount, DesktopAccount, DesktopAccount];
@@ -606,7 +606,7 @@ describe('Reply accounts, one card per profile', () => {
         expect(cards(page)).toEqual(['Reply default Default', 'Reply outbound', 'Reply routed-only']);
     });
 
-    it('offers the teams of a sign-in in more than one in place of its accounts, from the read right after a sign-in on the card, and pins the one picked; a desktop without the pick says it cannot choose', async () => {
+    it('offers the teams of a sign-in in more than one in place of its accounts, from the read right after a sign-in on the card, and pins the one picked', async () => {
         const teams = [
             { id: '5', name: 'Made-up Five' },
             { id: '9', name: 'Made-up Nine' },
@@ -665,17 +665,5 @@ describe('Reply accounts, one card per profile', () => {
                 "The team was not chosen. Team 5 isn't one you can act in.",
             ),
         );
-        cleanup();
-        // A desktop without the pick: the card says so, and offers no choice it cannot make.
-        const earlier = chatDesktop(teamless);
-        delete (earlier.setup as Partial<typeof earlier.setup>).chooseTeam;
-        inDesktop(teamless, earlier);
-        const again = await openAccounts('.reply-account');
-        const card = cardOf(again, 'Reply account outbound');
-        expect(words(card)).toContain(
-            'This sign-in belongs to more than one Reply team, and this version of Jason Desktop cannot choose one.',
-        );
-        expect(within(card).queryByRole('button', { name: 'Choose' })).toBeNull();
-        expect(words(card)).not.toMatch(/could not be read/);
     });
 });

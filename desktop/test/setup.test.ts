@@ -901,7 +901,7 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.equal(readFileSync(dataLayout(fresh.paths.data).userSettingsFile, 'utf8').includes('planted-reply-key'), false);
     assert.equal(JSON.stringify(log.lines).includes('planted-reply-key'), false);
     assert.equal(JSON.stringify(log.lines).includes('outbound'), false, 'a profile’s name, an address as often as not, is never logged');
-    assert.deepEqual(log.lines.find((line) => line.name === 'reply_wired')?.fields, { Default: 'made' });
+    assert.deepEqual(log.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'placed_granted', Default: 'made' });
     assert.deepEqual((await first.status()).accounts?.accounts.map((each) => `${each.name}${each.default ? ' (default)' : ''}`), ['outbound (default)', 'default']);
 
     // The plugin listed and not granted: the grant alone, and the load that takes it up; nothing is fetched.
@@ -923,7 +923,7 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     await next.connectReply({ type: 'reply', name: 'default' });
     assert.deepEqual(runsAfter(ready, from, 'jason'), ['plugin list', 'route list']);
     assert.equal(readFileSync(dataLayout(ready.paths.data).userSettingsFile, 'utf8'), before, 'the file as it was, byte for byte');
-    assert.deepEqual(keptLog.lines.filter((line) => line.name === 'reply_wired').map((line) => line.fields), [{ Default: 'kept' }]);
+    assert.deepEqual(keptLog.lines.filter((line) => line.name === 'reply_placed_after_sign_in').map((line) => line.fields), [{ Placed: 'in_place', Default: 'kept' }]);
 
     // Listed and granted, but not valid, as after a Reply CLI installed or updated outside the desktop: nothing is fetched
     // or written, and the runtime loads its plugins again, which is what makes it valid.
@@ -953,7 +953,7 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     await onTeam.connectReply({ type: 'reply', name: 'outbound' });
     assert.deepEqual(runsAfter(teamed, from, 'jason'), ['plugin list', 'route list', set('outbound')]);
     assert.equal(teamed.record().slice(from).some((entry) => entry.args.includes('--team-id')), false);
-    assert.deepEqual(teamLog.lines.find((line) => line.name === 'reply_wired')?.fields, { Default: 'made' });
+    assert.deepEqual(teamLog.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'in_place', Default: 'made' });
     assert.deepEqual(readInstallationSettings(teamed).Routes, { Default: { Plugin: 'reply', Binding: { profile: 'outbound' } } });
 
     // The routes could not be read at the click: signed in, and said so: none was made the default.
@@ -972,14 +972,14 @@ test('a sign-in places only what is missing of Jason’s Reply plugin and its gr
     assert.equal(refused.world().credentials?.['default'], 'browser@example.test');
     assert.equal((readInstallationSettings(refused) as { Routes?: unknown }).Routes, undefined);
 
-    // A placing that fails after the sign-in is said as such first; then, as on release 51.2, the words of the program that
-    // refused, the package's fetch or the load that would take the grant up, without the "Nothing was changed." a fetch
-    // ends with, which the sign-in belies.
+    // A placing that fails after the sign-in is the desktop's sentence, then the reason of the program that refused, the
+    // package's fetch or the load that would take the grant up, without the "Nothing was changed." a fetch ends with, which
+    // the sign-in belies.
     const offline = replyBench(t, {}, { STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' });
-    await assert.rejects((await readSetup(offline, memoryLog(), settings)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed: The update feed at http://127.0.0.1:9/manifest.json could not be reached.');
+    await assert.rejects((await readSetup(offline, memoryLog(), settings)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed or loaded. The update feed at http://127.0.0.1:9/manifest.json could not be reached.');
     assert.equal(offline.world().credentials?.['default'], 'browser@example.test');
     const reloadRefused = replyBench(t, {}, { STUB_RELOAD_REFUSED: 'yes' });
-    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && /^Signed in, but Jason’s Reply plugin could not be placed: the settings file could not be read \(not valid JSON/.test(error.message));
+    await assert.rejects((await readSetup(reloadRefused)).connectReply(), (error: unknown) => error instanceof Refused && error.message === 'Signed in, but Jason’s Reply plugin could not be placed or loaded. The settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.');
 });
 
 test('a global default a person set to another plugin is kept at a sign-in, and the members of today do not say it is wired', async (t) => {
@@ -991,7 +991,7 @@ test('a global default a person set to another plugin is kept at a sign-in, and 
         Routes: { Default: { Plugin: 'other', Binding: { account: 'a' } } },
         Plugins: { Grants: { reply: { Exec: ['reply'] } } },
     });
-    assert.deepEqual(log.lines.find((line) => line.name === 'reply_wired')?.fields, { Default: 'kept' });
+    assert.deepEqual(log.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'granted', Default: 'kept' });
     assert.equal(b.record().some((entry) => entry.name === 'jason' && entry.args[1] === 'set'), false);
     assert.equal((await setupOn(b).status()).reply.wired, false);
     // So is a Reply default that names no profile: no route is rewritten for it, and it is the account of the profile the
@@ -1001,7 +1001,7 @@ test('a global default a person set to another plugin is kept at a sign-in, and 
     const unnamedLog = memoryLog();
     await (await readSetup(unnamed, unnamedLog)).connectReply();
     assert.deepEqual(readInstallationSettings(unnamed).Routes, { Default: { Plugin: 'reply', Binding: {} } });
-    assert.deepEqual(unnamedLog.lines.find((line) => line.name === 'reply_wired')?.fields, { Default: 'kept' });
+    assert.deepEqual(unnamedLog.lines.find((line) => line.name === 'reply_placed_after_sign_in')?.fields, { Placed: 'in_place', Default: 'kept' });
     const { reply: wiredReply, accounts: marked } = await setupOn(unnamed).status();
     assert.deepEqual([wiredReply.wired, marked?.accounts.filter((each) => each.default).map((each) => each.name)], [true, ['default']]);
 
@@ -1011,7 +1011,7 @@ test('a global default a person set to another plugin is kept at a sign-in, and 
     const setup = await readSetup(unreadable);
     writeInstallationSettings(unreadable, '{ /* mine */ }');
     const from = unreadable.record().length;
-    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed: ') && /comments/.test(error.message));
+    await assert.rejects(setup.connectReply(), (error: unknown) => error instanceof Refused && error.message.startsWith('Signed in, but Jason’s Reply plugin could not be placed or loaded. The settings file is not plain JSON') && /comments/.test(error.message));
     assert.equal(readFileSync(dataLayout(unreadable.paths.data).userSettingsFile, 'utf8'), '{ /* mine */ }');
     assert.deepEqual(runsAfter(unreadable, from, 'jason'), ['plugin list']);
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
@@ -1119,18 +1119,19 @@ test('Make default with no default set asks nothing, and a default of another pl
         [{ STUB_ROUTE_SET: JSON.stringify({ exit: 3 }) }, 'Jason is not running, so nothing was changed. Start it, then try again.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'validation_failed', details: [{ code: 'not_representable_globally' }] }) }, 'The settings file cannot hold this account’s name as written, so nothing was changed: route a campaign to it with `jason route set`, which keeps it as written.'],
         [{ STUB_ROUTE_SET: JSON.stringify({ code: 'plugin_reload_rejected' }) }, 'The runtime did not change the default: it answered plugin_reload_rejected, so nothing was changed.'],
-        [{ STUB_RELOAD_REFUSED: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.'],
-        [{ STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.'],
+        // A placing that fails is the desktop's sentence, then the refusing program's reason, as at a sign-in.
+        [{ STUB_RELOAD_REFUSED: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed. The settings file could not be read (not valid JSON at line 1, byte 2), so nothing it grants or routes can be resolved; fix it, or close what holds it open, and reload again.'],
+        [{ STUB_REPLY_PLUGIN: 'absent', STUB_PLUGIN_INSTALL_FAILS: 'yes' }, 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed. The update feed at https://releases.example.test/manifest.json could not be reached.'],
     ];
     const asked = ['Campaigns with no route of their own send through the Reply account “default” now. They will send through the Reply account “outbound” instead.'];
     for (const [env, sentence] of refusals) {
         const { runs: _, ...made } = await make(env, kept);
         assert.deepEqual(made, { answer: sentence, boxes: asked, routes: kept.Routes }, sentence);
     }
-    // A grant to write in a file the desktop cannot parse: said in the desktop's own sentence for that file, and nothing
-    // is placed or written.
+    // A grant to write in a file the desktop cannot parse: the same sentence, then the desktop's reason for that file, and
+    // nothing is placed or written.
     const unparsed = await make({}, '{\n  // mine\n  "Routes": { "Default": { "Plugin": "reply", "Binding": { "profile": "default" } } }\n}\n');
-    assert.match(unparsed.answer, /^The settings file is not plain JSON, so the desktop left it as it is: .* Edit it by hand, then press Reload\.$/);
+    assert.match(unparsed.answer, /^Jason’s Reply plugin could not be placed or loaded, so nothing was changed\. The settings file is not plain JSON, so the desktop left it as it is: .* Edit it by hand, then press Reload\.$/);
     assert.deepEqual(unparsed.runs, ['route list', 'route list', 'plugin list']);
     // Nobody can be named as having made the change, or the routes as they stand could not be read at the click: no box,
     // nothing written.

@@ -1,6 +1,6 @@
 import type { Plugin, Routes } from '../api/types';
 import { pluginLabel } from './unavailable-model';
-import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
+import type { DesktopReply, DesktopReplyChannel, DesktopReplySender, DesktopSetup } from '../platform/desktop';
 import { act, define } from './actions';
 import { cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
 import type { Chat } from './chat-model';
@@ -70,7 +70,7 @@ const accountsWord = (n: number): string => (n === 0 ? 'No accounts' : n === 1 ?
 /** The statuses Reply gives an account that mean it can be used; any other word is shown as given, with no tone. */
 const readyStatus: ReadonlySet<string> = new Set(['connected', 'enabled']);
 
-function accountRow(account: DesktopReplyAccount): Html {
+function accountRow(account: DesktopReplySender): Html {
     const glyph = account.channel === 'email' ? 'mail' : account.channel === 'linkedin' ? 'linkedin' : null;
     return html`<tr>
         <td>

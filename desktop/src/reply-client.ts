@@ -24,9 +24,9 @@ export function replyClient(bundleVersion: string | null): string | null {
 
 /**
  * The variables reply-cli reads to choose the account a run acts as: its profile, a key that comes before any stored
- * sign-in, its team, and where its profiles and sign-ins are kept. The desktop names the account of each run by
- * `--profile` alone, as Jason's Reply plugin does, whose runs never see these, so a profile acts in the team the Reply CLI
- * holds for it.
+ * sign-in, its team, and where its profiles and sign-ins are kept. The desktop names the account of each run by its
+ * profile alone (`accountArguments`), and Jason's Reply plugin's runs never see these either, so a profile acts in the
+ * team the Reply CLI holds for it.
  */
 export const replyAccountVariables = ['REPLY_PROFILE', 'REPLY_API_KEY', 'REPLY_TEAM_ID', 'REPLY_CONFIG_DIR'] as const;
 

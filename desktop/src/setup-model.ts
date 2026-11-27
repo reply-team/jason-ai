@@ -302,8 +302,7 @@ function derivedHost(server: unknown): string | null {
 /**
  * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`, written
  * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept), as the golden path
- * writes it by hand. No route is written here: a default is the runtime's to write, at a person's click (`route set`).
- * Every other key stays as it was, and the input is not changed.
+ * writes it by hand; every other key stays as it was, and the input is not changed.
  */
 export function withReplyGranted(settings: Json): Json {
     const next = structuredClone(settings);
@@ -402,7 +401,8 @@ export const replyMinimumVersion = '0.23.2';
 export const replyChannels = ['email', 'linkedin'] as const;
 export type ReplyChannel = (typeof replyChannels)[number];
 
-export interface ReplyAccount {
+/** A sender of a Reply account, a mailbox or a LinkedIn account, as `reply account list` gives it. */
+export interface ReplySender {
     id: string;
     channel: string;
     name: string;
@@ -458,7 +458,7 @@ export function readReplyAuth(result: { exit: number; stdout: string }): { signe
     return parseReplyAuth(result.stdout);
 }
 
-export function parseReplyAccounts(stdout: string): ReplyAccount[] {
+export function parseReplyAccounts(stdout: string): ReplySender[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };
         return (raw.items ?? []).map((item) => ({
@@ -474,7 +474,7 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { kind: 'absent' } | { kind: 'teamless' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; accounts: ReplySender[] } | { kind: 'absent' } | { kind: 'teamless' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has

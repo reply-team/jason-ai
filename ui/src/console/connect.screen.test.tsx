@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopReplyAccount, DesktopReplyChannel, DesktopReplyRefusal, DesktopSetup } from '../platform/desktop';
+import type { DesktopReplySender, DesktopReplyChannel, DesktopReplyRefusal, DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
@@ -75,7 +75,7 @@ const replyCard = (connect: HTMLElement) =>
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-const account = (id: string, channel: string, status: string, name = `Account ${id}`): DesktopReplyAccount => ({
+const sender = (id: string, channel: string, status: string, name = `Account ${id}`): DesktopReplySender => ({
     id,
     channel,
     name,
@@ -83,16 +83,16 @@ const account = (id: string, channel: string, status: string, name = `Account ${
     status,
 });
 
-const withAccounts = (accounts: DesktopReplyAccount[]): DesktopSetup => ({
+const withSenders = (senders: DesktopReplySender[]): DesktopSetup => ({
     ...setupFound,
-    reply: { ...setupFound.reply, accounts },
+    reply: { ...setupFound.reply, accounts: senders },
 });
 
 const statusReads = (desktop: StubDesktop) => desktop.calls.filter((call) => call.name === 'setup.status').length;
 
 const focusBack = () => fireEvent.focus(window);
 
-/** Each account row as a person reads it: the heading over it, its name and its state. */
+/** Each sender's row as a person reads it: the heading over it, its name and its state. */
 function rows(card: HTMLElement): [string, string, string][] {
     return Array.from(card.querySelectorAll<HTMLElement>('.acct')).map((row) => [
         words(row.closest('.acct-group')!.querySelector('.acct-hd')!),
@@ -123,12 +123,12 @@ afterEach(() => {
 describe('the Reply card', () => {
     it('groups the accounts by channel: email, then LinkedIn, then a channel it does not know, by its own name', async () => {
         renderConnect(
-            withAccounts([
-                account('li1', 'linkedin', 'enabled'),
-                account('x1', 'whatsapp', 'connected'),
-                account('em1', 'email', 'connected'),
-                account('li2', 'linkedin', 'disabled'),
-                account('em2', 'email', 'disconnected'),
+            withSenders([
+                sender('li1', 'linkedin', 'enabled'),
+                sender('x1', 'whatsapp', 'connected'),
+                sender('em1', 'email', 'connected'),
+                sender('li2', 'linkedin', 'disabled'),
+                sender('em2', 'email', 'disconnected'),
             ]),
         );
         const card = replyCard(await openConnect());
@@ -143,22 +143,19 @@ describe('the Reply card', () => {
     });
 
     it('shows the accounts however late the first read of the setup answers', async () => {
-        renderConnect(
-            withAccounts([account('em1', 'email', 'connected'), account('li1', 'linkedin', 'enabled')]),
-            1500,
-        );
+        renderConnect(withSenders([sender('em1', 'email', 'connected'), sender('li1', 'linkedin', 'enabled')]), 1500);
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), words)).toEqual(['Email', 'LinkedIn']);
     });
 
     it('draws no heading for a channel with no account', async () => {
-        renderConnect(withAccounts([account('li1', 'linkedin', 'enabled')]));
+        renderConnect(withSenders([sender('li1', 'linkedin', 'enabled')]));
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), words)).toEqual(['LinkedIn']);
     });
 
     it('draws nothing of the accounts for an empty list', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const card = replyCard(await openConnect());
         expect(card.querySelector('.acct-group')).toBeNull();
         expect(card.querySelector('.acct')).toBeNull();
@@ -167,18 +164,18 @@ describe('the Reply card', () => {
     it('says each state Reply reports in plain words, an unknown one as its own text, and an absent one as unknown', async () => {
         const long = `pausedForReview${'x'.repeat(45)}`;
         renderConnect(
-            withAccounts([
-                account('e1', 'email', 'connected'),
-                account('e2', 'email', 'disconnected'),
-                account('e3', 'email', 'unknown'),
-                account('l1', 'linkedin', 'enabled'),
-                account('l2', 'linkedin', 'disabled'),
-                account('l3', 'linkedin', 'cookieInvalid'),
-                account('l4', 'linkedin', 'dailyLimitReached'),
-                account('e4', 'email', hostile),
-                account('e5', 'email', long),
-                account('e6', 'email', ''),
-                account('l5', 'linkedin', 'connected'),
+            withSenders([
+                sender('e1', 'email', 'connected'),
+                sender('e2', 'email', 'disconnected'),
+                sender('e3', 'email', 'unknown'),
+                sender('l1', 'linkedin', 'enabled'),
+                sender('l2', 'linkedin', 'disabled'),
+                sender('l3', 'linkedin', 'cookieInvalid'),
+                sender('l4', 'linkedin', 'dailyLimitReached'),
+                sender('e4', 'email', hostile),
+                sender('e5', 'email', long),
+                sender('e6', 'email', ''),
+                sender('l5', 'linkedin', 'connected'),
             ]),
         );
         const card = replyCard(await openConnect());
@@ -216,7 +213,7 @@ describe('the Reply card', () => {
 
     it('cuts by characters, never inside one, and leaves forty characters whole', async () => {
         const forty = `${'x'.repeat(39)}😀`;
-        renderConnect(withAccounts([account('e1', 'email', `${forty}yy`), account('e2', 'email', forty)]));
+        renderConnect(withSenders([sender('e1', 'email', `${forty}yy`), sender('e2', 'email', forty)]));
         const states = new Map(rows(replyCard(await openConnect())).map(([, name, state]) => [name, state]));
         expect(states.get('Account e1')).toBe(`${forty}…`);
         expect(states.get('Account e2')).toBe(forty);
@@ -224,7 +221,7 @@ describe('the Reply card', () => {
 
     it('draws a channel it does not know as inert text, cut to forty characters', async () => {
         const channel = `${hostile}${'y'.repeat(30)}`;
-        renderConnect(withAccounts([account('z1', channel, 'connected')]));
+        renderConnect(withSenders([sender('z1', channel, 'connected')]));
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), (each) => each.textContent!.trim())).toEqual([
             `${channel.slice(0, 40)}…`,
@@ -233,7 +230,7 @@ describe('the Reply card', () => {
     });
 
     it('opens Reply for what the card does not do with one plain https link', async () => {
-        renderConnect(withAccounts([account('em1', 'email', 'connected'), account('li1', 'linkedin', 'enabled')]));
+        renderConnect(withSenders([sender('em1', 'email', 'connected'), sender('li1', 'linkedin', 'enabled')]));
         const card = replyCard(await openConnect());
         const links = within(card).getAllByRole('link');
         expect(links).toHaveLength(1);
@@ -259,7 +256,7 @@ describe('the Reply card, a channel it did not list', () => {
         pendingUnread: DesktopReplyChannel[] = [],
     ): DesktopSetup => ({
         ...setupFound,
-        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread, pendingUnread },
+        reply: { ...setupFound.reply, accounts: [sender('em1', 'email', 'connected')], absent, unread, pendingUnread },
     });
     const noted = (card: HTMLElement) => Array.from(card.querySelectorAll('.acct-none'), words);
 
@@ -304,7 +301,7 @@ describe('the Reply card, a channel it did not list', () => {
     });
 
     it('says nothing when both channels were listed, an empty one included, nor from a desktop that sends no word of the links still waiting', async () => {
-        renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         expect((await openConnect()).querySelector('.acct-none')).toBeNull();
         cleanup();
         // As seen on a live account: both channels read, both empty, no link waiting. An empty state is not drawn.
@@ -328,7 +325,7 @@ describe('the Reply card, reading again', () => {
     afterEach(() => vi.useRealTimers());
 
     it('has a Check again button that reads the list again', async () => {
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         const card = replyCard(await openConnect());
         const before = statusReads(desktop);
         fireEvent.click(within(card).getByRole('button', { name: 'Check again' }));
@@ -338,7 +335,7 @@ describe('the Reply card, reading again', () => {
     it('reads again when the window takes the focus back, not more often than once in thirty seconds', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         await openConnect();
         await waitFor(() => expect(statusReads(desktop)).toBeGreaterThan(0));
         const first = statusReads(desktop);
@@ -358,7 +355,7 @@ describe('the Reply card, reading again', () => {
     it('does not start a read on the focus while one is going', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         await openConnect();
         const first = statusReads(desktop);
         let release: () => void = () => undefined;
@@ -401,7 +398,7 @@ describe('the Reply card, its acts', () => {
     ) => ({ refused, code, offer, reread }) satisfies DesktopReplyRefusal;
 
     it('offers Gmail, Outlook and LinkedIn, and no form that takes a password', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
@@ -477,7 +474,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('draws the default account’s card, or the profile default’s where no Reply account is the default, and asks its acts as that account', async () => {
-        const mailbox = account('m_1', 'email', 'connected', 'Made-up Sales');
+        const mailbox = sender('m_1', 'email', 'connected', 'Made-up Sales');
         const twoAccounts = (defaulted: string | null) =>
             withReplyAccounts(setupFound, [
                 replyAccount('default', {
@@ -528,7 +525,7 @@ describe('the Reply card, its acts', () => {
                 ...setupFound.reply,
                 signedIn: false,
                 user: null,
-                accounts: [account('2', 'email', 'disconnected')],
+                accounts: [sender('2', 'email', 'disconnected')],
             },
         });
         const connect = await openConnect();
@@ -538,7 +535,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('connects a mailbox for its provider: the desktop opens the link, and the card says so and never holds it', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         expect(actCalls(desktop)).toEqual([]);
@@ -560,7 +557,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('asks a LinkedIn account’s name, then its link, says until when it works, and reads the list again', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         desktop.actAnswers.set('setup.replyConnect', {
             opened: true,
             channel: 'linkedin',
@@ -587,7 +584,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('says the plain refusal where this Reply makes no one-mailbox link, and offers nothing after it', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         const sentence = 'Reply did not do it: the Reply CLI answered email_link.not_available.';
         desktop.actAnswers.set('setup.replyConnect', refusal(sentence, 'email_link.not_available'));
         const connect = await openConnect();
@@ -605,7 +602,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('copies a new link instead of opening it where the person ticks so, and says until when it works', async () => {
-        const desktop = renderConnect(withAccounts([account('14', 'linkedin', 'cookieInvalid')]));
+        const desktop = renderConnect(withSenders([sender('14', 'linkedin', 'cookieInvalid')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         const box = within(card()).getByRole('checkbox', {
@@ -639,15 +636,15 @@ describe('the Reply card, its acts', () => {
 
     it('offers each row the acts its channel and state take, and Reconnect only where the state is not good', async () => {
         renderConnect(
-            withAccounts([
-                account('1', 'email', 'connected'),
-                account('2', 'email', 'disconnected'),
-                account('11', 'linkedin', 'enabled'),
-                account('12', 'linkedin', 'disabled'),
-                account('13', 'linkedin', 'dailyLimitReached'),
-                account('14', 'linkedin', 'cookieInvalid'),
-                account('15', 'linkedin', ''),
-                account('21', 'whatsapp', 'broken'),
+            withSenders([
+                sender('1', 'email', 'connected'),
+                sender('2', 'email', 'disconnected'),
+                sender('11', 'linkedin', 'enabled'),
+                sender('12', 'linkedin', 'disabled'),
+                sender('13', 'linkedin', 'dailyLimitReached'),
+                sender('14', 'linkedin', 'cookieInvalid'),
+                sender('15', 'linkedin', ''),
+                sender('21', 'whatsapp', 'broken'),
             ]),
         );
         const connect = await openConnect();
@@ -668,10 +665,10 @@ describe('the Reply card, its acts', () => {
 
     it('asks the desktop for each act by the account’s channel and id, and reads the list again once it is done', async () => {
         const desktop = renderConnect(
-            withAccounts([
-                account('2', 'email', 'disconnected'),
-                account('11', 'linkedin', 'enabled'),
-                account('12', 'linkedin', 'disabled'),
+            withSenders([
+                sender('2', 'email', 'disconnected'),
+                sender('11', 'linkedin', 'enabled'),
+                sender('12', 'linkedin', 'disabled'),
             ]),
         );
         const connect = await openConnect();
@@ -694,12 +691,12 @@ describe('the Reply card, its acts', () => {
             ['setup.replyUnblock', '2'],
             ['setup.replyPause', '11'],
             ['setup.replyResume', '12'],
-            ['setup.replyDelete', 'linkedin', '11'],
+            ['setup.replyDelete', 'linkedin', '11', undefined],
         ]);
     });
 
     it('offers the forced delete only after the desktop said sequences use the account, and never forces first', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         desktop.actAnswers.set('setup.replyDelete', [
             refusal('Sequences use this LinkedIn account, so it was not deleted.', 'linkedin.account_in_use', 'force'),
             { done: true },
@@ -708,14 +705,14 @@ describe('the Reply card, its acts', () => {
         const card = () => replyCard(connect);
         fireEvent.click(within(rowOf(card, 'Account 11')).getByRole('button', { name: 'Delete' }));
         await waitFor(() => within(dialogOf(card)).getByRole('alert'));
-        expect(actCalls(desktop)).toEqual([['setup.replyDelete', 'linkedin', '11']]);
+        expect(actCalls(desktop)).toEqual([['setup.replyDelete', 'linkedin', '11', undefined]]);
         fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Delete anyway…' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Done.'));
         expect(actCalls(desktop)[1]).toEqual(['setup.replyDelete', 'linkedin', '11', { force: true }]);
     });
 
     it('offers Reconnect on a signed-out answer, and no Pause or Resume for that account while it stands', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         desktop.actAnswers.set(
             'setup.replyPause',
             refusal('The LinkedIn account is signed out of LinkedIn.', 'linkedin.invalid_cookie', 'reconnect'),
@@ -731,7 +728,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads the list again where the answer says so, offers nothing for a plan’s limit, and says any code inert', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         const ask = async (answer: DesktopReplyRefusal) => {
@@ -772,7 +769,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads a mailbox’s daily limit into a field, and sets it to what is typed on Set', async () => {
-        const desktop = renderConnect(withAccounts([account('2', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('2', 'email', 'connected')]));
         desktop.actAnswers.set('setup.replyLimits', [{ daily: 500 }, { daily: 200 }]);
         const connect = await openConnect();
         const card = () => replyCard(connect);
@@ -787,7 +784,7 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Set' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Done.'));
         expect(actCalls(desktop)).toEqual([
-            ['setup.replyLimits', '2'],
+            ['setup.replyLimits', '2', undefined],
             ['setup.replyLimits', '2', 200],
         ]);
     });
@@ -799,7 +796,7 @@ describe('the Reply card, its acts', () => {
             reply: {
                 ...setupFound.reply,
                 cli: { found: true, version: '0.21.0', install: 'reply' },
-                accounts: [account('2', 'email', 'disconnected')],
+                accounts: [sender('2', 'email', 'disconnected')],
                 belowMinimum: below,
             },
         });
@@ -825,7 +822,7 @@ describe('the Reply card, its acts', () => {
         const unreadVersion = {
             ...setupFound.reply,
             cli: { found: true, version: null, install: 'reply' },
-            accounts: [account('2', 'email', 'disconnected')],
+            accounts: [sender('2', 'email', 'disconnected')],
             belowMinimum: below,
         };
         const asked = renderConnect({ ...setupFound, reply: { ...unreadVersion, notRead: ['version'] } });
@@ -956,7 +953,7 @@ describe('the Reply card, its acts', () => {
 
     it('turns every act off while one is being asked for, and on again once it answers', async () => {
         const desktop = renderConnect(
-            withAccounts([account('14', 'linkedin', 'cookieInvalid'), account('2', 'email', 'disconnected')]),
+            withSenders([sender('14', 'linkedin', 'cookieInvalid'), sender('2', 'email', 'disconnected')]),
         );
         let release: () => void = () => undefined;
         desktop.setup.replyReconnect = () =>
@@ -989,7 +986,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('takes its dialog with it when the console goes away', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const connect = await openConnect();
         await addAccount(() => replyCard(connect), 'Gmail');
         await waitFor(() => expect(heldDialog()).toBe('connect'));
@@ -998,7 +995,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('drops an answer that comes after its dialog was closed', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         let release: () => void = () => undefined;
         desktop.setup.replyConnect = () =>
             new Promise((resolve) => {
@@ -1017,7 +1014,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads the list again when an act answers done or asks for a read after its dialog was closed', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         for (const late of [

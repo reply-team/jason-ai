@@ -1,12 +1,14 @@
 /**
  * Pure: the Reply accounts Jason Desktop shows and acts on. They are read every time from two answers and kept nowhere:
  * the Reply CLI's profiles (`reply profile list --json`) and the routes (`jason route list`). An account is a type, the
- * provider, and a name, the Reply CLI profile's exactly, and nothing else: Jason knows nothing of teams, and a profile
- * acts in the team the Reply CLI holds for it. The accounts are every profile the CLI holds and every profile a route to
- * the plugin `reply` names, at any level, global or a campaign's; a team a binding holds is ignored. A route's profile is
- * the one its binding names, else the one the Reply CLI is set to at that read, as Jason's Reply plugin runs it. The
- * default is the account of the global default route's profile, where that route is the plugin `reply`'s, and no account
- * otherwise.
+ * provider, and a name, the Reply CLI profile's exactly, and nothing else. It has no team of its own in Jason: the team is
+ * the profile's, pinned in the Reply CLI, and the desktop names the profile alone, which is how Jason's Reply plugin runs a
+ * route that names no team. Teams are read only to offer a pick where Reply asks for one (`readTeams`).
+ *
+ * The accounts are every profile the CLI holds and every profile a route to the plugin `reply` names, at any level, global
+ * or a campaign's; a team a binding holds is no part of its account. A route's profile is the one its binding names, else
+ * the one the Reply CLI is set to at that read, as Jason's Reply plugin runs it. The default is the account of the global
+ * default route's profile, where that route is the plugin `reply`'s, and no account otherwise.
  */
 
 /** An account as a member of the seam names it: the provider, and the profile's name exactly. */
@@ -25,8 +27,8 @@ export function isAccountRef(value: unknown): value is AccountRef {
 }
 
 /**
- * What `reply profile list --json` answered: every profile the CLI holds, in its order, and the profile it is set to, the
- * last of a route's profiles.
+ * What `reply profile list --json` answered: every profile the CLI holds, in its order, and the profile it is set to, which
+ * a route that names none acts as.
  */
 export interface Profiles {
     current: string;
@@ -104,7 +106,7 @@ const objectOf = (value: unknown): Record<string, unknown> | null =>
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
 
-/** The profile a binding of a route to `reply` names, a team beside it ignored; null where it names none. */
+/** The profile a binding of a route to `reply` names, a team beside it no part of it; null where it names none. */
 const profileOf = (binding: Record<string, unknown> | null): string | null => text(binding?.['profile']);
 
 /** The profile each route to `reply` of these names, null for one that names none. */
@@ -182,8 +184,8 @@ export function accountsOf(profiles: Profiles, routes: Routes | null): Listing {
 }
 
 /**
- * The arguments that make one run of the Reply CLI act as the account, before the command's own, as Jason's Reply plugin
- * starts it: its profile, and never a team.
+ * The arguments that make one run of the Reply CLI act as the account, before the command's own: its profile alone, which
+ * is how Jason's Reply plugin runs a route that names no team.
  */
 export const accountArguments = (account: AccountRef): string[] => ['--profile', account.name];
 
@@ -231,6 +233,7 @@ export const accountSentences = {
     noActor: 'Jason Desktop could not read the name of this computer’s account, which a change of the default is recorded under, so nothing was changed.',
     notRunning: 'Jason is not running, so nothing was changed. Start it, then try again.',
     notPlaced: 'Jason’s Reply plugin could not be placed or loaded, so nothing was changed.',
+    notPlacedAtSignIn: 'Signed in, but Jason’s Reply plugin could not be placed or loaded.',
     orphansSearch: 'A search still followed runs on the account that is the default now, so nothing was changed: stop it, or let it end, then try again.',
     orphansSend: 'A send Reply holds for later runs on the account that is the default now, so nothing was changed: cancel it, or wait until it is sent, then try again.',
     notDefaultAtSignIn: 'Signed in, but this account was not made the default: Make default on its card says why.',
@@ -240,12 +243,14 @@ export const accountSentences = {
 } as const;
 
 /**
- * A sign-in that signed in, then could not place or load Jason's Reply plugin: said as that first, then the program's own
- * words without the "Nothing was changed." `jason plugin install` ends a refusal with, which the sign-in belies.
+ * A refusal in one shape: the desktop's sentence, then the reason of the program that refused as a sentence of its own,
+ * cut to 1000 characters and without the "Nothing was changed." `jason` ends a refusal with, which the desktop's sentence
+ * says or belies. A reason with no words leaves the sentence alone.
  */
-export function notPlacedAtSignIn(said: string): string {
-    const why = said.replace(/\s*Nothing was changed\.\s*$/, '');
-    return why === '' ? 'Signed in, but Jason’s Reply plugin could not be placed.' : `Signed in, but Jason’s Reply plugin could not be placed: ${why}`;
+export function withReason(sentence: string, reason: string): string {
+    const said = reason.replace(/\s+/g, ' ').trim().replace(/\s*Nothing was changed\.$/, '').slice(0, 1000);
+    if (said === '') return sentence;
+    return `${sentence} ${said[0]!.toUpperCase()}${said.slice(1)}${/[.!?]$/.test(said) ? '' : '.'}`;
 }
 
 /** Every other refusal of the runtime's, in one sentence that carries its code. */

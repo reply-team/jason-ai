@@ -3,7 +3,7 @@ import type {
     DesktopAccountRef,
     DesktopHost,
     DesktopPlugin,
-    DesktopReplyAccount,
+    DesktopReplySender,
     DesktopReplyChannel,
     DesktopReplyCopied,
     DesktopReplyDone,
@@ -111,7 +111,7 @@ interface AccountView {
     user: string | null;
     /** Its sign-in could not be read: said as that, and no sign-in. */
     authUnread: boolean;
-    senders: readonly DesktopReplyAccount[];
+    senders: readonly DesktopReplySender[];
     absent: readonly DesktopReplyChannel[];
     unread: readonly DesktopReplyChannel[];
     pending: readonly DesktopReplyPending[];
@@ -222,28 +222,28 @@ const unlisted = (view: AccountView): string[] => [
     ),
 ];
 
-function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
-    if (!account.status) return ['State unknown', 'gray'];
-    const known = Object.hasOwn(states, account.channel) ? states[account.channel]! : {};
-    return Object.hasOwn(known, account.status) ? known[account.status]! : [cap(account.status), 'gray'];
+function stateOf(sender: DesktopReplySender): readonly [string, Tone] {
+    if (!sender.status) return ['State unknown', 'gray'];
+    const known = Object.hasOwn(states, sender.channel) ? states[sender.channel]! : {};
+    return Object.hasOwn(known, sender.status) ? known[sender.status]! : [cap(sender.status), 'gray'];
 }
 
 /**
  * The accounts by channel: the known channels in their order, then any other under its own name, as it first comes;
- * each with the links made for it and not used yet, which make its heading even with no account.
+ * each with the links made for it and not used yet, which make its heading even with no sender.
  */
 function grouped(
-    accounts: readonly DesktopReplyAccount[],
+    senders: readonly DesktopReplySender[],
     pending: readonly DesktopReplyPending[],
-): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]][] {
-    const others = [...new Set(accounts.map((each) => each.channel))].filter(
+): [string, string, DesktopReplySender[], readonly DesktopReplyPending[]][] {
+    const others = [...new Set(senders.map((each) => each.channel))].filter(
         (channel) => !channels.some(([known]) => known === channel),
     );
     return [...channels, ...others.map((channel) => [channel, cap(channel)] as const)]
-        .map(([channel, heading]): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]] => [
+        .map(([channel, heading]): [string, string, DesktopReplySender[], readonly DesktopReplyPending[]] => [
             channel,
             heading,
-            accounts.filter((each) => each.channel === channel),
+            senders.filter((each) => each.channel === channel),
             pending.filter((row) => row.channel === channel),
         ])
         .filter(([, , members, waiting]) => members.length > 0 || waiting.length > 0);
@@ -258,17 +258,19 @@ const good: Record<string, readonly string[]> = {
     linkedin: ['enabled', 'disabled', 'dailyLimitReached'],
 };
 
-const needsReconnect = (account: DesktopReplyAccount): boolean =>
-    Object.hasOwn(good, account.channel) && !good[account.channel]!.includes(account.status);
+const needsReconnect = (sender: DesktopReplySender): boolean =>
+    Object.hasOwn(good, sender.channel) && !good[sender.channel]!.includes(sender.status);
 
-// ---- The acts: each one verb of the Reply CLI, which the desktop runs ------------------------------------------------
+// ---- The acts: a verb of the Reply CLI each, which the desktop runs; Make default asks Jason's runtime -----------------
 //
-// A link the Reply CLI makes for connecting or reconnecting an account goes from the desktop straight to the person's
+// A link the Reply CLI makes for connecting or reconnecting a sender goes from the desktop straight to the person's
 // browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a
-// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as does a forced delete;
-// the card can only ask for the act.
+// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as does a forced delete,
+// and so does Make default where a default is set; the card can only ask for the act.
 
-/** Which of the card's places a dialog or a choice belongs to: the Connect panel's card, or the chat's. */
+/**
+ * Which of the cards a dialog or a choice belongs to: the Connect panel's, a chat's, or an account's on the Accounts page.
+ */
 type Place = string;
 
 type Channel = DesktopReplyChannel;
@@ -290,8 +292,8 @@ interface ActDialog {
     copied: DesktopReplyCopied | null;
     done: boolean;
     refused: DesktopReplyRefusal | null;
-    /** The account the act was on, for a Reconnect a signed-out refusal offers; null for a new account. */
-    account: { channel: Channel; id: string } | null;
+    /** The sender the act was on, for a Reconnect a signed-out refusal offers; null for a new one. */
+    sender: { channel: Channel; id: string } | null;
     /** The ask the refusal's offer makes: the forced delete; null for none. */
     again: Again | null;
     /** Whether it goes with the sign-in it was asked under, as an act on the account's rows does; Make default's does not. */
@@ -359,18 +361,18 @@ export function resetDialogs(): void {
     cardRefused.value = null;
 }
 
-/** The card's account, and the row of it a control names by channel and id, as the last read listed them. */
-function listedAccount(
+/** The card's account, and the sender of it a control names by channel and id, as the last read listed them. */
+function listedSender(
     place: unknown,
     channel: unknown,
     id: unknown,
-): { view: AccountView; row: DesktopReplyAccount } | null {
+): { view: AccountView; sender: DesktopReplySender } | null {
     const view = typeof place === 'string' ? accountAt(place) : null;
-    const row = view?.senders.find((each) => each.channel === channel && each.id === id);
-    return view && row ? { view, row } : null;
+    const sender = view?.senders.find((each) => each.channel === channel && each.id === id);
+    return view && sender ? { view, sender } : null;
 }
 
-const accountTitle = (account: DesktopReplyAccount): string => cap(account.name || account.address || 'the account');
+const senderTitle = (sender: DesktopReplySender): string => cap(sender.name || sender.address || 'the account');
 
 /**
  * Opens a dialog that asks the desktop for one act and says how it ended. A refusal that says the list may have changed
@@ -379,7 +381,7 @@ const accountTitle = (account: DesktopReplyAccount): string => cap(account.name 
 async function ask(
     place: Place,
     title: string,
-    account: ActDialog['account'],
+    sender: ActDialog['sender'],
     run: () => Promise<
         DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null }
     >,
@@ -402,7 +404,7 @@ async function ask(
         copied: null,
         done: false,
         refused: null,
-        account,
+        sender,
         again: null,
         signedIn,
     };
@@ -419,8 +421,8 @@ async function ask(
         return;
     }
     if ('refused' in answer) {
-        if (answer.offer === 'reconnect' && account !== null && !signedOut.value.includes(account.id))
-            signedOut.value = [...signedOut.value, account.id];
+        if (answer.offer === 'reconnect' && sender !== null && !signedOut.value.includes(sender.id))
+            signedOut.value = [...signedOut.value, sender.id];
         actDialog.value = { ...actDialog.value, asking: false, refused: answer, again: again(answer) };
         if (answer.reread) void reload();
         return;
@@ -428,9 +430,9 @@ async function ask(
     if ('daily' in answer) {
         // A limit read: shown in its field for a change, and the dialog that read it closed.
         actDialog.value = null;
-        if (account !== null) {
-            typed.set(`limit:${account.id}`, answer.daily === null ? '' : String(answer.daily));
-            limiting.value = { place, id: account.id, daily: answer.daily };
+        if (sender !== null) {
+            typed.set(`limit:${sender.id}`, answer.daily === null ? '' : String(answer.daily));
+            limiting.value = { place, id: sender.id, daily: answer.daily };
         }
         return;
     }
@@ -448,11 +450,11 @@ async function ask(
 function askLink(
     place: Place,
     title: string,
-    account: ActDialog['account'],
+    sender: ActDialog['sender'],
     run: (how: { copy?: true }) => Promise<LinkAnswer>,
 ): Promise<void> {
     const copy = copying.value;
-    return ask(place, title, account, () => run(copy ? { copy } : {}));
+    return ask(place, title, sender, () => run(copy ? { copy } : {}));
 }
 
 define('connect.copyLinks', (_args, element) => {
@@ -500,86 +502,81 @@ defineReal('connect.makeLinkedIn', ([place]) => {
 });
 
 defineReal('connect.reconnect', ([place, channel, id]) => {
-    const on = listedAccount(place, channel, id);
+    const on = listedSender(place, channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !on) return;
-    const { view, row } = on;
-    signedOut.value = signedOut.value.filter((each) => each !== row.id);
-    void askLink(place, `Reconnect ${accountTitle(row)}`, { channel, id: row.id }, (how) =>
-        here().desktop.setup.replyReconnect(channel, row.id, how.copy ? how : undefined, ...named(view)),
+    const { view, sender } = on;
+    signedOut.value = signedOut.value.filter((each) => each !== sender.id);
+    void askLink(place, `Reconnect ${senderTitle(sender)}`, { channel, id: sender.id }, (how) =>
+        here().desktop.setup.replyReconnect(channel, sender.id, how.copy ? how : undefined, ...named(view)),
     );
 });
 
 defineReal('connect.pause', ([place, id]) => {
-    const on = listedAccount(place, 'linkedin', id);
+    const on = listedSender(place, 'linkedin', id);
     if (typeof place === 'string' && on)
-        void ask(place, `Pause ${accountTitle(on.row)}`, { channel: 'linkedin', id: on.row.id }, () =>
-            here().desktop.setup.replyPause(on.row.id, ...named(on.view)),
+        void ask(place, `Pause ${senderTitle(on.sender)}`, { channel: 'linkedin', id: on.sender.id }, () =>
+            here().desktop.setup.replyPause(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.resume', ([place, id]) => {
-    const on = listedAccount(place, 'linkedin', id);
+    const on = listedSender(place, 'linkedin', id);
     if (typeof place === 'string' && on)
-        void ask(place, `Resume ${accountTitle(on.row)}`, { channel: 'linkedin', id: on.row.id }, () =>
-            here().desktop.setup.replyResume(on.row.id, ...named(on.view)),
+        void ask(place, `Resume ${senderTitle(on.sender)}`, { channel: 'linkedin', id: on.sender.id }, () =>
+            here().desktop.setup.replyResume(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.unblock', ([place, id]) => {
-    const on = listedAccount(place, 'email', id);
+    const on = listedSender(place, 'email', id);
     if (typeof place === 'string' && on)
-        void ask(place, `Unblock ${accountTitle(on.row)}`, { channel: 'email', id: on.row.id }, () =>
-            here().desktop.setup.replyUnblock(on.row.id, ...named(on.view)),
+        void ask(place, `Unblock ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
+            here().desktop.setup.replyUnblock(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.delete', ([place, channel, id]) => {
-    const on = listedAccount(place, channel, id);
+    const on = listedSender(place, channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !on) return;
-    const { view, row } = on;
+    const { view, sender } = on;
     void ask(
         place,
-        `Delete ${accountTitle(row)}`,
-        { channel, id: row.id },
-        () =>
-            view.ref === null
-                ? here().desktop.setup.replyDelete(channel, row.id)
-                : here().desktop.setup.replyDelete(channel, row.id, undefined, view.ref),
+        `Delete ${senderTitle(sender)}`,
+        { channel, id: sender.id },
+        () => here().desktop.setup.replyDelete(channel, sender.id, undefined, ...named(view)),
         (refusal) =>
             refusal.offer === 'force'
-                ? () => here().desktop.setup.replyDelete(channel, row.id, { force: true }, ...named(view))
+                ? () => here().desktop.setup.replyDelete(channel, sender.id, { force: true }, ...named(view))
                 : null,
     );
 });
 
 defineReal('connect.limits', ([place, id]) => {
-    const on = listedAccount(place, 'email', id);
+    const on = listedSender(place, 'email', id);
     if (typeof place !== 'string' || !on) return;
-    if (limiting.value?.place === place && limiting.value.id === on.row.id) {
+    if (limiting.value?.place === place && limiting.value.id === on.sender.id) {
         limiting.value = null;
         return;
     }
-    void ask(place, `Daily limit of ${accountTitle(on.row)}`, { channel: 'email', id: on.row.id }, () =>
-        on.view.ref === null
-            ? here().desktop.setup.replyLimits(on.row.id)
-            : here().desktop.setup.replyLimits(on.row.id, undefined, on.view.ref),
+    void ask(place, `Daily limit of ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
+        here().desktop.setup.replyLimits(on.sender.id, undefined, ...named(on.view)),
     );
 });
 
 defineReal('connect.setLimit', ([place, id]) => {
-    const on = listedAccount(place, 'email', id);
+    const on = listedSender(place, 'email', id);
     const text = typedOf(`limit:${typeof id === 'string' ? id : ''}`);
     if (typeof place !== 'string' || !on || !/^\d{1,10}$/.test(text)) return;
-    void ask(place, `Daily limit of ${accountTitle(on.row)}`, { channel: 'email', id: on.row.id }, () =>
+    void ask(place, `Daily limit of ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
         here()
-            .desktop.setup.replyLimits(on.row.id, Number(text), ...named(on.view))
+            .desktop.setup.replyLimits(on.sender.id, Number(text), ...named(on.view))
             .then((answer) => ('refused' in answer ? answer : { done: true as const })),
     );
 });
 
 defineReal('connect.again', () => {
     const shown = actDialog.value;
-    if (shown?.again != null) void ask(shown.place, shown.title, shown.account, shown.again);
+    if (shown?.again != null) void ask(shown.place, shown.title, shown.sender, shown.again);
 });
 
 // A team for an account whose sign-in belongs to several and whose profile pins none: one the desktop offered, pinned on
@@ -660,13 +657,13 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
         ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>${shown.waiting}</div>` : null}
         ${shown.refused !== null ? html`<div class="note am" role="alert">${shown.refused.refused}</div>` : null}
         ${
-            offer === 'reconnect' && shown.account !== null
+            offer === 'reconnect' && shown.sender !== null
                 ? html`<div class="setrow">
                       <button
                           class="btn sm"
                           type="button"
                           ${busy}
-                          ${act('connect.reconnect', shown.place, shown.account.channel, shown.account.id)}
+                          ${act('connect.reconnect', shown.place, shown.sender.channel, shown.sender.id)}
                       >
                           ${offers.reconnect}
                       </button>
@@ -747,37 +744,37 @@ function addView(view: AccountView, place: Place, busy: Html | null): Html {
         }`;
 }
 
-/** The acts a row offers, by its channel and state; Pause and Resume not while the account is signed out. */
-function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null): Html[] {
+/** The acts a sender's row offers, by its channel and state; Pause and Resume not while it is signed out. */
+function rowActs(sender: DesktopReplySender, place: Place, busy: Html | null): Html[] {
     const button = (label: string, name: string, ...args: string[]) =>
         html`<button class="btn sm" type="button" ${busy} ${act(name, place, ...args)}>${label}</button>`;
     const acts: Html[] = [];
-    if (needsReconnect(account)) acts.push(button('Reconnect', 'connect.reconnect', account.channel, account.id));
-    if (account.channel === 'email') {
-        acts.push(button('Limits', 'connect.limits', account.id), button('Unblock', 'connect.unblock', account.id));
+    if (needsReconnect(sender)) acts.push(button('Reconnect', 'connect.reconnect', sender.channel, sender.id));
+    if (sender.channel === 'email') {
+        acts.push(button('Limits', 'connect.limits', sender.id), button('Unblock', 'connect.unblock', sender.id));
     } else if (
-        account.channel === 'linkedin' &&
-        account.status !== 'cookieInvalid' &&
-        !signedOut.value.includes(account.id)
+        sender.channel === 'linkedin' &&
+        sender.status !== 'cookieInvalid' &&
+        !signedOut.value.includes(sender.id)
     ) {
-        // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; an
-        // account at its daily limit is on and offers neither.
-        if (account.status === 'disabled') acts.push(button('Resume', 'connect.resume', account.id));
-        else if (account.status === 'enabled') acts.push(button('Pause', 'connect.pause', account.id));
+        // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; a
+        // LinkedIn account at its daily limit is on and offers neither.
+        if (sender.status === 'disabled') acts.push(button('Resume', 'connect.resume', sender.id));
+        else if (sender.status === 'enabled') acts.push(button('Pause', 'connect.pause', sender.id));
     }
-    if (account.channel === 'email' || account.channel === 'linkedin')
-        acts.push(button('Delete', 'connect.delete', account.channel, account.id));
+    if (sender.channel === 'email' || sender.channel === 'linkedin')
+        acts.push(button('Delete', 'connect.delete', sender.channel, sender.id));
     return acts;
 }
 
 /** A mailbox's daily limit, open for a change: the field, and Set, which the desktop asks the person about first. */
-function limitView(account: DesktopReplyAccount, place: Place, busy: Html | null): Html | null {
+function limitView(sender: DesktopReplySender, place: Place, busy: Html | null): Html | null {
     const open = limiting.value;
-    if (open === null || open.place !== place || open.id !== account.id) return null;
+    if (open === null || open.place !== place || open.id !== sender.id) return null;
     return html`<div class="setrow acct-limit">
         <div class="grow meta">Emails a day${open.daily === null ? '' : `, now ${open.daily}`}:</div>
-        ${field(`limit:${account.id}`, 'Daily limit', 'text')}
-        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, account.id)}>Set</button>
+        ${field(`limit:${sender.id}`, 'Daily limit', 'text')}
+        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, sender.id)}>Set</button>
     </div>`;
 }
 
@@ -1238,9 +1235,8 @@ const replyHead = (): Html =>
         </p>`;
 
 /**
- * The Reply CLI's state, only where there is something to say, in the sentences of today: not found and Install, or what
- * to install where npm is missing too; what came of the update at the start; a version not read and Check again; below the
- * minimum and Update.
+ * The Reply CLI's state, only where there is something to say: not found and Install, or what to install where npm is
+ * missing too; what came of the update at the start; a version not read and Check again; below the minimum and Update.
  */
 function cliLines(reply: DesktopSetup['reply'], real: Html | null): Html {
     const below = typeof reply.belowMinimum === 'string' ? reply.belowMinimum : null;
@@ -1305,7 +1301,7 @@ function accountsLines(state: DesktopSetup): Html | null {
     }
     ${notRead.includes('routes') ? html`<div class="setrow meta default-unread">Which account is the default could not be read.</div>` : null}
     ${
-        state.accounts!.noDefault && !notRead.includes('routes')
+        state.accounts!.noDefault
             ? html`<div class="setrow meta no-default" role="note">
                   No account is the default yet. Campaigns have nothing to send through until you make one the default.
               </div>`
@@ -1337,14 +1333,10 @@ function accountHead(state: DesktopSetup, view: AccountView, place: Place, real:
 }
 
 /**
- * The teams of a sign-in that belongs to more than one, in place of its account's rows, where the profile pins none and
- * Reply would not list it without one: each by its name, its id beside it, with Choose where the desktop can pin one.
+ * The teams of a sign-in that belongs to more than one, in place of its account's senders, where the profile pins none
+ * and Reply would not list it without one: each by its name, its id beside it, with Choose.
  */
 function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
-    if (!choosesTeam())
-        return html`<div class="setrow meta acct-teams-why">
-            This sign-in belongs to more than one Reply team, and this version of Jason Desktop cannot choose one.
-        </div>`;
     return html`<div class="acct-group acct-teams">
         <div class="setrow meta acct-teams-why">
             This sign-in belongs to more than one Reply team. Choose the one this profile works in.
@@ -1364,16 +1356,16 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
 }
 
 /**
- * An account's body: its sign-in line, the sign-in and the key for it, its mailboxes and LinkedIn accounts with their acts,
- * what of them could not be read, its Add account and Check again, and the dialog an act on it opened.
+ * An account's body: its sign-in line, the sign-in and the key for it, its senders (its mailboxes and LinkedIn accounts)
+ * with their acts, what of them could not be read, its Add account and Check again, and the dialog an act on it opened.
  */
 function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html | null, place: Place): Html {
     const shown = actDialog.value?.place === place ? actDialog.value : null;
-    // Below the Reply CLI the acts need, the card offers no act.
+    // Below the Reply CLI the acts need, the card offers no act: only a desktop of an earlier version draws an account then.
     const usable = typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
     const offering = view.signedIn && usable;
-    // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its rows and acts.
-    const choosing = view.signedIn && view.teams !== null;
+    // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
+    const choosing = view.signedIn && view.teams !== null && choosesTeam();
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
@@ -1401,16 +1393,16 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
             ([, heading, members, waiting]) =>
                 html`<div class="acct-group">
                     <div class="setrow meta acct-hd">${heading}</div>
-                    ${members.map((account) => {
-                        const [words, tone] = stateOf(account);
+                    ${members.map((sender) => {
+                        const [words, tone] = stateOf(sender);
                         return html`<div class="setrow acct">
                                 <div class="grow">
-                                    <b>${account.name}</b> <span class="meta">${account.address}</span>
+                                    <b>${sender.name}</b> <span class="meta">${sender.address}</span>
                                 </div>
                                 <span class="pillc ${tone}">${words}</span>
-                                ${offering ? rowActs(account, place, asks) : null}
+                                ${offering ? rowActs(sender, place, asks) : null}
                             </div>
-                            ${offering ? limitView(account, place, asks) : null}`;
+                            ${offering ? limitView(sender, place, asks) : null}`;
                     })}
                     ${waiting.map((row) => pendingView(row))}
                     ${

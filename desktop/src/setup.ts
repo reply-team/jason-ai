@@ -17,7 +17,6 @@ import {
     defaultAccount,
     defaultBinding,
     defaultReason,
-    notPlacedAtSignIn,
     signInReason,
     defaultRefusal,
     defaultWords,
@@ -29,6 +28,7 @@ import {
     type AccountRef,
     type GlobalDefault,
     type ReplyTeam,
+    withReason,
 } from './accounts.ts';
 import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
@@ -117,7 +117,7 @@ import {
     withReplyGranted,
     type PluginRuntime,
     type PluginValues,
-    type ReplyAccount,
+    type ReplySender,
 } from './setup-model.ts';
 import { npmLine, readUpdateSwitch, replyAtWork, runtimeReplyVersion, startUpdateSentences, versionUnsaid } from './reply-update.ts';
 
@@ -187,23 +187,23 @@ export interface HostState {
 }
 
 /**
- * A fact of the Reply connection that was asked and could not be read, as a page of an earlier version reads it:
- * `version`, the Reply CLI's, where `reply --version` said none; `auth`, the account's sign-in, where `reply auth status`
- * did not answer, or no account could be read; `route`, whether Jason's Reply plugin is valid and the global default,
- * where the runtime gave no plugin list or no route list.
+ * A fact of `ReplyState` that was asked and could not be read: `version`, the Reply CLI's, where `reply --version` said
+ * none; `auth`, the account's sign-in, where `reply auth status` did not answer, or no account could be read; `route`,
+ * whether Jason's Reply plugin is valid and the global default, where the runtime gave no plugin list or no route list.
  */
 export type ReplyFact = 'version' | 'auth' | 'route';
 
 /**
- * The Reply connection as a page of an earlier version reads it: the Reply CLI, and of the accounts the default one, or the
- * profile `default`'s where no Reply account is the default, so the one card such a page draws is true of it.
+ * The Reply connection as one card draws it: the Reply CLI, and of the accounts the default one, or the profile
+ * `default`'s where no Reply account is the default. A page of an earlier version reads it, and so does this page's chat
+ * until the chat's own part reads the accounts.
  */
 export interface ReplyState {
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
     user: string | null;
     wired: boolean;
-    accounts: ReplyAccount[];
+    accounts: ReplySender[];
     /** The channels the CLI says are not in this account's plan or role (`email`, `linkedin`). */
     absent: ReplyChannel[];
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
@@ -246,7 +246,7 @@ export type AccountsFact = 'profiles' | 'routes';
 
 /**
  * One Reply account, one profile of the Reply CLI, as Jason's work acts as it, and what was read of it under its own name:
- * its sign-in and, signed in, its mailboxes and LinkedIn accounts and the links still waiting.
+ * its sign-in and, signed in, its senders (its mailboxes and LinkedIn accounts) and the links still waiting.
  */
 export interface AccountState extends AccountRef {
     /** Whether the global default route names this account. */
@@ -255,7 +255,7 @@ export interface AccountState extends AccountRef {
     held: boolean;
     signedIn: boolean;
     user: string | null;
-    senders: ReplyAccount[];
+    senders: ReplySender[];
     absent: ReplyChannel[];
     unread: ReplyChannel[];
     pending: ReplyCliPending[];
@@ -483,9 +483,7 @@ function signInWords(result: RunResult, sentence: string): string {
         return sentence;
     }
     const reason = [error?.detail, error?.title].find((each): each is string => typeof each === 'string' && each.trim() !== '');
-    if (reason === undefined) return sentence;
-    const said = reason.replace(/\s+/g, ' ').trim().slice(0, 1000);
-    return `${sentence} ${/[.!?]$/.test(said) ? said : `${said}.`}`;
+    return reason === undefined ? sentence : withReason(sentence, reason);
 }
 
 /**
@@ -560,6 +558,12 @@ function refusal(refused: string, reread = false): ReplyRefusal {
  * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
  * or the runtime did not say (`plugins_unread`), or the mark could not be written.
  */
+/**
+ * What a placing of Jason's Reply plugin did: nothing, it being in place; a load alone; the grant and a load; the package
+ * and a load; or all three.
+ */
+type Placing = 'in_place' | 'loaded' | 'granted' | 'placed' | 'placed_granted';
+
 export type StartUpdateOutcome =
     | 'updated' | 'still_old' | 'failed'
     | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';
@@ -574,8 +578,8 @@ export class Setup {
     /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
     #acts = false;
     /**
-     * The accounts the last read gave, each with the mailboxes and LinkedIn accounts it listed: an act names only one of
-     * them and one of its rows, and its box names the row as the list does.
+     * The accounts the last read gave, each with the senders it listed: an act names only one of them and one of its
+     * senders, and its box names the sender as the list does.
      */
     #listed: AccountState[] = [];
     /** The profile a route that names none acts as, at the last read that listed the accounts; set with `#listed`. */
@@ -598,7 +602,10 @@ export class Setup {
     #startCheckEnded = false;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
-    /** How many changes have ended: the acts of the setup's queue, each Reply verb, and every change the desktop announced. */
+    /**
+     * How many changes have ended, moved only by the doors every change passes through: the setup's queue (`#serial`), an
+     * act on a Reply account (`#acting`), and a change the desktop learnt of elsewhere (`announceChange`).
+     */
     #ended = 0;
     /** The listing being read now, and how many changes had ended when it began. */
     #reading: { listing: Promise<SetupState>; ended: number } | null = null;
@@ -614,7 +621,6 @@ export class Setup {
     }
 
     #changed(): void {
-        this.#ended += 1;
         for (const listener of this.#listeners) listener();
     }
 
@@ -623,6 +629,7 @@ export class Setup {
      * page as every change is, so a listing asked after it is never answered by a read that began before it.
      */
     announceChange(): void {
+        this.#ended += 1;
         this.#changed();
     }
 
@@ -858,11 +865,11 @@ export class Setup {
     }
 
     /**
-     * The Reply CLI, and the accounts: the Reply CLI's profiles and every profile a route to Reply names, each read under its
-     * own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account. A
-     * profile only a route names is asked nothing. What a page of an earlier version reads is the default account's state,
-     * or the profile `default`'s where no Reply account is the default; it is wired where Jason's Reply plugin is valid and
-     * the global default names that very account. `valid` is null where the runtime gave no plugin list.
+     * The Reply CLI, and the accounts: the Reply CLI's profiles and every profile a route to Reply names, each read under
+     * its own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account, and a
+     * profile only a route names is asked nothing. `ReplyState` is the default account's, or the profile `default`'s where
+     * no Reply account is the default; its `wired` says that Jason's Reply plugin is valid and the global default names
+     * that very account. `valid` is null where the runtime gave no plugin list.
      */
     async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
         const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
@@ -999,15 +1006,15 @@ export class Setup {
     }
 
     /**
-     * The account an act names and the row of it the act is on, as the last read listed both: an act names only an account
-     * and a row that read gave, the row by its channel and id among that account's own.
+     * The account an act names and the sender of it the act is on, as the last read listed both: an act names only an
+     * account and a sender that read gave, the sender by its channel and id among that account's own.
      */
-    #named(named: unknown, channel: ReplyCliChannel, id: unknown): { account: AccountState; row: ReplyAccount } | ReplyRefusal {
+    #named(named: unknown, channel: ReplyCliChannel, id: unknown): { account: AccountState; sender: ReplySender } | ReplyRefusal {
         const account = this.#accountOf(named);
-        // With no account named and none to act as, there is no row: said as a row the list did not give.
+        // With no account named and none to act as, there is no sender: said as one the list did not give.
         if (account === null) return refusal(named === undefined ? said.badId : accountSentences.badAccount);
-        const row = isReplyId(id) ? account.senders.find((each) => each.channel === channel && each.id === id) : undefined;
-        return row === undefined ? refusal(said.badId) : { account, row };
+        const sender = isReplyId(id) ? account.senders.find((each) => each.channel === channel && each.id === id) : undefined;
+        return sender === undefined ? refusal(said.badId) : { account, sender };
     }
 
     /**
@@ -1023,6 +1030,7 @@ export class Setup {
             return await work();
         } finally {
             this.#acts = false;
+            this.#ended += 1;
         }
     }
 
@@ -1038,7 +1046,6 @@ export class Setup {
      */
     async #verb(account: AccountRef, act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
         const result = await this.#run('reply', `account ${act}`, [...accountArguments(account), ...args], { timeoutMs: replyActLimitMs });
-        this.#ended += 1;
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
@@ -1082,8 +1089,7 @@ export class Setup {
     /**
      * Connects a new account by a link the CLI makes (`reply account connect`) in the Reply account named, the default where
      * none is: LinkedIn under the name typed for it, a mailbox for its provider. With `copy`, the link is copied instead of
-     * opened, as `#open` says. `sharedPage`, the shared mailbox page an earlier desktop offered, is no option any more and
-     * is refused.
+     * opened, as `#open` says. `sharedPage`, the shared mailbox page a desktop of an earlier version offered, is refused.
      */
     replyConnect(channel: unknown, options: unknown, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
@@ -1112,7 +1118,7 @@ export class Setup {
         if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
         const on = this.#named(named, channel, accountId);
         if ('refused' in on) return Promise.resolve(on);
-        return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.row.id), { write: true }), copy));
+        return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.sender.id), { write: true }), copy));
     }
 
     /**
@@ -1126,8 +1132,8 @@ export class Setup {
             return Promise.resolve(refusal(said.badLimit));
         }
         return this.#acting(async () => {
-            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.row, daily)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb(on.account, 'limits', 'email', limitsArguments(on.row.id, daily), { write: daily !== undefined });
+            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.sender, daily)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, 'limits', 'email', limitsArguments(on.sender.id, daily), { write: daily !== undefined });
             if ('refused' in answer) return answer;
             return readDailyLimit(answer.stdout) ?? refusal(said.outcomeUnknown, true);
         });
@@ -1147,8 +1153,8 @@ export class Setup {
         const on = this.#named(named, 'linkedin', accountId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox(verb, on.row)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb(on.account, verb, 'linkedin', stateArguments(verb, on.row.id), { write: true });
+            if (!(await this.#confirmed(actBox(verb, on.sender)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, verb, 'linkedin', stateArguments(verb, on.sender.id), { write: true });
             if ('refused' in answer) return answer;
             return readState(answer.stdout) === null ? refusal(said.outcomeUnknown, true) : { done: true };
         });
@@ -1159,8 +1165,8 @@ export class Setup {
         const on = this.#named(named, 'email', accountId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox('unblock', on.row)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb(on.account, 'unblock', 'email', unblockArguments(on.row.id), { write: true });
+            if (!(await this.#confirmed(actBox('unblock', on.sender)))) return refusal(said.notConfirmed);
+            const answer = await this.#verb(on.account, 'unblock', 'email', unblockArguments(on.sender.id), { write: true });
             if ('refused' in answer) return answer;
             return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(said.outcomeUnknown, true);
         });
@@ -1178,13 +1184,13 @@ export class Setup {
         if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
         const on = this.#named(named, channel, accountId);
         if ('refused' in on) return Promise.resolve(on);
-        // A door is the one row's of the one Reply account: two profiles may list the same row.
-        const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.row.id]);
+        // A door is the one sender's of the one Reply account: two profiles may list the same sender.
+        const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.sender.id]);
         return this.#acting(async () => {
             if (force && !this.#doors.has(door)) return refusal(said.notOffered);
-            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.row)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.sender)))) return refusal(said.notConfirmed);
             if (force) this.#doors.delete(door);
-            const answer = await this.#verb(on.account, 'delete', channel, deleteArguments(channel, on.row.id, force), { write: true, force });
+            const answer = await this.#verb(on.account, 'delete', channel, deleteArguments(channel, on.sender.id, force), { write: true, force });
             if (channel === 'linkedin') this.#keepDoor(door, answer, 'force');
             if ('refused' in answer) return answer;
             return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(said.outcomeUnknown, true);
@@ -1247,7 +1253,7 @@ export class Setup {
     /** After a sign-in: Jason's Reply plugin placed, the first default made, and the Reply skills deployed either way. */
     async #signedIn(account: AccountRef): Promise<void> {
         try {
-            await this.#wireReply(account);
+            await this.#placeAndMakeFirstDefault(account);
         } finally {
             await this.#deployReplySkills();
             this.#changed();
@@ -1255,20 +1261,16 @@ export class Setup {
     }
 
     /**
-     * Places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no global default at
-     * all, has the runtime name the account signed in that default, as Make default does. A default already set, whatever
-     * its plugin, is left as it is. Routes that could not be read are said, and so is a placing that failed, first as that,
-     * then in the refusing program's words.
+     * After a sign-in: places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no
+     * global default at all, has the runtime name the account signed in that default, as Make default does. A default
+     * already set, whatever its plugin, is left as it is. Routes that could not be read are said, and so is a placing that
+     * failed. The log says what was placed and what came of the default.
      */
-    async #wireReply(account: AccountRef): Promise<void> {
-        try {
-            await this.#placeMissing('program');
-        } catch (error) {
-            throw error instanceof Refused ? new Refused(notPlacedAtSignIn(error.message)) : error;
-        }
+    async #placeAndMakeFirstDefault(account: AccountRef): Promise<void> {
+        const placed = await this.#placeMissing(accountSentences.notPlacedAtSignIn);
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null, signInReason)) === null ? 'made' : 'refused';
-        this.#deps.log.info('reply_wired', { Default: outcome });
+        this.#deps.log.info('reply_placed_after_sign_in', { Placed: placed, Default: outcome });
         if (outcome === 'unread') throw new Refused(accountSentences.routesUnreadAtSignIn);
         if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
     }
@@ -1279,27 +1281,35 @@ export class Setup {
      * does not hold `reply`, and the plugins loaded again where either was, or where the plugin is listed and not valid, as
      * after a Reply CLI installed or updated outside the desktop. So an installation where the plugin is listed valid and
      * granted asks no release feed, loads nothing again, and its settings file is neither read nor written by the desktop,
-     * one with comments included. A list the runtime did not give places both, as a sign-in always did. A refusal is thrown in the
-     * words of the program that refused (`program`, a sign-in's, as on release 51.2) or in the desktop's own sentence
-     * (`desktop`, Make default's); a settings file the desktop cannot parse is refused in its own words either way.
+     * one with comments included; where the runtime gives no list, both are placed. A refusal is `sentence`, then the
+     * reason of what refused: the fetch, the load, or the desktop's reading of a settings file it cannot parse.
      */
-    async #placeMissing(say: 'program' | 'desktop'): Promise<void> {
+    async #placeMissing(sentence: string): Promise<Placing> {
+        const refused = (reason: string) => new Refused(withReason(sentence, reason));
+        const readForEdit = () => {
+            try {
+                return this.#readForEdit();
+            } catch (error) {
+                throw error instanceof Refused ? refused(error.message) : error;
+            }
+        };
         const placement = replyPlacement(await this.#deps.cli.run(['plugin', 'list']));
         const placed = placement?.placed === true;
         const granted = placement?.granted === true;
-        if (placed && placement?.valid === true && granted) return;
+        if (placed && placement?.valid === true && granted) return 'in_place';
         // A file the edit cannot keep is refused before anything is fetched.
-        if (!granted) this.#readForEdit();
+        if (!granted) readForEdit();
         if (!placed) {
             const install = await this.#deps.cli.run(['plugin', 'install', 'reply', ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
-            if (install.exit !== 0) throw new Refused(say === 'program' ? words(install, 'jason plugin install reply did not place the plugin.') : accountSentences.notPlaced);
+            if (install.exit !== 0) throw refused(words(install, ''));
         }
         if (!granted) {
-            const { file, settings } = this.#readForEdit();
+            const { file, settings } = readForEdit();
             writeAtomically(file, `${JSON.stringify(withReplyGranted(settings), null, 2)}\n`);
         }
         const reload = await this.#reloadPlugins();
-        if (reload.exit !== 0) throw say === 'program' ? this.#reloadRefused(reload) : new Refused(accountSentences.notPlaced);
+        if (reload.exit !== 0) throw refused(this.#reloadRefusal ?? words(reload, ''));
+        return placed ? (granted ? 'loaded' : 'granted') : granted ? 'placed' : 'placed_granted';
     }
 
     /**
@@ -1329,7 +1339,6 @@ export class Setup {
         if (typeof teamId !== 'string' || !(account.teams ?? []).some((team) => team.id === teamId)) return Promise.resolve(refusal(accountSentences.teamNotOffered));
         return this.#acting(async () => {
             const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs });
-            this.#ended += 1;
             this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
             if (result.exit === 0) return { done: true };
             const ending = replyCliEnding(result);
@@ -1341,7 +1350,7 @@ export class Setup {
      * Make default: the account named becomes the global default, replacing the default there was, whatever plugin it named.
      * Where one is set, the person is asked first in the main process's own box, which names it and the account that would
      * be; the box is asked before the queue the setup's other changes wait in, so none of them waits on the answer. Then,
-     * in that queue, the routes are read again: a default that is no longer the one the box named changes nothing. What is
+     * in that queue, the routes are read again: a default other than the one the box named changes nothing. What is
      * missing of the plugin and its grant is placed (`#placeMissing`), and the runtime names the account (`#setDefault`),
      * keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence, and the runtime
      * writes nothing it refuses.
@@ -1371,7 +1380,7 @@ export class Setup {
             if (routes === null) return refusal(accountSentences.routesUnread);
             if (JSON.stringify(routes.globalDefault) !== JSON.stringify(asked.globalDefault)) return refusal(accountSentences.changedMeanwhile);
             try {
-                await this.#placeMissing('desktop');
+                await this.#placeMissing(accountSentences.notPlaced);
             } catch (error) {
                 if (error instanceof Refused) return refusal(error.message);
                 throw error;
