@@ -596,17 +596,17 @@ function cliRefusal(result: RunResult, sentence: string): ReplyRefusal {
 }
 
 /**
- * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
- * run, since it was looked at already, `reply` was not found, the switch is off or could not be read, the version was not
- * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
- * or the runtime did not say (`plugins_unread`), or the mark could not be written.
- */
-/**
  * What a placing of Jason's Reply plugin did: nothing, it being in place; a load alone; the grant and a load; the package
  * and a load; or all three.
  */
 type Placing = 'in_place' | 'loaded' | 'granted' | 'placed' | 'placed_granted';
 
+/**
+ * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
+ * run, since it was looked at already, `reply` was not found, the switch is off or could not be read, the version was not
+ * read or is at the minimum, npm was not found, this minimum was tried before, a plugin that runs it can be at work (`in_use`)
+ * or the runtime did not say (`plugins_unread`), or the mark could not be written.
+ */
 export type StartUpdateOutcome =
     | 'updated' | 'still_old' | 'failed'
     | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';

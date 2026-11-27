@@ -86,7 +86,7 @@ const setup = {
     replyResume: true,
     replyUnblock: true,
     replyDelete: true,
-    // Make default: the account it names becomes the global default, after the person's yes in the desktop's own box.
+    // Make default: the account it names becomes the global default, only while Jason has none, with no box.
     makeDefault: true,
     // A team chosen for an account whose sign-in belongs to more than one, pinned on its profile in the Reply CLI.
     chooseTeam: true,

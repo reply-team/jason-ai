@@ -338,7 +338,7 @@ const good: Record<string, readonly string[]> = {
 const needsReconnect = (sender: DesktopReplySender): boolean =>
     Object.hasOwn(good, sender.channel) && !good[sender.channel]!.includes(sender.status);
 
-// ---- The acts: a verb of the Reply CLI each, which the desktop runs; Make default asks Jason's runtime -----------------
+// ---- The acts: a Reply CLI verb each, which the desktop runs; Make default asks Jason's runtime, Keep it its note ---
 //
 // A link the Reply CLI makes for connecting or reconnecting a sender goes from the desktop straight to the person's
 // browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a

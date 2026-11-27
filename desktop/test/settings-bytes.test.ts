@@ -67,13 +67,14 @@ test('every card that writes the settings file has its recorded bytes, and nothi
 });
 
 /**
- * The route the Reply card wrote into the file before the stamp, as it wrote it, which the runtime writes now through its
- * own writer of the file (`jason route set --global`): the bytes held of the Reply card are the recorded ones without it.
+ * The route in the Reply card's recording. The Reply card writes its grant alone, and the default is the runtime's to write
+ * through its own writer of the file (`jason route set --global`), so the bytes held of the card are the recording's
+ * without this route.
  */
 const recordedRoute = ',\n    "Default": {\n      "Plugin": "reply",\n      "Binding": {\n        "profile": "default"\n      }\n    }';
 
 for (const row of rows) {
-    test(`with no layout stamp, ${row.card} writes the settings file byte for byte as it did before the stamp`, async (t) => {
+    test(`with no layout stamp, ${row.card} writes the settings file byte for byte as recorded, the Reply card its grant alone and the default the runtime's`, async (t) => {
         const b = bench(t, { programs: ['reply'] });
         mkdirSync(dirname(settingsFile(b)), { recursive: true });
         writeFileSync(settingsFile(b), written);
