@@ -1067,6 +1067,37 @@ describe('the Reply card, its acts', () => {
             </>,
         );
         expect(heldDialog()).toBeNull();
+        // So does a key's refusal said on it: drawn again, the card says nothing of it.
+        const both = (
+            <>
+                <div className="one">
+                    <Painted view={one} onGone={() => dropDialogs(chatPlace('chat_one'))} />
+                </div>
+                <div className="two">
+                    <Painted view={two} onGone={() => dropDialogs(chatPlace('chat_two'))} />
+                </div>
+            </>
+        );
+        rerender(both);
+        desktop.refuse.set('setup.connectReplyWithKey', 'Reply did not accept that key.');
+        fireEvent.input(within(cardIn('one')()).getByPlaceholderText('Or paste a Reply API key'), {
+            target: { value: 'made-up-key' },
+        });
+        fireEvent.click(within(cardIn('one')()).getByRole('button', { name: 'Use key' }));
+        await waitFor(() =>
+            expect(within(cardIn('one')()).getByRole('alert').textContent).toBe('Reply did not accept that key.'),
+        );
+        expect(within(cardIn('two')()).queryByRole('alert')).toBeNull();
+        rerender(
+            <>
+                <div className="one" />
+                <div className="two">
+                    <Painted view={two} onGone={() => dropDialogs(chatPlace('chat_two'))} />
+                </div>
+            </>,
+        );
+        rerender(both);
+        expect(within(cardIn('one')()).queryByRole('alert')).toBeNull();
         stop();
         unbind();
     });

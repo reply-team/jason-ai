@@ -9,7 +9,7 @@ import { chats, lines, setup, setupError } from '../../console/state';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
-import type { DesktopSetup } from '../../platform/desktop';
+import type { DesktopAccount, DesktopReplyDone, DesktopSetup } from '../../platform/desktop';
 import {
     chatDesktop,
     replyAccount,
@@ -383,6 +383,26 @@ describe('Reply accounts, one card per profile', () => {
             [{ type: 'reply', name: 'routed-only', team: null }],
             [{ type: 'reply', name: 'routed-only', team: null }],
         ]);
+        // While the desktop has not answered, the card says what it waits on, never that Reply is asked, which Make default
+        // never asks: where a default is set, the person's answer in the desktop's box; where none is, the default made.
+        const held: ((answer: DesktopReplyDone) => void)[] = [];
+        desktop.setup.makeDefault = () => new Promise((resolve) => held.push(resolve));
+        const waiting = async (line: string) => {
+            fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
+            await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toContain(line));
+            expect(words(routed())).not.toContain('Asking Reply');
+            held.shift()!({ done: true });
+            await waitFor(() => expect(words(within(routed()).getByRole('dialog'))).toMatch(/Done\./));
+        };
+        await waiting('Answer the question Jason Desktop asks.');
+        desktop.status = withReplyAccounts(
+            setupFound,
+            three.accounts!.accounts.map((each) => ({ ...each, default: false })),
+            { noDefault: true },
+        );
+        desktop.changed();
+        await waitFor(() => expect(words(section(page))).toContain('No account is the default yet'));
+        await waiting('Making it the default…');
     });
 
     it('says what of the accounts could not be read in the section, never as a state: no account where the profiles were not, no mark and no Make default where the routes were not; and that no account is the default yet', async () => {
@@ -444,30 +464,105 @@ describe('Reply accounts, one card per profile', () => {
         const desktop = inDesktop(three);
         const wrapped = (member: string, words: string) =>
             `Error invoking remote method 'jason:setup.${member}': Error: ${words}`;
-        desktop.refuse.set(
-            'setup.connectReplyWithKey',
-            wrapped('connectReplyWithKey', 'Reply did not accept that key.'),
-        );
-        desktop.refuse.set('setup.connectReply', wrapped('connectReply', 'Reply did not sign in.'));
+        const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
+        const notPlaced =
+            'Signed in, but Jason’s Reply plugin could not be placed: The update feed at http://127.0.0.1:9/manifest.json could not be reached.';
+        desktop.refuse.set('setup.connectReplyWithKey', wrapped('connectReplyWithKey', keyRefused));
+        desktop.refuse.set('setup.connectReply', wrapped('connectReply', notPlaced));
+        const [ada, bea, routedOnly] = three.accounts!.accounts as [DesktopAccount, DesktopAccount, DesktopAccount];
         const page = await openAccounts('.reply-account');
         const second = () => cardOf(page, 'Reply account outbound, team 9');
         const routed = () => cardOf(page, 'Reply account routed-only');
-        fireEvent.input(within(second()).getByPlaceholderText('Or paste a Reply API key'), {
-            target: { value: 'made-up-key' },
-        });
-        fireEvent.click(within(second()).getByRole('button', { name: 'Use key' }));
-        await waitFor(() => expect(words(within(second()).getByRole('alert'))).toBe('Reply did not accept that key.'));
+        const useKey = (card: HTMLElement) => {
+            fireEvent.input(within(card).getByPlaceholderText('Or paste a Reply API key'), {
+                target: { value: 'made-up-key' },
+            });
+            fireEvent.click(within(card).getByRole('button', { name: 'Use key' }));
+        };
+        const checkAgain = () =>
+            fireEvent.click(
+                within(cardOf(page, 'Reply account default')).getAllByRole('button', { name: 'Check again' })[0]!,
+            );
+        useKey(second());
+        await waitFor(() => expect(words(within(second()).getByRole('alert'))).toBe(keyRefused));
         expect(within(section(page)).queryByRole('alert')).toBeNull();
         expect(within(cardOf(page, 'Reply account default')).queryByRole('alert')).toBeNull();
-        // The next sign-in, on another card, says its own refusal there, and the first card's goes.
+        // A later read that shows another account's sign-in changed, and this one's as it was, keeps the line.
+        desktop.status = withReplyAccounts(setupFound, [{ ...ada, user: 'cy@example.test' }, bea, routedOnly]);
+        checkAgain();
+        await waitFor(() => expect(words(cardOf(page, 'Reply account default'))).toContain('cy@example.test'));
+        expect(words(within(second()).getByRole('alert'))).toBe(keyRefused);
+        // The next sign-in, on another card, says its own refusal there, and the first card's goes. That sign-in signed
+        // in before the plugin could not be placed: the read after it shows the account signed in, the act's own change,
+        // and the line stays; so it does where a read begun before the sign-in lands after it.
+        const status = desktop.setup.status;
+        let landEarlier: (state: DesktopSetup) => void = () => undefined;
+        desktop.setup.status = () => new Promise((resolve) => (landEarlier = resolve));
+        checkAgain();
+        desktop.setup.status = status;
+        const earlierState = desktop.status;
+        desktop.status = withReplyAccounts(setupFound, [
+            ada,
+            bea,
+            { ...routedOnly, signedIn: true, user: 'bea@example.test' },
+        ]);
         fireEvent.click(within(routed()).getByRole('button', { name: 'Sign in with Reply' }));
-        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toBe('Reply did not sign in.'));
+        await waitFor(() => expect(words(within(routed()).getByRole('alert'))).toBe(notPlaced));
         expect(within(second()).queryByRole('alert')).toBeNull();
+        await waitFor(() => expect(words(routed())).toContain('Signed in as bea@example.test'));
+        expect(words(within(routed()).getByRole('alert'))).toBe(notPlaced);
+        landEarlier(earlierState);
+        await waitFor(() => expect(words(routed())).toContain('Not signed in'));
+        expect(words(within(routed()).getByRole('alert'))).toBe(notPlaced);
+        // A later read that shows this account's sign-in changed, signed out in a terminal, takes it away.
+        desktop.status = three;
+        checkAgain();
+        await waitFor(() => expect(within(routed()).queryByRole('alert')).toBeNull());
         // The next act of any kind takes it away too.
+        useKey(second());
+        await waitFor(() => expect(words(within(second()).getByRole('alert'))).toBe(keyRefused));
         fireEvent.click(within(routed()).getByRole('button', { name: 'Make default' }));
         await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.makeDefault')).toBe(true));
-        await waitFor(() => expect(within(routed()).queryByText('Reply did not sign in.')).toBeNull());
-        expect(words(page)).not.toContain('Error invoking remote method');
+        await waitFor(() => expect(within(second()).queryByRole('alert')).toBeNull());
+        // The Connect panel's card is the default's, whichever that is. A refusal said there stays with its account: when
+        // the default moves to another, here signed in as the same person, that one's card says nothing of it, nor does
+        // the first account's when it is back.
+        bringForward('Connect');
+        const connect = () =>
+            screen
+                .getByRole('heading', { name: 'Connect', level: 1 })
+                .closest<HTMLElement>('.painted')!
+                .querySelector<HTMLElement>('.reply-card')!;
+        const drawn = () => connect().querySelector('.acct-name')?.textContent;
+        await waitFor(() => expect(drawn()).toBe('default'));
+        useKey(connect());
+        await waitFor(() => expect(words(within(connect()).getByRole('alert'))).toBe(keyRefused));
+        const movedDefault = withReplyAccounts(setupFound, [
+            { ...ada, default: false },
+            bea,
+            { ...routedOnly, default: true, signedIn: true, user: 'ada@example.test' },
+        ]);
+        desktop.status = movedDefault;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('routed-only'));
+        expect(within(connect()).queryByRole('alert')).toBeNull();
+        desktop.status = three;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('default'));
+        expect(within(connect()).queryByRole('alert')).toBeNull();
+        // Nor is it said on another account's card where the default moved while the key was asked and no read came after.
+        let refuseKey: (error: Error) => void = () => undefined;
+        desktop.setup.connectReplyWithKey = () => new Promise((_, reject) => (refuseKey = reject));
+        useKey(connect());
+        desktop.status = movedDefault;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('routed-only'));
+        desktop.refuse.set('setup.status', wrapped('status', 'This window may not ask that.'));
+        refuseKey(new Error(wrapped('connectReplyWithKey', keyRefused)));
+        const panel = () => connect().closest<HTMLElement>('.painted')!;
+        await waitFor(() => expect(words(panel())).toContain('This window may not ask that.'));
+        expect(words(connect())).not.toContain(keyRefused);
+        expect(words(document.body)).not.toContain('Error invoking remote method');
     });
 
     it('says an act with no card of its own, and a read that failed, in the section without the window’s wrapper; a good read takes the read’s line away', async () => {

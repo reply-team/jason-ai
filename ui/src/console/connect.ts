@@ -183,6 +183,14 @@ function accountAt(place: Place, state: DesktopSetup | null = setup.value): Acco
     return defaultAccount(state);
 }
 
+/** How an account is told from the others, an earlier desktop's one account included. */
+const accountKey = (view: AccountView): string =>
+    view.ref === null ? '' : JSON.stringify([view.ref.type, view.ref.name, view.ref.team]);
+
+/** An account's sign-in as a read shows it: signed out, or signed in and as whom; null where it could not be read. */
+const signInOf = (view: AccountView): string | null =>
+    view.authUnread ? null : view.signedIn ? `in ${view.user ?? ''}` : 'out';
+
 /** Whether the desktop has Make default, which one of an earlier version does not: asked before it is offered. */
 const makesDefault = (): boolean => mounted() && typeof earlier(here().desktop).setup?.makeDefault === 'function';
 
@@ -267,6 +275,8 @@ interface ActDialog {
     place: Place;
     title: string;
     asking: boolean;
+    /** What the card says while the desktop has not answered. */
+    waiting: string;
     opened: DesktopReplyOpened | null;
     /** A link the desktop put on the clipboard for the person to hand on; the card never holds the link itself. */
     copied: DesktopReplyCopied | null;
@@ -291,8 +301,13 @@ const limiting = signal<{ place: Place; id: string; daily: number | null } | nul
 const copying = signal(false);
 /** The LinkedIn accounts the CLI said are signed out, by id: Pause and Resume are not offered while that stands. */
 const signedOut = signal<readonly string[]>([]);
-/** A sign-in's or a key's refusal, said on the card it was asked on, until the next act; null when none is. */
-const cardRefused = signal<{ place: Place; said: string } | null>(null);
+/**
+ * A sign-in's or a key's refusal, said on the card it was asked on while that card draws the account it was said of,
+ * until the next act, or a read that shows that account's sign-in changed; null when none is. `read` is the number of
+ * reads begun when it was said, and `signIn` the account's sign-in as the first read begun after it showed it, since the
+ * act may have signed it in before it was refused.
+ */
+const cardRefused = signal<{ place: Place; account: string; said: string; read: number; signIn?: string } | null>(null);
 /** Moves on at each ask and each close, so an answer that comes after its dialog was closed or replaced is dropped. */
 let asked = 0;
 
@@ -319,6 +334,7 @@ export function dropDialogs(place: Place): void {
     if (adding.peek() === place) adding.value = null;
     if (naming.peek() === place) naming.value = null;
     if (limiting.peek()?.place === place) limiting.value = null;
+    if (cardRefused.peek()?.place === place) cardRefused.value = null;
 }
 
 /** The place whose dialog the card holds open; null when none is. */
@@ -361,6 +377,7 @@ async function ask(
     >,
     again: (refusal: DesktopReplyRefusal) => Again | null = () => null,
     signedIn = true,
+    waiting = 'Asking Reply…',
 ): Promise<void> {
     asked += 1;
     const mine = asked;
@@ -372,6 +389,7 @@ async function ask(
         place,
         title,
         asking: true,
+        waiting,
         opened: null,
         copied: null,
         done: false,
@@ -557,7 +575,8 @@ defineReal('connect.again', () => {
 });
 
 // Make default: the desktop asks the person first where a default is set, in its own box, and says on the card how it
-// ended. Offered only where the desktop has it and read the routes.
+// ended. Offered only where the desktop has it and read the routes. It asks Jason's runtime, never Reply, so meanwhile the
+// card says what it waits on: the person's answer where the last read shows a default set, else the default being made.
 defineReal('connect.makeDefault', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !makesDefault()) return;
@@ -569,6 +588,9 @@ defineReal('connect.makeDefault', ([place]) => {
         () => here().desktop.setup.makeDefault(ref),
         () => null,
         false,
+        setup.value?.accounts?.noDefault === true
+            ? 'Making it the default…'
+            : 'Answer the question Jason Desktop asks.',
     );
 });
 
@@ -587,6 +609,16 @@ effect(() => {
     if (adding.peek() !== null && signedOutAt(adding.peek()!)) adding.value = null;
     if (naming.peek() !== null && signedOutAt(naming.peek()!)) naming.value = null;
     if (limiting.peek() !== null && signedOutAt(limiting.peek()!.place)) limiting.value = null;
+    const refused = cardRefused.peek();
+    if (refused === null) return;
+    const view = accountAt(refused.place, state);
+    if (view === null || accountKey(view) !== refused.account) cardRefused.value = null;
+    else if (shownRead > refused.read) {
+        const signIn = signInOf(view);
+        if (signIn === null) return;
+        if (refused.signIn === undefined) cardRefused.value = { ...refused, signIn };
+        else if (refused.signIn !== signIn) cardRefused.value = null;
+    }
 });
 
 /** A moment Reply wrote, as a person reads it: `2026-11-19 04:59 UTC`; null for one that is not a moment. */
@@ -607,7 +639,7 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
     const offer = shown.refused?.offer ?? null;
     return html`<div class="note act-dialog" role="dialog" aria-label="${shown.title}">
         <b>${shown.title}</b>
-        ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>Asking Reply…</div>` : null}
+        ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>${shown.waiting}</div>` : null}
         ${shown.refused !== null ? html`<div class="note am" role="alert">${shown.refused.refused}</div>` : null}
         ${
             offer === 'reconnect' && shown.account !== null
@@ -747,6 +779,9 @@ function pendingView(row: DesktopReplyPending): Html {
 /** How many reads of the setup are going, and when the last one began. */
 let reading = 0;
 let lastRead = Number.NEGATIVE_INFINITY;
+/** How many reads have begun, and which of them gave the state the page shows. */
+let begun = 0;
+let shownRead = 0;
 /** Whether the error the page says is a read's that failed, which the next read that succeeds takes away; an act's stays. */
 let readSaid = false;
 
@@ -756,8 +791,11 @@ const focusReadSpacingMs = 30_000;
 export async function reload(): Promise<void> {
     reading += 1;
     lastRead = Date.now();
+    begun += 1;
+    const read = begun;
     try {
         const status = await here().desktop.setup.status();
+        shownRead = read;
         setup.value = { ...status, hosts: withModels(status.hosts) };
         setupReadFailed.value = false;
         if (readSaid) setupError.value = null;
@@ -780,10 +818,14 @@ export function reloadOnFocus(): void {
 define('connect.check', () => void reload());
 
 /**
- * Runs an act, with its busy line. Its refusal is said on the card at `place` where it has one (a sign-in, a key), else in
- * the error line of the section or panel the act is on.
+ * Runs an act, with its busy line. Its refusal is said on the card at `place` of the account it was asked as where it has
+ * one (a sign-in, a key), else in the error line of the section or panel the act is on.
  */
-async function doing(what: string, run: () => Promise<void>, place: Place | null = null): Promise<void> {
+async function doing(
+    what: string,
+    run: () => Promise<void>,
+    card: { place: Place; view: AccountView } | null = null,
+): Promise<void> {
     if (setupBusy.value !== null) return;
     setupBusy.value = what;
     setupError.value = null;
@@ -792,8 +834,14 @@ async function doing(what: string, run: () => Promise<void>, place: Place | null
     try {
         await run();
     } catch (error) {
-        if (place === null) setupError.value = messageOf(error);
-        else cardRefused.value = { place, said: messageOf(error) };
+        if (card === null) setupError.value = messageOf(error);
+        else
+            cardRefused.value = {
+                place: card.place,
+                account: accountKey(card.view),
+                said: messageOf(error),
+                read: begun,
+            };
     } finally {
         setupBusy.value = null;
     }
@@ -824,7 +872,10 @@ define('connect.install', ([program]) => {
 defineReal('connect.reply', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (view)
-        void doing('Signing in to Reply…', () => here().desktop.setup.connectReply(...named(view)), place as Place);
+        void doing('Signing in to Reply…', () => here().desktop.setup.connectReply(...named(view)), {
+            place: place as Place,
+            view,
+        });
 });
 
 /** Where a card's typed key is kept until the desktop takes it: one per card. */
@@ -840,7 +891,7 @@ defineReal('connect.replyKey', ([place]) => {
                 await here().desktop.setup.connectReplyWithKey(key, ...named(view));
                 forget(keyField(place as string));
             },
-            place as Place,
+            { place: place as Place, view },
         );
 });
 
@@ -1287,7 +1338,9 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
-    const refused = cardRefused.value?.place === place ? cardRefused.value.said : null;
+    const shownRefusal = cardRefused.value;
+    const refused =
+        shownRefusal?.place === place && shownRefusal.account === accountKey(view) ? shownRefusal.said : null;
     return html`<div class="setrow reply-state">
             ${
                 view.authUnread
