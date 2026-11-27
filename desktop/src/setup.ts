@@ -102,6 +102,7 @@ import {
     parseReplyAccounts,
     readReplyAuth,
     readReplyChannel,
+    type ReplyAuth,
     replyChannels,
     type ReplyChannel,
     pluginRuntimes,
@@ -1002,7 +1003,7 @@ export class Setup {
         const read: AccountState = { ...account, default: false, held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
         if (!held) return read;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
-        const auth = readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
+        const auth = await this.#pinned(account);
         if (auth === null) return { ...read, notRead: ['auth'] };
         if (!auth.signedIn) return read;
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
@@ -1059,13 +1060,37 @@ export class Setup {
 
     /**
      * Binds an account whose profile pins no team to the one team of its sign-in (`reply --profile <name> team use <id>`),
-     * with no question, since nothing is lost by it; the log says that it was done. The team, or null where the Reply CLI
-     * did not pin it.
+     * with no question, since nothing is lost by it; the log says that it was done. The pin is read again in the write's
+     * own turn, and one found by then, a terminal's, is left as it is. The team bound, or null where none is.
      */
     async #bind(account: AccountRef, team: ReplyTeam): Promise<ReplyTeam | null> {
-        const result = await this.#writingConfig(() => this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs }));
-        this.#deps.log.info('reply_team_bound', { Exit: result.exit });
-        return result.exit === 0 ? team : null;
+        return this.#writingConfig(async () => {
+            const pinned = (await this.#pinned(account))?.team ?? null;
+            if (pinned !== null) return pinned === team.id ? team : { id: pinned, name: '' };
+            const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
+            this.#deps.log.info('reply_team_bound', { Exit: result.exit });
+            return result.exit === 0 ? team : null;
+        });
+    }
+
+    /** An account's sign-in as the Reply CLI says it now (`reply --profile <name> auth status --json`), with its pin. */
+    async #pinned(account: AccountRef): Promise<ReplyAuth | null> {
+        return readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
+    }
+
+    /**
+     * The profiles as the Reply CLI holds them, read again in a write's own turn (`#writingConfig`), and the profile made
+     * there under `name` where it holds none of that name, since an add of a name it holds would replace that profile's
+     * settings without a word. Whether it was made; null where the profiles could not be read.
+     */
+    async #addProfile(name: string): Promise<{ made: boolean; held: boolean; result?: RunResult } | null> {
+        return this.#writingConfig(async () => {
+            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+            if (profiles === null) return null;
+            if (profiles.available.includes(name)) return { made: false, held: true };
+            const result = await this.#run('reply', 'profile add', ['profile', 'add', name, '--json']);
+            return { made: result.exit === 0, held: false, result };
+        });
     }
 
     /**
@@ -1398,14 +1423,10 @@ export class Setup {
             if (version === null || !versionAtLeast(version, replyMinimumVersion)) throw new Refused(belowMinimumSentence(replyMinimumVersion));
             throw new Refused(accountSentences.profilesUnread);
         }
-        const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
-        if (profiles === null) throw new Refused(accountSentences.profilesUnread);
-        if (!profiles.available.includes(account.name)) {
-            const added = await this.#writingConfig(() => this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']));
-            if (added.exit !== 0) throw new Refused(accountSentences.profileNotMade);
-        } else if (readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']))?.signedIn === true) {
-            throw new Refused(accountSentences.signedInAlready);
-        }
+        const profile = await this.#addProfile(account.name);
+        if (profile === null) throw new Refused(accountSentences.profilesUnread);
+        if (!profile.held && !profile.made) throw new Refused(accountSentences.profileNotMade);
+        if (profile.held && (await this.#pinned(account))?.signedIn === true) throw new Refused(accountSentences.signedInAlready);
         return { type: account.type, name: account.name };
     }
 
@@ -1500,11 +1521,12 @@ export class Setup {
         if ((account.team ?? null) !== null) return Promise.resolve(refusal(accountSentences.teamPinned));
         if (typeof teamId !== 'string' || !(account.teams ?? []).some((team) => team.id === teamId)) return Promise.resolve(refusal(accountSentences.teamNotOffered));
         return this.#acting(async () => {
-            const auth = readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
-            if (auth?.team != null) return refusal(accountSentences.teamPinned, true);
-            const result = await this.#writingConfig(() => this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs }));
-            this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
-            return result.exit === 0 ? { done: true } : cliRefusal(result, accountSentences.teamNotChosen);
+            return this.#writingConfig(async () => {
+                if ((await this.#pinned(account))?.team != null) return refusal(accountSentences.teamPinned, true);
+                const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs });
+                this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
+                return result.exit === 0 ? { done: true } : cliRefusal(result, accountSentences.teamNotChosen);
+            });
         });
     }
 
@@ -1519,12 +1541,11 @@ export class Setup {
         if (problem !== null) return Promise.resolve(refusal(problem));
         const asked = name as string;
         return this.#acting(async () => {
-            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
-            if (profiles === null) return refusal(accountSentences.profilesUnreadAtAdd, true);
-            if (profiles.available.includes(asked)) return refusal(accountSentences.nameTaken, true);
-            const added = await this.#writingConfig(() => this.#run('reply', 'profile add', ['profile', 'add', asked, '--json']));
-            this.#deps.log.info('reply_account_added', { Exit: added.exit });
-            return added.exit === 0 ? this.#announced({ done: true }) : cliRefusal(added, accountSentences.notAdded);
+            const profile = await this.#addProfile(asked);
+            if (profile === null) return refusal(accountSentences.profilesUnreadAtAdd, true);
+            if (profile.held) return refusal(accountSentences.nameTaken, true);
+            this.#deps.log.info('reply_account_added', { Exit: profile.result?.exit ?? -1 });
+            return profile.made ? this.#announced({ done: true }) : cliRefusal(profile.result!, accountSentences.notAdded);
         });
     }
 

@@ -146,7 +146,11 @@ A Reply account's card acts on its senders by the Reply CLI's `account` verbs, r
 account by its sign-in, **Sign out** (`reply auth logout`), **Remove** (`reply profile delete`), **Choose** (`reply team
 use`), **Keep it** (the desktop's own note) and **Make default** (`jason route set --global`); the Reply section adds one
 with **Add Reply account** (`reply profile add`). The writes of the Reply CLI's profiles (`team use`, `profile add`,
-`profile delete`) go one at a time, since the CLI rewrites its configuration whole. The cards offer
+`profile delete`) go one at a time, since the CLI rewrites its configuration whole, and each makes the read it depends on
+again in its own turn, just before it runs: `auth status` before a `team use` (a pin found then is left as it is),
+`profile list` before a `profile add` (a name found then is not added). What is left is the CLI's own: a change a
+terminal makes between that read and the CLI's write, or while the CLI rewrites the file, is not seen, and that write
+can undo it. The cards offer
 them only from the Reply CLI that has them (`replyMinimumVersion`); below it the Reply section says to update the Reply
 CLI and no account is drawn. An installed one
 below it is updated once a Live start, in the queue the clicks wait in and by their one npm line

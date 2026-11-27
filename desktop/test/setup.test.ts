@@ -1231,6 +1231,23 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const steps = readFileSync(writes, 'utf8').trim().split('\n').map((line) => line.split(' ')[0]);
     assert.deepEqual(steps, ['start', 'end', 'start', 'end'], readFileSync(writes, 'utf8'));
     assert.deepEqual([two.world().profiles?.['default'], two.world().profiles?.['outbound']], [{ team_id: 3 }, { team_id: 4 }]);
+    // A terminal pins a team between the look's read of the teams and its bind: the bind reads the pin again in its own
+    // turn of the writes, finds it, and writes nothing over it.
+    const racing = replyBench(t, { credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3, 6] }, teams: { '6': 'Made-up Six' } });
+    writeFileSync(racing.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...racing.world(), seats: { 'ada@example.test': [3] } }));
+    const terminal: Programs = {
+        find: (name) => racing.programs.find(name),
+        run: async (name, args, options) => {
+            const result = await racing.programs.run(name, args, options);
+            if (name === 'reply' && args.join(' ') === '--profile default team list --json') {
+                writeFileSync(racing.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...racing.world(), profiles: { default: { team_id: 6 } }, seats: { 'ada@example.test': [3, 6] } }));
+            }
+            return result;
+        },
+    };
+    const raced = await accountOf(new Setup({ ...setupDeps(racing), programs: terminal }), 'default');
+    assert.equal(replyRuns(racing).some((run) => run.includes(' team use ')), false);
+    assert.deepEqual([racing.world().profiles?.['default'], raced?.team], [{ team_id: 6 }, { id: '6', name: '' }]);
 });
 
 test('a sign-in places only what is missing of Jason’s Reply plugin and its grant, as the runtime’s plugin list says, and where no global default is set has the runtime name that account the default, under the person’s name; a default already set, whatever its plugin or binding, is left as it is', async (t) => {
