@@ -670,15 +670,22 @@ describe('Reply accounts, one card per profile', () => {
         expect(words(page)).not.toContain('Error invoking remote method');
     });
 
-    it('offers Add Reply account in the Reply section wherever the accounts were read, asks the desktop under the name typed, and says its refusal under the field', async () => {
+    it('offers Add Reply account in the Reply section wherever the accounts were read, asks the desktop under the name typed, an empty one too, and says its refusal under the field', async () => {
         const desktop = inDesktop(three);
         const taken = 'The Reply CLI holds a Reply account of that name already; choose another name.';
-        desktop.actAnswers.set('setup.addAccount', [{ ...refusal(taken), reread: true }, { done: true }]);
+        const badName = 'Name the Reply account in one line of up to 64 characters that does not begin with a hyphen.';
+        desktop.actAnswers.set('setup.addAccount', [
+            refusal(badName),
+            { ...refusal(taken), reread: true },
+            { done: true },
+        ]);
         const page = await openAccounts('.reply-account');
         const adding = () => section(page).querySelector<HTMLElement>('.reply-add')!;
         const field = () => within(adding()).getByRole('textbox', { name: 'Name for a new Reply account' });
         const reads = () => desktop.calls.filter((call) => call.name === 'setup.status').length;
+        // An empty field is asked too, and refused as every name the desktop refuses is, under the field.
         fireEvent.click(within(adding()).getByRole('button', { name: 'Add Reply account' }));
+        await waitFor(() => expect(words(within(adding()).getByRole('alert'))).toBe(badName));
         fireEvent.input(field(), { target: { value: '  outbound ' } });
         fireEvent.click(within(adding()).getByRole('button', { name: 'Add Reply account' }));
         await waitFor(() => expect(words(within(adding()).getByRole('alert'))).toBe(taken));
@@ -689,8 +696,9 @@ describe('Reply accounts, one card per profile', () => {
         await waitFor(() => expect(within(adding()).queryByRole('alert')).toBeNull());
         await waitFor(() => expect(reads()).toBeGreaterThan(before));
         expect((field() as HTMLInputElement).value).toBe('');
-        // Nothing is asked for an empty field; the name typed is asked for trimmed.
+        // The name typed is asked for trimmed.
         expect(desktop.calls.filter((call) => call.name === 'setup.addAccount').map((call) => call.args)).toEqual([
+            [''],
             ['outbound'],
             ['Made-up Ops'],
         ]);

@@ -761,11 +761,11 @@ const accountNameField = 'reply-account-name';
 /** Add Reply account's ask: whether one is going, and what the desktop refused the last one with, said under its field. */
 const addingAccount = signal<{ asking: boolean; refused: string | null }>({ asking: false, refused: null });
 
-// Add Reply account: the name typed, trimmed, asked of the desktop; its card is the next read's, and a refusal is said under
-// the field, which keeps the name to be corrected.
+// Add Reply account: the name typed, trimmed, asked of the desktop, an empty one too, which it refuses as it refuses every
+// name it does not take; its card is the next read's, and a refusal is said under the field, which keeps the name.
 defineReal('connect.addReplyAccount', () => {
     const name = typedOf(accountNameField);
-    if (name === '' || !addsAccount() || addingAccount.value.asking) return;
+    if (!addsAccount() || addingAccount.value.asking) return;
     addingAccount.value = { asking: true, refused: null };
     void here()
         .desktop.setup.addAccount(name)
