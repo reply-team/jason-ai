@@ -158,6 +158,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             replyUnblock: 'function',
             replyDelete: 'function',
             makeDefault: 'function',
+            chooseTeam: 'function',
             onChanged: 'function',
         },
     });
@@ -176,7 +177,7 @@ test('a dropped file’s path is read in the preload for a page served over http
 
 test('each member of the seam calls the channel ipc.ts checks, with its own arguments only: an account where the page names one, and none where it does not', () => {
     const recorded = runPreload();
-    const outbound = { type: 'reply', name: 'outbound', team: '9' };
+    const outbound = { type: 'reply', name: 'outbound' };
     const api = recorded.exposed.get('jasonDesktop') as Record<string, Record<string, (...args: unknown[]) => unknown>>;
     const calls: [string, unknown[]][] = [
         ['chat.send', ['c1', 'hello', { host: 'claude' }]],
@@ -225,6 +226,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.replyUnblock', ['12', outbound]],
         ['setup.replyDelete', ['linkedin', '34', { force: true }, outbound]],
         ['setup.makeDefault', [outbound]],
+        ['setup.chooseTeam', [outbound, '9']],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];

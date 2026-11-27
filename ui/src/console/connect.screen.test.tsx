@@ -496,7 +496,7 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card).getByRole('button', { name: 'Sign in with Reply' }));
         await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
         expect(desktop.calls.find((call) => call.name === 'setup.connectReply')?.args).toEqual([
-            { type: 'reply', name: 'outbound', team: null },
+            { type: 'reply', name: 'outbound' },
         ]);
         cleanup();
 
@@ -508,7 +508,7 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(none.calls.some((call) => call.name === 'setup.replyUnblock')).toBe(true));
         expect(none.calls.find((call) => call.name === 'setup.replyUnblock')?.args).toEqual([
             'm_1',
-            { type: 'reply', name: 'default', team: null },
+            { type: 'reply', name: 'default' },
         ]);
     });
 

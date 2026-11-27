@@ -3,6 +3,8 @@ import type {
     DesktopAccount,
     DesktopAccounts,
     DesktopReply,
+    DesktopNoProfile,
+    DesktopReplyTeam,
     DesktopSetup,
     JasonDesktop,
 } from '../../src/platform/desktop';
@@ -86,6 +88,8 @@ const setup = {
     replyDelete: true,
     // Make default: the account it names becomes the global default, after the person's yes in the desktop's own box.
     makeDefault: true,
+    // A team chosen for an account whose sign-in belongs to more than one, pinned on its profile in the Reply CLI.
+    chooseTeam: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -117,14 +121,21 @@ const reply = {
     startCheck: true,
 } as const satisfies Record<keyof DesktopReply, true>;
 // And the accounts, each one profile of the Reply CLI with what was read of it, and what of them could not be read.
-const accounts = { accounts: true, notRead: true, noDefault: true } as const satisfies Record<
-    keyof DesktopAccounts,
+const accounts = {
+    accounts: true,
+    notRead: true,
+    noDefault: true,
+    noProfile: true,
+    campaignsWithTeam: true,
+} as const satisfies Record<keyof DesktopAccounts, true>;
+// The routes to the Reply plugin that name no profile, which the section says.
+const noProfile = { default: true, current: true, campaigns: true, globalRoutes: true } as const satisfies Record<
+    keyof DesktopNoProfile,
     true
 >;
 const account = {
     type: true,
     name: true,
-    team: true,
     default: true,
     held: true,
     signedIn: true,
@@ -135,7 +146,10 @@ const account = {
     pending: true,
     pendingUnread: true,
     notRead: true,
+    // The teams its sign-in can act in, where its profile has none pinned and Reply would not list it without one.
+    teams: true,
 } as const satisfies Record<keyof DesktopAccount, true>;
+const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -149,14 +163,33 @@ const held: [
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof reply, keyof DesktopReply>,
     Exactly<keyof typeof accounts, keyof DesktopAccounts>,
+    Exactly<keyof typeof noProfile, keyof DesktopNoProfile>,
     Exactly<keyof typeof account, keyof DesktopAccount>,
+    Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+        ]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
@@ -233,6 +266,7 @@ describe('the desktop seam', () => {
             'setup.replyUnblock',
             'setup.replyDelete',
             'setup.makeDefault',
+            'setup.chooseTeam',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([
@@ -260,11 +294,11 @@ describe('the desktop seam', () => {
             'startUpdate',
             'startCheck',
         ]);
-        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault']);
+        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault', 'noProfile', 'campaignsWithTeam']);
+        expect(Object.keys(noProfile)).toEqual(['default', 'current', 'campaigns', 'globalRoutes']);
         expect(Object.keys(account)).toEqual([
             'type',
             'name',
-            'team',
             'default',
             'held',
             'signedIn',
@@ -275,6 +309,8 @@ describe('the desktop seam', () => {
             'pending',
             'pendingUnread',
             'notRead',
+            'teams',
         ]);
+        expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
     });
 });

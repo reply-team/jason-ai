@@ -22,6 +22,7 @@ import type {
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyRefusal,
+    DesktopReplyTeam,
     DesktopSetup,
     DesktopUpdateItem,
     JasonDesktop,
@@ -38,7 +39,7 @@ import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
-import type { AccountRef } from '../src/accounts.ts';
+import type { AccountRef, ReplyTeam } from '../src/accounts.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -187,10 +188,15 @@ type OpenInIsTheSeam = [
     Holds<Equal<Place, DesktopOpenInAnswer['places'][number]>>,
 ];
 
-// An account reaches the desktop as the page names it, its type, its name and its team; Make default names one, and every
-// act of today takes one after its own arguments, where the page names one.
+// An account reaches the desktop as the page names it, its type and its name, never a team; Make default names one, a
+// team's choice names one and a team the desktop offered it, and every act of today takes one after its own arguments,
+// where the page names one.
 type AccountIsTheSeam = [
     Holds<Equal<AccountRef, DesktopAccountRef>>,
+    Holds<Equal<keyof DesktopAccountRef, 'type' | 'name'>>,
+    Holds<Equal<ReplyTeam, DesktopReplyTeam>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['chooseTeam']>, [account: DesktopAccountRef, teamId: string]>>,
+    Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['chooseTeam']>>, DesktopReplyDone | DesktopReplyRefusal>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['makeDefault']>, [account: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
     Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,

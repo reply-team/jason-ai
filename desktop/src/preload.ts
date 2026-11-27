@@ -99,6 +99,7 @@ const desktop = {
         replyDelete: (channel: 'email' | 'linkedin', accountId: string, options?: unknown, account?: unknown) =>
             account === undefined ? ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options) : ipcRenderer.invoke('jason:setup.replyDelete', channel, accountId, options, account),
         makeDefault: (account: unknown) => ipcRenderer.invoke('jason:setup.makeDefault', account),
+        chooseTeam: (account: unknown, teamId: string) => ipcRenderer.invoke('jason:setup.chooseTeam', account, teamId),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

@@ -16,6 +16,7 @@ import {
     accountSentences,
     defaultAccount,
     defaultBinding,
+    defaultNamesNoProfile,
     defaultReason,
     notPlacedAtSignIn,
     signInReason,
@@ -24,9 +25,11 @@ import {
     isAccountRef,
     readProfiles,
     readRoutes,
+    readTeams,
     sameAccount,
     type AccountRef,
     type GlobalDefault,
+    type ReplyTeam,
 } from './accounts.ts';
 import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
@@ -243,8 +246,8 @@ export interface ReplyState {
 export type AccountsFact = 'profiles' | 'routes';
 
 /**
- * One Reply account, one profile of the Reply CLI, as Jason's work acts as it, and what was read of it under its own name
- * and team: its sign-in and, signed in, its mailboxes and LinkedIn accounts and the links still waiting.
+ * One Reply account, one profile of the Reply CLI, as Jason's work acts as it, and what was read of it under its own name:
+ * its sign-in and, signed in, its mailboxes and LinkedIn accounts and the links still waiting.
  */
 export interface AccountState extends AccountRef {
     /** Whether the global default route names this account. */
@@ -260,6 +263,11 @@ export interface AccountState extends AccountRef {
     pendingUnread: ReplyChannel[];
     /** `auth` where its sign-in could not be read: no sign-in then, and nothing listed. */
     notRead: 'auth'[];
+    /**
+     * The teams its sign-in can act in, where Reply would not list the account for want of one, the profile pinning none:
+     * the choice the card offers. Absent otherwise; its channels are unread either way.
+     */
+    teams?: ReplyTeam[];
 }
 
 /**
@@ -272,6 +280,18 @@ export interface AccountsState {
     notRead: AccountsFact[];
     /** Whether the routes were read and no global default is set at all, whatever its plugin. */
     noDefault: boolean;
+    /**
+     * The routes to Jason's Reply plugin that name no profile, which act as no account and are said: whether the global
+     * default is one, with the profile the Reply CLI is set to, which it has been sending through (null unless it is one,
+     * or where the profiles were not read); how many campaigns have one of their own; and how many global routes but the
+     * default are one.
+     */
+    noProfile: { default: boolean; current: string | null; campaigns: number; globalRoutes: number };
+    /**
+     * How many campaigns have a route of their own to Jason's Reply plugin that names a Reply team beside its profile, each
+     * once: its work goes to that team, which the profile's card does not show, so it is said.
+     */
+    campaignsWithTeam: number;
 }
 
 /**
@@ -571,8 +591,6 @@ export class Setup {
      * them and one of its rows, and its box names the row as the list does.
      */
     #listed: AccountState[] = [];
-    /** The profile the Reply CLI answered as current at the last read: a route whose binding names no profile is it. */
-    #current = 'default';
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -852,13 +870,13 @@ export class Setup {
 
     /**
      * The Reply CLI, and the accounts: the Reply CLI's profiles and every profile a route to Reply names, each read under its
-     * own name and team as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account. A
+     * own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account. A
      * profile only a route names is asked nothing. What a page of an earlier version reads is the default account's state,
      * or the profile `default`'s where no Reply account is the default; it is wired where Jason's Reply plugin is valid and
      * the global default names that very account. `valid` is null where the runtime gave no plugin list.
      */
     async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
-        const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
+        const none: AccountsState = { accounts: [], notRead: [], noDefault: false, noProfile: { default: false, current: null, campaigns: 0, globalRoutes: 0 }, campaignsWithTeam: 0 };
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
             this.#listed = [];
@@ -895,7 +913,7 @@ export class Setup {
         );
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#listed = accounts;
-        this.#current = profiles?.current ?? 'default';
+        const unnamed = routes !== null && defaultNamesNoProfile(routes);
         const acting = this.#accountOf(undefined);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -920,13 +938,21 @@ export class Setup {
                 accounts,
                 notRead: [...(profiles === null ? ['profiles' as const] : []), ...(routes === null ? ['routes' as const] : [])],
                 noDefault: routes !== null && routes.globalDefault === null,
+                noProfile: {
+                    default: unnamed,
+                    current: unnamed ? (profiles?.current ?? null) : null,
+                    campaigns: routes?.campaignsWithoutProfile ?? 0,
+                    globalRoutes: routes?.globalWithoutProfile ?? 0,
+                },
+                campaignsWithTeam: routes?.campaignsWithTeam ?? 0,
             },
         };
     }
 
     /**
-     * One account's reads, each run naming its profile and its team: the sign-in, and, signed in, each channel's accounts
-     * and its links still waiting. A profile the CLI does not hold is asked nothing.
+     * One account's reads, each run naming its profile: the sign-in, and, signed in, each channel's accounts and its links
+     * still waiting. A profile the CLI does not hold is asked nothing. A channel Reply refuses for want of a team ends the
+     * reads, and the account is offered the teams of its sign-in (`#teamless`).
      */
     async #readAccount(account: AccountRef, held: boolean): Promise<AccountState> {
         const read: AccountState = { ...account, default: false, held, signedIn: false, user: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [] };
@@ -937,8 +963,9 @@ export class Setup {
         if (auth === null) return { ...read, notRead: ['auth'] };
         if (!auth.signedIn) return read;
         // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
-        for (const channel of replyChannels) {
+        for (const [at, channel] of replyChannels.entries()) {
             const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
+            if (listed.kind === 'teamless') return this.#teamless({ ...read, signedIn: true, user: auth.user, unread: [...read.unread, ...replyChannels.slice(at)] });
             if (listed.kind === 'listed') read.senders.push(...listed.accounts);
             else (listed.kind === 'absent' ? read.absent : read.unread).push(channel);
         }
@@ -953,6 +980,17 @@ export class Setup {
             else read.pending.push(...rows.filter((row) => row.channel === channel));
         }
         return { ...read, signedIn: true, user: auth.user };
+    }
+
+    /**
+     * An account Reply would not list for want of a team: its sign-in belongs to more than one and its profile pins none.
+     * It is offered the teams the Reply CLI lists for that sign-in (`reply --profile <name> team list --json`), asked here
+     * alone, so a sign-in with one team, or a profile with one pinned, is never asked; a list that could not be read
+     * offers none, and the channels stay unread.
+     */
+    async #teamless(read: AccountState): Promise<AccountState> {
+        const teams = readTeams(await this.#run('reply', 'team list', [...accountArguments(read), 'team', 'list', '--json'], { timeoutMs: replyActLimitMs }));
+        return teams === null ? read : { ...read, teams };
     }
 
     /**
@@ -1159,7 +1197,7 @@ export class Setup {
         const on = this.#named(named, channel, accountId);
         if ('refused' in on) return Promise.resolve(on);
         // A door is the one row's of the one Reply account: two profiles may list the same row.
-        const door = JSON.stringify(['delete', on.account.name, on.account.team, 'linkedin', on.row.id]);
+        const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.row.id]);
         return this.#acting(async () => {
             if (force && !this.#doors.has(door)) return refusal(said.notOffered);
             if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.row)))) return refusal(said.notConfirmed);
@@ -1221,7 +1259,7 @@ export class Setup {
             const added = await this.#run('reply', 'profile add', ['profile', 'add', account.name, '--json']);
             if (added.exit !== 0) throw new Refused(accountSentences.profileNotMade);
         }
-        return { type: account.type, name: account.name, team: account.team };
+        return { type: account.type, name: account.name };
     }
 
     /** After a sign-in: Jason's Reply plugin placed, the first default made, and the Reply skills deployed either way. */
@@ -1237,19 +1275,14 @@ export class Setup {
     /**
      * Places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no global default at
      * all, has the runtime name the account signed in that default, as Make default does. A default already set, whatever
-     * its plugin, is left as it is, and so is one an account with a team cannot be, since the global default cannot name a
-     * team: the section then says that no account is the default yet. Routes that could not be read are said, and so is a
-     * placing that failed, first as that, then in the refusing program's words.
+     * its plugin, is left as it is. Routes that could not be read are said, and so is a placing that failed, first as that,
+     * then in the refusing program's words.
      */
     async #wireReply(account: AccountRef): Promise<void> {
         try {
             await this.#placeMissing('program');
         } catch (error) {
             throw error instanceof Refused ? new Refused(notPlacedAtSignIn(error.message)) : error;
-        }
-        if (account.team !== null) {
-            this.#deps.log.info('reply_wired', { Default: 'team' });
-            return;
         }
         const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
         const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, null, signInReason)) === null ? 'made' : 'refused';
@@ -1303,19 +1336,37 @@ export class Setup {
     }
 
     /**
+     * Pins a team on an account's profile in the Reply CLI (`reply --profile <name> team use <id>`, which checks the id
+     * against the sign-in's own teams): only a team the last read offered that account, which Reply would not list without
+     * one. Nothing is asked of the person first, since nothing is lost by it. The answer is done, or the desktop's sentence
+     * and then the Reply CLI's own reason, and the page reads the accounts again either way.
+     */
+    chooseTeam(named: unknown, teamId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (typeof teamId !== 'string' || !(account.teams ?? []).some((team) => team.id === teamId)) return Promise.resolve(refusal(accountSentences.teamNotOffered));
+        return this.#acting(async () => {
+            const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', teamId, '--json'], { timeoutMs: replyActLimitMs });
+            this.#ended += 1;
+            this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
+            if (result.exit === 0) return { done: true };
+            const ending = replyCliEnding(result);
+            return { refused: signInWords(result, accountSentences.teamNotChosen), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
+        });
+    }
+
+    /**
      * Make default: the account named becomes the global default, replacing the default there was, whatever plugin it named.
      * Where one is set, the person is asked first in the main process's own box, which names it and the account that would
      * be; the box is asked before the queue the setup's other changes wait in, so none of them waits on the answer. Then,
      * in that queue, the routes are read again: a default that is no longer the one the box named changes nothing. What is
      * missing of the plugin and its grant is placed (`#placeMissing`), and the runtime names the account (`#setDefault`),
-     * keeping of a Reply default before it `derive_first_name` alone. An account with a team is refused before anything,
-     * since the global default cannot name a team. A refusal is the desktop's sentence, and the runtime writes nothing it
-     * refuses.
+     * keeping of a Reply default before it `derive_first_name` alone. A refusal is the desktop's sentence, and the runtime
+     * writes nothing it refuses.
      */
     async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return refusal(accountSentences.badAccount);
-        if (account.team !== null) return refusal(accountSentences.teamDefault);
         const answer = await this.#makeDefault(account);
         this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
         this.#changed();
@@ -1326,9 +1377,9 @@ export class Setup {
         if (!usableAccount(this.#deps.account)) return refusal(accountSentences.noActor);
         const asked = readRoutes(await this.#deps.cli.run(['route', 'list']));
         if (asked === null) return refusal(accountSentences.routesUnread);
-        const now = defaultAccount(asked, this.#current);
+        const now = defaultAccount(asked);
         if (now !== null && sameAccount(now, account)) return { done: true };
-        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault, this.#current), accountNamed(account))))) {
+        if (asked.globalDefault !== null && !(await this.#confirmed(defaultBox(defaultWords(asked.globalDefault), accountNamed(account))))) {
             return refusal(said.notConfirmed);
         }
         return this.#serial(async () => {

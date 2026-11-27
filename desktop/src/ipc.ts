@@ -22,6 +22,7 @@ export const invokeChannels = {
     'setup.replyUnblock': 'jason:setup.replyUnblock',
     'setup.replyDelete': 'jason:setup.replyDelete',
     'setup.makeDefault': 'jason:setup.makeDefault',
+    'setup.chooseTeam': 'jason:setup.chooseTeam',
     'theme.get': 'jason:theme.get',
     'theme.set': 'jason:theme.set',
     'updates.key': 'jason:updates.key',

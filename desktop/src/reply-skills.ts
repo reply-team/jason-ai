@@ -71,7 +71,7 @@ export async function replySkillsAtStart(programs: Pick<Programs, 'find' | 'run'
         const profiles = readProfiles(await run('profile list', ['profile', 'list', '--json'], { timeoutMs: 30_000 }));
         let signedIn = false;
         for (const name of profiles?.available ?? []) {
-            const status = await run('auth status', [...accountArguments({ type: 'reply', name, team: null }), 'auth', 'status', '--json'], { timeoutMs: 30_000 });
+            const status = await run('auth status', [...accountArguments({ type: 'reply', name }), 'auth', 'status', '--json'], { timeoutMs: 30_000 });
             signedIn = parseReplyAuth(status.stdout).signedIn;
             if (signedIn) break;
         }

@@ -2,6 +2,7 @@ import { effect, signal } from '@preact/signals-react';
 import type {
     DesktopAccountRef,
     DesktopHost,
+    DesktopNoProfile,
     DesktopPlugin,
     DesktopReplyAccount,
     DesktopReplyChannel,
@@ -10,6 +11,7 @@ import type {
     DesktopReplyOpened,
     DesktopReplyPending,
     DesktopReplyRefusal,
+    DesktopReplyTeam,
     DesktopSetup,
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
@@ -115,6 +117,8 @@ interface AccountView {
     unread: readonly DesktopReplyChannel[];
     pending: readonly DesktopReplyPending[];
     pendingUnread: readonly DesktopReplyChannel[];
+    /** The teams its sign-in can act in, where Reply would not list it for want of one; null where there is no choice. */
+    teams: readonly DesktopReplyTeam[] | null;
 }
 
 const listOf = <T>(value: readonly T[] | undefined): readonly T[] => (Array.isArray(value) ? value : []);
@@ -129,7 +133,7 @@ const accountsSent = (state: DesktopSetup): boolean => Array.isArray(state.accou
 function accountViews(state: DesktopSetup): AccountView[] {
     if (accountsSent(state))
         return state.accounts!.accounts.map((each) => ({
-            ref: { type: each.type, name: each.name, team: each.team },
+            ref: { type: each.type, name: each.name },
             isDefault: each.default === true,
             signedIn: each.signedIn === true,
             user: each.user,
@@ -139,6 +143,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             unread: listOf(each.unread),
             pending: listOf(each.pending),
             pendingUnread: listOf(each.pendingUnread),
+            teams: Array.isArray(each.teams) && each.teams.length > 0 ? each.teams : null,
         }));
     const reply = state.reply;
     if (!reply.cli.found) return [];
@@ -154,6 +159,7 @@ function accountViews(state: DesktopSetup): AccountView[] {
             unread: listOf(reply.unread),
             pending: listOf(reply.pending),
             pendingUnread: listOf(reply.pendingUnread),
+            teams: null,
         },
     ];
 }
@@ -173,7 +179,7 @@ function defaultAccount(state: DesktopSetup): AccountView | null {
 
 /** The Accounts page's place of an account's card: its own, so a dialog asked on one card never shows on another. */
 const accountPlace = (view: AccountView): Place =>
-    view.ref === null ? accountsPlace : `${accountsPlace}:${JSON.stringify([view.ref.name, view.ref.team])}`;
+    view.ref === null ? accountsPlace : `${accountsPlace}:${JSON.stringify(view.ref.name)}`;
 
 /** The account a card at `place` is: on the Accounts page, the one its place names; anywhere else, the default. */
 function accountAt(place: Place, state: DesktopSetup | null = setup.value): AccountView | null {
@@ -185,7 +191,7 @@ function accountAt(place: Place, state: DesktopSetup | null = setup.value): Acco
 
 /** How an account is told from the others, an earlier desktop's one account included. */
 const accountKey = (view: AccountView): string =>
-    view.ref === null ? '' : JSON.stringify([view.ref.type, view.ref.name, view.ref.team]);
+    view.ref === null ? '' : JSON.stringify([view.ref.type, view.ref.name]);
 
 /** An account's sign-in as a read shows it: signed out, or signed in and as whom; null where it could not be read. */
 const signInOf = (view: AccountView): string | null =>
@@ -193,6 +199,9 @@ const signInOf = (view: AccountView): string | null =>
 
 /** Whether the desktop has Make default, which one of an earlier version does not: asked before it is offered. */
 const makesDefault = (): boolean => mounted() && typeof earlier(here().desktop).setup?.makeDefault === 'function';
+
+/** Whether the desktop can pin a team on a profile, which one of an earlier version cannot: asked before a choice is offered. */
+const choosesTeam = (): boolean => mounted() && typeof earlier(here().desktop).setup?.chooseTeam === 'function';
 
 /** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
 const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
@@ -572,6 +581,16 @@ defineReal('connect.setLimit', ([place, id]) => {
 defineReal('connect.again', () => {
     const shown = actDialog.value;
     if (shown?.again != null) void ask(shown.place, shown.title, shown.account, shown.again);
+});
+
+// A team for an account whose sign-in belongs to several and whose profile pins none: one the desktop offered, pinned on
+// the profile in the Reply CLI with no question, since nothing is lost by it; the card reads as that team after.
+defineReal('connect.chooseTeam', ([place, teamId]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !choosesTeam()) return;
+    if (typeof teamId !== 'string' || !(view.teams ?? []).some((team) => team.id === teamId)) return;
+    const ref = view.ref;
+    void ask(place, 'Choose a team', null, () => here().desktop.setup.chooseTeam(ref, teamId));
 });
 
 // Make default: the desktop asks the person first where a default is set, in its own box, and says on the card how it
@@ -1271,8 +1290,58 @@ function cliLines(reply: DesktopSetup['reply'], real: Html | null): Html {
 }
 
 /**
- * What of the accounts as a whole the desktop could not read, said as that and never as a state, and that no account is
- * the default yet where the routes were read and name none: from a desktop of this version alone.
+ * The routes to Jason's Reply plugin that name no profile, which act as no account and cannot send, each kind said with
+ * the command that fixes it: the global default's with the profile it has been sending through, a campaign's own, and a
+ * global route for one kind of work. The profile's name is drawn as text, never read for a command.
+ */
+function noProfileLines(noProfile: DesktopNoProfile | undefined): Html[] {
+    if (noProfile === undefined) return [];
+    const campaigns = noProfile.campaigns;
+    const globals = noProfile.globalRoutes;
+    const binding = html`--plugin reply --binding '{"profile":"&lt;name&gt;"}'`;
+    const campaignCommand = html`<code>jason route set --campaign &lt;id&gt; ${binding}</code>`;
+    const globalCommand = html`<code>jason route set --global --operation &lt;operation&gt; ${binding}</code>`;
+    return [
+        ...(noProfile.default
+            ? [
+                  html`The default route names no profile, so campaigns that use it cannot
+                  send.${
+                      noProfile.current === null
+                          ? null
+                          : html` It has been sending through the Reply CLI’s current profile, “${noProfile.current}”:
+                            make that account the default to keep it so.`
+                  }`,
+              ]
+            : []),
+        ...(campaigns === 1
+            ? [
+                  html`1 campaign has a route of its own that names no profile, so work that goes through it cannot run.
+                  Name one for it: ${campaignCommand}.`,
+              ]
+            : campaigns > 1
+              ? [
+                    html`${campaigns} campaigns have a route of their own that names no profile, so work that goes
+                    through it cannot run. Name one for each: ${campaignCommand}.`,
+                ]
+              : []),
+        ...(globals === 1
+            ? [
+                  html`1 global route for one kind of work names no profile, so that work cannot run. Name one for it:
+                  ${globalCommand}.`,
+              ]
+            : globals > 1
+              ? [
+                    html`${globals} global routes for one kind of work each name no profile, so that work cannot run.
+                    Name one for each: ${globalCommand}.`,
+                ]
+              : []),
+    ];
+}
+
+/**
+ * What of the accounts as a whole the desktop could not read, said as that and never as a state; that no account is the
+ * default yet where the routes were read and name none; and the routes that name no profile: from a desktop of this
+ * version alone.
  */
 function accountsLines(state: DesktopSetup): Html | null {
     if (!accountsSent(state)) return null;
@@ -1292,7 +1361,24 @@ function accountsLines(state: DesktopSetup): Html | null {
                   No account is the default yet. Campaigns have nothing to send through until you make one the default.
               </div>`
             : null
-    }`;
+    }
+    ${noProfileLines(state.accounts!.noProfile).map(
+        (line) => html`<div class="setrow meta no-profile" role="note">${line}</div>`,
+    )}
+    ${teamRoutesLine(state.accounts!.campaignsWithTeam)}`;
+}
+
+/**
+ * The campaigns whose own route to Jason's Reply plugin names a Reply team beside its profile: their work goes to that
+ * team, which no card shows, so the line says so and how to leave it.
+ */
+function teamRoutesLine(campaigns: number | undefined): Html | null {
+    if (campaigns === undefined || campaigns < 1) return null;
+    const said =
+        campaigns === 1
+            ? '1 campaign has a route that names a Reply team beside its profile. Its work goes to that team, and the profile’s card shows the profile’s own. Route it to a profile pinned to that team instead.'
+            : `${campaigns} campaigns have a route that names a Reply team beside its profile. Their work goes to that team, and the profile’s card shows the profile’s own. Route each to a profile pinned to that team instead.`;
+    return html`<div class="setrow meta team-routes" role="note">${said}</div>`;
 }
 
 /** Where what the card does not do is managed. */
@@ -1305,24 +1391,43 @@ const manageInReply = (): Html =>
     </div>`;
 
 /**
- * An account's head: Reply and its name exactly as the Reply CLI has it, its team beside it, and the default mark, or
- * Make default where the desktop has it, read the routes and the account has no team. None for an earlier desktop's
- * account, which has no name.
+ * An account's head: Reply and its name exactly as the Reply CLI has it, and the default mark, or Make default where the
+ * desktop has it and read the routes. None for an earlier desktop's account, which has no name.
  */
 function accountHead(state: DesktopSetup, view: AccountView, place: Place, real: Html | null): Html | null {
     if (view.ref === null) return null;
-    // The global default cannot name a team, so a card with one offers no Make default; a campaign is routed to it with
-    // `jason route set`.
-    const offered =
-        !view.isDefault &&
-        view.ref.team === null &&
-        !listOf(state.accounts?.notRead).includes('routes') &&
-        makesDefault();
+    const offered = !view.isDefault && !listOf(state.accounts?.notRead).includes('routes') && makesDefault();
     return html`<div class="acct-head">
         <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>
-        ${view.ref.team === null ? null : html`<span class="meta acct-team">team ${view.ref.team}</span>`}
         ${view.isDefault ? html`<span class="pillc green acct-default">Default</span>` : null}
         ${offered ? html`<button class="btn sm" type="button" ${real} ${act('connect.makeDefault', place)}>Make default</button>` : null}
+    </div>`;
+}
+
+/**
+ * The teams of a sign-in that belongs to more than one, in place of its account's rows, where the profile pins none and
+ * Reply would not list it without one: each by its name, its id beside it, with Choose where the desktop can pin one.
+ */
+function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
+    if (!choosesTeam())
+        return html`<div class="setrow meta acct-teams-why">
+            This sign-in belongs to more than one Reply team, and this version of Jason Desktop cannot choose one.
+        </div>`;
+    return html`<div class="acct-group acct-teams">
+        <div class="setrow meta acct-teams-why">
+            This sign-in belongs to more than one Reply team. Choose the one this profile works in.
+        </div>
+        ${teams.map(
+            (team) =>
+                html`<div class="setrow acct-team">
+                    <div class="grow">
+                        ${team.name === '' ? null : html`<b>${team.name}</b>`} <span class="meta">team ${team.id}</span>
+                    </div>
+                    <button class="btn sm" type="button" ${asks} ${act('connect.chooseTeam', place, team.id)}>
+                        Choose
+                    </button>
+                </div>`,
+        )}
     </div>`;
 }
 
@@ -1335,6 +1440,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
     // Below the Reply CLI the acts need, the card offers no act.
     const usable = typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
     const offering = view.signedIn && usable;
+    // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its rows and acts.
+    const choosing = view.signedIn && view.teams !== null;
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
@@ -1357,7 +1464,8 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
         </div>
         <div class="meta reply-key-why">For an account the browser sign-in does not reach.</div>
         ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
-        ${grouped(view.senders, view.pending).map(
+        ${choosing ? teamChoice(view.teams!, place, asks) : null}
+        ${(choosing ? [] : grouped(view.senders, view.pending)).map(
             ([, heading, members, waiting]) =>
                 html`<div class="acct-group">
                     <div class="setrow meta acct-hd">${heading}</div>
@@ -1382,9 +1490,9 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
                     }
                 </div>`,
         )}
-        ${unlisted(view).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
+        ${(choosing ? [] : unlisted(view)).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
         ${
-            offering
+            offering && !choosing
                 ? html`<div class="setrow">
                           <div class="grow meta">Accounts are read again when this window takes the focus back.</div>
                           <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
@@ -1466,10 +1574,7 @@ function replySection(state: DesktopSetup, busy: Html | null): Html {
 function accountCard(state: DesktopSetup, view: AccountView, busy: Html | null): Html {
     const place = accountPlace(view);
     const real = realBusy(busy);
-    const label =
-        view.ref === null
-            ? 'Reply account'
-            : `Reply account ${view.ref.name}${view.ref.team === null ? '' : `, team ${view.ref.team}`}`;
+    const label = view.ref === null ? 'Reply account' : `Reply account ${view.ref.name}`;
     return html`<div class="card reply-card reply-account" role="region" aria-label="${label}">
         <div class="bd">
             <div class="reply-top">

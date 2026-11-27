@@ -565,21 +565,27 @@ export interface DesktopReply {
 }
 
 /**
- * How a member of the seam names an account: its type, the provider; its name, the Reply CLI profile's exactly, `default`
- * included; and the team a route names for that profile, or null. The desktop takes it only as one its last read listed.
+ * How a member of the seam names an account: its type, the provider, and its name, the Reply CLI profile's exactly,
+ * `default` included; never a team, which is the profile's own in the Reply CLI. The desktop takes it only as one its
+ * last read listed.
  */
 export interface DesktopAccountRef {
     type: 'reply';
     name: string;
-    team: string | null;
+}
+
+/** A Reply team an account's sign-in can act in: its id, digits only, and its name as Reply gives it, cut to 100 characters. */
+export interface DesktopReplyTeam {
+    id: string;
+    name: string;
 }
 
 /** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
 export type DesktopAccountsFact = 'profiles' | 'routes';
 
 /**
- * One Reply account: one profile of the Reply CLI, read as Jason's work acts as it, under its own name and team, and never
- * as the Reply CLI's current profile or the desktop's own environment would choose.
+ * One Reply account: one profile of the Reply CLI, read as Jason's work acts as it, under its own name alone, and never as
+ * the Reply CLI's current profile or the desktop's own environment would choose.
  */
 export interface DesktopAccount extends DesktopAccountRef {
     /** Whether the global default route names this account: campaigns with no route of their own send through it. */
@@ -598,6 +604,11 @@ export interface DesktopAccount extends DesktopAccountRef {
     pendingUnread: DesktopReplyChannel[];
     /** `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed. */
     notRead: 'auth'[];
+    /**
+     * The teams its sign-in can act in, where Reply would not list the account for want of one and its profile pins none:
+     * the choice the card offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` either way.
+     */
+    teams?: DesktopReplyTeam[];
 }
 
 /**
@@ -610,6 +621,26 @@ export interface DesktopAccounts {
     notRead: DesktopAccountsFact[];
     /** Whether the routes were read and no global default is set at all, whatever its plugin. */
     noDefault: boolean;
+    /**
+     * The routes to Jason's Reply plugin that name no profile, which act as no account and cannot send: whether the global
+     * default is one, with the profile the Reply CLI is set to, which it has been sending through (null unless it is one,
+     * or where the profiles were not read); how many campaigns have one of their own, each once; and how many global
+     * routes but the default are one.
+     */
+    noProfile: DesktopNoProfile;
+    /**
+     * How many campaigns have a route of their own to Jason's Reply plugin that names a Reply team beside its profile, each
+     * once: its work goes to that team, while the profile's card shows the profile's own team.
+     */
+    campaignsWithTeam: number;
+}
+
+/** The routes to Jason's Reply plugin that name no profile, as `DesktopAccounts.noProfile` counts them. */
+export interface DesktopNoProfile {
+    default: boolean;
+    current: string | null;
+    campaigns: number;
+    globalRoutes: number;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */
@@ -1122,6 +1153,12 @@ export interface JasonDesktop {
          * runtime writes nothing it refuses. Absent from a desktop of an earlier version.
          */
         makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Pins a team the account's last read offered (`teams`) on its profile in the Reply CLI (`reply --profile <name> team
+         * use <id>`), with no question first. The account then reads as that team. A refusal is the desktop's sentence and
+         * the Reply CLI's reason. Absent from a desktop of an earlier version.
+         */
+        chooseTeam(account: DesktopAccountRef, teamId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

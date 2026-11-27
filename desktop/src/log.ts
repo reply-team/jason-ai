@@ -42,6 +42,7 @@ export const templates = {
     reply_wired: 'Jason’s Reply plugin was placed and granted reply after a sign-in; the global default {Default}',
     reply_default_set: 'jason route set --global for a Reply account exited {Exit}',
     reply_default_made: 'Make default on a Reply account ended; done {Done}',
+    reply_team_chosen: 'reply team use for a Reply account’s profile exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
     own_servers_unread: 'The MCP servers of {Program} were not listed: its file is {Kind}',
     roles_profile: 'The agents’ roles were looked at for a profile of their own: {Outcome}',

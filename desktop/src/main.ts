@@ -219,6 +219,9 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
         ['setup.replyDelete', (channel, id, options, account) => setup.replyDelete(channel, id, options, account)],
         // Make default: the runtime names the account the global default, after the person's yes in the main process's box.
         ['setup.makeDefault', (account) => setup.makeDefault(account)],
+        // A team pinned on an account's profile in the Reply CLI, where its sign-in belongs to several and the last read
+        // offered them.
+        ['setup.chooseTeam', (account, teamId) => setup.chooseTeam(account, teamId)],
     ];
     for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
     setup.onChanged(changed);

@@ -33,7 +33,7 @@ const said = rest.join(' ');
 // keeps its own (src/profile.ts, src/commands/auth.ts):
 //   {"current": "default", "profiles": {"outbound": {"team_id"?: 9}}, "credentials": {"default": "ada@example.test"},
 //    "seats": {"ada@example.test": [3, 9]}, "lists": {"ada@example.test#3": {"email": [...], "linkedin": [...]}},
-//    "browser": "ada@example.test", "keys": {"made-up-key": "bea@example.test"}}
+//    "browser": "ada@example.test", "keys": {"made-up-key": "bea@example.test"}, "teams": {"9": "Made-up Nine"}}
 // `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
 // replaces a profile's settings and never its sign-in. Without the file the CLI holds `default` alone, or the profiles
 // STUB_REPLY_PROFILES names as `profile list --json` prints them, and the sign-in and lists are the variables' below,
@@ -206,6 +206,23 @@ if (process.env.STUB_HANG === name) {
         keepWorld();
         answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: 7, username: world.keys[key], team_id: 3 } } });
     }
+} else if (name === 'reply' && world !== null && (said === 'team list --json' || (rest[0] === 'team' && rest[1] === 'use' && rest[3] === '--json' && rest.length === 4))) {
+    // The teams a login can act in, as reply-cli 0.23.2 prints them (src/commands/team.ts): `team list` the profile's pinned
+    // team and every team; `team use <id>` pins one the login is in on the profile, and refuses any other as usage.team.
+    const login = (world.credentials ?? {})[inUse()];
+    const seats = login ? ((world.seats ?? {})[login] ?? [3]) : null;
+    const listed = (seats ?? []).map((id) => ({ team_id: id, team_name: (world.teams ?? {})[String(id)] ?? '' }));
+    const pinned = ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? null;
+    if (seats === null) answer({ code: 'auth.required', exit: 2 });
+    else if (rest[1] === 'list') answer({ print: { current_team_id: pinned, teams: listed } });
+    else if (!/^\d+$/.test(rest[2])) answer({ code: 'usage.team', error: { title: 'Team id must be a positive integer.' } });
+    else if (!seats.includes(Number(rest[2]))) answer({ code: 'usage.team', error: { title: `Team ${rest[2]} isn't one you can act in.` } });
+    else {
+        const id = Number(rest[2]);
+        world.profiles = { ...(world.profiles ?? {}), [inUse()]: { ...((world.profiles ?? {})[inUse()] ?? {}), team_id: id } };
+        keepWorld();
+        answer({ print: { profile: inUse(), team_id: id, team_name: listed.find((each) => each.team_id === id).team_name } });
+    }
 } else if (name === 'reply' && rest[0] === 'account' && world !== null && !(world.credentials ?? {})[inUse()]) {
     // No sign-in under the profile: `auth.required`, exit 2, before Reply is asked (src/operations/call.ts).
     answer({ code: 'auth.required', exit: 2 });
@@ -216,7 +233,11 @@ if (process.env.STUB_HANG === name) {
     const login = world.credentials[inUse()];
     const seats = (world.seats ?? {})[login] ?? [3];
     const team = replyTeam !== null ? Number(replyTeam) : ((world.profiles ?? {})[inUse()] ?? {}).team_id ?? (seats.length === 1 ? seats[0] : null);
-    if (team === null || !seats.includes(team)) answer({ code: 'access.denied' });
+    // Reply's 403 for a login in several teams with none named, or for a team it is not in, which reply-cli answers as
+    // access.denied carrying Reply's own code (src/operations/call.ts `refusal`).
+    const refusedAccess = (reply_code) => answer({ code: 'access.denied', error: { status: 403, title: 'Reply refused access.', reply_code } });
+    if (team === null) refusedAccess('TEAM_REQUIRED');
+    else if (!seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
     else answer({ print: { items: ((world.lists ?? {})[`${login}#${team}`] ?? {})[rest[3]] ?? [] } });
 } else if (name === 'reply' && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
     // Per channel, as reply-cli prints it: the items of that channel, or a refusal when the plan or role has none.

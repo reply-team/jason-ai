@@ -215,7 +215,6 @@ export const setupFound: DesktopSetup = {
 export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): DesktopAccount => ({
     type: 'reply',
     name,
-    team: null,
     default: false,
     held: true,
     signedIn: false,
@@ -241,7 +240,14 @@ export function withReplyAccounts(
     const acting = accounts.find((each) => each.default) ?? accounts.find((each) => each.name === 'default');
     return {
         ...status,
-        accounts: { accounts, notRead: [], noDefault: false, ...over },
+        accounts: {
+            accounts,
+            notRead: [],
+            noDefault: false,
+            noProfile: { default: false, current: null, campaigns: 0, globalRoutes: 0 },
+            campaignsWithTeam: 0,
+            ...over,
+        },
         reply: {
             ...status.reply,
             signedIn: acting?.signedIn ?? false,
@@ -774,6 +780,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             replyUnblock: acting('setup.replyUnblock', done),
             replyDelete: acting('setup.replyDelete', done),
             makeDefault: acting('setup.makeDefault', done),
+            chooseTeam: acting('setup.chooseTeam', done),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

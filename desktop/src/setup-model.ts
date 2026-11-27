@@ -474,7 +474,7 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { kind: 'absent' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { kind: 'absent' } | { kind: 'teamless' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
@@ -485,9 +485,16 @@ export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { 
 const channelAbsentCode = 'access.feature_unavailable';
 
 /**
- * One channel's read, in three outcomes: listed, absent (the CLI's own code above, read from the last line of stderr
- * and nothing else), and unread for every other ending, a network failure, an expired sign-in, an exit nobody explained,
- * a timeout (exit -1) or an answer that is no list. The CLI's own words are read for the code only, never kept.
+ * reply-cli 0.23.2 answers Reply's 403 `TEAM_REQUIRED`, Reply refusing a sign-in that belongs to more than one team and
+ * names none, as `access.denied` carrying Reply's own code in `reply_code` (src/operations/call.ts `refusal`), exit 1.
+ */
+const teamRequiredCode = 'TEAM_REQUIRED';
+
+/**
+ * One channel's read, in four outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
+ * and nothing else); teamless, Reply's own code above; and unread for every other ending, a network failure, an expired
+ * sign-in, an exit nobody explained, a timeout (exit -1) or an answer that is no list. The CLI's own words are read for
+ * the codes only, never kept.
  */
 export function readReplyChannel(result: { exit: number; stdout: string; stderr: string }): ReplyChannelRead {
     if (result.exit === 0) {
@@ -501,8 +508,9 @@ export function readReplyChannel(result: { exit: number; stdout: string; stderr:
     if (result.exit !== 1) return { kind: 'unread' };
     const last = result.stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '').pop();
     try {
-        const code = (JSON.parse(last ?? '') as { error?: { code?: unknown } }).error?.code;
-        return code === channelAbsentCode ? { kind: 'absent' } : { kind: 'unread' };
+        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown; reply_code?: unknown } }).error;
+        if (error?.code === channelAbsentCode) return { kind: 'absent' };
+        return error?.code === 'access.denied' && error.reply_code === teamRequiredCode ? { kind: 'teamless' } : { kind: 'unread' };
     } catch {
         return { kind: 'unread' };
     }

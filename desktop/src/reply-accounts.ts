@@ -226,15 +226,15 @@ export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' 
 
 /**
  * The box of Make default: the account that would be the default, and what the default is now, a Reply account or another
- * plugin, by what campaigns with no route of their own send through.
+ * plugin, by what campaigns with no route of their own send through; `now` null for a Reply default that names no
+ * profile, through which they cannot send.
  */
-export function defaultBox(now: string, next: string): ReplyBox {
-    return box(
-        'question',
-        `Make ${next} the default?`,
-        `Campaigns with no route of their own send through ${now} now. They will send through ${next} instead.`,
-        'Make default',
-    );
+export function defaultBox(now: string | null, next: string): ReplyBox {
+    const was =
+        now === null
+            ? 'Campaigns with no route of their own go through a Reply route that names no profile now, and cannot send.'
+            : `Campaigns with no route of their own send through ${now} now.`;
+    return box('question', `Make ${next} the default?`, `${was} They will send through ${next} instead.`, 'Make default');
 }
 
 /**

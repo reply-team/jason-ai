@@ -57,10 +57,10 @@ const listed = {
 };
 const print = (value: unknown) => JSON.stringify({ print: value });
 const refused = (code: string, extra: Record<string, unknown> = {}) => JSON.stringify({ code, ...extra });
-/** A run's own command, after the arguments that name the account it acts as (`--profile <name>`, `--team-id <id>`). */
+/** A run's own command, after the argument that names the account it acts as (`--profile <name>`). */
 const bare = (args: readonly string[]): readonly string[] => {
     let rest = args;
-    while ((rest[0] === '--profile' || rest[0] === '--team-id') && rest.length > 1) rest = rest.slice(2);
+    while (rest[0] === '--profile' && rest.length > 1) rest = rest.slice(2);
     return rest;
 };
 /** What a refusal said, read off an answer of either kind. */
@@ -148,13 +148,13 @@ test('each verb is started with its own arguments: a name as one argument, the f
     assert.deepEqual(deleteArguments('email', '12', true), ['account', 'delete', '12', '--channel', 'email', '--yes', '--json'], 'never forced for email');
     assert.deepEqual(deleteArguments('linkedin', '34', false), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--json']);
     assert.deepEqual(deleteArguments('linkedin', '34', true), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--force', '--json']);
-    // Each run names the account it acts as before the command, as Jason's Reply plugin starts it: the profile always, the
-    // team where a route names one, each one argument.
-    assert.deepEqual(accountArguments({ type: 'reply', name: 'default', team: null }), ['--profile', 'default']);
-    assert.deepEqual(accountArguments({ type: 'reply', name: 'Made-up Ops', team: '9' }), ['--profile', 'Made-up Ops', '--team-id', '9']);
+    // Each run names the account it acts as before the command, as Jason's Reply plugin starts it: its profile, one
+    // argument, and never a team.
+    assert.deepEqual(accountArguments({ type: 'reply', name: 'default' }), ['--profile', 'default']);
+    assert.deepEqual(accountArguments({ type: 'reply', name: 'Made-up Ops' }), ['--profile', 'Made-up Ops']);
 });
 
-test('every act runs as the account it names, its profile and team before the verb; one that names none acts as the default account; a row of another account, or an account the read did not list, runs nothing', async (t) => {
+test('every act runs as the account it names, its profile before the verb and no team, a route’s among them; one that names none acts as the default account; a row of another account, or an account the read did not list, runs nothing', async (t) => {
     const folder = mkdtempSync(join(tmpdir(), 'jason-reply-world-'));
     t.after(() => rmSync(folder, { recursive: true, force: true }));
     const world = join(folder, 'world.json');
@@ -162,7 +162,7 @@ test('every act runs as the account it names, its profile and team before the ve
     writeFileSync(
         world,
         JSON.stringify({
-            profiles: { outbound: {} },
+            profiles: { outbound: { team_id: 9 } },
             credentials: { default: 'ada@example.test', outbound: 'bea@example.test' },
             seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
             lists: { 'ada@example.test#3': { email: [row(12, 'email', 'connected')] }, 'bea@example.test#9': { email: [row(56, 'email', 'disconnected')], linkedin: [row(78, 'linkedin', 'disabled'), row(79, 'linkedin', 'enabled')] } },
@@ -182,20 +182,21 @@ test('every act runs as the account it names, its profile and team before the ve
     const b = bench(t, { programs: ['reply'], env });
     const h = harness(b);
     await h.setup.status();
-    const team9 = { type: 'reply', name: 'outbound', team: '9' } as const;
+    const outbound = { type: 'reply', name: 'outbound' } as const;
     const from = b.record().length;
-    await h.setup.replyConnect('linkedin', { name: 'Made-up Bea' }, team9);
-    await h.setup.replyConnect('email', { provider: 'gmail' }, team9);
-    await h.setup.replyReconnect('email', '56', {}, team9);
-    await h.setup.replyLimits('56', undefined, team9);
-    await h.setup.replyLimits('56', 40, team9);
-    await h.setup.replyResume('78', team9);
-    await h.setup.replyPause('79', team9);
-    await h.setup.replyUnblock('56', team9);
-    await h.setup.replyDelete('linkedin', '79', {}, team9);
+    await h.setup.replyConnect('linkedin', { name: 'Made-up Bea' }, outbound);
+    await h.setup.replyConnect('email', { provider: 'gmail' }, outbound);
+    await h.setup.replyReconnect('email', '56', {}, outbound);
+    await h.setup.replyLimits('56', undefined, outbound);
+    await h.setup.replyLimits('56', 40, outbound);
+    await h.setup.replyResume('78', outbound);
+    await h.setup.replyPause('79', outbound);
+    await h.setup.replyUnblock('56', outbound);
+    await h.setup.replyDelete('linkedin', '79', {}, outbound);
     const acts = b.record().slice(from).filter((entry) => entry.name === 'reply' && entry.args.includes('account'));
     assert.equal(acts.length, 9);
-    for (const entry of acts) assert.deepEqual(entry.args.slice(0, 4), ['--profile', 'outbound', '--team-id', '9'], entry.args.join(' '));
+    for (const entry of acts) assert.deepEqual(entry.args.slice(0, 3), ['--profile', 'outbound', 'account'], entry.args.join(' '));
+    assert.equal(b.record().some((entry) => entry.args.includes('--team-id')), false, 'the team is the profile’s own, pinned in the Reply CLI');
     // No account named, as a page of an earlier version asks: the default, here the profile default, by its rows alone.
     const bare = b.record().length;
     assert.deepEqual(await h.setup.replyUnblock('12'), { done: true });
@@ -204,9 +205,9 @@ test('every act runs as the account it names, its profile and team before the ve
     // list, or a value of another shape, is refused before reply starts.
     const none = b.record().length;
     const no = (sentence: string) => ({ refused: sentence, code: null, offer: null, reread: false });
-    assert.deepEqual(await h.setup.replyUnblock('12', team9), no(said.badId));
+    assert.deepEqual(await h.setup.replyUnblock('12', outbound), no(said.badId));
     assert.deepEqual(await h.setup.replyUnblock('56'), no(said.badId));
-    for (const named of [{ type: 'reply', name: 'outbound', team: '5' }, { type: 'reply', name: 'nobody', team: null }, { type: 'reply', name: 'outbound' }, { type: 'reply', name: 'outbound', team: '9', extra: 1 }, 'outbound', null]) {
+    for (const named of [{ type: 'reply', name: 'outbound', team: '9' }, { type: 'reply', name: 'nobody' }, { type: 'reply', name: 'outbound', team: null }, { type: 'reply', name: 'outbound', extra: 1 }, 'outbound', null]) {
         assert.deepEqual(await h.setup.replyPause('79', named), no('That is not a Reply account the desktop listed.'), JSON.stringify(named));
         assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail' }, named), no('That is not a Reply account the desktop listed.'), JSON.stringify(named));
     }

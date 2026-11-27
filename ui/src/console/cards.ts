@@ -84,6 +84,7 @@ export const controlWords: readonly string[] = [
     'Sign in with Reply',
     'Add account',
     'Make default',
+    'Choose',
     'Make the link',
     'Set',
     'Save key',
