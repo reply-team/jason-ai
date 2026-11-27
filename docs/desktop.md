@@ -284,8 +284,9 @@ runtime's start at logon is the machine set-up's, and no item of the menu's.
   system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
-- `<data>/desktop/reply-account-notes.json`: the login and the team each Reply account was last seen signed in and bound to
-  ([Connect](#connect), Reply), readable by your account alone where the system has modes.
+- `<data>/desktop/reply-account-notes.json`: the login and the team each Reply account was last seen signed in and bound
+  to, or, after **Keep it**, that its team is to be picked afresh ([Connect](#connect), Reply), readable by your account
+  alone where the system has modes.
 - `<data>/desktop/full-access.json` and `full-access-taken-back`, which an earlier version kept for a standing choice of
   Full access, are removed when Jason starts; no mode is read from them.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
@@ -639,37 +640,48 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   sign-in could not be read.") with **Check again**, in place of the sign-in: a card says "Not signed in" only where the
   Reply CLI answers that the profile holds no credential, or does not hold the profile.
   Every signed-in Reply account is bound to one Reply team, which its profile pins in the Reply CLI, and its card says
-  it beside the sign-in ("Signed in as ada@example.com in Sales"), by the name Reply gives the team, never by a number;
-  where no name can be known, it says that the team's name could not be read. A sign-in bound to none of its own teams,
-  whether its profile pins none or pins a team the sign-in is not in, is bound as a first sign-in is: one that can act
-  in one team is bound to it at the look that finds it (`reply team use`), with no question, since it may have two
-  tomorrow, and Jason Desktop's log says so; one that can act in several is one Reply will not list: its card says so
-  and shows the teams by their names in place of its mailboxes and LinkedIn accounts, and **Choose** pins that team on
-  the profile, with no question, since nothing is lost by it. Nothing in the window changes the team a sign-in is bound
-  to, and no page says how it is changed elsewhere: a pick for a Reply account bound already is refused. Where the Reply
-  CLI holds no login for a sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed
-  in, and once it is bound Jason Desktop asks the Reply CLI who it is (`reply auth whoami`); where that could not be
-  read, the card says so ("The login of this sign-in could not be read.") with **Check again**.
-  Jason Desktop notes, for each Reply account, the login and the team it last saw there, the team's name with it, in a
-  file of its own (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the account signed in,
-  bound and named with nothing noted, and at **Keep it**; a removal takes the note away. The note decides nothing of
-  which Reply accounts there are or what a card lists. A card that is not signed in says who it was last signed in as.
+  it beside the sign-in ("Signed in as ada@example.com in Sales"), by the name Reply gives the team, never by a number.
+  Reply gives no name to the team of a Reply account outside an organization, and the card then names no team ("Signed
+  in as ada@example.com"); only where the teams could not be read and no name is known does it say that the team's name
+  could not be read. A key acts in its own team, whatever team is pinned: the team Reply named it in when it signed in,
+  as the Reply CLI keeps it. A sign-in bound to none of its own teams, whether its profile pins none or pins a team the
+  sign-in does not act in, is bound as a first sign-in is: one that acts in one team, as a key always does, is bound to
+  it at the look that finds it (`reply team use`), with no question, since it may have two tomorrow, and Jason Desktop's
+  log says so; one that can act in several is one Reply will not list: its card says so and shows the teams by their
+  names in place of its mailboxes and LinkedIn accounts, and **Choose** pins that team on the profile, with no question,
+  since nothing is lost by it. Nothing in the window changes the team a sign-in is bound to, and no page says how it is
+  changed elsewhere: a pick for a Reply account bound already is refused. Where the Reply CLI holds no login for a
+  sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed in, and once it has a team
+  Jason Desktop asks the Reply CLI who it is (`reply auth whoami`); where that could not be read, the card says so ("The
+  login of this sign-in could not be read.") with **Check again**.
+  Jason Desktop notes, for each Reply account, the login and the team it last saw there, the team's name with it once
+  Reply named it, in a file of its own (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the
+  account signed in and bound with nothing noted, or reads the name of a noted team it had not read, at **Choose** and
+  at **Keep it**; a removal takes the note away. The note is never used to tell which Reply accounts there are. A card
+  that is not signed in says who it was last signed in as.
   With no sign-in since, nothing is taken to have changed: a look that finds the noted login in the noted pinned team,
   as the Reply CLI's own files give them, asks Reply for no teams and names the team from the note, and a sign-in the
   Reply CLI holds no login for is taken as the noted one while its pin is the noted team. A sign-in is one made on the
   card (the browser decides who signs in), one made in a terminal that the Reply CLI's files show as another login or
   another pinned team, or one Reply gives away by refusing the Reply account's own read because the sign-in cannot act
   in its pinned team. After it the teams are read and the Reply account is checked against the note. The same login,
-  still in the noted team, is said nothing of. Another login: the card says what the Reply account was and who it is
-  now, and that campaigns sending through it now send as the new one, and shows no team and lists nothing until you
-  answer. The noted login, or one the Reply CLI does not name, no longer in the noted team: the card says that the Reply
-  account was in that team and that this sign-in can no longer work in it, and lists nothing until you answer. The same
-  login in another of its teams: the card says what the Reply account was and is now, and lists it as it now is. Each
-  offers **Keep it** and **Sign out**, which keeps the note, so the card then says who it was. **Keep it** makes the
-  Reply account as it now is the noted one; after another login, or a team the sign-in is no longer in, it binds the
-  sign-in as a first sign-in is bound, then notes it. Until one is chosen the card says it at every look. Where the
-  teams could not be read, nothing is rebound: the card says so ("The teams of this sign-in could not be read.") with
-  **Check again**, its other reads standing. Nothing prevents such a change: the Reply CLI is yours.
+  still in the noted team, is said nothing of, and a pin cleared, or set to a team it does not act in, is put back.
+  Another login: the card says what the Reply account was and who it is now, and that campaigns sending through it now
+  send as the new one. The same login, no longer in the noted team: the card says that the Reply account was in that
+  team and that this sign-in can no longer work in it. A sign-in the Reply CLI does not name, with no pinned team it
+  acts in to be named in: the card says what the Reply account was, and that who is signed in now cannot be known until
+  it has a team; no pin is written before it is known. For these three the card shows no team, and Reply is asked for
+  none of its mailboxes and LinkedIn accounts, until you answer. The same login in another of its teams: the card says
+  the Reply account's team changed, and lists it as it now is. Each offers **Keep it** and **Sign out**, which keeps
+  the note, so the card then says who it was. Until you answer, the card offers nothing to do in the Reply account, and
+  Jason Desktop refuses a connect, an act on a mailbox or a LinkedIn account and a **Choose** for it ("The sign-in of
+  this Reply account changed: keep it or sign it out on its card first, so nothing was changed."). **Keep it** makes the
+  Reply account as it now is the noted one, where it is in another of its teams; otherwise its team is picked afresh:
+  the pin its profile holds no longer stands, even where the new sign-in acts in it, one team is bound by itself, and
+  several are offered with **Choose**, which writes over that pin; the Reply account is noted once it is bound. Until
+  you answer, the card says it at every look. Where the teams could not be read, nothing is rebound: the card says so
+  ("The teams of this sign-in could not be read.") with **Check again**, its other reads standing. Nothing prevents such
+  a change: the Reply CLI is yours.
   A signed-in card lists its Reply account's mailboxes and LinkedIn accounts, each channel read on its own, so a Reply
   account without LinkedIn still shows its mailboxes. A channel that Reply account's plan or role does not have says so
   ("This Reply account has no LinkedIn."), and one that could not be read says that and offers **Check again**; what the
@@ -739,9 +751,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   sign-in, or the profile and its sign-in, too, and, where a route names the Reply account, that campaigns sending
   through it stop; a removed Reply account a route names keeps its card, not signed in. They run `reply --profile <name>
   auth logout` and `reply profile delete <name> --yes`, and change no route. A refusal is said on the card in Jason
-  Desktop's sentence, then the reason the Reply CLI gives. The acts on a Reply account, these, its sign-ins, Choose,
-  Make default, Keep it and the acts on its mailboxes and LinkedIn accounts, run one at a time: one asked while another
-  runs is refused, and the cards' acts are off meanwhile.
+  Desktop's sentence, then the reason the Reply CLI gives; a pick Reply refuses, in Jason Desktop's sentence alone,
+  which names no team. The acts on a Reply account, these, its sign-ins, Choose, Make default, Keep it and the acts on
+  its mailboxes and LinkedIn accounts, run one at a time: one asked while another runs is refused, and the cards' acts
+  are off meanwhile.
   The acts that run the Reply CLI are offered only from the Reply CLI that has them. Below that version the Reply
   section says to update the Reply CLI and offers **Update**, where npm is there to update it with; a Reply CLI whose
   version could not be read is said as that ("The Reply CLI's version could not be read.") with **Check again**, never
