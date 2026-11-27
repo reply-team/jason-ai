@@ -1088,6 +1088,31 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     assert.deepEqual((await seen())['default'], { last: { user: 'ada@example.test', team: { id: '6', name: 'Made-up Six' } }, changed: false });
     assert.deepEqual(b.world().profiles, { default: { team_id: 6 }, spare: {} }, 'the note is never written into the Reply CLI’s files');
     assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false, 'nor into the installation’s settings');
+    // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote.
+    const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3] } });
+    let release: () => void = () => undefined;
+    let holding = false;
+    const slow: Programs = {
+        find: (name) => overlapping.programs.find(name),
+        run: async (name, args, options) => {
+            const result = await overlapping.programs.run(name, args, options);
+            if (holding && name === 'reply' && args.join(' ') === '--profile default auth status --json') {
+                holding = false;
+                await new Promise<void>((resolve) => (release = resolve));
+            }
+            return result;
+        },
+    };
+    const looks = new Setup({ ...setupDeps(overlapping), programs: slow });
+    holding = true;
+    const older = looks.status();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    looks.announceChange();
+    const newer = (await looks.status()).accounts?.accounts[0];
+    release();
+    const late = (await older).accounts?.accounts[0];
+    const ada = { user: 'ada@example.test', team: { id: '3', name: '' } };
+    assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.changed], [ada, ada, false]);
 });
 
 test('one act on a Reply account at a time, whatever it is: while Make default or a sign-in places the plugin, every other act on a Reply account, a sign-in, Make default and Keep it among them, is refused as busy and runs nothing', async (t) => {

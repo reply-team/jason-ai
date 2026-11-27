@@ -1029,28 +1029,30 @@ export class Setup {
      */
     #noted(account: AccountState, notes: readonly AccountNote[]): AccountState {
         const now = account.signedIn && account.user !== null && account.team != null ? { user: account.user, team: account.team } : null;
-        const kept = notes.find((each) => sameAccount(each, account)) ?? (now !== null && this.#note(account, now, 'look') ? now : null);
+        const kept = notes.find((each) => sameAccount(each, account)) ?? (now === null ? null : this.#note(account, now, 'look'));
         return { ...account, lastSignIn: kept === null ? null : { user: kept.user, team: kept.team }, changed: kept !== null && now !== null && !sameSignIn(kept, now) };
     }
 
     /**
      * Writes one account's note, or takes it away (`signIn` null), on the file as it is at this moment, read and written in
      * one turn of the event loop so no other write comes between. A look notes only an account that has nothing noted by
-     * then. Whether the note was written.
+     * then, and takes the note another look wrote meanwhile. What is noted for the account after it; null where nothing is,
+     * or the note could not be written.
      */
-    #note(account: AccountRef, signIn: SignIn | null, moment: 'look' | 'keep' | 'remove'): boolean {
+    #note(account: AccountRef, signIn: SignIn | null, moment: 'look' | 'keep' | 'remove'): SignIn | null {
         const file = this.#deps.paths.replyAccounts;
         const notes = readAccountNotes(file);
-        const others = notes.filter((each) => !sameAccount(each, account));
-        if ((moment === 'look' && others.length !== notes.length) || (signIn === null && others.length === notes.length)) return false;
+        const noted = notes.find((each) => sameAccount(each, account)) ?? null;
+        if (moment === 'look' && noted !== null) return { user: noted.user, team: noted.team };
+        if (signIn === null && noted === null) return null;
         try {
-            writeAccountNotes(file, signIn === null ? others : [...others, { type: account.type, name: account.name, ...signIn }]);
+            writeAccountNotes(file, [...notes.filter((each) => each !== noted), ...(signIn === null ? [] : [{ type: account.type, name: account.name, ...signIn }])]);
         } catch {
             this.#deps.log.warn('reply_account_noted', { Moment: moment, Written: false });
-            return false;
+            return null;
         }
         this.#deps.log.info('reply_account_noted', { Moment: moment, Written: true });
-        return true;
+        return signIn;
     }
 
     /** The teams an account's sign-in can act in (`reply --profile <name> team list --json`); null where they were not read. */
@@ -1603,7 +1605,7 @@ export class Setup {
         const { user, team } = account;
         return this.#oneAct<ReplyDone | ReplyRefusal>(
             () => refusal(said.busy),
-            async () => (this.#note(account, { user, team }, 'keep') ? this.#announced({ done: true }) : refusal(accountSentences.notKept)),
+            async () => (this.#note(account, { user, team }, 'keep') !== null ? this.#announced({ done: true }) : refusal(accountSentences.notKept)),
         );
     }
 
