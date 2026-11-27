@@ -637,8 +637,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   default. Each places only what `jason plugin list` shows missing of the plugin and its grant, so where both are there
   it fetches nothing and leaves the settings file to the runtime; a plugin listed and not valid, as after a Reply CLI
   installed or updated outside Jason Desktop, is loaded again. A sign-in where a default is set leaves it as it is.
-  A sign-in or a key that is refused is said on the card it was asked on; a sign-in that went through and could not
-  place the plugin says that first, then the refusing program's own words.
+  A sign-in or a key that is refused is said on the card it was asked on, in Jason Desktop's sentence and the reason the
+  Reply CLI gives; a sign-in that went through and could not place the plugin says that first, then the refusing
+  program's own words. The line goes at your next act, at a look that shows that account's sign-in changed, or when the
+  card comes to show another account.
   A card signs its own profile in, with `reply auth login` or with a key on standard input that only the Reply CLI
   keeps; a profile only a route names is made in the Reply CLI first (`reply profile add`), and a profile the Reply CLI
   holds never is. A card says "configured" when the runtime accepted it, never "connected". What the desktop tells
