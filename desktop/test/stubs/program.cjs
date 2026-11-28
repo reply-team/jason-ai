@@ -220,13 +220,15 @@ if (process.env.STUB_HANG === name) {
         keepWorld();
         answer({ print: { deleted, credential_removed: credential !== undefined, current_reset: reset } });
     }
-} else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'show' && rest.length === 4 && rest[3] === '--json') {
+} else if (name === 'reply' && rest[0] === 'profile' && rest[1] === 'show' && ((rest.length === 4 && rest[3] === '--json') || (rest.length === 5 && rest[2] === '--json' && rest[3] === '--'))) {
     // `profile show <name>` ignores --profile and asks Reply nothing (src/commands/profile.ts `handle_show`): the profile's
     // backend, each address its own or the built-in one it inherits (src/profile.ts `EMBEDDED`, `describe_profile`), its
     // pin, and its stored sign-in without a secret; an address without its trailing slashes (`strip_trailing_slash`). A
-    // name it does not hold is usage.profile, exit 2.
+    // name it does not hold is usage.profile, exit 2. The name comes after `--`, which commander takes as the end of the
+    // options; given before it, a name that is one of the CLI's flags is read as that flag, and the current profile shown.
     // STUB_REPLY_PROFILE_SHOW names another ending.
-    const shown = rest[2];
+    const named = rest.length === 5 ? rest[4] : rest[2];
+    const shown = rest.length === 4 && ['--json', '--pretty', '--verbose', '-q', '--quiet'].includes(named) ? listedProfiles.current : named;
     const own = world !== null ? ((world.profiles ?? {})[shown] ?? {}) : {};
     const builtIn = { authority: 'https://oauth.reply.io', api_base: 'https://api.reply.io' };
     if (process.env.STUB_REPLY_PROFILE_SHOW) answer(JSON.parse(process.env.STUB_REPLY_PROFILE_SHOW));

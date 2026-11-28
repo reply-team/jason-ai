@@ -56,7 +56,7 @@ export function readProfiles(result: { exit: number; stdout: string }): Profiles
 }
 
 /**
- * Where a profile points, as `reply profile show <name> --json` prints it with no call to Reply (reply-cli 0.23.2,
+ * Where a profile points, as `reply profile show --json -- <name>` prints it with no call to Reply (reply-cli 0.23.2,
  * src/commands/profile.ts `show_json`): `backend.api_base`, the API address its runs use, and whether the profile inherits
  * it (`backend.inherited.api_base`), which it can only from the Reply CLI's own built-in address (src/profile.ts
  * `EMBEDDED`, `resolve_profile`), production.

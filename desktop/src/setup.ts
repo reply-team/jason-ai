@@ -1213,9 +1213,12 @@ export class Setup {
         return entry;
     }
 
-    /** Where an account's profile points (`reply profile show <name> --json`), with no call to Reply; null where not read. */
+    /**
+     * Where an account's profile points (`reply profile show --json -- <name>`), with no call to Reply; null where not read.
+     * The name comes after `--`, so one shaped like a flag of the Reply CLI is read as a name.
+     */
     async #backend(account: AccountRef): Promise<ProfileBackend | null> {
-        return readBackend(await this.#run('reply', 'profile show', ['profile', 'show', account.name, '--json']));
+        return readBackend(await this.#run('reply', 'profile show', ['profile', 'show', '--json', '--', account.name]));
     }
 
     /**

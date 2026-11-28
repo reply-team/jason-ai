@@ -2089,8 +2089,8 @@ test('each account is read under its own profile’s name alone, a profile only 
     assert.ok(runs.includes('--profile quiet auth status --json'));
     assert.equal(runs.some((run) => run.includes('routed-only')), false, 'nothing is asked of the CLI for a profile it does not hold');
     assert.equal(runs.some((run) => run.startsWith('--profile quiet account')), false, 'nothing is listed for a profile with no sign-in');
-    assert.ok(runs.includes('profile show quiet --json'), 'where each profile points is read with no call to Reply');
-    for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile ') || /^profile show \S+ --json$/.test(run), `every other run names its account: ${run}`);
+    assert.ok(runs.includes('profile show --json -- quiet'), 'where each profile points is read with no call to Reply');
+    for (const run of runs) assert.ok(run === '--version' || run === 'profile list --json' || run.startsWith('--profile ') || /^profile show --json -- \S+$/.test(run), `every other run names its account: ${run}`);
     assert.equal(JSON.stringify(log.lines).includes('api.example.test'), false, 'the address reaches no log');
     // Where that could not be read, nothing is said of it.
     const unread = replyBench(t, world, { STUB_REPLY_PROFILE_SHOW: JSON.stringify({ code: 'config.read' }) });
@@ -2099,7 +2099,8 @@ test('each account is read under its own profile’s name alone, a profile only 
     // Production is the Reply CLI's built-in address, never learned from another profile: where no profile inherits it,
     // `default` pointing at another Reply is marked, and a profile that names production itself, in any letter case, with
     // its default port or a trailing slash, is not. An address is read in any letter case and without blanks around it;
-    // anything else written beside production, a query or a fragment, is another address.
+    // anything else written beside production, a query or a fragment, is another address. A profile named like one of the
+    // Reply CLI's flags is read as itself, not as that flag.
     const noneInherits = replyBench(t, {
         profiles: {
             default: { api_base: 'https://api.dev.example.test' },
@@ -2110,6 +2111,7 @@ test('each account is read under its own profile’s name alone, a profile only 
             padded: { api_base: ' https://api.dev.example.test ' },
             queried: { api_base: 'https://api.reply.io?x=1' },
             fragment: { api_base: 'https://api.reply.io#x' },
+            '--pretty': {},
         },
     });
     assert.deepEqual(
@@ -2123,6 +2125,7 @@ test('each account is read under its own profile’s name alone, a profile only 
             ['padded', 'https://api.dev.example.test'],
             ['queried', 'https://api.reply.io?x=1'],
             ['fragment', 'https://api.reply.io#x'],
+            ['--pretty', undefined],
         ],
     );
     // A global default that names no profile is, at each read, the account of the profile the Reply CLI is set to then: a
