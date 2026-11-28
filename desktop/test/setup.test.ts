@@ -2212,6 +2212,10 @@ test('the members a page of an earlier version reads are the default account’s
         const card = teamedAccounts?.accounts.find((each) => each.name === 'outbound');
         assert.deepEqual([teamedReply.wired, teamedReply.user, card?.default, card?.team?.id], [wired, 'ada@example.test', true, '9'], team);
     }
+    // A key acts in its own team whatever team is asked, so the plugin sends as it in that team all the same.
+    const keyedTeam = replyBench(t, { profiles: { outbound: { team_id: 9 } }, credentials: { outbound: { login: 'ada@example.test', key: 9 } }, seats: { 'ada@example.test': [9, 5] } });
+    writeInstallationSettings(keyedTeam, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound', team_id: '5' } } } });
+    assert.equal((await setupOn(keyedTeam).status()).reply.wired, true, 'a key');
     // A Reply default that names no profile is the account of the profile the Reply CLI is set to, and names it.
     const unnamed = bench(t, { programs: ['reply'] });
     writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: {} } } });

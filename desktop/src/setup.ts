@@ -681,7 +681,8 @@ export class Setup {
     /**
      * The accounts the next look checks against their note (`bindingOf`) whatever their login and pin, each with the count
      * of marks at its own mark: one signed in on its card in this run; one a look found changed, while that change is not
-     * answered, so no look asks Reply for its mailboxes and LinkedIn accounts meanwhile; and one a look left undecided,
+     * answered, so every look checks it again, listing nothing under another login or a team left, and the new team's under
+     * a change of team; and one a look left undecided,
      * another look having noted it meanwhile or Reply naming another login once it was decided. Only a look that began
      * after the mark, and found the account bound with nothing changed and nothing unread, clears it.
      */
@@ -1046,14 +1047,14 @@ export class Setup {
         const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => {
                 const noted = notedOf(notes, account);
-                const { state, pin, userId, fromReply, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
+                const { state, pin, userId, fromReply, keyed, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
                 const marked = {
                     ...state,
                     default: listing?.default != null && sameAccount(account, listing.default),
                     defaultFor: listing?.defaultFor.get(account.name) ?? [],
                     followed: listing?.followed === account.name,
                 };
-                return { account: marked, noted, pin, userId, fromReply, backend };
+                return { account: marked, noted, pin, userId, fromReply, keyed, backend };
             }),
         );
         for (const each of read) {
@@ -1066,7 +1067,8 @@ export class Setup {
         this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin, userId }) => [account.name, { pin, userId }])));
         const acting = actingOf(accounts);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
-        const sendsIn = defaultTeam(routes);
+        // The team the global default sends in, where it names one; a key acts in its own team whatever team is asked.
+        const sendsIn = read.find(({ account }) => account.name === acting?.name)?.keyed === true ? null : defaultTeam(routes);
         const reply: ReplyState =
             acting === null
                 ? { cli, ...nobody, notRead: ['auth', ...routeUnread], ...tail }
@@ -1099,7 +1101,7 @@ export class Setup {
      * beside it, where the profile points (`profile show`, which names the profile as its argument). A profile the CLI
      * does not hold is asked nothing.
      */
-    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null; fromReply: boolean; backend: ProfileBackend | null }> {
+    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null; fromReply: boolean; keyed: boolean; backend: ProfileBackend | null }> {
         const [read, backend] = await Promise.all([this.#readSignIn(account, held, noted), held ? this.#backend(account) : null]);
         return { ...read, backend };
     }
@@ -1112,14 +1114,14 @@ export class Setup {
      * acts in (`asksIn`); `bindingOf` decides once; and the account is bound where it says, who it is asked in the team
      * pinned where the gathering could not ask there. The pin is the one the account is left with.
      */
-    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null; fromReply: boolean }> {
+    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null; fromReply: boolean; keyed: boolean }> {
         const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: shownSignIn(noted), change: null };
-        if (!held) return { state: read, pin: null, userId: null, fromReply: false };
+        if (!held) return { state: read, pin: null, userId: null, fromReply: false, keyed: false };
         const marks = this.#marks;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
         const auth = await this.#pinned(account);
-        if (auth === null) return { state: { ...read, notRead: ['auth'] }, pin: null, userId: null, fromReply: false };
-        if (!auth.signedIn) return { state: read, pin: auth.team, userId: null, fromReply: false };
+        if (auth === null) return { state: { ...read, notRead: ['auth'] }, pin: null, userId: null, fromReply: false, keyed: false };
+        if (!auth.signedIn) return { state: read, pin: auth.team, userId: null, fromReply: false, keyed: false };
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
         const files: SignInFiles = { pin: auth.team, login: auth.user, userId: auth.userId, keyTeam: auth.keyTeam };
         const asked = (team: string) => this.#asked.has(askedKey(account, team));
@@ -1136,7 +1138,7 @@ export class Setup {
                 if (asking == null || sameUser(userOf(asking), noted)) {
                     const named = { ...noted.team, name: owed?.find((each) => each.id === noted.team.id)?.name ?? noted.team.name };
                     const state: AccountState = { ...signedIn, ...lists, user: asking?.login ?? noted.user, team: namedBy(named, asking ?? null), notRead: owed === null ? ['teams'] : [] };
-                    return { state, pin: auth.team, userId: noted.id ?? asking?.userId ?? auth.userId, fromReply: asking != null };
+                    return { state, pin: auth.team, userId: noted.id ?? asking?.userId ?? auth.userId, fromReply: asking != null, keyed: auth.keyTeam !== null };
                 }
             }
             [listed, refused] = [lists, outOfTeam];
@@ -1178,11 +1180,11 @@ export class Setup {
         if (binding.change !== null || later) this.#markToCheck(account);
         else if (team !== null && user !== null) this.#checked(account, marks);
         const now: AccountState = { ...signedIn, user, team: team === null ? null : namedBy(team, answer), change: binding.change, notRead };
-        const fromReply = answer !== null;
-        if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin, userId: id, fromReply };
-        if (!binding.lists) return { state: now, pin, userId: id, fromReply };
+        const [fromReply, keyed] = [answer !== null, auth.keyTeam !== null];
+        if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin, userId: id, fromReply, keyed };
+        if (!binding.lists) return { state: now, pin, userId: id, fromReply, keyed };
         // The account's own read made before it was decided stands for the same pin.
-        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin, userId: id, fromReply };
+        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin, userId: id, fromReply, keyed };
     }
 
     /** Marks the account for the next look to check (`#toCheck`). */
