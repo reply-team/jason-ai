@@ -1174,6 +1174,34 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     await setup.removeAccount(outbound);
     assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '41' }] });
     assert.deepEqual(Object.keys(await seen()), ['default', 'spare']);
+    // Nor does a look begun before the Remove note it again, though it read it signed in: here an account its first look
+    // offered two teams, one of which a terminal then pins.
+    const removing = replyBench(t, { profiles: { spare: {} }, credentials: { spare: 'bea@example.test' }, seats: { 'bea@example.test': [5, 9] } });
+    let [holdingSpare, letGo] = [false, () => undefined as void];
+    const removingSetup = new Setup({
+        ...setupDeps(removing),
+        confirm: () => Promise.resolve(true),
+        programs: {
+            find: (name) => removing.programs.find(name),
+            run: async (name, args, options) => {
+                const result = await removing.programs.run(name, args, options);
+                if (holdingSpare && name === 'reply' && args.join(' ') === '--profile spare auth status --json') {
+                    holdingSpare = false;
+                    await new Promise<void>((resolve) => (letGo = resolve));
+                }
+                return result;
+            },
+        },
+    });
+    assert.deepEqual((await removingSetup.status()).accounts?.accounts.find((one) => one.name === 'spare')?.teams?.map((team) => team.id), ['5', '9']);
+    writeFileSync(removing.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...removing.world(), profiles: { spare: { team_id: 9 } } }));
+    holdingSpare = true;
+    const begunBefore = removingSetup.status();
+    while (holdingSpare) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(await removingSetup.removeAccount({ type: 'reply', name: 'spare' }), { done: true });
+    letGo();
+    await begunBefore;
+    assert.equal(existsSync(removing.paths.replyAccountNotes) && readFileSync(removing.paths.replyAccountNotes, 'utf8').includes('"spare"'), false, 'nothing noted of the account removed');
     // The note never decides which accounts there are: one it names that the Reply CLI holds not, and no route names, is
     // no account. A note that cannot be read is no note: the next look finds nothing noted, and notes again.
     writeFileSync(file, JSON.stringify({ accounts: [{ type: 'reply', name: 'ghost', ...cy4 }, { type: 'reply', name: 'default', ...ada3 }] }));

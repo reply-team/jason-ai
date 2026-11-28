@@ -706,6 +706,8 @@ export class Setup {
     /** How many reads of the setup have begun, and which of them gave `#listed` and `#routed`. */
     #readsBegun = 0;
     #listedBy = 0;
+    /** The accounts removed in this run, each with the reads begun by then: a read that began before notes nothing of it. */
+    #removed = new Map<string, number>();
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -1058,7 +1060,7 @@ export class Setup {
             if (elsewhere !== null) each.account = { ...each.account, nonProductionApi: elsewhere };
         }
         // Noted in the listing's order once every account is read, so the note is written in one order.
-        const accounts = read.map(({ account, noted, userId }) => this.#noted(account, noted, userId));
+        const accounts = read.map(({ account, noted, userId }) => (begun <= (this.#removed.get(account.name) ?? 0) ? account : this.#noted(account, noted, userId)));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
         this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin, userId }) => [account.name, { pin, userId }])));
         const acting = actingOf(accounts);
@@ -1817,6 +1819,7 @@ export class Setup {
             const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
             this.#deps.log.info('reply_account_removed', { Exit: result.exit });
             if (result.exit !== 0) return cliRefusal(result, accountSentences.notRemoved);
+            this.#removed.set(account.name, this.#readsBegun);
             this.#note(account, null, 'remove');
             return this.#announced({ done: true });
         });
