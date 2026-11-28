@@ -1128,7 +1128,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     // The first look notes each account signed in and bound, with Reply's id of its user; one signed out, or never signed
     // in, has nothing noted.
     assert.deepEqual(await seen(), { default: { last: ada3, change: null }, outbound: { last: bea9, change: null }, spare: { last: null, change: null } });
-    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '41' }, { type: 'reply', name: 'outbound', ...bea9, id: '42' }] });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '4103' }, { type: 'reply', name: 'outbound', ...bea9, id: '4209' }] });
     assert.deepEqual(log.lines.filter((line) => line.name === 'reply_account_noted').map((line) => line.fields), [{ Moment: 'look', Written: true }, { Moment: 'look', Written: true }]);
     // Signed out in a terminal: who it was last signed in as stays.
     world((current) => ({ ...current, credentials: { default: 'ada@example.test' } }));
@@ -1172,7 +1172,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     await setup.signOut(outbound);
     assert.deepEqual((await seen())['outbound'], { last: cy4, change: null });
     await setup.removeAccount(outbound);
-    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '41' }] });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '4103' }] });
     assert.deepEqual(Object.keys(await seen()), ['default', 'spare']);
     // Nor does a look begun before the Remove note it again, though it read it signed in: here an account its first look
     // offered two teams, one of which a terminal then pins.
@@ -1238,7 +1238,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     const late = (await older).accounts?.accounts[0];
     const ada6 = { user: 'ada@example.test', team: { id: '6', name: '' } };
     assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [ada6, ada6, null]);
-    assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6, id: '41' }] });
+    assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6, id: '4106' }] });
     from = overlapping.record().length;
     const next = (await looks.status()).accounts?.accounts[0];
     assert.deepEqual([next?.team, next?.change, runsAfter(overlapping, from, 'reply').filter((run) => run.includes('team list'))], [ada6.team, null, ['--profile default team list --json']]);
@@ -1271,7 +1271,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     assert.deepEqual(await webSetup.keepChange(web), { done: true });
     assert.deepEqual(await webSeen(), { user: null, team: null, last: null, change: null, teams: ['4', '5'] });
     assert.deepEqual(await webSetup.chooseTeam(web, '5'), { done: true });
-    assert.deepEqual(JSON.parse(readFileSync(unnamed.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'web', ...cy5, id: '43' }] }, 'the pick is noted at once');
+    assert.deepEqual(JSON.parse(readFileSync(unnamed.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'web', ...cy5, id: '4305' }] }, 'the pick is noted at once');
     assert.deepEqual(await webSeen(), { ...cy5, last: cy5, change: null, teams: undefined });
     writeFileSync(unnamed.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...unnamed.world(), profiles: { web: { team_id: 4 } } }));
     assert.deepEqual(await webSeen(), { user: 'cy@example.test', team: { id: '4', name: 'Made-up Four' }, last: cy5, change: 'team', teams: undefined });
@@ -1294,14 +1294,17 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         teams: { '4': 'Made-up Four', '5': 'Made-up Five', '6': 'Made-up Six', '7': 'Made-up Seven', '8': 'Made-up Eight' },
         keys: { 'k-bea': { login: bea, team: 5 }, 'k-bea8': { login: bea, team: 8 }, 'k-cy': { login: cy, team: 4 }, 'k-dee': { login: dee, team: 7 } },
         lists: { [`${bea}#5`]: { email: [mailbox] }, [`${cy}#5`]: { email: [mailbox] }, [`${bea}#8`]: { email: [otherMailbox] } },
+        ids: { [bea]: 42, [cy]: 43, [dee]: 44 },
     };
-    type Case = { env?: Record<string, string>; restart?: boolean; count?: string; start?: boolean; org?: boolean };
-    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count, start = false, org = false }: Case = {}) => {
+    type Case = { env?: Record<string, string>; restart?: boolean; count?: string; start?: boolean; org?: boolean; note?: boolean };
+    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count, start = false, org = false, note = false }: Case = {}) => {
         const each = replyBench(t, world, env);
         writeInstallationSettings(each, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
         if (noted !== null) {
             mkdirSync(dirname(each.paths.replyAccountNotes), { recursive: true });
-            writeFileSync(each.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: noted, team: { id: '5', name: 'Made-up Five', ...(org ? { org: { id: '4242', name: 'Made-up Org' } } : {}) } }] }));
+            // Noted as a look notes it: with Reply's id of the user's seat in team 5, where the world gives the login one.
+            const seat = world.ids?.[noted] === undefined ? {} : { id: String(world.ids[noted]! * 100 + 5) };
+            writeFileSync(each.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: noted, ...seat, team: { id: '5', name: 'Made-up Five', ...(org ? { org: { id: '4242', name: 'Made-up Org' } } : {}) } }] }));
         }
         let setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
         await setup.status();
@@ -1333,6 +1336,10 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
             return views;
         };
         const views = await looks();
+        if (note) {
+            const entry = (JSON.parse(readFileSync(each.paths.replyAccountNotes, 'utf8')) as { accounts: { user?: string; id?: string; team?: { id: string } }[] }).accounts[0];
+            views.push(`noted ${entry?.user ?? '-'} ${entry?.id ?? '-'} ${entry?.team?.id ?? '-'}`);
+        }
         if (count === undefined) return views;
         return [...views, `${count} ×${runsAfter(each, since, 'reply').filter((run) => run.startsWith(`--profile web ${count} `)).length}`];
     };
@@ -1350,7 +1357,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         // Reply does not name it, in a team it is not in: who it is is not known until it has a team.
         ['another login not in the pinned team, by a browser', { ...room, browser: dee }, bea, byBrowser, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, `${dee} 7 [] same last ${dee} 7 pin 7`, `${dee} 7 [] same last ${dee} 7 pin 7`]],
         // Its key acts in its own team: the change is said again by a desktop started again before it is answered.
-        ['the same login, no longer in the noted team, by a key', { ...room, seats: { ...room.seats, [bea]: [8] } }, bea, byKey('k-bea8'), null, [`${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} 8 [56] same last ${bea} 8 pin 8`, `${bea} 8 [56] same last ${bea} 8 pin 8`], { restart: true }],
+        ['the same login, no longer in the noted team, by a key', { ...room, seats: { ...room.seats, [bea]: [8] } }, bea, byKey('k-bea8'), null, [`${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} 8 [56] same last ${bea} 8 pin 8`, `${bea} 8 [56] same last ${bea} 8 pin 8`, `noted ${bea} 4208 8`], { restart: true, note: true }],
         // A key of the same login pasted in a terminal, acting in another of its teams under the noted pin: not the noted
         // sign-in, from this desktop or one started again.
         ['the same login by a key of another of its teams, signed in in a terminal under the noted pin', { ...room, seats: { ...room.seats, [bea]: [5, 8] }, credentials: { web: { login: bea, key: 8 } } }, bea, none, null, [`${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} - [] unlisted left last ${bea} 5 pin 5`, `${bea} 8 [56] same last ${bea} 8 pin 8`, `${bea} 8 [56] same last ${bea} 8 pin 8`], { restart: true }],
@@ -1413,13 +1420,13 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     assert.deepEqual(await atStart(), { user: bea, team: '5', change: null, last: bea });
     rename({ renamed: { [bea]: beaNew } });
     for (const start of ['the next start', 'a start after it']) assert.deepEqual(await atStart(), { user: beaNew, team: '5', change: null, last: beaNew }, start);
-    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: beaNew, id: '42', team: { id: '5', name: 'Made-up Five' } }]);
+    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: beaNew, id: '4205', team: { id: '5', name: 'Made-up Five' } }]);
     rename({ credentials: { web: cy }, renamed: { [bea]: beaNew, [cy]: cyNew } });
     const keepingRenamed = setupOn(renamedAt);
     assert.deepEqual(await atStart(keepingRenamed), { user: cyNew, team: undefined, change: 'login', last: beaNew });
     assert.deepEqual(await keepingRenamed.keepChange(web), { done: true });
     assert.deepEqual(await atStart(keepingRenamed), { user: cyNew, team: '5', change: null, last: cyNew });
-    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: cyNew, id: '43', team: { id: '5', name: 'Made-up Five' } }]);
+    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: cyNew, id: '4305', team: { id: '5', name: 'Made-up Five' } }]);
     // A look that began before a sign-in on the card does not count as its check: the next look still checks it.
     const racing = replyBench(t, { ...room, credentials: { web: bea } });
     writeInstallationSettings(racing, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
@@ -1602,9 +1609,9 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(bound(await accountOf(setupOn(unread), 'outbound')), { team: { id: '9', name: null }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [] });
     const notedUnread = readFileSync(unread.paths.replyAccountNotes, 'utf8');
     const notedAs = (text: string, name: string) => (JSON.parse(text) as { accounts: { name: string }[] }).accounts.find((each) => each.name === name);
-    assert.deepEqual(notedAs(notedUnread, 'outbound'), { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '42', team: { id: '9', name: null } });
+    assert.deepEqual(notedAs(notedUnread, 'outbound'), { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '4209', team: { id: '9', name: null } });
     // So is a key's, though its team is known without them: its own.
-    assert.deepEqual(notedAs(notedUnread, 'keyed'), { type: 'reply', name: 'keyed', user: 'bea@example.test', id: '42', team: { id: '5', name: null } });
+    assert.deepEqual(notedAs(notedUnread, 'keyed'), { type: 'reply', name: 'keyed', user: 'bea@example.test', id: '4205', team: { id: '5', name: null } });
     // While they still cannot be read, the noted login in its noted pin is taken as noted: nothing rebound, nothing said.
     const stillUnread = (await setupOn(unread).status()).accounts?.accounts.find((each) => each.name === 'outbound');
     assert.deepEqual({ ...bound(stillUnread), change: stillUnread?.change }, { team: { id: '9', name: null }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [], change: null });
@@ -1768,8 +1775,8 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: bothAsked });
     const orgNoted = readFileSync(carried.paths.replyAccountNotes, 'utf8');
     assert.deepEqual([notedAs(orgNoted, 'default'), notedAs(orgNoted, 'outbound')], [
-        { type: 'reply', name: 'default', user: 'ada@example.test', id: '41', team: default3 },
-        { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '42', team: nine },
+        { type: 'reply', name: 'default', user: 'ada@example.test', id: '4103', team: default3 },
+        { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '4209', team: nine },
     ]);
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'the next look');
     assert.deepEqual(await looked(carried, setupOn(carried, orgLog)), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'a desktop started again');
@@ -1779,7 +1786,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     from = carried.record().length;
     assert.deepEqual(await carriedSetup.chooseTeam({ type: 'reply', name: 'picking' }, '9'), { done: true });
     assert.deepEqual(runsAfter(carried, from, 'reply').filter((run) => run.includes('auth whoami')), ['--profile picking auth whoami --json']);
-    assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', id: '42', team: nine });
+    assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', id: '4209', team: nine });
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine], ['picking', nine]], whoami: [] }, 'the look after Choose');
     // Another of the login's teams pinned in a terminal: the change names the new team with its organization too. Each look
     // while the change waits checks the sign-in, so Reply is asked once at each, in that team; the answer decides nothing.

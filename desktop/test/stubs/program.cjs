@@ -33,7 +33,7 @@ const said = rest.join(' ');
 //    "seats": {"ada@example.test": [3, 9]}, "lists": {"ada@example.test#3": {"email": [...], "linkedin": [...]}},
 //    "browser": "ada@example.test", "keys": {"made-up-key": {"login": "bea@example.test", "team": 9}},
 //    "teams": {"9": "Made-up Nine"}, "whoami": {"9": {"orgId": 12, "orgName": "Made-up Org"}},
-//    "ids": {"ada@example.test": 41}, "renamed": {"ada@example.test": "ada.new@example.test"}}
+//    "ids": {"ada@example.test": 41}, "renamed": {"ada@example.test": "ada.new@example.test"}}   (ada's id in team 9: 4109)
 // `default` is always a profile; a sign-in is kept under its profile's name, apart from the profiles, so `profile add`
 // replaces a profile's settings and never its sign-in. A browser's sign-in is its login, or {"login": …, "unnamed": true}
 // where Reply would not name it: reply-cli asks Reply's /v3/whoami in the profile's pinned team right after the browser
@@ -56,10 +56,10 @@ const loginOf = (profile) => {
     const credential = (world.credentials ?? {})[profile];
     return typeof credential === 'object' && credential !== null ? credential.login : credential;
 };
-// The Reply user a login is: its id, the world's `ids` where it names one, else a number of the login's own, so two logins
-// are two users; and the address Reply names it by now, the world's `renamed` where the person changed it at Reply since
-// the Reply CLI stored it.
-const userIdOf = (login) => (world?.ids ?? {})[login] ?? [...login].reduce((sum, each) => (sum * 31 + each.codePointAt(0)) % 999_983, 7) + 1;
+// Reply's id of a login's user in a team: one id in each of its teams, as Reply gives a seat its own, made of the login's
+// number (the world's `ids` where it names one, else one of the login's own) and the team; and the address Reply names it
+// by now, the world's `renamed` where the person changed it at Reply since the Reply CLI stored it.
+const userIdOf = (login, team) => ((world?.ids ?? {})[login] ?? [...login].reduce((sum, each) => (sum * 31 + each.codePointAt(0)) % 9_973, 7) + 1) * 100 + Number(team);
 const nameOf = (login) => (world?.renamed ?? {})[login] ?? login;
 const namedBy = (profile) => {
     const credential = (world.credentials ?? {})[profile];
@@ -265,7 +265,7 @@ if (process.env.STUB_HANG === name) {
     const key = world !== null ? keyTeamOf(profile) : undefined;
     const seat = key ?? (world !== null ? ((world.seats ?? {})[login] ?? [3])[0] : 3);
     const pinned = world !== null ? ((world.profiles ?? {})[profile] ?? {}).team_id : 3;
-    const user = named ? { user: { id: world !== null ? userIdOf(login) : 7, username: login, team_id: seat } } : {};
+    const user = named ? { user: { id: world !== null ? userIdOf(login, seat) : 7, username: login, team_id: seat } } : {};
     process.stdout.write(JSON.stringify(login ? { authenticated: true, profile, source: 'store', method: key !== undefined ? 'api_key' : 'oauth', ...user, ...(pinned === undefined ? {} : { team_id: pinned }) } : { authenticated: false, profile }));
     if (!login) process.exitCode = 1;
 } else if (name === 'reply' && said === 'auth whoami --json' && process.env.STUB_REPLY_WHOAMI) {
@@ -284,7 +284,7 @@ if (process.env.STUB_HANG === name) {
     if (!login) answer({ code: 'auth.required', exit: 2 });
     else if (team === null) refusedAccess('TEAM_REQUIRED');
     else if (keyTeamOf(inUse()) === undefined && !seats.includes(team)) refusedAccess('TEAM_NOT_ACCESSIBLE');
-    else answer({ print: { userId: userIdOf(login), username: nameOf(login), teamId: team, ...carried } });
+    else answer({ print: { userId: userIdOf(login, team), username: nameOf(login), teamId: team, ...carried } });
 } else if (name === 'reply' && said === 'team list --json' && process.env.STUB_REPLY_TEAM_LIST) {
     // A read of the teams that ended as STUB_REPLY_TEAM_LIST names it, as reply-cli prints `teams.unavailable` and the like.
     answer(JSON.parse(process.env.STUB_REPLY_TEAM_LIST));
@@ -317,7 +317,7 @@ if (process.env.STUB_HANG === name) {
         world.credentials = { ...(world.credentials ?? {}), [inUse()]: named ? login : { login, unnamed: true } };
         keepWorld();
     }
-    const user = named ? { user: { id: world !== null ? userIdOf(login) : 7, username: login, team_id: pinned ?? seats[0] } } : {};
+    const user = named ? { user: { id: world !== null ? userIdOf(login, pinned ?? seats[0]) : 7, username: login, team_id: pinned ?? seats[0] } } : {};
     if (!named) process.stderr.write('Signed in, but could not fetch your identity: Reply refused access.\n');
     answer({ print: { logged_in: true, method: 'oauth', profile: inUse(), ...user } });
 } else if (name === 'reply' && said === 'auth login --with-token --json') {
@@ -334,7 +334,7 @@ if (process.env.STUB_HANG === name) {
         const { login, team } = world.keys[key];
         world.credentials = { ...(world.credentials ?? {}), [inUse()]: { login, key: team } };
         keepWorld();
-        answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: userIdOf(login), username: login, team_id: team } } });
+        answer({ print: { logged_in: true, method: 'api_key', profile: inUse(), user: { id: userIdOf(login, team), username: login, team_id: team } } });
     }
 } else if (name === 'reply' && world !== null && (said === 'team list --json' || (rest[0] === 'team' && rest[1] === 'use' && rest[3] === '--json' && rest.length === 4))) {
     // The teams a login can act in, as reply-cli 0.23.2 prints them (src/commands/team.ts): `team list` the profile's pinned

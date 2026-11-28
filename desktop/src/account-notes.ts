@@ -29,13 +29,13 @@ export interface SignIn {
     team: BoundTeam;
 }
 
-/** A login: the address Reply names the user by, and Reply's id of the user where it is known. */
+/** A login: the address Reply names the user by, and Reply's id of the user's seat where it is known, one in each team. */
 export interface Login {
     user: string;
     id?: string | null;
 }
 
-/** A sign-in as the note keeps it: the card's, and Reply's id of the user where it was known. */
+/** A sign-in as the note keeps it: the card's, and Reply's id of the user's seat in its team where it was known. */
 export interface NotedSignIn extends SignIn {
     id?: string;
 }
@@ -49,10 +49,11 @@ export interface AccountNote extends AccountRef {
 }
 
 /**
- * Whether two logins are one Reply user: by Reply's id of the user where both hold one, which stays when the person changes
- * the address at Reply; else by the address.
+ * Whether two sign-ins are one login, a person's Reply sign-in: the same address, whatever the team and the id, since Reply
+ * gives a login one user id in each of its teams; or, under another address, the same id of Reply's, the same seat whose
+ * address the person changed at Reply. Another address and another id is another login.
  */
-export const sameUser = (a: Login, b: Login): boolean => (a.id != null && b.id != null ? a.id === b.id : a.user === b.user);
+export const sameUser = (a: Login, b: Login): boolean => a.user === b.user || (a.id != null && b.id != null && a.id === b.id);
 
 /** Whether two sign-ins are one: the same user in the same team, whatever the address and the team's name are now. */
 export const sameSignIn = (a: SignIn & Login, b: SignIn & Login): boolean => sameUser(a, b) && a.team.id === b.team.id;
