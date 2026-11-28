@@ -1282,7 +1282,9 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     // mailboxes and LinkedIn accounts and `unread` where they could not be read, and `login unread` or `teams unread` where
     // those were not: after the act, again while a change is unanswered (and, for `restart`, from a desktop started again
     // on the same files), then after Keep it, and after Choose where Keep it offered teams; and, where a case counts a verb
-    // (`count`), how many times those looks ran it. A key acts in its own team (the stand-in's `keys`), whatever is pinned.
+    // (`count`), how many times those looks ran it. With `start`, the first look after the act is a desktop's started
+    // again, which owes Reply's once-a-run asks again; with `org`, the note holds the team's organization. A key acts in
+    // its own team (the stand-in's `keys`), whatever is pinned.
     const bea = 'bea@example.test';
     const cy = 'cy@example.test';
     const dee = 'dee@example.test';
@@ -1293,17 +1295,18 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         keys: { 'k-bea': { login: bea, team: 5 }, 'k-bea8': { login: bea, team: 8 }, 'k-cy': { login: cy, team: 4 }, 'k-dee': { login: dee, team: 7 } },
         lists: { [`${bea}#5`]: { email: [mailbox] }, [`${cy}#5`]: { email: [mailbox] }, [`${bea}#8`]: { email: [otherMailbox] } },
     };
-    type Case = { env?: Record<string, string>; restart?: boolean; count?: string };
-    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count }: Case = {}) => {
+    type Case = { env?: Record<string, string>; restart?: boolean; count?: string; start?: boolean; org?: boolean };
+    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count, start = false, org = false }: Case = {}) => {
         const each = replyBench(t, world, env);
         writeInstallationSettings(each, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
         if (noted !== null) {
             mkdirSync(dirname(each.paths.replyAccountNotes), { recursive: true });
-            writeFileSync(each.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: noted, team: { id: '5', name: 'Made-up Five' } }] }));
+            writeFileSync(each.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: noted, team: { id: '5', name: 'Made-up Five', ...(org ? { org: { id: '4242', name: 'Made-up Org' } } : {}) } }] }));
         }
         let setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
         await setup.status();
         await act(setup, (to) => writeFileSync(each.env['STUB_REPLY_WORLD']!, JSON.stringify(to)));
+        if (start) setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
         const view = async () => {
             const from = each.record().length;
             const card = (await setup.status()).accounts?.accounts.find((one) => one.name === 'web');
@@ -1373,12 +1376,18 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         ['no sign-in, the same login refused in the noted team, unnamed', { ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, `${bea} 8 [56] same last ${bea} 8 pin 8`, `${bea} 8 [56] same last ${bea} 8 pin 8`]],
         // A read that failed otherwise, for the network, gives nothing away: the noted login in the noted team, nothing rebound.
         ['no sign-in, a read that failed for the network', { ...room, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`${bea} 5 [] unread same last ${bea} 5 pin 5`], { env: { STUB_REPLY_ACCOUNT_LIST: JSON.stringify({ code: 'reply.unavailable' }) } }],
+        // Nor does Reply not saying who it is, at a start that asks it of a sign-in the Reply CLI does not name: the card is
+        // the note's, its lists as they were read, and that failure is not said.
+        ['no sign-in, a start where Reply does not say who a sign-in the Reply CLI does not name is', { ...room, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`${bea} 5 [12] same last ${bea} 5 pin 5`], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, start: true }],
+        ['no sign-in, a start offline: the lists and who it is not read', { ...room, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`${bea} 5 [] unread same last ${bea} 5 pin 5`], { env: { STUB_REPLY_ACCOUNT_LIST: JSON.stringify({ code: 'reply.unavailable' }), STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, start: true }],
         // A sign-in the Reply CLI does not name, pinned to another of its teams, whose login Reply did not say when asked:
         // nothing is decided and nothing said, but that its login could not be read.
         ['a sign-in the Reply CLI does not name, pinned to another of its teams, its login not read', { ...room, profiles: { web: { team_id: 6 } }, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`? - [] unlisted same last ${bea} 5 pin 6 login unread`], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) } }],
         // Reply, asked once in this run who a sign-in the Reply CLI does not name is, names another login than noted: a
         // sign-in given away, decided as any by another login.
         ['an unchanged look whose Reply names another login than noted', { ...room, credentials: { web: { login: dee, unnamed: true } }, seats: { ...room.seats, [dee]: [5] }, whoami: { '5': { orgId: 4242, orgName: 'Made-up Org' } } }, bea, none, null, [`${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`]],
+        // Asked so once in a run, though the note holds the team's organization: nothing else could give such a sign-in away.
+        ['an unchanged look whose Reply names another login than noted, the organization noted', { ...room, credentials: { web: { login: dee, unnamed: true } }, seats: { ...room.seats, [dee]: [5] }, whoami: { '5': { orgId: 4242, orgName: 'Made-up Org' } } }, bea, none, null, [`${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`], { org: true }],
         // Another login, its teams not readable: once its team is picked afresh, nothing is read in the pin set aside.
         ['another login, by a browser, its teams not readable', { ...room, browser: cy }, bea, byBrowser, null, [`${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) } }],
         // Reply refusing the read in the noted team while the teams cannot be read decides nothing: the noted login in its
@@ -1599,6 +1608,25 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     // While they still cannot be read, the noted login in its noted pin is taken as noted: nothing rebound, nothing said.
     const stillUnread = (await setupOn(unread).status()).accounts?.accounts.find((each) => each.name === 'outbound');
     assert.deepEqual({ ...bound(stillUnread), change: stillUnread?.change }, { team: { id: '9', name: null }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [], change: null });
+    // A name owed is no sign-in: while the teams still cannot be read, each look asks Reply for them, for the name alone,
+    // and who it is once in the run, as for an organization owed; so too after a key's sign-in, once a look checked it.
+    const runsOf = async (on: Bench, setup: Setup, name: string) => {
+        const since = on.record().length;
+        const card = (await setup.status()).accounts?.accounts.find((each) => each.name === name);
+        const runs = runsAfter(on, since, 'reply').filter((run) => run.startsWith(`--profile ${name} `));
+        return { notRead: card?.notRead, change: card?.change, teams: runs.filter((run) => run.includes('team list')).length, whoami: runs.filter((run) => run.includes('auth whoami')).length };
+    };
+    const owing = setupOn(unread);
+    for (const [look, whoami] of [['a start', 1], ['the next look', 0]] as const) {
+        assert.deepEqual(await runsOf(unread, owing, 'outbound'), { notRead: ['teams'], change: null, teams: 1, whoami }, look);
+    }
+    const keyedUnread = replyBench(t, { profiles: { keyed: {} }, keys: { 'planted-reply-key': { login: 'bea@example.test', team: 5 } }, seats: { 'bea@example.test': [5, 9] } }, { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) });
+    const keyedSetup = setupOn(keyedUnread);
+    await keyedSetup.status();
+    await keyedSetup.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'keyed' });
+    for (const [look, whoami] of [['the look after the sign-in', 1], ['the next look', 0], ['the one after it', 0]] as const) {
+        assert.deepEqual(await runsOf(keyedUnread, keyedSetup, 'keyed'), { notRead: ['teams'], change: null, teams: 1, whoami }, look);
+    }
     const readable = replyBench(t, world);
     mkdirSync(dirname(readable.paths.replyAccountNotes), { recursive: true });
     writeFileSync(readable.paths.replyAccountNotes, notedUnread);

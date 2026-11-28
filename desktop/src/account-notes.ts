@@ -167,9 +167,10 @@ export function asksIn(seen: Omit<SignInSeen, 'login'>): string | null {
 
 /**
  * Whether no sign-in is seen since the note, before anything is asked of Reply: the account is not marked to be checked (a
- * sign-in on its card, or a change not answered yet), the Reply CLI's own files hold the noted login, or none, and the
- * noted team both pinned and as the team its runs act in (`runsIn`: a key acts in its own, whatever is pinned), and the
- * noted team's name is read. Then the look takes the account as its note says and asks Reply nothing of its teams.
+ * sign-in on its card, or a change not answered yet), and the Reply CLI's own files hold the noted login, or none, and
+ * the noted team both pinned and as the team its runs act in (`runsIn`: a key acts in its own, whatever is pinned). Then
+ * the look takes the account as its note says; only Reply, refusing its lists there or naming another user, gives a
+ * sign-in away.
  */
 export const noSignInSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is NotedSignIn =>
     noted !== null &&
@@ -177,16 +178,16 @@ export const noSignInSince = (files: SignInFiles, noted: Noted, marked: boolean)
     !marked &&
     files.pin === noted.team.id &&
     runsIn(files) === noted.team.id &&
-    (files.login === null || sameUser({ user: files.login, id: files.userId }, noted)) &&
-    noted.team.name !== null;
+    (files.login === null || sameUser({ user: files.login, id: files.userId }, noted));
 
 /**
- * Whether a look asks Reply who a signed-in account is, and with it its team's organization: after a sign-in (`signIn`),
- * when who it is must be known anyway, a look while a change is not answered among them; and with none since, once in a
- * run for a team whose organization the note does not hold (`asked`: whether it was asked in this run in that team).
+ * Whether a look with no sign-in since asks Reply who a signed-in account is, and with it its team's organization: once in
+ * a run (`asked`: whether it was asked in this run in that team), for a team whose organization the note does not hold, or
+ * for a sign-in the Reply CLI does not name (`unnamed`), which nothing else could give away. After a sign-in every look
+ * asks it, at every look until the sign-in is answered, where Reply can be asked (`asksIn`).
  */
-export const whoIsAsked = (signIn: boolean, noted: Noted, asked: (team: string) => boolean): boolean =>
-    signIn || noted === null || noted === 'fresh' || (noted.team.org === undefined && !asked(noted.team.id));
+export const whoIsAsked = (noted: NotedSignIn, unnamed: boolean, asked: (team: string) => boolean): boolean =>
+    !asked(noted.team.id) && (noted.team.org === undefined || unnamed);
 
 /**
  * Whether what is decided of a signed-in account rests on its pin alone: nothing noted, a browser's sign-in whose teams
