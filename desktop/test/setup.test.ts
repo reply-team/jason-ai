@@ -1166,8 +1166,9 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     assert.deepEqual((await seen())['default'], { last: { user: 'ada@example.test', team: { id: '6', name: 'Made-up Six' } }, change: null });
     assert.deepEqual(b.world().profiles, { default: { team_id: 6 }, spare: {} }, 'the note is never written into the Reply CLI’s files');
     assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false, 'nor into the installation’s settings');
-    // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote, and
-    // writes nothing over it, though it read another pin.
+    // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote, writes
+    // nothing over it, though it read another pin, and decides nothing of it: the next look checks the account against
+    // that note, and finds it so.
     const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3, 6] } });
     let release: () => void = () => undefined;
     let holding = false;
@@ -1192,8 +1193,11 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     release();
     const late = (await older).accounts?.accounts[0];
     const ada6 = { user: 'ada@example.test', team: { id: '6', name: '' } };
-    assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [ada6, ada6, 'team']);
+    assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [ada6, ada6, null]);
     assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6 }] });
+    from = overlapping.record().length;
+    const next = (await looks.status()).accounts?.accounts[0];
+    assert.deepEqual([next?.team, next?.change, runsAfter(overlapping, from, 'reply').filter((run) => run.includes('team list'))], [ada6.team, null, ['--profile default team list --json']]);
     // A sign-in the Reply CLI holds no login for, a browser's of a login in several teams on a profile that pins none, cannot
     // be named before it has a team: on an account noted as another sign-in, that is the change said, with no team and
     // nothing listed, and no pin is written before it is known who signed in. Keep it picks its team afresh, by Choose,
@@ -1691,19 +1695,19 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(runsAfter(carried, from, 'reply').filter((run) => run.includes('auth whoami')), ['--profile picking auth whoami --json']);
     assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', team: nine });
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine], ['picking', nine]], whoami: [] }, 'the look after Choose');
-    // Another of the login's teams pinned in a terminal: the change names the new team with its organization too, Reply
-    // asked once in it while the change waits. The answer decides nothing.
+    // Another of the login's teams pinned in a terminal: the change names the new team with its organization too. Each look
+    // while the change waits checks the sign-in, so Reply is asked once at each, in that team; the answer decides nothing.
     const five = { id: '5', name: 'Made-up Five', org: { id: '4242', name: 'Made-up Org' } };
     writeFileSync(
         carried.env['STUB_REPLY_WORLD']!,
         JSON.stringify({ ...carried.world(), profiles: { ...carried.world().profiles, outbound: { team_id: 5 } }, teams: { ...carried.world().teams, '5': 'Made-up Five' }, whoami: { ...orgWorld.whoami, '5': { orgId: 4242, orgName: 'Made-up Org' } } }),
     );
-    for (const [look, whoami] of [['the change said', ['--profile outbound auth whoami --json']], ['while it waits', []]] as const) {
+    for (const look of ['the change said', 'while it waits']) {
         const since = carried.record().length;
         const outbound = (await carriedSetup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
         assert.deepEqual(
             { change: outbound?.change, team: outbound?.team, last: outbound?.lastSignIn?.team, whoami: runsAfter(carried, since, 'reply').filter((run) => run.includes('auth whoami')) },
-            { change: 'team', team: five, last: nine, whoami },
+            { change: 'team', team: five, last: nine, whoami: ['--profile outbound auth whoami --json'] },
             look,
         );
     }
