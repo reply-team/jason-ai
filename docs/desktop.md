@@ -725,29 +725,29 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   it names: "Default for LinkedIn" or "Default for email" for a channel's sends, and for any other work the operation's
   name as Jason has it, with its channel where the route is one channel's ("Default for audience.search"). A Reply
   account whose profile points at another Reply than production, an address set on the profile other than the one the
-  Reply CLI ships with, `https://api.reply.io`, written in any letter case, with or without its default port or a
-  trailing slash (`reply profile show`, which asks Reply nothing), carries a small mark beside its name, here and on the
-  one card outside the Accounts screen; its hint, shown under the pointer and under the keyboard's focus alike, says it
-  is not Reply's production and gives that address. A profile on production shows nothing, and where that could not be
-  read nothing is said of it. Where the routes could not be read, the cards stay, none is marked and none offers Make
-  default, and the Reply section says so ("Which Reply account is the default could not be read."). Jason Desktop makes
-  a default only where Jason has none, and never replaces one: a campaign with no route of its own follows the default
-  at every step, so another default would carry running campaigns with it, and whoever means that does it with `jason
-  route set --global`. Where no default is set, the first sign-in on a card makes that Reply account the default, and
-  every card offers **Make default** until one is; the Reply section says meanwhile that no Reply account is the default
-  yet and that campaigns have nothing to send through until you make one the default. A Make default that finds a
-  default set, at its click or once it has placed the plugin, changes nothing and says so, and so does a sign-in,
-  whatever that default's plugin or binding. The runtime writes the route (`jason route set --global`, by the Reply
-  account's profile, journaled as yours, with a reason that tells a click on Make default from a default made at a
-  sign-in) and refuses it, and the card says why, for a profile name the settings file cannot hold as written. Nothing
-  is installed and no route is written without your click: Jason's Reply plugin, its grant of the `reply` program and
-  the first default appear at that first sign-in, or at Make default. Each places only what `jason plugin list` shows
-  missing of the plugin and its grant, so where both are there it fetches nothing and leaves the settings file to the
-  runtime; a plugin listed and not valid, as after a Reply CLI installed or updated outside Jason Desktop, is loaded
-  again. A placing that fails is said in Jason Desktop's sentence, then the refusing program's reason. Every other
-  route, a campaign's own or an operation's, is `jason route set`'s, and no card makes one. No card on the Accounts
-  screen, nor the one Reply card outside it, says who uses a Reply account: which Reply account a campaign sends through
-  is its routes', which `jason route resolve` answers.
+  Reply CLI ships with, `https://api.reply.io`, written in any letter case, with or without its default port, a
+  trailing slash or blanks around it (`reply profile show`, which asks Reply nothing), carries a small mark beside its
+  name, here and on the one card outside the Accounts screen; its hint, shown under the pointer and under the keyboard's
+  focus alike, says it is not Reply's production and gives that address. A profile on production shows nothing, and
+  where that could not be read nothing is said of it. Where the routes could not be read, the cards stay, none is marked
+  and none offers Make default, and the Reply section says so ("Which Reply account is the default could not be read.").
+  Jason Desktop makes a default only where Jason has none, and never replaces one: a campaign with no route of its own
+  follows the default at every step, so another default would carry running campaigns with it, and whoever means that
+  does it with `jason route set --global`. Where no default is set, the first sign-in on a card makes that Reply account
+  the default, and every card offers **Make default** until one is; the Reply section says meanwhile that no Reply
+  account is the default yet and that campaigns have nothing to send through until you make one the default. A Make
+  default that finds a default set, at its click or once it has placed the plugin, changes nothing and says so, and so
+  does a sign-in, whatever that default's plugin or binding. The runtime writes the route (`jason route set --global`,
+  by the Reply account's profile, journaled as yours, with a reason that tells a click on Make default from a default
+  made at a sign-in) and refuses it, and the card says why, for a profile name the settings file cannot hold as written.
+  Nothing is installed and no route is written without your click: Jason's Reply plugin, its grant of the `reply`
+  program and the first default appear at that first sign-in, or at Make default. Each places only what `jason plugin
+  list` shows missing of the plugin and its grant, so where both are there it fetches nothing and leaves the settings
+  file to the runtime; a plugin listed and not valid, as after a Reply CLI installed or updated outside Jason Desktop,
+  is loaded again. A placing that fails is said in Jason Desktop's sentence, then the refusing program's reason. Every
+  other route, a campaign's own or an operation's, is `jason route set`'s, and no card makes one. No card on the
+  Accounts screen, nor the one Reply card outside it, says who uses a Reply account: which Reply account a campaign
+  sends through is its routes', which `jason route resolve` answers.
   A route to Jason's Reply plugin that names no profile acts as whichever profile the Reply CLI is set to when it runs,
   as the plugin runs it. Its Reply account is that profile's at each look: where the global default is such a route, the
   card of the Reply CLI's current profile carries the Default mark, whichever profile a `reply profile use` in a

@@ -69,14 +69,17 @@ export interface ProfileBackend {
 /** The longest address the page is handed, in characters. */
 const addressMost = 200;
 
-/** A profile's backend as `profile show --json` printed it; null for any other ending, or an address that is no http(s) URL. */
+/**
+ * A profile's backend as `profile show --json` printed it, its address without blanks around it, which a configuration
+ * edited by hand may hold; null for any other ending, or an address that is no http(s) URL in any letter case.
+ */
 export function readBackend(result: { exit: number; stdout: string }): ProfileBackend | null {
     if (result.exit !== 0) return null;
     try {
         const backend = objectOf(objectOf(JSON.parse(result.stdout))?.['backend']);
-        const api = backend?.['api_base'];
+        const api = typeof backend?.['api_base'] === 'string' ? backend['api_base'].trim() : null;
         const inherited = objectOf(backend?.['inherited'])?.['api_base'];
-        if (typeof api !== 'string' || api.length > addressMost || !/^https?:\/\/[^\s]+$/.test(api) || typeof inherited !== 'boolean') return null;
+        if (api === null || api.length > addressMost || !/^https?:\/\/\S+$/i.test(api) || typeof inherited !== 'boolean') return null;
         return { api, inherited };
     } catch {
         return null;
@@ -89,11 +92,14 @@ export function readBackend(result: { exit: number; stdout: string }): ProfileBa
  */
 export const replyProductionApi = 'https://api.reply.io';
 
-/** An address as two are compared: the scheme and the host in any letter case, a default port and a trailing slash dropped. */
+/**
+ * An address as two are compared: the scheme and the host in any letter case, a default port and a trailing slash
+ * dropped; everything else as written, a query and a fragment among it.
+ */
 function comparable(address: string): string | null {
     try {
         const url = new URL(address);
-        return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+        return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}${url.search}${url.hash}`;
     } catch {
         return null;
     }
