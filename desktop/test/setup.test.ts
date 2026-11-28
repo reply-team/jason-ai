@@ -1091,7 +1091,7 @@ test('Remove, never for the Reply CLI’s own default nor for the account a rout
     assert.deepEqual([followedBoxes.length, Object.keys(following.world().profiles ?? {})], [1, ['default', 'outbound', 'quiet']]);
 });
 
-test('the desktop notes who each Reply account was last signed in as, and in which team, in a file of its own: at the look that finds it signed in and bound with nothing noted, at Choose and at Keep it; after a sign-in, a look that finds another login, a team left, another of its teams or a login it cannot know says that change, and until Keep it or Sign out nothing is done in the account and nothing asked of Reply for its senders; a sign-out keeps the note, a removal forgets it, and the note never decides which accounts there are', async (t) => {
+test('the desktop’s note holds each Reply account’s one login and team, and a look checks the account against it only after a sign-in: each case shows on the card as the table says, nothing is done in the account while a change is unanswered, Sign out keeps the note and Remove forgets it, and the note never lists the accounts', async (t) => {
     const log = memoryLog();
     const b = replyBench(t, {
         profiles: { default: { team_id: 3 }, outbound: { team_id: 9 }, spare: {} },
@@ -1236,8 +1236,8 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
     // `login team [listed] change last <noted> pin <its pin>`, with `unlisted` where the look asked Reply for none of its
     // mailboxes and LinkedIn accounts and `unread` where they could not be read, and `login unread` or `teams unread` where
     // those were not: after the act, again while a change is unanswered (and, for `restart`, from a desktop started again
-    // on the same files), then after Keep it, and after Choose where Keep it offered teams. A key acts in its own team (the
-    // stand-in's `keys`), whatever is pinned.
+    // on the same files), then after Keep it, and after Choose where Keep it offered teams; and, where a case counts a verb
+    // (`count`), how many times those looks ran it. A key acts in its own team (the stand-in's `keys`), whatever is pinned.
     const bea = 'bea@example.test';
     const cy = 'cy@example.test';
     const dee = 'dee@example.test';
@@ -1248,7 +1248,8 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
         keys: { 'k-bea': { login: bea, team: 5 }, 'k-bea8': { login: bea, team: 8 }, 'k-cy': { login: cy, team: 4 }, 'k-dee': { login: dee, team: 7 } },
         lists: { [`${bea}#5`]: { email: [mailbox] }, [`${cy}#5`]: { email: [mailbox] }, [`${bea}#8`]: { email: [otherMailbox] } },
     };
-    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false }: { env?: Record<string, string>; restart?: boolean } = {}) => {
+    type Case = { env?: Record<string, string>; restart?: boolean; count?: string };
+    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count }: Case = {}) => {
         const each = replyBench(t, world, env);
         writeInstallationSettings(each, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
         if (noted !== null) {
@@ -1268,24 +1269,30 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
             const unreadFacts = (['login', 'teams'] as const).filter((fact) => card?.notRead.includes(fact)).map((fact) => ` ${fact} unread`).join('');
             return `${card?.user ?? '?'} ${card?.team?.id ?? '-'} [${card?.senders.map((sender) => sender.id).join()}]${read} ${card?.change ?? 'same'}${choice} last ${last} pin ${each.world().profiles?.['web']?.team_id ?? '-'}${unreadFacts}`;
         };
-        const views = [await view()];
-        if (views[0]!.includes(' same ')) return views;
-        views.push(await view());
-        if (restart) {
-            setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
+        const since = each.record().length;
+        const looks = async () => {
+            const views = [await view()];
+            if (views[0]!.includes(' same ')) return views;
             views.push(await view());
-        }
-        assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'web' }), { done: true });
-        views.push(await view());
-        if (pick !== null) assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'web' }, pick), { done: true });
-        views.push(await view());
-        return views;
+            if (restart) {
+                setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
+                views.push(await view());
+            }
+            assert.deepEqual(await setup.keepChange({ type: 'reply', name: 'web' }), { done: true });
+            views.push(await view());
+            if (pick !== null) assert.deepEqual(await setup.chooseTeam({ type: 'reply', name: 'web' }, pick), { done: true });
+            views.push(await view());
+            return views;
+        };
+        const views = await looks();
+        if (count === undefined) return views;
+        return [...views, `${count} ×${runsAfter(each, since, 'reply').filter((run) => run.startsWith(`--profile web ${count} `)).length}`];
     };
     const byKey = (key: string) => (setup: Setup) => setup.connectReplyWithKey(key, { type: 'reply', name: 'web' });
     const byBrowser = (setup: Setup) => setup.connectReply({ type: 'reply', name: 'web' });
     const pinned = (to: ReplyWorld) => async (_: Setup, change: (to: ReplyWorld) => void) => change(to);
     const none = async () => undefined;
-    const cases: [string, ReplyWorld, string | null, (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, string | null, string[], { env?: Record<string, string>; restart?: boolean }?][] = [
+    const cases: [string, ReplyWorld, string | null, (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, string | null, string[], Case?][] = [
         ['the same login, still in the noted team, by a key', room, bea, byKey('k-bea'), null, [`${bea} 5 [12] same last ${bea} 5 pin 5`]],
         ['the same login, still in the noted team, by a browser', { ...room, browser: bea }, bea, byBrowser, null, [`${bea} 5 [12] same last ${bea} 5 pin 5`]],
         // Keep it picks afresh: the old pin does not stand, even where the new login is in it.
@@ -1329,32 +1336,14 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
         ['an unchanged look whose Reply names another login than noted', { ...room, credentials: { web: { login: dee, unnamed: true } }, seats: { ...room.seats, [dee]: [5] }, whoami: { '5': { orgId: 4242, orgName: 'Made-up Org' } } }, bea, none, null, [`${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`]],
         // Another login, its teams not readable: once its team is picked afresh, nothing is read in the pin set aside.
         ['another login, by a browser, its teams not readable', { ...room, browser: cy }, bea, byBrowser, null, [`${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) } }],
+        // Reply refusing the read in the noted team while the teams cannot be read decides nothing: the noted login in its
+        // pin, the refused reads said as not read, and made once.
+        ['no sign-in, the same login refused in the noted team, its teams not readable', { ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: bea } }, bea, none, null, [`${bea} 5 [] unread same last ${bea} 5 pin 5 teams unread`, 'account list ×2'], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) }, count: 'account list' }],
+        // A team picked afresh is set aside no longer once it is bound, though who signed in could not be read then: the next
+        // look takes the pin, notes nothing, and writes no pin again.
+        ['another login the Reply CLI does not name, kept, bound while Reply cannot say who it is', { ...room, credentials: { web: { login: dee, unnamed: true } } }, bea, none, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, '? 7 [] same last - pin 7 login unread', '? 7 [] same last - pin 7 login unread', 'team use ×1'], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, count: 'team use' }],
     ];
     for (const [name, world, noted, act, pick, expected, options] of cases) assert.deepEqual(await checked(world, noted, act, pick, options), expected, name);
-    // Reply refusing the read in the noted team while the teams cannot be read decides nothing: the noted login in its pin,
-    // the refused reads said as not read, and made once.
-    const refusedUnread = replyBench(t, { ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: bea } }, { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) });
-    mkdirSync(dirname(refusedUnread.paths.replyAccountNotes), { recursive: true });
-    writeFileSync(refusedUnread.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', ...bea5 }] }));
-    const refusedCard = (await setupOn(refusedUnread).status()).accounts?.accounts.find((one) => one.name === 'web');
-    assert.deepEqual(
-        { team: refusedCard?.team, change: refusedCard?.change, unread: refusedCard?.unread, notRead: refusedCard?.notRead, lists: replyRuns(refusedUnread).filter((run) => run.startsWith('--profile web account list')).length },
-        { team: bea5.team, change: null, unread: ['email', 'linkedin'], notRead: ['teams'], lists: 2 },
-    );
-    // A team picked afresh is set aside no longer once it is bound, though who signed in could not be read then: the next
-    // look takes the pin, and writes no pin again.
-    const keptUnread = replyBench(t, { ...room, credentials: { web: { login: dee, unnamed: true } } }, { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
-    mkdirSync(dirname(keptUnread.paths.replyAccountNotes), { recursive: true });
-    writeFileSync(keptUnread.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', ...bea5 }] }));
-    const keeping = new Setup({ ...setupDeps(keptUnread), confirm: () => Promise.resolve(true) });
-    assert.equal((await keeping.status()).accounts?.accounts.find((one) => one.name === 'web')?.change, 'unknown');
-    assert.deepEqual(await keeping.keepChange(web), { done: true });
-    const bindings = () => replyRuns(keptUnread).filter((run) => run.startsWith('--profile web team use'));
-    for (const look of ['the look after Keep it', 'the next look']) {
-        const card = (await keeping.status()).accounts?.accounts.find((one) => one.name === 'web');
-        assert.deepEqual({ user: card?.user, team: card?.team?.id, notRead: card?.notRead, bindings: bindings() }, { user: null, team: '7', notRead: ['login'], bindings: ['--profile web team use 7 --json'] }, look);
-    }
-    assert.equal(readFileSync(keptUnread.paths.replyAccountNotes, 'utf8').includes('"web"'), false, 'nothing noted, and no team set aside');
     // A look that began before a sign-in on the card does not count as its check: the next look still checks it.
     const racing = replyBench(t, { ...room, credentials: { web: bea } });
     writeInstallationSettings(racing, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
