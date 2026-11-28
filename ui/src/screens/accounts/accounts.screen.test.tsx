@@ -959,6 +959,8 @@ describe('Reply accounts, one card per profile', () => {
         ];
         for (const [name, said] of changed) {
             expect(words(card(name).querySelector('.acct-changed')!), name).toBe(said);
+            // Sign out is the notice's, once: the card's head offers none beside it.
+            expect(within(card(name)).getAllByRole('button', { name: 'Sign out' }), name).toHaveLength(1);
             // Until it is answered, nothing is offered to do in the account: no connect, no line about reading it again,
             // and no act on a sender it lists.
             expect(
