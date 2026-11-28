@@ -1460,6 +1460,9 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         // A record that names a user where the noted one named none is another record too, and the Reply CLI's login is
         // never held against who is noted: until Reply says who it is, nothing is decided and its login is said as not read.
         ['a record that names a user where the noted one named none, Reply not saying who it is', { ...room, credentials: { web: bea } }, { user: bea, record: { user: null, id: null } }, none, null, [`? - [] unlisted same last ${bea} 5 pin 5 login unread`], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) } }],
+        // With no sign-in since, Reply's answer is who the account is, its id with its address: a noted id of another team's
+        // seat gives way to Reply's seat in the noted team when Reply is next asked.
+        ['a noted id of another of its teams’ seats, Reply asked at a start', { ...room, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: bea } }, { user: bea, id: '4206' }, none, null, [`${bea} 5 [12] same last ${bea} 5 pin 5`, `noted ${bea} 4205 5 record ${bea} 4205`], { note: true }],
         // A note kept before the Reply CLI's record was: its one login stands for both, and the look notes them apart.
         ['a note kept before the record, then a rename at Reply', { ...room, seats: { ...room.seats, [bea]: [6, 5] }, credentials: { web: bea } }, { user: bea, record: null }, none, null, [`${bea} 5 [12] same last ${bea} 5 pin 5`, `${beaNew} 5 [12] same last ${beaNew} 5 pin 5 asks auth whoami`, `${beaNew} 5 [12] same last ${beaNew} 5 pin 5 asks -`, `noted ${beaNew} 4205 5 record ${bea} 4206`], { then: (current) => ({ ...current, renamed: { [bea]: beaNew } }), note: true }],
     ];
