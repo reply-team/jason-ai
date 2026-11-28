@@ -12,7 +12,7 @@
  * default route's profile, where that route is the plugin `reply`'s, and no account otherwise.
  */
 
-import { box, capped, type ReplyBox } from './reply-accounts.ts';
+import { box, capped, type ReplyBox } from './reply-senders.ts';
 import { profileLimit } from './setup-model.ts';
 
 /** An account as a member of the seam names it: the provider, and the profile's name exactly. */

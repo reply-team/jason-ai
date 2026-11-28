@@ -1,4 +1,4 @@
-// The Reply card's account acts: each one verb of the Reply CLI, run by the main process on the person's click, behind
+// The acts on a Reply account's senders: each one verb of the Reply CLI, run by the main process on the person's click, behind
 // the main process's own box where it changes something; a link the CLI makes goes to the system opener and nowhere else.
 
 import assert from 'node:assert/strict';
@@ -19,10 +19,10 @@ import {
     linkedInNameProblem,
     otherRefusal,
     refusalOf,
-    replyAccountSentences as said,
+    senderSentences as said,
     replyActLimitMs,
     type ReplyBox,
-} from '../src/reply-accounts.ts';
+} from '../src/reply-senders.ts';
 import {
     connectArguments,
     deleteArguments,
@@ -337,7 +337,7 @@ test('a link is handed to the opener only as https on a host name, with no user,
     }
 });
 
-test('the boxes are the main process’s own: they name the account as the list does and the act, Cancel focused', async () => {
+test('the boxes are the main process’s own: they name the sender as the list does and the act, Cancel focused', async () => {
     const mailbox = { channel: 'email', name: 'Made-up Sales', address: 'sales@example.test' };
     const linkedin = { channel: 'linkedin', name: 'Made-up Ada', address: '' };
     assert.equal(senderWords(mailbox), 'the mailbox Made-up Sales (sales@example.test)');

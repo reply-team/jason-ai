@@ -73,7 +73,7 @@ effect(() => {
  */
 export const replyAccountsAddress = 'https://run.reply.io/';
 
-/** The channels the Reply CLI lists accounts for, in the order the card shows them, with their headings. */
+/** The channels the Reply CLI lists senders for, in the order the card shows them, with their headings. */
 const channels: readonly (readonly [string, string])[] = [
     ['email', 'Email'],
     ['linkedin', 'LinkedIn'],
@@ -82,7 +82,7 @@ const channels: readonly (readonly [string, string])[] = [
 type Tone = 'green' | 'amber' | 'red' | 'gray';
 
 /**
- * The state Reply reports for an account (`reply_status` in `reply account list --json`, see the Reply CLI's
+ * The state Reply reports for a sender (`reply_status` in `reply account list --json`, see the Reply CLI's
  * `src/operations/accounts.ts`), in words, by channel. A word not here is shown as Reply wrote it, in a neutral pill.
  */
 const states: Record<string, Record<string, readonly [string, Tone]>> = {
@@ -357,7 +357,7 @@ function stateOf(sender: DesktopReplySender): readonly [string, Tone] {
 }
 
 /**
- * The accounts by channel: the known channels in their order, then any other under its own name, as it first comes;
+ * The senders by channel: the known channels in their order, then any other under its own name, as it first comes;
  * each with the links made for it and not used yet, which make its heading even with no sender.
  */
 function grouped(

@@ -598,7 +598,7 @@ describe('the Reply card, its acts', () => {
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['LinkedIn', 'Cancel']);
     });
 
-    it('has no Connect a mailbox or LinkedIn and no act on a row before the CLI is signed in', async () => {
+    it('has no Connect a mailbox or LinkedIn and no act on a row before the Reply account is signed in', async () => {
         renderConnect({
             ...setupFound,
             reply: {

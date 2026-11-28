@@ -26,7 +26,7 @@ export const isReplyChannel = (value: unknown): value is ReplyCliChannel => valu
 export const dailyLimitMost = 2_147_483_647;
 
 /** The desktop's sentences: the only words an act ends with. */
-export const replyAccountSentences = {
+export const senderSentences = {
     badName: 'Name the LinkedIn account in one line of up to 100 characters.',
     badId: 'That is not a mailbox or LinkedIn account Reply listed.',
     badRequest: 'That is not an act the card offers.',
@@ -64,10 +64,10 @@ const nameLimit = 100;
 
 /** Why a typed LinkedIn account name is refused, or null: one plain line of one to a hundred characters, trimmed. */
 export function linkedInNameProblem(value: unknown): string | null {
-    if (typeof value !== 'string') return replyAccountSentences.badName;
+    if (typeof value !== 'string') return senderSentences.badName;
     const name = value.trim();
     const length = [...name].length;
-    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return replyAccountSentences.badName;
+    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return senderSentences.badName;
     return null;
 }
 
@@ -92,20 +92,20 @@ const refusal = (refused: string, code: string | null, offer: ReplyOffer | null 
 
 /** The plan's limits: a sentence, nothing offered. */
 const planLimits: Readonly<Record<string, string>> = {
-    [codes.emailAccountLimitReached]: replyAccountSentences.mailboxLimit,
-    [codes.emailAccountNoFreeMailboxSlots]: replyAccountSentences.mailboxSeat,
-    [codes.linkedInAccountLimitReached]: replyAccountSentences.linkedInLimit,
-    [codes.accessFeatureUnavailable]: replyAccountSentences.notInPlan,
+    [codes.emailAccountLimitReached]: senderSentences.mailboxLimit,
+    [codes.emailAccountNoFreeMailboxSlots]: senderSentences.mailboxSeat,
+    [codes.linkedInAccountLimitReached]: senderSentences.linkedInLimit,
+    [codes.accessFeatureUnavailable]: senderSentences.notInPlan,
 };
 
 /** The codes after which the card reads the list again and shows what is; it never repeats the act by itself. */
 const rereads: Readonly<Record<string, string>> = {
-    [codes.outcomeUnknown]: replyAccountSentences.outcomeUnknown,
-    [codes.accountStatusChanged]: replyAccountSentences.stateChanged,
-    [codes.accountStatusUnknown]: replyAccountSentences.stateUnknown,
-    [codes.accountPauseUnavailable]: replyAccountSentences.pauseUnavailable,
-    [codes.emailAccountNotFound]: replyAccountSentences.accountGone,
-    [codes.linkedInAccountNotFound]: replyAccountSentences.accountGone,
+    [codes.outcomeUnknown]: senderSentences.outcomeUnknown,
+    [codes.accountStatusChanged]: senderSentences.stateChanged,
+    [codes.accountStatusUnknown]: senderSentences.stateUnknown,
+    [codes.accountPauseUnavailable]: senderSentences.pauseUnavailable,
+    [codes.emailAccountNotFound]: senderSentences.accountGone,
+    [codes.linkedInAccountNotFound]: senderSentences.accountGone,
 };
 
 /** The acts that change something at Reply, whose ending without an answer may still have done it. */
@@ -120,14 +120,14 @@ export function refusalOf(
     act: { verb: ReplyAct; channel: ReplyCliChannel; write: boolean; force?: boolean },
 ): ReplyRefusal {
     const write = act.write && writes.has(act.verb);
-    if (ending.kind === 'unknown') return refusal(replyAccountSentences.outcomeUnknown, codes.outcomeUnknown, null, true);
-    if (ending.kind === 'unreached') return write ? refusal(replyAccountSentences.unreachedWrite, null, null, true) : refusal(replyAccountSentences.unreached, null);
+    if (ending.kind === 'unknown') return refusal(senderSentences.outcomeUnknown, codes.outcomeUnknown, null, true);
+    if (ending.kind === 'unreached') return write ? refusal(senderSentences.unreachedWrite, null, null, true) : refusal(senderSentences.unreached, null);
     const code = ending.code;
     if (code === null) return refusal(otherRefusal(null), null);
     // A reconnect's own refusal offers no second reconnect.
-    if (code === codes.linkedInInvalidCookie) return refusal(replyAccountSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
+    if (code === codes.linkedInInvalidCookie) return refusal(senderSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
     if (code === codes.linkedInAccountInUse && act.verb === 'delete' && act.channel === 'linkedin' && act.force !== true) {
-        return refusal(replyAccountSentences.inUse, code, 'force');
+        return refusal(senderSentences.inUse, code, 'force');
     }
     if (Object.hasOwn(rereads, code)) return refusal(rereads[code]!, code, null, true);
     if (Object.hasOwn(planLimits, code)) return refusal(planLimits[code]!, code);

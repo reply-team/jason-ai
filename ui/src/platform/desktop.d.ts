@@ -496,13 +496,13 @@ export interface DesktopReplySender {
     name: string;
     address: string;
     /**
-     * The state Reply reports for the account, as Reply wrote it (email: `connected`, `disconnected`, `unknown`;
+     * The state Reply reports for the sender, as Reply wrote it (email: `connected`, `disconnected`, `unknown`;
      * LinkedIn: `enabled`, `disabled`, `cookieInvalid`, `dailyLimitReached`; or another word); empty when it reported none.
      */
     status: string;
 }
 
-/** A channel Reply lists accounts for. */
+/** A channel Reply lists senders for. */
 export type DesktopReplyChannel = 'email' | 'linkedin';
 
 /**

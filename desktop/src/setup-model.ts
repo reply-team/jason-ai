@@ -408,7 +408,7 @@ export interface ReplySender {
     name: string;
     address: string;
     /**
-     * The state Reply reports for the account, its `reply_status` as Reply wrote it (email: connected, disconnected,
+     * The state Reply reports for the sender, its `reply_status` as Reply wrote it (email: connected, disconnected,
      * unknown; LinkedIn: enabled, disabled, cookieInvalid, dailyLimitReached; or another word); empty when Reply reported
      * none. The CLI's own `status` summarises it into four words and is not read.
      */

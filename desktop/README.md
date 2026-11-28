@@ -169,7 +169,7 @@ reloaded, and at the start the version the runtime found is read back from `jaso
 one that names its error where one does (`npmLine`), goes to the card (`startUpdate` in the setup state, in memory for
 this run) and never to the log. What the CLI prints and the codes it ends with are read in one module,
 `src/reply-cli-account.ts`, held to a fixture taken from the CLI's own tests (`test/reply-cli-account-fixture.ts`); what
-the desktop does with each code is `src/reply-accounts.ts`. A link the CLI makes for connecting or reconnecting an
+the desktop does with each code is `src/reply-senders.ts`. A link the CLI makes for connecting or reconnecting an
 account is the person's secret: the main process checks it (https, a host name, no user, port or anything but printable
 ASCII) and hands it to the system browser through the navigation lock's one way out, or, where the page asked for a copy
 and the link is one that expires and connects one account, writes it to the clipboard itself. Nothing else of the

@@ -94,12 +94,12 @@ import {
     isUsageCode,
     linkedInNameProblem,
     refusalOf,
-    replyAccountSentences as said,
+    senderSentences,
     replyActLimitMs,
     type ReplyAct,
     type ReplyBox,
     type ReplyRefusal,
-} from './reply-accounts.ts';
+} from './reply-senders.ts';
 import {
     connectArguments,
     deleteArguments,
@@ -374,7 +374,7 @@ export interface ReplyDone {
     done: true;
 }
 
-export type { ReplyRefusal } from './reply-accounts.ts';
+export type { ReplyRefusal } from './reply-senders.ts';
 
 export interface PluginState {
     id: string;
@@ -1372,10 +1372,10 @@ export class Setup {
     #named(named: unknown, channel: ReplyCliChannel, id: unknown): { account: AccountState; sender: ReplySender } | ReplyRefusal {
         const account = this.#accountOf(named);
         // With no account named and none to act as, there is no sender: said as one the list did not give.
-        if (account === null) return refusal(named === undefined ? said.badId : accountSentences.badAccount);
+        if (account === null) return refusal(named === undefined ? senderSentences.badId : accountSentences.badAccount);
         if (account.change !== null) return refusal(accountSentences.unanswered);
         const sender = isReplyId(id) ? account.senders.find((each) => each.channel === channel && each.id === id) : undefined;
-        return sender === undefined ? refusal(said.badId) : { account, sender };
+        return sender === undefined ? refusal(senderSentences.badId) : { account, sender };
     }
 
     /**
@@ -1400,7 +1400,7 @@ export class Setup {
      */
     #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
         return this.#oneAct<T | ReplyRefusal>(
-            () => refusal(said.busy),
+            () => refusal(senderSentences.busy),
             async () => {
                 const version = await this.#replyVersion();
                 if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
@@ -1413,7 +1413,7 @@ export class Setup {
     #signingInAct(work: () => Promise<void>): Promise<void> {
         return this.#oneAct(
             () => {
-                throw new Refused(said.busy);
+                throw new Refused(senderSentences.busy);
             },
             () => this.#serial(work),
         );
@@ -1446,22 +1446,22 @@ export class Setup {
     async #open(answer: { stdout: string } | ReplyRefusal, copy: boolean): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         if ('refused' in answer) return answer;
         const printed = readLink(answer.stdout);
-        if (printed === null) return refusal(said.outcomeUnknown, true);
-        if (!isOpenableLink(printed.link)) return refusal(said.badLink, true);
+        if (printed === null) return refusal(senderSentences.outcomeUnknown, true);
+        if (!isOpenableLink(printed.link)) return refusal(senderSentences.badLink, true);
         if (copy) {
-            if (this.#deps.copyLink === undefined) return refusal(said.notCopied, true);
+            if (this.#deps.copyLink === undefined) return refusal(senderSentences.notCopied, true);
             try {
                 this.#deps.copyLink(printed.link);
             } catch {
-                return refusal(said.notCopied, true);
+                return refusal(senderSentences.notCopied, true);
             }
             return { copied: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
         }
-        if (this.#deps.openLink === undefined) return refusal(said.badLink, true);
+        if (this.#deps.openLink === undefined) return refusal(senderSentences.badLink, true);
         try {
             await this.#deps.openLink(printed.link);
         } catch {
-            return refusal(said.notOpened, true);
+            return refusal(senderSentences.notOpened, true);
         }
         return { opened: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
     }
@@ -1480,7 +1480,7 @@ export class Setup {
     replyConnect(channel: unknown, options: unknown, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
         const account = this.#accountOf(named);
         if (named !== undefined && account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         if (account !== null && account.change !== null) return Promise.resolve(refusal(accountSentences.unanswered));
@@ -1490,11 +1490,11 @@ export class Setup {
         if (channel === 'linkedin') {
             const problem = linkedInNameProblem(asked['name']);
             if (problem !== null) return Promise.resolve(refusal(problem));
-            if (asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+            if (asked['provider'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
             return connect({ channel: 'linkedin', name: (asked['name'] as string).trim() });
         }
         const provider = asked['provider'];
-        if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
+        if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(senderSentences.badRequest));
         return connect({ channel: 'email', provider });
     }
 
@@ -1502,7 +1502,7 @@ export class Setup {
     replyReconnect(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
         const on = this.#named(named, channel, senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.sender.id), { write: true }), copy));
@@ -1516,13 +1516,13 @@ export class Setup {
         const on = this.#named(named, 'email', senderId);
         if ('refused' in on) return Promise.resolve(on);
         if (daily !== undefined && (typeof daily !== 'number' || !Number.isSafeInteger(daily) || daily < 0 || daily > dailyLimitMost)) {
-            return Promise.resolve(refusal(said.badLimit));
+            return Promise.resolve(refusal(senderSentences.badLimit));
         }
         return this.#acting(async () => {
-            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.sender, daily)))) return refusal(said.notConfirmed);
+            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.sender, daily)))) return refusal(senderSentences.notConfirmed);
             const answer = await this.#verb(on.account, 'limits', 'email', limitsArguments(on.sender.id, daily), { write: daily !== undefined });
             if ('refused' in answer) return answer;
-            return readDailyLimit(answer.stdout) ?? refusal(said.outcomeUnknown, true);
+            return readDailyLimit(answer.stdout) ?? refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
@@ -1540,10 +1540,10 @@ export class Setup {
         const on = this.#named(named, 'linkedin', senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox(verb, on.sender)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(actBox(verb, on.sender)))) return refusal(senderSentences.notConfirmed);
             const answer = await this.#verb(on.account, verb, 'linkedin', stateArguments(verb, on.sender.id), { write: true });
             if ('refused' in answer) return answer;
-            return readState(answer.stdout) === null ? refusal(said.outcomeUnknown, true) : { done: true };
+            return readState(answer.stdout) === null ? refusal(senderSentences.outcomeUnknown, true) : { done: true };
         });
     }
 
@@ -1552,10 +1552,10 @@ export class Setup {
         const on = this.#named(named, 'email', senderId);
         if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox('unblock', on.sender)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(actBox('unblock', on.sender)))) return refusal(senderSentences.notConfirmed);
             const answer = await this.#verb(on.account, 'unblock', 'email', unblockArguments(on.sender.id), { write: true });
             if ('refused' in answer) return answer;
-            return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(said.outcomeUnknown, true);
+            return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
@@ -1566,21 +1566,21 @@ export class Setup {
      */
     replyDelete(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
-        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
+        if (!isReplyChannel(channel)) return Promise.resolve(refusal(senderSentences.badRequest));
         const force = asked['force'] === true;
-        if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
+        if (force && channel !== 'linkedin') return Promise.resolve(refusal(senderSentences.badRequest));
         const on = this.#named(named, channel, senderId);
         if ('refused' in on) return Promise.resolve(on);
         // A door is the one sender's of the one Reply account: two profiles may list the same sender.
         const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.sender.id]);
         return this.#acting(async () => {
-            if (force && !this.#doors.has(door)) return refusal(said.notOffered);
-            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.sender)))) return refusal(said.notConfirmed);
+            if (force && !this.#doors.has(door)) return refusal(senderSentences.notOffered);
+            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.sender)))) return refusal(senderSentences.notConfirmed);
             if (force) this.#doors.delete(door);
             const answer = await this.#verb(on.account, 'delete', channel, deleteArguments(channel, on.sender.id, force), { write: true, force });
             if (channel === 'linkedin') this.#keepDoor(door, answer, 'force');
             if ('refused' in answer) return answer;
-            return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(said.outcomeUnknown, true);
+            return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
@@ -1785,7 +1785,7 @@ export class Setup {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         return this.#acting(async () => {
-            if (!(await this.#confirmed(accountBox('signOut', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(accountBox('signOut', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(senderSentences.notConfirmed);
             const result = await this.#run('reply', 'auth logout', [...accountArguments(account), 'auth', 'logout', '--json']);
             this.#deps.log.info('reply_signed_out', { Exit: result.exit });
             return result.exit === 0 ? this.#announced({ done: true }) : cliRefusal(result, accountSentences.notSignedOut);
@@ -1811,7 +1811,7 @@ export class Setup {
             const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
             const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
             if (profiles !== null && followedProfile(profiles, routes) === account.name) return refusal(routes === null ? accountSentences.followedUnread : accountSentences.followed, true);
-            if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(said.notConfirmed);
+            if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(senderSentences.notConfirmed);
             const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
             this.#deps.log.info('reply_account_removed', { Exit: result.exit });
             if (result.exit !== 0) return cliRefusal(result, accountSentences.notRemoved);
@@ -1835,7 +1835,7 @@ export class Setup {
         if (change === null || (change === 'team' && (user === null || team === null))) return Promise.resolve(refusal(accountSentences.nothingToKeep));
         const kept: SignIn | 'fresh' = change === 'team' ? { user: user!, team: team! } : 'fresh';
         return this.#oneAct<ReplyDone | ReplyRefusal>(
-            () => refusal(said.busy),
+            () => refusal(senderSentences.busy),
             async () => (this.#note(account, kept, 'keep') === undefined ? refusal(accountSentences.notKept) : this.#announced({ done: true })),
         );
     }
@@ -1857,7 +1857,7 @@ export class Setup {
     async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
         const account = named === undefined ? null : this.#accountOf(named);
         if (account === null) return refusal(accountSentences.badAccount);
-        const answer = await this.#oneAct(() => refusal(said.busy), () => this.#makeDefault(account));
+        const answer = await this.#oneAct(() => refusal(senderSentences.busy), () => this.#makeDefault(account));
         this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
         this.#changed();
         return answer;

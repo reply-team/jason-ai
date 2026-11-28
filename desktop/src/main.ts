@@ -61,7 +61,7 @@ import { Setup } from './setup.ts';
 import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
-import { askBox } from './reply-accounts.ts';
+import { askBox } from './reply-senders.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { accountShell, handedPath, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';

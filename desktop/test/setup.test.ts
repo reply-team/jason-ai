@@ -35,7 +35,7 @@ import {
 } from '../src/setup-model.ts';
 import { claudeCodeModels } from '../src/chat-models.ts';
 import { accountsOf, defaultReason, readProfiles, readReplyWhoami, readRoutes, readTeams } from '../src/accounts.ts';
-import { belowMinimumSentence, type ReplyBox } from '../src/reply-accounts.ts';
+import { belowMinimumSentence, type ReplyBox } from '../src/reply-senders.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 import { printed } from './reply-cli-account-fixture.ts';
 import { dataLayout } from '../src/paths.ts';
