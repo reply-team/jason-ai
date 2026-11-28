@@ -643,11 +643,15 @@ export interface DesktopAccount extends DesktopAccountRef {
      */
     followed: boolean;
     signedIn: boolean;
-    /** The address the profile is signed in as; null when it is not. */
+    /**
+     * The address its sign-in's user goes by, Reply's where Reply names the user otherwise than the Reply CLI stored it;
+     * null when it is not signed in, or its user is not known.
+     */
     user: string | null;
     /**
-     * The team it is bound to, its profile's pin in the Reply CLI, by its id and the name Reply gives it or the desktop's
-     * note keeps; null while it is not signed in, or signed in and bound to none.
+     * The team it is bound to: its profile's pin in the Reply CLI, or for a key the key's own team, whatever is pinned; by
+     * its id and the name Reply gives it or the desktop's note keeps. Null while it is not signed in, or signed in and bound
+     * to none.
      */
     team: DesktopBoundTeam | null;
     /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
@@ -1200,11 +1204,11 @@ export interface JasonDesktop {
             account?: DesktopAccountRef,
         ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Make default, only while Jason has no global default: the Reply account `DesktopSetup.accounts` lists becomes it. Jason's Reply
-         * plugin and its grant are placed where they are missing, and the runtime writes the route (`jason route set
-         * --global`) by the account's profile. Where a default is set by then, whatever its plugin or account, nothing is
-         * changed: the desktop never moves a default. A refusal is the desktop's sentence, and the runtime writes nothing
-         * it refuses. Absent from a desktop of an earlier version.
+         * Make default, only while Jason has no global default: the Reply account `DesktopSetup.accounts` lists becomes it.
+         * Jason's Reply plugin and its grant are placed where they are missing, and the runtime writes the route (`jason
+         * route set --global`) by the account's profile. Where a default is set by then, whatever its plugin or account,
+         * nothing is changed: the desktop never moves a default. A refusal is the desktop's sentence, and the runtime
+         * writes nothing it refuses. Absent from a desktop of an earlier version.
          */
         makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
@@ -1223,16 +1227,16 @@ export interface JasonDesktop {
          */
         addAccount(name: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Sign out of a Reply account `DesktopSetup.accounts` lists, after the person's yes in the desktop's own box, which says that the Reply
-         * CLI itself signs it out and, where a route names it, that campaigns sending through it stop (`reply --profile
-         * <name> auth logout`). No route changes. Absent from a desktop of an earlier version.
+         * Sign out of a Reply account `DesktopSetup.accounts` lists, after the person's yes in the desktop's own box, which
+         * says that the Reply CLI itself signs it out and, where a route names it, that campaigns sending through it stop
+         * (`reply --profile <name> auth logout`). No route changes. Absent from a desktop of an earlier version.
          */
         signOut(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Remove a Reply account `DesktopSetup.accounts` lists whose profile the Reply CLI holds, never `default`, after the person's yes in the
-         * desktop's own box, which says that the Reply CLI itself deletes its profile and its sign-in and, where a route
-         * names it, that campaigns sending through it stop and its card stays (`reply profile delete <name> --yes`). No route
-         * changes. Absent from a desktop of an earlier version.
+         * Remove a Reply account `DesktopSetup.accounts` lists whose profile the Reply CLI holds, never `default`, after
+         * the person's yes in the desktop's own box, which says that the Reply CLI itself deletes its profile and its
+         * sign-in and, where a route names it, that campaigns sending through it stop and its card stays (`reply profile
+         * delete <name> --yes`). No route changes. Absent from a desktop of an earlier version.
          */
         removeAccount(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**

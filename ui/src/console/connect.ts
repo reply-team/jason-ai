@@ -509,6 +509,16 @@ const linkedSender = (channel: DesktopReplyChannel): string =>
     channel === 'linkedin' ? 'LinkedIn account' : 'mailbox';
 
 /**
+ * What an ask holds besides its act: what a refusal may offer next, whether the act goes with the sign-in it was asked
+ * under (`ActDialog.signedIn`), and what the card says while the desktop has not answered.
+ */
+interface AskOptions {
+    again?: (refusal: DesktopReplyRefusal) => Again | null;
+    signedIn?: boolean;
+    waiting?: string;
+}
+
+/**
  * Opens a dialog that asks the desktop for one act and says how it ended. A refusal that says the list may have changed
  * reads it again, as does an act done; nothing is ever repeated without the person's click.
  */
@@ -519,9 +529,7 @@ async function ask(
     run: () => Promise<
         DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null }
     >,
-    again: (refusal: DesktopReplyRefusal) => Again | null = () => null,
-    signedIn = true,
-    waiting = 'Asking Reply…',
+    { again = () => null, signedIn = true, waiting = 'Asking Reply…' }: AskOptions = {},
 ): Promise<void> {
     asked += 1;
     const mine = asked;
@@ -682,10 +690,12 @@ defineReal('connect.delete', ([place, channel, id]) => {
         `Delete ${senderTitle(sender)}`,
         { channel, id: sender.id },
         () => here().desktop.setup.replyDelete(channel, sender.id, undefined, ...named(view)),
-        (refusal) =>
-            refusal.offer === 'force'
-                ? () => here().desktop.setup.replyDelete(channel, sender.id, { force: true }, ...named(view))
-                : null,
+        {
+            again: (refusal) =>
+                refusal.offer === 'force'
+                    ? () => here().desktop.setup.replyDelete(channel, sender.id, { force: true }, ...named(view))
+                    : null,
+        },
     );
 });
 
@@ -733,15 +743,10 @@ defineReal('connect.makeDefault', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !makesDefault()) return;
     const ref = view.ref;
-    void ask(
-        place,
-        'Make default',
-        null,
-        () => here().desktop.setup.makeDefault(ref),
-        () => null,
-        false,
-        'Making it the default…',
-    );
+    void ask(place, 'Make default', null, () => here().desktop.setup.makeDefault(ref), {
+        signedIn: false,
+        waiting: 'Making it the default…',
+    });
 });
 
 // Sign out and Remove, said on the card as they ended. Each asks the person in the desktop's own box first, so meanwhile the
@@ -750,30 +755,20 @@ defineReal('connect.signOut', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !signsOut()) return;
     const ref = view.ref;
-    void ask(
-        place,
-        'Sign out',
-        null,
-        () => here().desktop.setup.signOut(ref),
-        () => null,
-        false,
-        'Signing it out…',
-    );
+    void ask(place, 'Sign out', null, () => here().desktop.setup.signOut(ref), {
+        signedIn: false,
+        waiting: 'Signing it out…',
+    });
 });
 
 defineReal('connect.removeAccount', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !removesAccount()) return;
     const ref = view.ref;
-    void ask(
-        place,
-        'Remove',
-        null,
-        () => here().desktop.setup.removeAccount(ref),
-        () => null,
-        false,
-        'Removing it…',
-    );
+    void ask(place, 'Remove', null, () => here().desktop.setup.removeAccount(ref), {
+        signedIn: false,
+        waiting: 'Removing it…',
+    });
 });
 
 // Keep it: the account as it now is becomes the one the desktop's note keeps, and the card no longer says the change.
@@ -781,15 +776,7 @@ defineReal('connect.keepChange', ([place]) => {
     const view = typeof place === 'string' ? accountAt(place) : null;
     if (typeof place !== 'string' || view?.ref == null || !keepsChange()) return;
     const ref = view.ref;
-    void ask(
-        place,
-        'Keep it',
-        null,
-        () => here().desktop.setup.keepChange(ref),
-        () => null,
-        true,
-        'Keeping it…',
-    );
+    void ask(place, 'Keep it', null, () => here().desktop.setup.keepChange(ref), { waiting: 'Keeping it…' });
 });
 
 /** Where the name of a new Reply account is kept until the desktop takes it. */
@@ -1615,9 +1602,8 @@ function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html
 function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html | null, place: Place): Html {
     const shown = actDialog.value?.place === place ? actDialog.value : null;
     // Below the Reply CLI the acts need, the card offers no act: only a desktop of an earlier version draws an account then.
-    const usable = typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
     // While a change of its sign-in is not answered, nothing is done in the account: no act on a sender, no connect.
-    const offering = view.signedIn && usable && view.change === null;
+    const offering = view.signedIn && usableCli(reply) && view.change === null;
     const team = view.team === null ? null : teamOnLine(view.team);
     // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
     const choosing = view.signedIn && view.teams !== null && choosesTeam();
