@@ -392,7 +392,7 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     });
     assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, teamName: null, orgId: 0, orgName: 'Made-up Org' }), { login: 'ada@example.test', userId: null, team: '9', teamName: null }, 'an organization of another shape is not read');
     assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: '9', orgId: 4242 }), { login: 'ada@example.test', userId: null, team: null }, 'nor one half said');
-    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, orgId: 4242, orgName: null }), { login: 'ada@example.test', userId: null, team: '9' }, 'nor one half null');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, orgId: 4242, orgName: null }), { login: 'ada@example.test', userId: null, team: '9', org: { id: '4242', name: '' } }, 'an organization Reply gives no name is one with no name');
     for (const [exit, body] of [[0, { userId: 7, teamId: 3 }], [0, { username: '' }], [0, null], [2, { username: 'ada@example.test' }]] as const) {
         assert.equal(whoami(exit, body), null, `${exit} ${JSON.stringify(body)}`);
     }

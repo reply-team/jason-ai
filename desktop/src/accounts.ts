@@ -186,8 +186,8 @@ export interface ReplyWhoami {
  * of Reply's /v3/whoami as it came and ends 0 (src/commands/auth.ts `handle_whoami`): `{userId, username, teamId}`, and
  * from a Reply that carries them `teamName`, `orgId` and `orgName` too, null where there is none. It asks in the
  * profile's pinned team, so Reply refuses it for a login in several teams with none pinned, or in a team it is not in,
- * and every failure ends with its error line on stderr alone. An organization is read only whole, both members said or
- * both null; nothing is stored.
+ * and every failure ends with its error line on stderr alone. An organization is read by its id, with no name where Reply
+ * gives it none, or as none where both members are null; nothing is stored.
  */
 export function readReplyWhoami(result: { exit: number; stdout: string }): ReplyWhoami | null {
     if (result.exit !== 0) return null;
@@ -204,7 +204,7 @@ export function readReplyWhoami(result: { exit: number; stdout: string }): Reply
     if (teamName === null || typeof teamName === 'string') said.teamName = teamName === null || replyName(teamName) === '' ? null : replyName(teamName);
     const [orgId, orgName] = [raw['orgId'], raw['orgName']];
     if (orgId === null && orgName === null) said.org = null;
-    else if (replyId(orgId) !== null && typeof orgName === 'string') said.org = { id: replyId(orgId)!, name: replyName(orgName) };
+    else if (replyId(orgId) !== null && (typeof orgName === 'string' || orgName === null)) said.org = { id: replyId(orgId)!, name: orgName === null ? '' : replyName(orgName) };
     return said;
 }
 
