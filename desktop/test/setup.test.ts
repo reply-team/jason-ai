@@ -18,7 +18,7 @@ import { npmLine, readUpdateSwitch, replyAtWork, replyStartCheck, runtimeReplyVe
 import { parseSettings, readSettings, saveSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import type { Programs, RunResult } from '../src/programs.ts';
 import type { Cli } from '../src/cli.ts';
-import { installLimit, Setup, writeAtomically, type SetupDeps, type SetupState } from '../src/setup.ts';
+import { installLimit, Setup, writeAtomically, type AccountState, type SetupDeps, type SetupState } from '../src/setup.ts';
 import {
     bundledPlugin,
     parseInstallationSettings,
@@ -1296,8 +1296,8 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         lists: { [`${bea}#5`]: { email: [mailbox] }, [`${cy}#5`]: { email: [mailbox] }, [`${bea}#8`]: { email: [otherMailbox] } },
         ids: { [bea]: 42, [cy]: 43, [dee]: 44 },
     };
-    type Case = { env?: Record<string, string>; restart?: boolean; count?: string; start?: boolean; org?: boolean; note?: boolean };
-    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count, start = false, org = false, note = false }: Case = {}) => {
+    type Case = { env?: Record<string, string>; restart?: boolean; count?: string; start?: boolean; org?: boolean; note?: boolean; shown?: boolean };
+    const checked = async (world: ReplyWorld, noted: string | null, act: (setup: Setup, change: (to: ReplyWorld) => void) => Promise<unknown>, pick: string | null, { env = {}, restart = false, count, start = false, org = false, note = false, shown = false }: Case = {}) => {
         const each = replyBench(t, world, env);
         writeInstallationSettings(each, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
         if (noted !== null) {
@@ -1310,9 +1310,11 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         await setup.status();
         await act(setup, (to) => writeFileSync(each.env['STUB_REPLY_WORLD']!, JSON.stringify(to)));
         if (start) setup = new Setup({ ...setupDeps(each), confirm: () => Promise.resolve(true) });
+        let lastCard: AccountState | undefined;
         const view = async () => {
             const from = each.record().length;
             const card = (await setup.status()).accounts?.accounts.find((one) => one.name === 'web');
+            lastCard = card;
             const listed = runsAfter(each, from, 'reply').some((run) => run.startsWith('--profile web account list'));
             const last = card?.lastSignIn ? `${card.lastSignIn.user} ${card.lastSignIn.team.id}` : '-';
             const choice = card?.teams === undefined ? '' : ` choose ${card.teams.map((team) => team.id).join()}`;
@@ -1337,9 +1339,10 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         };
         const views = await looks();
         if (note) {
-            const entry = (JSON.parse(readFileSync(each.paths.replyAccountNotes, 'utf8')) as { accounts: { user?: string; id?: string; team?: { id: string } }[] }).accounts[0];
-            views.push(`noted ${entry?.user ?? '-'} ${entry?.id ?? '-'} ${entry?.team?.id ?? '-'}`);
+            const entry = (JSON.parse(readFileSync(each.paths.replyAccountNotes, 'utf8')) as { accounts: { pick?: string; user?: string; id?: string; team?: { id: string } }[] }).accounts[0];
+            views.push(`noted ${entry === undefined ? 'nothing' : (entry.pick ?? `${entry.user} ${entry.id ?? '-'} ${entry.team?.id ?? '-'}`)}`);
         }
+        if (shown) views.push(`shown ${lastCard?.team?.name ?? '-'} unread ${lastCard?.unread.join() || '-'}`);
         if (count === undefined) return views;
         return [...views, `${count} ×${runsAfter(each, since, 'reply').filter((run) => run.startsWith(`--profile web ${count} `)).length}`];
     };
@@ -1404,10 +1407,10 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         ['another login, by a browser, its teams not readable', { ...room, browser: cy }, bea, byBrowser, null, [`${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) } }],
         // Reply refusing the read in the noted team while the teams cannot be read decides nothing: the noted login in its
         // pin, the refused reads said as not read, and made once.
-        ['no sign-in, the same login refused in the noted team, its teams not readable', { ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: bea } }, bea, none, null, [`${bea} 5 [] unread same last ${bea} 5 pin 5 teams unread`, 'account list ×2'], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) }, count: 'account list' }],
+        ['no sign-in, the same login refused in the noted team, its teams not readable', { ...room, seats: { ...room.seats, [bea]: [8] }, credentials: { web: bea } }, bea, none, null, [`${bea} 5 [] unread same last ${bea} 5 pin 5 teams unread`, 'shown Made-up Five unread email,linkedin', 'account list ×2'], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) }, count: 'account list', shown: true }],
         // A team picked afresh is set aside no longer once it is bound, though who signed in could not be read then: the next
         // look takes the pin, notes nothing, and writes no pin again.
-        ['another login the Reply CLI does not name, kept, bound while Reply cannot say who it is', { ...room, credentials: { web: { login: dee, unnamed: true } } }, bea, none, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, '? 7 [] same last - pin 7 login unread', '? 7 [] same last - pin 7 login unread', 'team use ×1'], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, count: 'team use' }],
+        ['another login the Reply CLI does not name, kept, bound while Reply cannot say who it is', { ...room, credentials: { web: { login: dee, unnamed: true } } }, bea, none, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, '? 7 [] same last - pin 7 login unread', '? 7 [] same last - pin 7 login unread', 'noted nothing', 'team use ×1'], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, count: 'team use', note: true }],
     ];
     for (const [name, world, noted, act, pick, expected, options] of cases) assert.deepEqual(await checked(world, noted, act, pick, options), expected, name);
     // A login is a Reply user. Reply naming the noted user by another address, as after the person changed it at Reply, is
@@ -1422,7 +1425,11 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     };
     const notedWeb = () => (JSON.parse(readFileSync(renamedAt.paths.replyAccountNotes, 'utf8')) as { accounts: unknown[] }).accounts;
     const rename = (to: Partial<ReplyWorld>) => writeFileSync(renamedAt.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...renamedAt.world(), ...to }));
+    // Noted before the user's id was kept: the first look takes the id, asking Reply only what the organization owes.
+    mkdirSync(dirname(renamedAt.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(renamedAt.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'web', user: bea, team: { id: '5', name: 'Made-up Five' } }] }));
     assert.deepEqual(await atStart(), { user: bea, team: '5', change: null, last: bea });
+    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: bea, id: '4205', team: { id: '5', name: 'Made-up Five' } }]);
     rename({ renamed: { [bea]: beaNew } });
     for (const start of ['the next start', 'a start after it']) assert.deepEqual(await atStart(), { user: beaNew, team: '5', change: null, last: beaNew }, start);
     assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: beaNew, id: '4205', team: { id: '5', name: 'Made-up Five' } }]);
