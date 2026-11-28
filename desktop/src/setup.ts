@@ -48,7 +48,8 @@ import {
     sameUser,
     signInKept,
     signInRead,
-    takenAsNoted,
+    noSignInSince,
+    whoIsAsked,
     withNote,
     writeAccountNotes,
     type BoundTeam,
@@ -687,8 +688,8 @@ export class Setup {
     #toCheck = new Map<string, number>();
     #marks = 0;
     /**
-     * Each account and team `auth whoami` was asked in during this run (`#whoami`): a look takes an account whose note holds
-     * no organization for its team as noted only once it is here (`takenAsNoted`), so that is asked once in each run.
+     * Each account and team `auth whoami` was asked in during this run (`#whoami`): with no sign-in since, a look asks it of
+     * an account whose note holds no organization for its team only while it is not here (`whoIsAsked`), once in each run.
      */
     #asked = new Set<string>();
     /**
@@ -1104,11 +1105,12 @@ export class Setup {
     }
 
     /**
-     * An account's sign-in, in three steps. Taken as noted (`takenAsNoted`), the account is its note and only its lists are
-     * read; Reply refusing them in that team gives a sign-in away. Otherwise what Reply and the Reply CLI say of the
-     * sign-in is gathered whole: its teams, the lists first where nothing else can decide (`restsOnPin`), and who it is,
-     * asked in the team it acts in (`asksIn`); `bindingOf` decides once; and the account is bound where it says, who it is
-     * asked in the team pinned where the gathering could not ask there. The pin is the one the account is left with.
+     * An account's sign-in, in three steps. With no sign-in since (`noSignInSince`), the account is its note: its lists are
+     * read, and only Reply refusing them in that team gives a sign-in away; where nothing is to be asked of Reply besides
+     * (`whoIsAsked`), that is all. Otherwise what Reply and the Reply CLI say of the sign-in is gathered whole: after a
+     * sign-in its teams, the lists first where nothing else can decide (`restsOnPin`), and who it is, asked in the team it
+     * acts in (`asksIn`); `bindingOf` decides once; and the account is bound where it says, who it is asked in the team
+     * pinned where the gathering could not ask there. The pin is the one the account is left with.
      */
     async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null }> {
         const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: shownSignIn(noted), change: null };
@@ -1120,20 +1122,25 @@ export class Setup {
         if (!auth.signedIn) return { state: read, pin: auth.team, userId: null };
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
         const files: SignInFiles = { pin: auth.team, login: auth.user, userId: auth.userId, keyTeam: auth.keyTeam };
+        const asked = (team: string) => this.#asked.has(askedKey(account, team));
         let listed: Lists | null = null;
         let refused = false;
-        if (takenAsNoted(files, noted, this.#toCheck.has(account.name), (team) => this.#asked.has(askedKey(account, team)))) {
+        const sinceNote = noSignInSince(files, noted, this.#toCheck.has(account.name));
+        if (sinceNote) {
             const { lists, outOfTeam } = await this.#lists(account);
-            if (!outOfTeam) return { state: { ...signedIn, ...lists, user: noted.user, team: noted.team }, pin: auth.team, userId: noted.id ?? auth.userId };
-            [listed, refused] = [lists, true];
+            if (!outOfTeam && !whoIsAsked(false, noted, asked)) return { state: { ...signedIn, ...lists, user: noted.user, team: noted.team }, pin: auth.team, userId: noted.id ?? auth.userId };
+            [listed, refused] = [lists, outOfTeam];
         }
-        const teams = await this.#teams(account);
+        const signIn = !sinceNote || refused;
+        // With no sign-in since, Reply is not asked for the teams: undefined, as the teams are no part of what is decided.
+        const teamsRead = signIn ? await this.#teams(account) : undefined;
+        const teams = teamsRead ?? null;
         if (listed === null && restsOnPin({ ...files, teams }, noted)) {
             const { lists, outOfTeam } = await this.#lists(account);
             [listed, refused] = [lists, outOfTeam];
         }
         const gathered = { ...files, refused, teams };
-        const askedIn = asksIn(gathered);
+        const askedIn = whoIsAsked(signIn, noted, asked) ? asksIn(gathered) : null;
         const who = askedIn === null ? undefined : await this.#whoami(account, askedIn);
         // Who it is: Reply's answer where it names the user the Reply CLI's files hold, by whatever address, or they hold
         // none, or it names another user than noted, which gives the sign-in away; the files' otherwise.
@@ -1154,11 +1161,11 @@ export class Setup {
         const answer = said != null && (login === null || sameUser(userOf(said), { user: login, id: userId })) ? said : null;
         const later = said != null && answer === null;
         const [user, id] = answer !== null ? [answer.login, answer.userId] : [login, userId];
-        const notRead: AccountState['notRead'] = [...(teams === null ? ['teams' as const] : []), ...(user === null && said !== undefined ? ['login' as const] : [])];
+        const notRead: AccountState['notRead'] = [...(teamsRead === null ? ['teams' as const] : []), ...(user === null && said !== undefined ? ['login' as const] : [])];
         // Checked by a look that began after the mark, that bound it with nothing changed and nothing unread; a change is
         // checked again at every look until it is answered.
         if (binding.change !== null || later) this.#markToCheck(account);
-        else if (team !== null && user !== null && teams !== null) this.#checked(account, marks);
+        else if (team !== null && user !== null && teamsRead !== null) this.#checked(account, marks);
         const now: AccountState = { ...signedIn, user, team: team === null ? null : namedBy(team, answer), change: binding.change, notRead };
         if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin, userId: id };
         if (!binding.lists) return { state: now, pin, userId: id };

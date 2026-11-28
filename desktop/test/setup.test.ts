@@ -1850,7 +1850,9 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: bothAsked }, 'after the first sign-in');
     assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: [] }, 'the next look');
     plainSetup = setupOn(plain);
+    from = plain.record().length;
     assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: bothAsked }, 'a desktop started again');
+    assert.deepEqual(runsAfter(plain, from, 'reply').filter((run) => run.includes(' team ')), [], 'with no sign-in since, no teams are asked');
     assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: [] }, 'its next look');
     // Another of the login's teams pinned in a terminal is a sign-in: once kept, the next look asks again, once.
     writeFileSync(plain.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...plain.world(), profiles: { ...plain.world().profiles, outbound: { team_id: 5 } } }));
