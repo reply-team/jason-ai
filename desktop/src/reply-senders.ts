@@ -1,7 +1,8 @@
 /**
- * Pure: what the desktop does with the Reply card's account acts, each of which is one verb of the Reply CLI
- * (`reply-cli-account.ts` holds that contract): its own sentences, what each refusal's code makes the card do, the main
- * process's confirmation boxes, and the check a link passes before the system opener is handed it.
+ * Pure: what the desktop does with the acts on a Reply account's senders, its mailboxes and LinkedIn accounts, each of
+ * which is one verb of the Reply CLI (`reply-cli-account.ts` holds that contract): its own sentences, what each refusal's
+ * code makes the card do, the main process's confirmation boxes (whose shape Sign out's and Remove's share), and the check
+ * a link passes before the system opener is handed it.
  *
  * A connection link and a consent address are the person's secrets: the main process hands
  * the link to the system opener and keeps nothing, and the page learns only that something was opened, when it expires
@@ -14,7 +15,7 @@ import { replyCliCodes as codes, replyCliUsagePrefix, type ReplyCliChannel, type
 /** How long one verb may take before it is stopped. */
 export const replyActLimitMs = 30_000;
 
-/** An account id as Reply gives one: digits with no leading zero, at most sixteen, a safe integer. */
+/** A sender's id as Reply gives one: digits with no leading zero, at most sixteen, a safe integer. */
 export function isReplyId(value: unknown): value is string {
     return typeof value === 'string' && /^[1-9][0-9]{0,15}$/.test(value) && Number.isSafeInteger(Number(value));
 }
@@ -25,21 +26,21 @@ export const isReplyChannel = (value: unknown): value is ReplyCliChannel => valu
 export const dailyLimitMost = 2_147_483_647;
 
 /** The desktop's sentences: the only words an act ends with. */
-export const replyAccountSentences = {
+export const senderSentences = {
     badName: 'Name the LinkedIn account in one line of up to 100 characters.',
-    badId: 'That is not an account Reply listed.',
+    badId: 'That is not a mailbox or LinkedIn account Reply listed.',
     badRequest: 'That is not an act the card offers.',
     badLimit: `A daily limit is a whole number from 0 to ${dailyLimitMost}.`,
     busy: 'Another act on a Reply account is going; wait for it.',
     notConfirmed: 'Nothing was done.',
     notOffered: 'That is offered only once Reply has said it is needed.',
-    signedOut: 'The LinkedIn account is signed out of LinkedIn, so Reply did not do it: reconnect the account first.',
+    signedOut: 'The LinkedIn account is signed out of LinkedIn, so Reply did not do it: reconnect it first.',
     inUse: 'Sequences use this LinkedIn account, so it was not deleted.',
     outcomeUnknown: 'Reply did not say how that ended; the list is read again to show where it stands.',
-    stateChanged: 'The account’s state changed meanwhile, so nothing was changed; the list is read again.',
-    stateUnknown: 'Reply gave the account a state the desktop does not know, so nothing was changed; the list is read again.',
-    pauseUnavailable: 'Reply cannot pause this account from the status it is in.',
-    accountGone: 'Reply no longer has that account; the list is read again.',
+    stateChanged: 'Its state changed meanwhile, so nothing was changed; the list is read again.',
+    stateUnknown: 'Reply gave it a state the desktop does not know, so nothing was changed; the list is read again.',
+    pauseUnavailable: 'Reply cannot pause this LinkedIn account from the status it is in.',
+    accountGone: 'Reply no longer has that mailbox or LinkedIn account; the list is read again.',
     mailboxLimit: 'This Reply account has reached the number of mailboxes its plan allows.',
     mailboxSeat: 'One more mailbox would need another paid seat in Reply.',
     linkedInLimit: 'This Reply account has reached the number of LinkedIn accounts its plan allows.',
@@ -63,10 +64,10 @@ const nameLimit = 100;
 
 /** Why a typed LinkedIn account name is refused, or null: one plain line of one to a hundred characters, trimmed. */
 export function linkedInNameProblem(value: unknown): string | null {
-    if (typeof value !== 'string') return replyAccountSentences.badName;
+    if (typeof value !== 'string') return senderSentences.badName;
     const name = value.trim();
     const length = [...name].length;
-    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return replyAccountSentences.badName;
+    if (length === 0 || length > nameLimit || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name)) return senderSentences.badName;
     return null;
 }
 
@@ -91,20 +92,20 @@ const refusal = (refused: string, code: string | null, offer: ReplyOffer | null 
 
 /** The plan's limits: a sentence, nothing offered. */
 const planLimits: Readonly<Record<string, string>> = {
-    [codes.emailAccountLimitReached]: replyAccountSentences.mailboxLimit,
-    [codes.emailAccountNoFreeMailboxSlots]: replyAccountSentences.mailboxSeat,
-    [codes.linkedInAccountLimitReached]: replyAccountSentences.linkedInLimit,
-    [codes.accessFeatureUnavailable]: replyAccountSentences.notInPlan,
+    [codes.emailAccountLimitReached]: senderSentences.mailboxLimit,
+    [codes.emailAccountNoFreeMailboxSlots]: senderSentences.mailboxSeat,
+    [codes.linkedInAccountLimitReached]: senderSentences.linkedInLimit,
+    [codes.accessFeatureUnavailable]: senderSentences.notInPlan,
 };
 
 /** The codes after which the card reads the list again and shows what is; it never repeats the act by itself. */
 const rereads: Readonly<Record<string, string>> = {
-    [codes.outcomeUnknown]: replyAccountSentences.outcomeUnknown,
-    [codes.accountStatusChanged]: replyAccountSentences.stateChanged,
-    [codes.accountStatusUnknown]: replyAccountSentences.stateUnknown,
-    [codes.accountPauseUnavailable]: replyAccountSentences.pauseUnavailable,
-    [codes.emailAccountNotFound]: replyAccountSentences.accountGone,
-    [codes.linkedInAccountNotFound]: replyAccountSentences.accountGone,
+    [codes.outcomeUnknown]: senderSentences.outcomeUnknown,
+    [codes.accountStatusChanged]: senderSentences.stateChanged,
+    [codes.accountStatusUnknown]: senderSentences.stateUnknown,
+    [codes.accountPauseUnavailable]: senderSentences.pauseUnavailable,
+    [codes.emailAccountNotFound]: senderSentences.accountGone,
+    [codes.linkedInAccountNotFound]: senderSentences.accountGone,
 };
 
 /** The acts that change something at Reply, whose ending without an answer may still have done it. */
@@ -119,14 +120,14 @@ export function refusalOf(
     act: { verb: ReplyAct; channel: ReplyCliChannel; write: boolean; force?: boolean },
 ): ReplyRefusal {
     const write = act.write && writes.has(act.verb);
-    if (ending.kind === 'unknown') return refusal(replyAccountSentences.outcomeUnknown, codes.outcomeUnknown, null, true);
-    if (ending.kind === 'unreached') return write ? refusal(replyAccountSentences.unreachedWrite, null, null, true) : refusal(replyAccountSentences.unreached, null);
+    if (ending.kind === 'unknown') return refusal(senderSentences.outcomeUnknown, codes.outcomeUnknown, null, true);
+    if (ending.kind === 'unreached') return write ? refusal(senderSentences.unreachedWrite, null, null, true) : refusal(senderSentences.unreached, null);
     const code = ending.code;
     if (code === null) return refusal(otherRefusal(null), null);
     // A reconnect's own refusal offers no second reconnect.
-    if (code === codes.linkedInInvalidCookie) return refusal(replyAccountSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
+    if (code === codes.linkedInInvalidCookie) return refusal(senderSentences.signedOut, code, act.verb === 'reconnect' ? null : 'reconnect');
     if (code === codes.linkedInAccountInUse && act.verb === 'delete' && act.channel === 'linkedin' && act.force !== true) {
-        return refusal(replyAccountSentences.inUse, code, 'force');
+        return refusal(senderSentences.inUse, code, 'force');
     }
     if (Object.hasOwn(rereads, code)) return refusal(rereads[code]!, code, null, true);
     if (Object.hasOwn(planLimits, code)) return refusal(planLimits[code]!, code);
@@ -162,24 +163,25 @@ export function isOpenableLink(value: unknown): value is string {
     return url.protocol === 'https:' && url.username === '' && url.password === '' && url.port === '' && isHostName(url.hostname);
 }
 
-/** An account as the main process names it in a box: by the list's name and address, as the card shows it. */
-export interface NamedAccount {
+/** A sender as the main process names it in a box: by the list's name and address, as the card shows it. */
+export interface NamedSender {
     channel: string;
     name: string;
     address: string;
 }
 
-const capped = (text: string): string => {
+/** A name drawn in a box: control and format characters made spaces, trimmed, and cut to eighty characters. */
+export const capped = (text: string): string => {
     const characters = [...text.replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()];
     return characters.length > 80 ? `${characters.slice(0, 80).join('')}…` : characters.join('');
 };
 
-/** `the mailbox Sales (sales@example.test)`, `the LinkedIn account Ada`: the account as the list names it. */
-export function accountWords(account: NamedAccount): string {
-    const name = capped(account.name);
-    const address = capped(account.address);
+/** `the mailbox Sales (sales@example.test)`, `the LinkedIn account Ada`: the sender as the list names it. */
+export function senderWords(sender: NamedSender): string {
+    const name = capped(sender.name);
+    const address = capped(sender.address);
     const named = name && address && name !== address ? `${name} (${address})` : name || address || 'with no name';
-    return `${account.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'} ${named}`;
+    return `${sender.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'} ${named}`;
 }
 
 /** A native box of the main process: its words, Cancel focused, and only the first button a yes. */
@@ -194,7 +196,7 @@ export interface ReplyBox {
     noLink: true;
 }
 
-const box = (type: ReplyBox['type'], message: string, detail: string, yes: string): ReplyBox => ({
+export const box = (type: ReplyBox['type'], message: string, detail: string, yes: string): ReplyBox => ({
     type,
     title: message,
     message,
@@ -205,9 +207,9 @@ const box = (type: ReplyBox['type'], message: string, detail: string, yes: strin
     noLink: true,
 });
 
-/** The box of an act on one account, naming it as the list does. */
-export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' | 'limits', account: NamedAccount, daily?: number): ReplyBox {
-    const named = accountWords(account);
+/** The box of an act on one sender, naming it as the list does. */
+export function actBox(act: 'pause' | 'resume' | 'unblock' | 'delete' | 'force' | 'limits', sender: NamedSender, daily?: number): ReplyBox {
+    const named = senderWords(sender);
     switch (act) {
         case 'pause':
             return box('question', `Pause ${named}?`, 'Reply stops its automation until it is resumed.', 'Pause');

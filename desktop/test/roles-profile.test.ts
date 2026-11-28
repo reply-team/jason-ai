@@ -150,7 +150,7 @@ test('in Live the start connects with the host the chat holds and a turn with it
 
 // ---- Against the stub runtime ---------------------------------------------------------------------------------------
 
-test('a fresh installation with Claude Code connected gets one profile for it, named the default; the mark goes before the create and after the write', async (t) => {
+test('a fresh installation with Claude Code connected gets one profile for it, named the default; the mark goes before the create and after the write; a listing asked after it is read afresh', async (t) => {
     const b = bench(t, { programs: ['claude'] });
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply' } }, Roles: { MaxStdoutBytes: 1000 } });
     const setup = setupOn(b);
@@ -175,6 +175,30 @@ test('a fresh installation with Claude Code connected gets one profile for it, n
     const listed = asked(b, 'profile list').length;
     assert.equal(await setup.connectRoles('claude'), 'settled');
     assert.equal(asked(b, 'profile list').length, listed);
+
+    // A listing that began before the default was named, held at the runtime's plugins, does not answer one asked after.
+    const again = bench(t, { programs: ['claude'] });
+    writeInstallationSettings(again, {});
+    let release: () => void = () => undefined;
+    let holding = true;
+    const naming = setupOn(again, {
+        cli: {
+            run: async (args, options) => {
+                if (holding && args[0] === 'plugin' && args[1] === 'list') {
+                    holding = false;
+                    await new Promise<void>((resolve) => (release = resolve));
+                }
+                return again.cli.run(args, options);
+            },
+        },
+    });
+    const going = naming.status();
+    while (holding) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(await naming.connectRoles(null), 'made');
+    const after = naming.status();
+    release();
+    await Promise.all([going, after]);
+    assert.equal(asked(again, 'plugin list').length, 2, 'the listing asked after the default was named is not the one that began before');
 });
 
 test('a chat set to run on Codex puts the roles on Codex, and a key provider puts them on Claude Code', async (t) => {

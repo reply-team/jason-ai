@@ -299,31 +299,19 @@ function derivedHost(server: unknown): string | null {
     }
 }
 
-/** The Reply plugin's binding as the golden path writes it: the reply-cli profile the route acts as. */
-export interface ReplyWiring {
-    settings: Json;
-    /** Whether `Routes:Default` was written, which it is only where the file holds none. */
-    routeWritten: boolean;
-}
-
 /**
  * The installation's settings with Jason's Reply plugin granted its one executable (`Plugins:Grants:reply:Exec`, written
- * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept) and,
- * where the file names no global default at all, named the global default with the signed-in profile
- * (`Routes:Default`), as the golden path writes both by hand. A default a person set is never replaced; every other key
- * stays as it was, and the input is not changed.
+ * as `["reply"]` only where the grant does not already hold `reply`, so one a person widened is kept), as the golden path
+ * writes it by hand; every other key stays as it was, and the input is not changed.
  */
-export function withReplyWired(settings: Json, profile: string): ReplyWiring {
+export function withReplyGranted(settings: Json): Json {
     const next = structuredClone(settings);
     const exec = at(next, ['Plugins', 'Grants', 'reply', 'Exec']);
     if (!(Array.isArray(exec) && exec.includes('reply'))) {
         const grant = section(next, ['Plugins', 'Grants', 'reply']);
         grant[keyOf(grant, 'Exec')] = ['reply'];
     }
-    const routes = existing(next, ['Routes']);
-    const routeWritten = routes === undefined || routes[keyOf(routes, 'Default')] === undefined;
-    if (routeWritten) section(next, ['Routes'])[keyOf(routes ?? {}, 'Default')] = { Plugin: 'reply', Binding: { profile } };
-    return { settings: next, routeWritten };
+    return next;
 }
 
 const present = (value: unknown) => typeof value === 'string' && value !== '';
@@ -413,13 +401,14 @@ export const replyMinimumVersion = '0.23.2';
 export const replyChannels = ['email', 'linkedin'] as const;
 export type ReplyChannel = (typeof replyChannels)[number];
 
-export interface ReplyAccount {
+/** A sender of a Reply account, a mailbox or a LinkedIn account, as `reply account list` gives it. */
+export interface ReplySender {
     id: string;
     channel: string;
     name: string;
     address: string;
     /**
-     * The state Reply reports for the account, its `reply_status` as Reply wrote it (email: connected, disconnected,
+     * The state Reply reports for the sender, its `reply_status` as Reply wrote it (email: connected, disconnected,
      * unknown; LinkedIn: enabled, disabled, cookieInvalid, dailyLimitReached; or another word); empty when Reply reported
      * none. The CLI's own `status` summarises it into four words and is not read.
      */
@@ -439,16 +428,37 @@ export interface ReplyAccount {
 // `--json` is the CLI's global flag for compact output (src/index.ts, src/utils/output.ts); without it the same object is
 // printed indented, so it is passed to both.
 
-/** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
-const profileLimit = 64;
+/**
+ * A sign-in as `reply auth status --json` prints it: whether there is one, as whom (the login reply-cli stored at the
+ * sign-in, and Reply's id of that user, digits only), and the team its runs send, the top-level `team_id`, which is the profile's pin where the run names no team and the environment holds no
+ * `REPLY_TEAM_ID`, as the desktop's runs never do: by its id, digits only, or null for none. For a key (`method`
+ * `api_key`), `keyTeam` is the team it acts in, whatever team a run asks: the `team_id` of the user reply-cli stored from
+ * Reply's whoami when the key signed in (src/commands/auth.ts `handle_login_token`); null for a browser's sign-in, or a key
+ * stored with none.
+ */
+export interface ReplyAuth {
+    signedIn: boolean;
+    user: string | null;
+    userId: string | null;
+    team: string | null;
+    keyTeam: string | null;
+}
 
-export function parseReplyAuth(stdout: string): { signedIn: boolean; user: string | null; profile: string | null } {
+const replyIdOf = (value: unknown): string | null => (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? String(value) : null);
+
+export function parseReplyAuth(stdout: string): ReplyAuth {
     try {
-        const raw = JSON.parse(stdout) as { authenticated?: unknown; profile?: unknown; user?: { username?: unknown } };
-        const profile = typeof raw.profile === 'string' && raw.profile.length > 0 && raw.profile.length <= profileLimit ? raw.profile : null;
-        return { signedIn: raw.authenticated === true, user: typeof raw.user?.username === 'string' ? raw.user.username : null, profile };
+        const raw = JSON.parse(stdout) as { authenticated?: unknown; method?: unknown; user?: { id?: unknown; username?: unknown; team_id?: unknown }; team_id?: unknown };
+        const user = typeof raw.user?.username === 'string' ? raw.user.username : null;
+        return {
+            signedIn: raw.authenticated === true,
+            user,
+            userId: user === null ? null : replyIdOf(raw.user?.id),
+            team: replyIdOf(raw.team_id),
+            keyTeam: raw.method === 'api_key' ? replyIdOf(raw.user?.team_id) : null,
+        };
     } catch {
-        return { signedIn: false, user: null, profile: null };
+        return { signedIn: false, user: null, userId: null, team: null, keyTeam: null };
     }
 }
 
@@ -458,7 +468,7 @@ export function parseReplyAuth(stdout: string): { signedIn: boolean; user: strin
  * before it prints, with its error line on stderr alone: a profile it does not know (`usage.profile`, exit 2), a
  * credential store it cannot read (`store.read`, `store.corrupt`, exit 1). A time limit is exit -1.
  */
-export function readReplyAuth(result: { exit: number; stdout: string }): { signedIn: boolean; user: string | null; profile: string | null } | null {
+export function readReplyAuth(result: { exit: number; stdout: string }): ReplyAuth | null {
     if (result.exit !== 0 && result.exit !== 1) return null;
     try {
         const raw: unknown = JSON.parse(result.stdout);
@@ -469,24 +479,7 @@ export function readReplyAuth(result: { exit: number; stdout: string }): { signe
     return parseReplyAuth(result.stdout);
 }
 
-/**
- * The plugin `jason route list` names as the global default, null for none; or null for the whole where the list was
- * not read: an exit other than 0 (3 where no runtime answered, 1 where it refused, -1 at the time limit), or an answer
- * without `global.default`, which the runtime prints as null where no default is set.
- */
-export function readGlobalDefault(result: { exit: number; stdout: string }): { plugin: string | null } | null {
-    if (result.exit !== 0) return null;
-    try {
-        const raw = JSON.parse(result.stdout) as { global?: { default?: { plugin_id?: unknown } | null } } | null;
-        const fallback = raw?.global?.default;
-        if (fallback === null) return { plugin: null };
-        return typeof fallback?.plugin_id === 'string' ? { plugin: fallback.plugin_id } : null;
-    } catch {
-        return null;
-    }
-}
-
-export function parseReplyAccounts(stdout: string): ReplyAccount[] {
+export function parseReplySenders(stdout: string): ReplySender[] {
     try {
         const raw = JSON.parse(stdout) as { items?: Record<string, unknown>[] };
         return (raw.items ?? []).map((item) => ({
@@ -502,7 +495,7 @@ export function parseReplyAccounts(stdout: string): ReplyAccount[] {
 }
 
 /** What one channel's `reply account list --channel <channel> --json` came to. */
-export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { kind: 'absent' } | { kind: 'unread' };
+export type ReplyChannelRead = { kind: 'listed'; senders: ReplySender[] } | { kind: 'absent' } | { kind: 'outOfTeam' } | { kind: 'unread' };
 
 /**
  * reply-cli 0.20.0 (src/operations/call.ts `refusal`, built to dist/operations/call.js:107-111) answers a 403 that has
@@ -513,15 +506,23 @@ export type ReplyChannelRead = { kind: 'listed'; accounts: ReplyAccount[] } | { 
 const channelAbsentCode = 'access.feature_unavailable';
 
 /**
- * One channel's read, in three outcomes: listed, absent (the CLI's own code above, read from the last line of stderr
- * and nothing else), and unread for every other ending, a network failure, an expired sign-in, an exit nobody explained,
- * a timeout (exit -1) or an answer that is no list. The CLI's own words are read for the code only, never kept.
+ * Reply's own code, which reply-cli 0.23.2 carries as `reply_code` beside `access.denied` (src/operations/call.ts
+ * `refusal`), for a sign-in that cannot act in the team the run asks in: its profile's pinned team.
+ */
+const outOfTeamCodes: ReadonlySet<unknown> = new Set(['TEAM_NOT_ACCESSIBLE']);
+
+/**
+ * One channel's read, in four outcomes: listed; absent (the CLI's own code above, read from the last line of stderr
+ * and nothing else); out of its team, Reply refusing the sign-in in its pinned team (`access.denied` carrying one of the
+ * codes above); and unread for every other ending, a network failure, an expired sign-in, Reply refusing a sign-in in
+ * several teams that names none (`access.denied` carrying `TEAM_REQUIRED`), an exit nobody explained, a timeout (exit -1)
+ * or an answer that is no list. The CLI's own words are read for the codes only, never kept.
  */
 export function readReplyChannel(result: { exit: number; stdout: string; stderr: string }): ReplyChannelRead {
     if (result.exit === 0) {
         try {
             const raw = JSON.parse(result.stdout) as { items?: unknown };
-            return Array.isArray(raw.items) ? { kind: 'listed', accounts: parseReplyAccounts(result.stdout) } : { kind: 'unread' };
+            return Array.isArray(raw.items) ? { kind: 'listed', senders: parseReplySenders(result.stdout) } : { kind: 'unread' };
         } catch {
             return { kind: 'unread' };
         }
@@ -529,8 +530,9 @@ export function readReplyChannel(result: { exit: number; stdout: string; stderr:
     if (result.exit !== 1) return { kind: 'unread' };
     const last = result.stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '').pop();
     try {
-        const code = (JSON.parse(last ?? '') as { error?: { code?: unknown } }).error?.code;
-        return code === channelAbsentCode ? { kind: 'absent' } : { kind: 'unread' };
+        const error = (JSON.parse(last ?? '') as { error?: { code?: unknown; reply_code?: unknown } }).error;
+        if (error?.code === channelAbsentCode) return { kind: 'absent' };
+        return error?.code === 'access.denied' && outOfTeamCodes.has(error.reply_code) ? { kind: 'outOfTeam' } : { kind: 'unread' };
     } catch {
         return { kind: 'unread' };
     }
@@ -625,17 +627,21 @@ export function pluginRuntimes(stdout: string): Map<string, PluginRuntime> {
 }
 
 /**
- * Whether the runtime holds Jason's Reply plugin valid, as `jason plugin list` answered: false for one it lists in another
- * state or does not list; null where it gave no list (an exit other than 0, or no `plugins` list printed).
+ * What of Jason's Reply plugin is in place, as `jason plugin list` answered: whether the runtime lists its package, in any
+ * state, whether it holds it valid, and whether its Exec grant holds the Reply CLI (`capabilities.exec.granted`, as the load
+ * resolved the grant). Null where the runtime gave no list.
  */
-export function replyPluginValid(result: { exit: number; stdout: string }): boolean | null {
+export function replyPlacement(result: { exit: number; stdout: string }): { placed: boolean; valid: boolean; granted: boolean } | null {
     if (result.exit !== 0) return null;
+    let raw: { plugins?: unknown } | null;
     try {
-        const raw = JSON.parse(result.stdout) as { plugins?: unknown } | null;
-        if (!Array.isArray(raw?.plugins)) return null;
+        raw = JSON.parse(result.stdout) as { plugins?: unknown } | null;
     } catch {
         return null;
     }
-    return pluginRuntimes(result.stdout).get('reply')?.valid ?? false;
+    if (!Array.isArray(raw?.plugins)) return null;
+    const reply = (raw.plugins as { id?: unknown; status?: unknown; capabilities?: { exec?: { granted?: unknown } | null } | null }[]).find((plugin) => plugin?.id === 'reply');
+    const granted = reply?.capabilities?.exec?.granted;
+    return { placed: reply !== undefined, valid: reply?.status === 'valid', granted: Array.isArray(granted) && granted.includes('reply') };
 }
 

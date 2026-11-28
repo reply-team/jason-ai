@@ -245,7 +245,7 @@ test('every CLI run is logged by its verb, exit and time, never by its arguments
 const replySkillCalls = (b: Bench) => b.record().filter((entry) => entry.name === 'reply' && entry.args.join(' ') === 'skills install adapter --project --agent codex');
 const replyRecordFile = (b: Bench) => join(b.paths.skillsRecords, 'reply.json');
 
-test('a first start with no record of the Reply skills and Reply signed in deploys them and records them with their digests', async (t) => {
+test('a first start with no record of the Reply skills and any Reply profile signed in deploys them and records them with their digests', async (t) => {
     const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
     runtimeAlreadyUp(b);
     await start(b);
@@ -260,14 +260,32 @@ test('a first start with no record of the Reply skills and Reply signed in deplo
     // With the record kept, a later start runs nothing of Reply's.
     await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
     assert.equal(replySkillCalls(b).length, 1);
+    // Signed in is any profile the Reply CLI holds, each asked by its name, as the cards read them: the profile the CLI
+    // is set to decides nothing. Here it is set to one with no sign-in, and another holds one.
+    const world = join(b.root, 'reply-world.json');
+    writeFileSync(world, JSON.stringify({ current: 'quiet', profiles: { quiet: {}, outbound: {} }, credentials: { outbound: 'bea@example.test' } }));
+    const other = bench(t, { programs: ['reply'], env: { STUB_REPLY_WORLD: world } });
+    runtimeAlreadyUp(other);
+    await start(other);
+    assert.equal(replySkillCalls(other).length, 1, 'deployed for the profile that is signed in');
+    assert.deepEqual(
+        other.record().filter((entry) => entry.name === 'reply' && entry.args.includes('status')).map((entry) => entry.args.join(' ')),
+        ['--profile default auth status --json', '--profile quiet auth status --json', '--profile outbound auth status --json'],
+    );
 });
 
-test('not signed in to Reply, or no Reply CLI, a start runs no install of the Reply skills and records nothing', async (t) => {
+test('no Reply profile signed in, or no Reply CLI, a start runs no install of the Reply skills and records nothing', async (t) => {
     const out = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'no' } });
     runtimeAlreadyUp(out);
     await start(out);
     assert.equal(replySkillCalls(out).length, 0);
     assert.ok(!existsSync(replyRecordFile(out)));
+    const world = join(out.root, 'reply-world.json');
+    writeFileSync(world, JSON.stringify({ current: 'outbound', profiles: { outbound: {} }, credentials: {} }));
+    const nobody = bench(t, { programs: ['reply'], env: { STUB_REPLY_WORLD: world } });
+    runtimeAlreadyUp(nobody);
+    await start(nobody);
+    assert.equal(replySkillCalls(nobody).length, 0, 'no profile signed in');
     const none = bench(t);
     runtimeAlreadyUp(none);
     await start(none);

@@ -45,15 +45,23 @@ test('the label replaces an inherited one in any letter case, so there is one; w
     }
 });
 
-test('the reply the desktop runs carries the label, and another program it runs does not', async (t) => {
-    const b = bench(t, { programs: ['reply', 'npm'], env: { reply_client: 'someone-else/1.0' }, bundleVersion: '0.35.0+4f2a9c1' });
-    assert.equal((await b.programs.run('reply', ['auth', 'status', '--json'])).exit, 1);
+// The variables reply-cli 0.23.2 reads to choose the account a run acts as (src/profile.ts, src/auth/resolve.ts,
+// src/auth/request-identity.ts, src/config.ts): a run the desktop starts names its account by --profile alone, so none of
+// them decides it, in any letter case Windows may have written its name in.
+const accountChoosers = { REPLY_PROFILE: 'other', Reply_Api_Key: 'planted-env-key', REPLY_TEAM_ID: '9', reply_config_dir: '/elsewhere/reply' };
+
+test('the reply the desktop runs carries the label and none of the variables that would choose its account, and another program it runs keeps its environment whole', async (t) => {
+    const b = bench(t, { programs: ['reply', 'npm'], env: { reply_client: 'someone-else/1.0', XDG_CONFIG_HOME: '/kept/config', ...accountChoosers }, bundleVersion: '0.35.0+4f2a9c1' });
+    assert.equal((await b.programs.run('reply', ['--profile', 'default', 'auth', 'status', '--json'])).exit, 1);
     assert.equal((await b.programs.run('npm', ['install', '-g', 'something'])).exit, 0);
     const [reply, npm] = b.record();
     assert.equal(reply?.name, 'reply');
     assert.deepEqual(named(reply?.env ?? {}).map(([, value]) => value), ['jason-harness/0.35.0']);
+    assert.deepEqual(Object.keys(reply?.env ?? {}).filter((name) => /^reply_(?:profile|api_key|team_id|config_dir)$/i.test(name)), [], 'none chooses the account');
+    assert.equal(reply?.env['XDG_CONFIG_HOME'], '/kept/config', 'where its configuration is stays the machine’s, as the runtime’s plugin reads it');
     assert.equal(npm?.name, 'npm');
     assert.deepEqual(named(npm?.env ?? {}).map(([, value]) => value), ['someone-else/1.0'], 'another program is started as before');
+    for (const [variable, value] of Object.entries(accountChoosers)) assert.equal(npm?.env[variable], value, variable);
 });
 
 test('with no bundle version the reply the desktop runs carries no label, not even an inherited one', async (t) => {

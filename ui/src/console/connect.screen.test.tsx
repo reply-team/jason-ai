@@ -1,12 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopReplyAccount, DesktopReplyChannel, DesktopReplyRefusal, DesktopSetup } from '../platform/desktop';
+import type { DesktopReplySender, DesktopReplyChannel, DesktopReplyRefusal, DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, chatDesktop, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import {
+    replyAccount,
+    setupFound,
+    chatDesktop,
+    stubDesktop,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { listen } from './actions';
@@ -66,8 +74,14 @@ const replyCard = (connect: HTMLElement) =>
     within(connect).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** Words as drawn: the hint of a Reply account’s mark shows only under the pointer or the keyboard’s focus. */
+const drawnWords = (element: Element) => {
+    const drawn = element.cloneNode(true) as Element;
+    drawn.querySelectorAll('.acct-elsewhere-hint').forEach((hint) => hint.remove());
+    return words(drawn);
+};
 
-const account = (id: string, channel: string, status: string, name = `Account ${id}`): DesktopReplyAccount => ({
+const sender = (id: string, channel: string, status: string, name = `Account ${id}`): DesktopReplySender => ({
     id,
     channel,
     name,
@@ -75,16 +89,16 @@ const account = (id: string, channel: string, status: string, name = `Account ${
     status,
 });
 
-const withAccounts = (accounts: DesktopReplyAccount[]): DesktopSetup => ({
+const withSenders = (senders: DesktopReplySender[]): DesktopSetup => ({
     ...setupFound,
-    reply: { ...setupFound.reply, accounts },
+    reply: { ...setupFound.reply, accounts: senders },
 });
 
 const statusReads = (desktop: StubDesktop) => desktop.calls.filter((call) => call.name === 'setup.status').length;
 
 const focusBack = () => fireEvent.focus(window);
 
-/** Each account row as a person reads it: the heading over it, its name and its state. */
+/** Each sender's row as a person reads it: the heading over it, its name and its state. */
 function rows(card: HTMLElement): [string, string, string][] {
     return Array.from(card.querySelectorAll<HTMLElement>('.acct')).map((row) => [
         words(row.closest('.acct-group')!.querySelector('.acct-hd')!),
@@ -115,12 +129,12 @@ afterEach(() => {
 describe('the Reply card', () => {
     it('groups the accounts by channel: email, then LinkedIn, then a channel it does not know, by its own name', async () => {
         renderConnect(
-            withAccounts([
-                account('li1', 'linkedin', 'enabled'),
-                account('x1', 'whatsapp', 'connected'),
-                account('em1', 'email', 'connected'),
-                account('li2', 'linkedin', 'disabled'),
-                account('em2', 'email', 'disconnected'),
+            withSenders([
+                sender('li1', 'linkedin', 'enabled'),
+                sender('x1', 'whatsapp', 'connected'),
+                sender('em1', 'email', 'connected'),
+                sender('li2', 'linkedin', 'disabled'),
+                sender('em2', 'email', 'disconnected'),
             ]),
         );
         const card = replyCard(await openConnect());
@@ -135,22 +149,19 @@ describe('the Reply card', () => {
     });
 
     it('shows the accounts however late the first read of the setup answers', async () => {
-        renderConnect(
-            withAccounts([account('em1', 'email', 'connected'), account('li1', 'linkedin', 'enabled')]),
-            1500,
-        );
+        renderConnect(withSenders([sender('em1', 'email', 'connected'), sender('li1', 'linkedin', 'enabled')]), 1500);
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), words)).toEqual(['Email', 'LinkedIn']);
     });
 
     it('draws no heading for a channel with no account', async () => {
-        renderConnect(withAccounts([account('li1', 'linkedin', 'enabled')]));
+        renderConnect(withSenders([sender('li1', 'linkedin', 'enabled')]));
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), words)).toEqual(['LinkedIn']);
     });
 
     it('draws nothing of the accounts for an empty list', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const card = replyCard(await openConnect());
         expect(card.querySelector('.acct-group')).toBeNull();
         expect(card.querySelector('.acct')).toBeNull();
@@ -159,18 +170,18 @@ describe('the Reply card', () => {
     it('says each state Reply reports in plain words, an unknown one as its own text, and an absent one as unknown', async () => {
         const long = `pausedForReview${'x'.repeat(45)}`;
         renderConnect(
-            withAccounts([
-                account('e1', 'email', 'connected'),
-                account('e2', 'email', 'disconnected'),
-                account('e3', 'email', 'unknown'),
-                account('l1', 'linkedin', 'enabled'),
-                account('l2', 'linkedin', 'disabled'),
-                account('l3', 'linkedin', 'cookieInvalid'),
-                account('l4', 'linkedin', 'dailyLimitReached'),
-                account('e4', 'email', hostile),
-                account('e5', 'email', long),
-                account('e6', 'email', ''),
-                account('l5', 'linkedin', 'connected'),
+            withSenders([
+                sender('e1', 'email', 'connected'),
+                sender('e2', 'email', 'disconnected'),
+                sender('e3', 'email', 'unknown'),
+                sender('l1', 'linkedin', 'enabled'),
+                sender('l2', 'linkedin', 'disabled'),
+                sender('l3', 'linkedin', 'cookieInvalid'),
+                sender('l4', 'linkedin', 'dailyLimitReached'),
+                sender('e4', 'email', hostile),
+                sender('e5', 'email', long),
+                sender('e6', 'email', ''),
+                sender('l5', 'linkedin', 'connected'),
             ]),
         );
         const card = replyCard(await openConnect());
@@ -208,7 +219,7 @@ describe('the Reply card', () => {
 
     it('cuts by characters, never inside one, and leaves forty characters whole', async () => {
         const forty = `${'x'.repeat(39)}😀`;
-        renderConnect(withAccounts([account('e1', 'email', `${forty}yy`), account('e2', 'email', forty)]));
+        renderConnect(withSenders([sender('e1', 'email', `${forty}yy`), sender('e2', 'email', forty)]));
         const states = new Map(rows(replyCard(await openConnect())).map(([, name, state]) => [name, state]));
         expect(states.get('Account e1')).toBe(`${forty}…`);
         expect(states.get('Account e2')).toBe(forty);
@@ -216,7 +227,7 @@ describe('the Reply card', () => {
 
     it('draws a channel it does not know as inert text, cut to forty characters', async () => {
         const channel = `${hostile}${'y'.repeat(30)}`;
-        renderConnect(withAccounts([account('z1', channel, 'connected')]));
+        renderConnect(withSenders([sender('z1', channel, 'connected')]));
         const card = replyCard(await openConnect());
         expect(Array.from(card.querySelectorAll('.acct-hd'), (each) => each.textContent!.trim())).toEqual([
             `${channel.slice(0, 40)}…`,
@@ -225,12 +236,12 @@ describe('the Reply card', () => {
     });
 
     it('opens Reply for what the card does not do with one plain https link', async () => {
-        renderConnect(withAccounts([account('em1', 'email', 'connected'), account('li1', 'linkedin', 'enabled')]));
+        renderConnect(withSenders([sender('em1', 'email', 'connected'), sender('li1', 'linkedin', 'enabled')]));
         const card = replyCard(await openConnect());
         const links = within(card).getAllByRole('link');
         expect(links).toHaveLength(1);
         const link = links[0]! as HTMLAnchorElement;
-        expect(words(link)).toBe('Manage accounts in Reply');
+        expect(words(link)).toBe('Manage mailboxes and LinkedIn accounts in Reply');
         expect(link.getAttribute('href')).toBe(replyAccountsAddress);
         expect(new URL(link.href).protocol).toBe('https:');
         expect(link.tagName).toBe('A');
@@ -251,7 +262,7 @@ describe('the Reply card, a channel it did not list', () => {
         pendingUnread: DesktopReplyChannel[] = [],
     ): DesktopSetup => ({
         ...setupFound,
-        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread, pendingUnread },
+        reply: { ...setupFound.reply, accounts: [sender('em1', 'email', 'connected')], absent, unread, pendingUnread },
     });
     const noted = (card: HTMLElement) => Array.from(card.querySelectorAll('.acct-none'), words);
 
@@ -278,11 +289,11 @@ describe('the Reply card, a channel it did not list', () => {
         const card = replyCard((renderConnect(with_(['linkedin'], ['email'])), await openConnect()));
         expect(noted(card)).toEqual([
             'This Reply account has no LinkedIn.',
-            'Email accounts could not be read. Check again.',
+            'Mailboxes could not be read. Check again.',
         ]);
     });
 
-    it('says a listed channel whose links still waiting could not be read in its own line, its accounts staying', async () => {
+    it('says a listed channel whose links still waiting could not be read in its own line, its mailboxes or LinkedIn accounts staying', async () => {
         const card = replyCard((renderConnect(with_([], ['linkedin'], ['email'])), await openConnect()));
         expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
         expect(noted(card)).toEqual([
@@ -296,7 +307,7 @@ describe('the Reply card, a channel it did not list', () => {
     });
 
     it('says nothing when both channels were listed, an empty one included, nor from a desktop that sends no word of the links still waiting', async () => {
-        renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         expect((await openConnect()).querySelector('.acct-none')).toBeNull();
         cleanup();
         // As seen on a live account: both channels read, both empty, no link waiting. An empty state is not drawn.
@@ -320,7 +331,7 @@ describe('the Reply card, reading again', () => {
     afterEach(() => vi.useRealTimers());
 
     it('has a Check again button that reads the list again', async () => {
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         const card = replyCard(await openConnect());
         const before = statusReads(desktop);
         fireEvent.click(within(card).getByRole('button', { name: 'Check again' }));
@@ -330,7 +341,7 @@ describe('the Reply card, reading again', () => {
     it('reads again when the window takes the focus back, not more often than once in thirty seconds', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         await openConnect();
         await waitFor(() => expect(statusReads(desktop)).toBeGreaterThan(0));
         const first = statusReads(desktop);
@@ -350,7 +361,7 @@ describe('the Reply card, reading again', () => {
     it('does not start a read on the focus while one is going', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
-        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('em1', 'email', 'connected')]));
         await openConnect();
         const first = statusReads(desktop);
         let release: () => void = () => undefined;
@@ -376,7 +387,7 @@ describe('the Reply card, its acts', () => {
         desktop.calls.filter((call) => call.name.startsWith('setup.reply')).map((call) => [call.name, ...call.args]);
     const dialogOf = (card: () => HTMLElement) => within(card()).getByRole('dialog');
     const addAccount = async (card: () => HTMLElement, choice: string) => {
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
         fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: choice })));
     };
     const rowOf = (card: () => HTMLElement, name: string) =>
@@ -393,11 +404,11 @@ describe('the Reply card, its acts', () => {
     ) => ({ refused, code, offer, reread }) satisfies DesktopReplyRefusal;
 
     it('offers Gmail, Outlook and LinkedIn, and no form that takes a password', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
-        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.connect-sender')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['Gmail', 'Outlook', 'LinkedIn', 'Cancel']);
         expect(card().querySelector('input[type="password"]:not([aria-label="Or paste a Reply API key"])')).toBeNull();
     });
@@ -405,6 +416,10 @@ describe('the Reply card, its acts', () => {
     it('draws the card as a recommended service, one sentence, the sign-in or that it could not be read, and a key field with its button', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } });
         const connect = await openConnect();
+        // The panel's own line names no bare "accounts".
+        expect(words(connect.querySelector('.ph p')!)).toBe(
+            'The AI that does the work, and the services it works through.',
+        );
         const card = replyCard(connect);
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
         expect(words(card.querySelector('.reply-why')!)).toBe(
@@ -419,12 +434,14 @@ describe('the Reply card, its acts', () => {
         expect(key.getAttribute('type')).toBe('password');
         expect(within(card).getByRole('button', { name: 'Use key' })).toBeTruthy();
         expect(within(card).queryByRole('button', { name: 'Connect' })).toBeNull();
-        expect(within(card).getByRole('link', { name: 'Manage accounts in Reply' })).toBeTruthy();
+        expect(
+            within(card).getByRole('link', { name: 'Manage mailboxes and LinkedIn accounts in Reply' }),
+        ).toBeTruthy();
         cleanup();
 
         // A sign-in the desktop could not read is said as that, in the sign-in's place, with Check again in its row:
-        // neither "Not signed in" nor "Signed in as". The sign-in and the key field stay, signing in no longer the card's
-        // first act, since nothing says it is needed; no act on an account is offered.
+        // neither "Not signed in" nor "Signed in as". No sign-in and no key field are offered, since either could replace
+        // a sign-in the card cannot see; nor any act on an account.
         const signedOut = { ...setupFound.reply, signedIn: false, user: null, accounts: [] };
         const desktop = renderConnect({ ...setupFound, reply: { ...signedOut, notRead: ['auth'] } });
         const unread = replyCard(await openConnect());
@@ -432,9 +449,9 @@ describe('the Reply card, its acts', () => {
         expect(words(row.querySelector('.grow')!)).toBe('The Reply sign-in could not be read.');
         expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
         expect(words(unread)).not.toMatch(/not signed in|signed in as|uses this sign-in|does not use it yet/i);
-        expect(within(unread).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
-        expect(within(unread).getByPlaceholderText('Or paste a Reply API key')).toBeTruthy();
-        expect(within(unread).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(unread).queryByRole('button', { name: 'Sign in with Reply' })).toBeNull();
+        expect(within(unread).queryByPlaceholderText('Or paste a Reply API key')).toBeNull();
+        expect(within(unread).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         const reads = statusReads(desktop);
         fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
         await waitFor(() => expect(statusReads(desktop)).toBe(reads + 1));
@@ -447,62 +464,158 @@ describe('the Reply card, its acts', () => {
         expect(words(replyCard(await openConnect()).querySelector('.reply-state')!)).toBe('Not signed in');
     });
 
-    it('keeps who is signed in beside the same card, and whether Jason uses that sign-in or that it could not be read', async () => {
+    it('keeps who is signed in beside the same card, and says nothing of who uses it, read or not', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
         const card = replyCard(await openConnect());
-        expect(words(card)).toContain('Signed in as ann@example.test');
-        expect(words(card)).toContain('Jason uses this sign-in');
-        expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
+        expect(words(card.querySelector('.reply-state')!)).toBe('Signed in as ann@example.test');
+        // Another login is another Reply account: a signed-in card offers no sign-in, by the browser or by a key.
+        expect(within(card).queryByRole('button', { name: 'Sign in with Reply' })).toBeNull();
+        expect(within(card).queryByPlaceholderText('Or paste a Reply API key')).toBeNull();
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
         cleanup();
 
-        // Whether Jason uses it: read as not, said as not; not read, said as that, never as either.
-        const used = (card: HTMLElement) => words(card.querySelector('.reply-state .meta')!);
-        const signedIn = { ...setupFound.reply, signedIn: true, user: 'ann@example.test', wired: false };
-        renderConnect({ ...setupFound, reply: signedIn });
-        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
-        cleanup();
-        renderConnect({ ...setupFound, reply: { ...signedIn, notRead: ['route'] } });
-        const unread = replyCard(await openConnect());
-        expect(used(unread)).toBe('Whether Jason uses this sign-in could not be read');
-        expect(words(unread)).toContain('Signed in as ann@example.test');
-        expect(words(unread)).not.toContain('Jason does not use it yet');
+        // Not wired, or whether it is not read: an account says neither; the default is the Accounts page's mark alone.
+        for (const reply of [{ wired: false }, { wired: false, notRead: ['route' as const] }]) {
+            renderConnect({
+                ...setupFound,
+                reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test', ...reply },
+            });
+            const shown = replyCard(await openConnect());
+            expect(words(shown.querySelector('.reply-state')!)).toBe('Signed in as ann@example.test');
+            expect(words(shown)).not.toMatch(/uses this sign-in|does not use it yet|whether jason uses/i);
+            cleanup();
+        }
+    });
+
+    it('draws the default account’s card, or the profile default’s where no Reply account is the default, marked where its profile is not on Reply’s production, and asks its acts as that account', async () => {
+        const mailbox = sender('m_1', 'email', 'connected', 'Made-up Sales');
+        const twoAccounts = (defaulted: string | null) =>
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', {
+                        default: defaulted === 'default',
+                        signedIn: true,
+                        user: 'ada@example.test',
+                        senders: [mailbox],
+                    }),
+                    replyAccount('outbound', {
+                        default: defaulted === 'outbound',
+                        signedIn: false,
+                        nonProductionApi: 'https://api.example.test',
+                    }),
+                ],
+                { noDefault: defaulted === null },
+            );
+        const desktop = renderConnect(twoAccounts('outbound'));
+        let card = replyCard(await openConnect());
+        expect(drawnWords(card.querySelector('.acct-head')!)).toBe('Reply outbound Default');
+        // Its profile is not on Reply's production: the card's mark says so, here as on the Accounts page.
+        expect(
+            within(card.querySelector<HTMLElement>('.acct-head')!)
+                .getByRole('img', { name: 'Not Reply’s production: https://api.example.test' })
+                .querySelector('.acct-elsewhere-hint')?.textContent,
+        ).toBe('Not Reply’s production: https://api.example.test');
+        expect(words(card.querySelector('.reply-state')!)).toBe('Not signed in');
+        expect(card.querySelector('.acct')).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: 'Sign in with Reply' }));
+        await waitFor(() => expect(desktop.calls.some((call) => call.name === 'setup.connectReply')).toBe(true));
+        expect(desktop.calls.find((call) => call.name === 'setup.connectReply')?.args).toEqual([
+            { type: 'reply', name: 'outbound' },
+        ]);
         cleanup();
 
-        // A desktop of an earlier version sends no such word: not wired is said as it was.
-        const older: Partial<DesktopSetup['reply']> = { ...signedIn };
-        delete older.notRead;
-        renderConnect({ ...setupFound, reply: older as DesktopSetup['reply'] });
-        expect(used(replyCard(await openConnect()))).toBe('Jason does not use it yet');
+        const none = renderConnect(twoAccounts(null));
+        card = replyCard(await openConnect());
+        expect(words(card.querySelector('.acct-head')!)).toBe('Reply default Make default');
+        expect(card.querySelector('.acct-head [role="img"]')).toBeNull();
+        expect(words(card.querySelector('.acct')!)).toContain('Made-up Sales');
+        fireEvent.click(within(card.querySelector<HTMLElement>('.acct')!).getByRole('button', { name: 'Unblock' }));
+        await waitFor(() => expect(none.calls.some((call) => call.name === 'setup.replyUnblock')).toBe(true));
+        expect(none.calls.find((call) => call.name === 'setup.replyUnblock')?.args).toEqual([
+            'm_1',
+            { type: 'reply', name: 'default' },
+        ]);
+    });
+
+    it('says a key’s refusal for the account it was asked for: not once the card shows another account, nor when it shows that one again, nor where the default moved while the key was asked', async () => {
+        const wrapped = (member: string, said: string) =>
+            `Error invoking remote method 'jason:setup.${member}': Error: ${said}`;
+        const keyRefused = 'Reply did not accept that key. Authentication credentials are missing or invalid.';
+        // Two accounts not signed in, each of which offers the key.
+        const ada = replyAccount('default', { default: true });
+        const bea = replyAccount('outbound');
+        const first = withReplyAccounts(setupFound, [ada, bea]);
+        // The default moved to the other account, which is not signed in either.
+        const moved = withReplyAccounts(setupFound, [
+            { ...bea, default: true },
+            { ...ada, default: false },
+        ]);
+        const desktop = renderConnect(first);
+        desktop.refuse.set('setup.connectReplyWithKey', wrapped('connectReplyWithKey', keyRefused));
+        await openConnect();
+        const panel = () =>
+            screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
+        const card = () => replyCard(panel());
+        const drawn = () => card().querySelector('.acct-name')?.textContent;
+        const useKey = () => {
+            fireEvent.input(within(card()).getByPlaceholderText('Or paste a Reply API key'), {
+                target: { value: 'made-up-key' },
+            });
+            fireEvent.click(within(card()).getByRole('button', { name: 'Use key' }));
+        };
+        await waitFor(() => expect(drawn()).toBe('default'));
+        useKey();
+        await waitFor(() => expect(words(within(card()).getByRole('alert'))).toBe(keyRefused));
+        desktop.status = moved;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('outbound'));
+        expect(within(card()).queryByRole('alert')).toBeNull();
+        desktop.status = first;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('default'));
+        expect(within(card()).queryByRole('alert')).toBeNull();
+        // The default moves while the key is asked, and no read comes after it: no card says the refusal.
+        let refuseKey: (error: Error) => void = () => undefined;
+        desktop.setup.connectReplyWithKey = () => new Promise((_, reject) => (refuseKey = reject));
+        useKey();
+        desktop.status = moved;
+        desktop.changed();
+        await waitFor(() => expect(drawn()).toBe('outbound'));
+        desktop.refuse.set('setup.status', wrapped('status', 'This window may not ask that.'));
+        refuseKey(new Error(wrapped('connectReplyWithKey', keyRefused)));
+        await waitFor(() => expect(words(panel())).toContain('This window may not ask that.'));
+        expect(words(card())).not.toContain(keyRefused);
+        expect(words(document.body)).not.toContain('Error invoking remote method');
     });
 
     it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, accounts: [], absent: ['email'] } });
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
-        const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
+        fireEvent.click(within(card()).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
+        const offered = await waitFor(() => card().querySelector<HTMLElement>('.connect-sender')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['LinkedIn', 'Cancel']);
     });
 
-    it('has no Add account and no act on a row before the CLI is signed in', async () => {
+    it('has no Connect a mailbox or LinkedIn and no act on a row before the Reply account is signed in', async () => {
         renderConnect({
             ...setupFound,
             reply: {
                 ...setupFound.reply,
                 signedIn: false,
                 user: null,
-                accounts: [account('2', 'email', 'disconnected')],
+                accounts: [sender('2', 'email', 'disconnected')],
             },
         });
         const connect = await openConnect();
         const card = () => replyCard(connect);
-        expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(card()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
     });
 
     it('connects a mailbox for its provider: the desktop opens the link, and the card says so and never holds it', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         expect(actCalls(desktop)).toEqual([]);
@@ -510,7 +623,7 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'email', { provider: 'gmail' }]]);
         const dialog = dialogOf(card);
-        expect(words(dialog)).toContain('It connects one account until it expires.');
+        expect(words(dialog)).toContain('It connects one mailbox until it expires.');
         expect(within(dialog).queryByRole('textbox')).toBeNull();
         expect(within(dialog).queryByRole('link')).toBeNull();
         expect(within(dialog).queryByRole('button', { name: 'Copy link' })).toBeNull();
@@ -524,7 +637,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('asks a LinkedIn account’s name, then its link, says until when it works, and reads the list again', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         desktop.actAnswers.set('setup.replyConnect', {
             opened: true,
             channel: 'linkedin',
@@ -546,12 +659,12 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Make the link' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'linkedin', { name: 'Made-up Sales' }]]);
-        expect(words(dialogOf(card))).toContain('It connects one account until 2026-11-19 04:59 UTC.');
+        expect(words(dialogOf(card))).toContain('It connects one LinkedIn account until 2026-11-19 04:59 UTC.');
         await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
     });
 
     it('says the plain refusal where this Reply makes no one-mailbox link, and offers nothing after it', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         const sentence = 'Reply did not do it: the Reply CLI answered email_link.not_available.';
         desktop.actAnswers.set('setup.replyConnect', refusal(sentence, 'email_link.not_available'));
         const connect = await openConnect();
@@ -569,11 +682,11 @@ describe('the Reply card, its acts', () => {
     });
 
     it('copies a new link instead of opening it where the person ticks so, and says until when it works', async () => {
-        const desktop = renderConnect(withAccounts([account('14', 'linkedin', 'cookieInvalid')]));
+        const desktop = renderConnect(withSenders([sender('14', 'linkedin', 'cookieInvalid')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         const box = within(card()).getByRole('checkbox', {
-            name: 'Copy a new link to hand on to whoever owns the account, instead of opening it here',
+            name: 'Copy a new link to hand on to whoever owns the mailbox or LinkedIn account, instead of opening it here',
         }) as HTMLInputElement;
         expect(box.checked).toBe(false);
         fireEvent.click(box);
@@ -588,7 +701,7 @@ describe('the Reply card, its acts', () => {
         await addAccount(card, 'Gmail');
         await waitFor(() => expect(words(dialogOf(card))).toContain('The link was copied.'));
         expect(words(dialogOf(card))).toContain(
-            'Hand it to whoever owns the account: it connects one account to this Reply account until 2026-11-18 12:00 UTC, so send it to no one else.',
+            'Hand it to whoever owns the mailbox: it connects one mailbox to this Reply account until 2026-11-18 12:00 UTC, so send it to no one else.',
         );
         expect(words(dialogOf(card))).not.toContain('works once');
         expect(words(dialogOf(card))).not.toContain(opened);
@@ -603,15 +716,15 @@ describe('the Reply card, its acts', () => {
 
     it('offers each row the acts its channel and state take, and Reconnect only where the state is not good', async () => {
         renderConnect(
-            withAccounts([
-                account('1', 'email', 'connected'),
-                account('2', 'email', 'disconnected'),
-                account('11', 'linkedin', 'enabled'),
-                account('12', 'linkedin', 'disabled'),
-                account('13', 'linkedin', 'dailyLimitReached'),
-                account('14', 'linkedin', 'cookieInvalid'),
-                account('15', 'linkedin', ''),
-                account('21', 'whatsapp', 'broken'),
+            withSenders([
+                sender('1', 'email', 'connected'),
+                sender('2', 'email', 'disconnected'),
+                sender('11', 'linkedin', 'enabled'),
+                sender('12', 'linkedin', 'disabled'),
+                sender('13', 'linkedin', 'dailyLimitReached'),
+                sender('14', 'linkedin', 'cookieInvalid'),
+                sender('15', 'linkedin', ''),
+                sender('21', 'whatsapp', 'broken'),
             ]),
         );
         const connect = await openConnect();
@@ -632,10 +745,10 @@ describe('the Reply card, its acts', () => {
 
     it('asks the desktop for each act by the account’s channel and id, and reads the list again once it is done', async () => {
         const desktop = renderConnect(
-            withAccounts([
-                account('2', 'email', 'disconnected'),
-                account('11', 'linkedin', 'enabled'),
-                account('12', 'linkedin', 'disabled'),
+            withSenders([
+                sender('2', 'email', 'disconnected'),
+                sender('11', 'linkedin', 'enabled'),
+                sender('12', 'linkedin', 'disabled'),
             ]),
         );
         const connect = await openConnect();
@@ -658,12 +771,12 @@ describe('the Reply card, its acts', () => {
             ['setup.replyUnblock', '2'],
             ['setup.replyPause', '11'],
             ['setup.replyResume', '12'],
-            ['setup.replyDelete', 'linkedin', '11'],
+            ['setup.replyDelete', 'linkedin', '11', undefined],
         ]);
     });
 
     it('offers the forced delete only after the desktop said sequences use the account, and never forces first', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         desktop.actAnswers.set('setup.replyDelete', [
             refusal('Sequences use this LinkedIn account, so it was not deleted.', 'linkedin.account_in_use', 'force'),
             { done: true },
@@ -672,14 +785,14 @@ describe('the Reply card, its acts', () => {
         const card = () => replyCard(connect);
         fireEvent.click(within(rowOf(card, 'Account 11')).getByRole('button', { name: 'Delete' }));
         await waitFor(() => within(dialogOf(card)).getByRole('alert'));
-        expect(actCalls(desktop)).toEqual([['setup.replyDelete', 'linkedin', '11']]);
+        expect(actCalls(desktop)).toEqual([['setup.replyDelete', 'linkedin', '11', undefined]]);
         fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Delete anyway…' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Done.'));
         expect(actCalls(desktop)[1]).toEqual(['setup.replyDelete', 'linkedin', '11', { force: true }]);
     });
 
     it('offers Reconnect on a signed-out answer, and no Pause or Resume for that account while it stands', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         desktop.actAnswers.set(
             'setup.replyPause',
             refusal('The LinkedIn account is signed out of LinkedIn.', 'linkedin.invalid_cookie', 'reconnect'),
@@ -695,7 +808,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads the list again where the answer says so, offers nothing for a plan’s limit, and says any code inert', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         const ask = async (answer: DesktopReplyRefusal) => {
@@ -712,10 +825,8 @@ describe('the Reply card, its acts', () => {
             fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
             return shown;
         };
-        expect(
-            await ask(refusal('The account’s state changed meanwhile.', 'account.status_changed', null, true)),
-        ).toEqual({
-            words: 'The account’s state changed meanwhile.',
+        expect(await ask(refusal('Its state changed meanwhile.', 'account.status_changed', null, true))).toEqual({
+            words: 'Its state changed meanwhile.',
             buttons: ['Close'],
             reads: 1,
         });
@@ -736,7 +847,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads a mailbox’s daily limit into a field, and sets it to what is typed on Set', async () => {
-        const desktop = renderConnect(withAccounts([account('2', 'email', 'connected')]));
+        const desktop = renderConnect(withSenders([sender('2', 'email', 'connected')]));
         desktop.actAnswers.set('setup.replyLimits', [{ daily: 500 }, { daily: 200 }]);
         const connect = await openConnect();
         const card = () => replyCard(connect);
@@ -751,7 +862,7 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Set' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Done.'));
         expect(actCalls(desktop)).toEqual([
-            ['setup.replyLimits', '2'],
+            ['setup.replyLimits', '2', undefined],
             ['setup.replyLimits', '2', 200],
         ]);
     });
@@ -763,7 +874,7 @@ describe('the Reply card, its acts', () => {
             reply: {
                 ...setupFound.reply,
                 cli: { found: true, version: '0.21.0', install: 'reply' },
-                accounts: [account('2', 'email', 'disconnected')],
+                accounts: [sender('2', 'email', 'disconnected')],
                 belowMinimum: below,
             },
         });
@@ -773,8 +884,7 @@ describe('the Reply card, its acts', () => {
         expect(card().querySelector('.version-unread')).toBeNull();
         // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
         expect(words(card())).not.toContain('Reply CLI 0.21.0');
-        expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
-        expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(card()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
         fireEvent.click(within(card()).getByRole('button', { name: 'Update' }));
         await waitFor(() =>
@@ -789,7 +899,7 @@ describe('the Reply card, its acts', () => {
         const unreadVersion = {
             ...setupFound.reply,
             cli: { found: true, version: null, install: 'reply' },
-            accounts: [account('2', 'email', 'disconnected')],
+            accounts: [sender('2', 'email', 'disconnected')],
             belowMinimum: below,
         };
         const asked = renderConnect({ ...setupFound, reply: { ...unreadVersion, notRead: ['version'] } });
@@ -801,7 +911,7 @@ describe('the Reply card, its acts', () => {
         expect(unread().querySelector('.below-minimum')).toBeNull();
         expect(words(unread())).not.toContain('or later');
         expect(within(unread()).queryByRole('button', { name: 'Update' })).toBeNull();
-        expect(within(unread()).queryByRole('button', { name: 'Add account' })).toBeNull();
+        expect(within(unread()).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         expect(buttonsOf(rowOf(unread, 'Account 2'))).toEqual([]);
         const reads = statusReads(asked);
         fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));
@@ -920,7 +1030,7 @@ describe('the Reply card, its acts', () => {
 
     it('turns every act off while one is being asked for, and on again once it answers', async () => {
         const desktop = renderConnect(
-            withAccounts([account('14', 'linkedin', 'cookieInvalid'), account('2', 'email', 'disconnected')]),
+            withSenders([sender('14', 'linkedin', 'cookieInvalid'), sender('2', 'email', 'disconnected')]),
         );
         let release: () => void = () => undefined;
         desktop.setup.replyReconnect = () =>
@@ -940,8 +1050,9 @@ describe('the Reply card, its acts', () => {
         const acts = () =>
             Array.from(card().querySelectorAll<HTMLButtonElement>('button')).filter(
                 (each) =>
-                    ['Reconnect', 'Limits', 'Unblock', 'Delete', 'Add account'].includes(words(each)) &&
-                    !each.closest('[role="dialog"]'),
+                    ['Reconnect', 'Limits', 'Unblock', 'Delete', 'Connect a mailbox or LinkedIn'].includes(
+                        words(each),
+                    ) && !each.closest('[role="dialog"]'),
             );
         fireEvent.click(within(rowOf(card, 'Account 14')).getByRole('button', { name: 'Reconnect' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain('Asking Reply'));
@@ -953,7 +1064,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('takes its dialog with it when the console goes away', async () => {
-        renderConnect(withAccounts([]));
+        renderConnect(withSenders([]));
         const connect = await openConnect();
         await addAccount(() => replyCard(connect), 'Gmail');
         await waitFor(() => expect(heldDialog()).toBe('connect'));
@@ -962,7 +1073,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('drops an answer that comes after its dialog was closed', async () => {
-        const desktop = renderConnect(withAccounts([]));
+        const desktop = renderConnect(withSenders([]));
         let release: () => void = () => undefined;
         desktop.setup.replyConnect = () =>
             new Promise((resolve) => {
@@ -981,7 +1092,7 @@ describe('the Reply card, its acts', () => {
     });
 
     it('reads the list again when an act answers done or asks for a read after its dialog was closed', async () => {
-        const desktop = renderConnect(withAccounts([account('11', 'linkedin', 'enabled')]));
+        const desktop = renderConnect(withSenders([sender('11', 'linkedin', 'enabled')]));
         const connect = await openConnect();
         const card = () => replyCard(connect);
         for (const late of [
@@ -999,7 +1110,7 @@ describe('the Reply card, its acts', () => {
         }
     });
 
-    it('keeps a dialog to the card it was asked from: another chat’s card never shows it, and a card no longer drawn drops it', async () => {
+    it('keeps a dialog, and a key’s refusal, to the card they were asked on: another chat’s card never shows them, and a card that goes drops them', async () => {
         const desktop = stubDesktop({ ...setupFound, reply: { ...setupFound.reply, accounts: [] } });
         setup.value = desktop.status;
         const unbind = bind({ api: new FakeApi(), desktop, dock: {} as never });
@@ -1031,6 +1142,40 @@ describe('the Reply card, its acts', () => {
             </>,
         );
         expect(heldDialog()).toBeNull();
+        // So does a key's refusal said on it, on a card not signed in, which is the one that offers the key: drawn again,
+        // the card says nothing of it.
+        desktop.status = { ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } };
+        setup.value = desktop.status;
+        const both = (
+            <>
+                <div className="one">
+                    <Painted view={one} onGone={() => dropDialogs(chatPlace('chat_one'))} />
+                </div>
+                <div className="two">
+                    <Painted view={two} onGone={() => dropDialogs(chatPlace('chat_two'))} />
+                </div>
+            </>
+        );
+        rerender(both);
+        desktop.refuse.set('setup.connectReplyWithKey', 'Reply did not accept that key.');
+        fireEvent.input(within(cardIn('one')()).getByPlaceholderText('Or paste a Reply API key'), {
+            target: { value: 'made-up-key' },
+        });
+        fireEvent.click(within(cardIn('one')()).getByRole('button', { name: 'Use key' }));
+        await waitFor(() =>
+            expect(within(cardIn('one')()).getByRole('alert').textContent).toBe('Reply did not accept that key.'),
+        );
+        expect(within(cardIn('two')()).queryByRole('alert')).toBeNull();
+        rerender(
+            <>
+                <div className="one" />
+                <div className="two">
+                    <Painted view={two} onGone={() => dropDialogs(chatPlace('chat_two'))} />
+                </div>
+            </>,
+        );
+        rerender(both);
+        expect(within(cardIn('one')()).queryByRole('alert')).toBeNull();
         stop();
         unbind();
     });
@@ -1072,8 +1217,8 @@ describe('the Reply card, its acts', () => {
         for (const row of pending) expect(within(row).queryAllByRole('button')).toEqual([]);
         // Each group with a waiting link says how to make a new one, once.
         expect(Array.from(card().querySelectorAll('.acct-pending-hint'), words)).toEqual([
-            'A link here is not shown again: add the account again to make a new link.',
-            'A link here is not shown again: add the account again to make a new link.',
+            'A link here is not shown again: connect the mailbox or LinkedIn account again to make a new link.',
+            'A link here is not shown again: connect the mailbox or LinkedIn account again to make a new link.',
         ]);
     });
 });

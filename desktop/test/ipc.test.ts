@@ -157,6 +157,12 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             replyResume: 'function',
             replyUnblock: 'function',
             replyDelete: 'function',
+            makeDefault: 'function',
+            chooseTeam: 'function',
+            addAccount: 'function',
+            signOut: 'function',
+            removeAccount: 'function',
+            keepChange: 'function',
             onChanged: 'function',
         },
     });
@@ -173,8 +179,9 @@ test('a dropped file’s path is read in the preload for a page served over http
         assert.deepEqual(asked(protocol), { path: '', read: [], invoked: [] }, protocol);
 });
 
-test('each member of the seam calls the channel ipc.ts checks, with its own arguments only', () => {
+test('each member of the seam calls the channel ipc.ts checks, with its own arguments only: an account where the page names one, and none where it does not', () => {
     const recorded = runPreload();
+    const outbound = { type: 'reply', name: 'outbound' };
     const api = recorded.exposed.get('jasonDesktop') as Record<string, Record<string, (...args: unknown[]) => unknown>>;
     const calls: [string, unknown[]][] = [
         ['chat.send', ['c1', 'hello', { host: 'claude' }]],
@@ -208,20 +215,26 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['openIn.continueChat', ['conv_01']],
         ['openIn.changeJason', []],
         ['setup.status', []],
-        ['setup.connectReply', []],
+        ['setup.connectReply', [outbound]],
         ['setup.connectReplyWithKey', ['k']],
         ['setup.setProviderKey', ['deepseek', 'k']],
         ['setup.installProgram', ['claude']],
         ['setup.useProgram', ['codex']],
         ['setup.configurePlugin', ['slack', { token: 't', target: 'C1' }]],
         ['setup.disconnectPlugin', ['slack']],
-        ['setup.replyConnect', ['email', { provider: 'gmail', copy: true }]],
+        ['setup.replyConnect', ['email', { provider: 'gmail', copy: true }, outbound]],
         ['setup.replyReconnect', ['linkedin', '34', { copy: false }]],
-        ['setup.replyLimits', ['12', 200]],
-        ['setup.replyPause', ['34']],
+        ['setup.replyLimits', ['12', 200, outbound]],
+        ['setup.replyPause', ['34', outbound]],
         ['setup.replyResume', ['34']],
-        ['setup.replyUnblock', ['12']],
-        ['setup.replyDelete', ['linkedin', '34', { force: true }]],
+        ['setup.replyUnblock', ['12', outbound]],
+        ['setup.replyDelete', ['linkedin', '34', { force: true }, outbound]],
+        ['setup.makeDefault', [outbound]],
+        ['setup.chooseTeam', [outbound, '9']],
+        ['setup.addAccount', ['Made-up Ops']],
+        ['setup.signOut', [outbound]],
+        ['setup.removeAccount', [outbound]],
+        ['setup.keepChange', [outbound]],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];

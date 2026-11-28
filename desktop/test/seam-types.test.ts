@@ -5,10 +5,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
+    DesktopAccountChange,
+    DesktopAccountRef,
+    DesktopBoundTeam,
     DesktopChatEvent,
     DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopDefaultFor,
     DesktopKeptEntry,
     DesktopLink,
     DesktopOpenInAnswer,
@@ -21,6 +25,9 @@ import type {
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyRefusal,
+    DesktopReplySignIn,
+    DesktopReplyOrg,
+    DesktopReplyTeam,
     DesktopSetup,
     DesktopUpdateItem,
     JasonDesktop,
@@ -37,6 +44,8 @@ import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
+import type { AccountRef, DefaultFor, ReplyOrg, ReplyTeam } from '../src/accounts.ts';
+import type { BoundTeam, Change, SignIn } from '../src/account-notes.ts';
 
 /** True when the two types are the same type, field by field and all the way down. */
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -185,7 +194,39 @@ type OpenInIsTheSeam = [
     Holds<Equal<Place, DesktopOpenInAnswer['places'][number]>>,
 ];
 
+// An account reaches the desktop as the page names it, its type and its name and nothing else; Make default, Sign out and
+// Remove name one, a team's choice names one and a team the desktop offered it, and every sign-in and every act on a sender
+// takes one after its own arguments, where the page names one. Add Reply account names a profile not listed yet, by name.
+type AccountIsTheSeam = [
+    Holds<Equal<AccountRef, DesktopAccountRef>>,
+    Holds<Equal<keyof DesktopAccountRef, 'type' | 'name'>>,
+    Holds<Equal<ReplyTeam, DesktopReplyTeam>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['chooseTeam']>, [account: DesktopAccountRef, teamId: string]>>,
+    Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['chooseTeam']>>, DesktopReplyDone | DesktopReplyRefusal>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['makeDefault']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['addAccount']>, [name: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['signOut']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['removeAccount']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['keepChange']>, [account: DesktopAccountRef]>>,
+    Holds<Equal<Awaited<ReturnType<JasonDesktop['setup']['addAccount' | 'signOut' | 'removeAccount' | 'keepChange']>>, DesktopReplyDone | DesktopReplyRefusal>>,
+    Holds<Equal<SignIn, DesktopReplySignIn>>,
+    Holds<Equal<BoundTeam, DesktopBoundTeam>>,
+    Holds<Equal<ReplyOrg, DesktopReplyOrg>>,
+    Holds<Equal<Change, DesktopAccountChange>>,
+    Holds<Equal<DefaultFor, DesktopDefaultFor>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['connectReply']>, [account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['connectReplyWithKey']>, [key: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyConnect']>[2], DesktopAccountRef | undefined>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyReconnect']>[3], DesktopAccountRef | undefined>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyLimits']>, [senderId: string, daily?: number, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyPause']>, [senderId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyResume']>, [senderId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyUnblock']>, [senderId: string, account?: DesktopAccountRef]>>,
+    Holds<Equal<Parameters<JasonDesktop['setup']['replyDelete']>[3], DesktopAccountRef | undefined>>,
+];
+
 export type SeamHeld = [
+    AccountIsTheSeam,
     OpenInIsTheSeam,
     ModeIsTheSeam,
     RefusalIsTheSeam,

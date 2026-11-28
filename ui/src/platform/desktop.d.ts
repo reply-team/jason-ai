@@ -489,35 +489,42 @@ export interface DesktopHost {
     runsRoles: string | null;
 }
 
-/** An account Reply holds, as the Reply CLI lists it. */
-export interface DesktopReplyAccount {
+/** A sender of a Reply account, a mailbox or a LinkedIn account, as the Reply CLI lists it. */
+export interface DesktopReplySender {
     id: string;
     channel: string;
     name: string;
     address: string;
     /**
-     * The state Reply reports for the account, as Reply wrote it (email: `connected`, `disconnected`, `unknown`;
+     * The state Reply reports for the sender, as Reply wrote it (email: `connected`, `disconnected`, `unknown`;
      * LinkedIn: `enabled`, `disabled`, `cookieInvalid`, `dailyLimitReached`; or another word); empty when it reported none.
      */
     status: string;
 }
 
-/** A channel Reply lists accounts for. */
+/** A channel Reply lists senders for. */
 export type DesktopReplyChannel = 'email' | 'linkedin';
 
-/** A fact of the Reply connection the desktop reads: the Reply CLI's version, its sign-in, and whether Jason uses that. */
+/**
+ * A fact of `DesktopReply` the desktop asked and could not read: the Reply CLI's version, the account's sign-in (or, with no
+ * account to read, that none was read), and whether Jason's Reply plugin is valid and the global default.
+ */
 export type DesktopReplyFact = 'version' | 'auth' | 'route';
 
-/** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
+/**
+ * The Reply connection as one card draws it: the Reply CLI, and of the accounts the default one, or the profile `default`'s
+ * where no Reply account is the default (`DesktopSetup.accounts` holds them all). A page of an earlier version reads it,
+ * and so does this page's chat until the chat's own part reads the accounts.
+ */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
-    /** The address the CLI is signed in as; null when it is not. */
+    /** The address that account is signed in as; null when it is not. */
     user: string | null;
-    /** Whether the runtime has the Reply plugin set up with this sign-in. */
+    /** Whether Jason's Reply plugin is valid and the global default route names that very account. */
     wired: boolean;
-    accounts: DesktopReplyAccount[];
+    accounts: DesktopReplySender[];
     /** The channels the Reply CLI says are not in this account's plan or role. */
     absent: DesktopReplyChannel[];
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
@@ -534,8 +541,9 @@ export interface DesktopReply {
     pendingUnread: DesktopReplyChannel[];
     /**
      * What the desktop asked and could not read, as closed words: the Reply CLI's version (`belowMinimum` is then still
-     * set, so a page that reads no such word offers no act), its sign-in (`signedIn` is then false), and whether the
-     * runtime's Reply plugin uses that sign-in (`wired` is then false).
+     * set, so a page that reads no such word offers no act), the account's sign-in (`signedIn` is then false), said too
+     * where no account could be read, and whether Jason's Reply plugin is valid and the global default (`wired` is then
+     * false).
      */
     notRead: DesktopReplyFact[];
     /**
@@ -555,6 +563,143 @@ export interface DesktopReply {
      * earlier version.
      */
     startCheck?: 'pending' | 'ended';
+}
+
+/**
+ * How a member of the seam names an account: its type, the provider, and its name, the Reply CLI profile's exactly,
+ * `default` included. An account has no team of its own: the team is its profile's, in the Reply CLI. The desktop takes it
+ * only as one its last read listed.
+ */
+export interface DesktopAccountRef {
+    type: 'reply';
+    name: string;
+}
+
+/** A Reply team an account's sign-in can act in: its id, digits only, and its name as Reply gives it, cut to 100 characters. */
+export interface DesktopReplyTeam {
+    id: string;
+    name: string;
+}
+
+/** The Reply organization a team belongs to: its id, digits only, and its name as Reply gives it, cut to 100 characters. */
+export interface DesktopReplyOrg {
+    id: string;
+    name: string;
+}
+
+/**
+ * A team an account is bound to: its id, digits only, and its name as Reply gives it, empty where Reply gives it none, null
+ * where it was not read. The page names a team only by a name.
+ */
+export interface DesktopBoundTeam {
+    id: string;
+    name: string | null;
+    /**
+     * The organization the team belongs to, as Reply named it after a sign-in: null for a team outside one; absent where
+     * Reply has not said it, and from a desktop of an earlier version. The page names it after the team, in brackets, by
+     * its name alone.
+     */
+    org?: DesktopReplyOrg | null;
+}
+
+/** A sign-in as the desktop's note of an account keeps it: the login, and the team it was bound to. */
+export interface DesktopReplySignIn {
+    user: string;
+    team: DesktopBoundTeam;
+}
+
+/**
+ * How the desktop found an account's sign-in changed from its note, until `setup.keepChange` or a sign-out: signed in as
+ * another login (`login`); the same login, no longer in the noted team (`left`); the same login, bound to another of its
+ * teams (`team`); or signed in as a login that cannot be known before the account has a team (`unknown`).
+ */
+export type DesktopAccountChange = 'login' | 'left' | 'team' | 'unknown';
+
+/** What of the accounts as a whole the desktop asked and could not read: the Reply CLI's profiles, or the routes. */
+export type DesktopAccountsFact = 'profiles' | 'routes';
+
+/**
+ * A global route to Jason's Reply plugin other than the default, as the mark of the account it names: the kind of work it
+ * routes, by Jason's operation, and the channel where it is one channel's route of that operation.
+ */
+export type DesktopDefaultFor =
+    { kind: 'operation'; operation: string } | { kind: 'channel'; operation: string; channel: string };
+
+/** One Reply account: one profile of the Reply CLI, read under its own name alone, as Jason's work acts as it. */
+export interface DesktopAccount extends DesktopAccountRef {
+    /** Whether the global default route names this account: campaigns with no route of their own send through it. */
+    default: boolean;
+    /**
+     * Every other global route to Jason's Reply plugin that names it, each a mark of its card; a route that names no profile
+     * names the Reply CLI's current one.
+     */
+    defaultFor: DesktopDefaultFor[];
+    /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
+    held: boolean;
+    /**
+     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile,
+     * or might, the routes not read: it is not removed then (`setup.removeAccount`), since that route would move to another
+     * Reply account.
+     */
+    followed: boolean;
+    signedIn: boolean;
+    /**
+     * The address its sign-in's user goes by, Reply's where Reply names the user otherwise than the Reply CLI stored it;
+     * null when it is not signed in, or its user is not known.
+     */
+    user: string | null;
+    /**
+     * The team it is bound to: its profile's pin in the Reply CLI, or for a key the key's own team, whatever is pinned; by
+     * its id and the name Reply gives it or the desktop's note keeps. Null while it is not signed in, or signed in and bound
+     * to none.
+     */
+    team: DesktopBoundTeam | null;
+    /** Its senders, its mailboxes and LinkedIn accounts, as the Reply CLI lists them; empty unless it is signed in. */
+    senders: DesktopReplySender[];
+    /** As `DesktopReply`'s, of this account. */
+    absent: DesktopReplyChannel[];
+    unread: DesktopReplyChannel[];
+    pending: DesktopReplyPending[];
+    pendingUnread: DesktopReplyChannel[];
+    /**
+     * `auth` where its sign-in could not be read: `signedIn` is then false, and nothing is listed; `teams` where the teams
+     * of its sign-in could not be read, its other reads standing; `login` where the Reply CLI could not say who a sign-in it
+     * does not name is, once it was bound, `user` being null.
+     */
+    notRead: ('auth' | 'teams' | 'login')[];
+    /**
+     * The teams its sign-in can act in, where it can act in more than one and is bound to none of them: the choice the card
+     * offers (`setup.chooseTeam`). Absent otherwise; its channels are in `unread` then.
+     */
+    teams?: DesktopReplyTeam[];
+    /**
+     * Who it was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is noted.
+     */
+    lastSignIn: DesktopReplySignIn | null;
+    /**
+     * How the last read found its sign-in changed from what the note says; null where it did not. Until it is answered the
+     * desktop takes no act on its senders, no connect and no choice of a team; for `login`, `left` and `unknown` it is bound to
+     * no team and lists nothing, and for `team` it is bound to that team and lists as it now is.
+     */
+    change: DesktopAccountChange | null;
+    /**
+     * The API address its Reply CLI profile points at, where that is not Reply's production: the card marks it, with the
+     * address in its hint. Absent on production, where it could not be read, and from a desktop of an earlier version.
+     */
+    nonProductionApi?: string;
+}
+
+/**
+ * The Reply accounts, read at each status and kept nowhere: none without a Reply CLI at the minimum; else every profile the
+ * Reply CLI holds and every profile a route to Jason's Reply plugin names, the default first, then the CLI's own order,
+ * then the profiles only a route names.
+ */
+export interface DesktopAccounts {
+    accounts: DesktopAccount[];
+    /** What could not be read: no account where the profiles were not, none marked default where the routes were not. */
+    notRead: DesktopAccountsFact[];
+    /** Whether the routes were read and no global default is set at all, whatever its plugin. */
+    noDefault: boolean;
 }
 
 /** A link made for connecting or reconnecting an account, and not used yet. */
@@ -596,9 +741,9 @@ export interface DesktopReplyRefusal {
 }
 
 /**
- * A link the Reply CLI made that expires and connects one account, written to the clipboard by the desktop's main process
- * for the person to hand on to whoever owns the account. The page learns that it was copied, when it stops working and
- * its pending entry; never the link.
+ * A link the Reply CLI made that expires and connects one mailbox or LinkedIn account, written to the clipboard by the
+ * desktop's main process for the person to hand on to whoever owns it. The page learns that it was copied, when it stops
+ * working and its pending entry; never the link.
  */
 export interface DesktopReplyCopied {
     copied: true;
@@ -650,6 +795,8 @@ export interface DesktopSetup {
     /** The agent hosts and key providers, found or not. */
     hosts: DesktopHost[];
     reply: DesktopReply;
+    /** The Reply accounts, one per profile; absent from a desktop of an earlier version. */
+    accounts?: DesktopAccounts;
     /** The version of the runtime the desktop drives; null while it is not running. */
     runtimeVersion: string | null;
     /** The version of the release the desktop carries. */
@@ -955,10 +1102,15 @@ export interface JasonDesktop {
     };
     setup: {
         status(): Promise<DesktopSetup>;
-        /** Signs the Reply CLI in through the browser, then sets Jason's Reply plugin up with it. */
-        connectReply(): Promise<void>;
+        /**
+         * Signs a Reply account in through the browser: the one `account` names, the default where it names none (or the
+         * profile `default` where no Reply account is the default), its profile made in the Reply CLI first where only a
+         * route names it. Then Jason's Reply plugin is placed and granted, and where no global default is set at all, that
+         * account becomes the default.
+         */
+        connectReply(account?: DesktopAccountRef): Promise<void>;
         /** The same with a Reply API key the person pasted, for an account the browser sign-in does not reach. */
-        connectReplyWithKey(key: string): Promise<void>;
+        connectReplyWithKey(key: string, account?: DesktopAccountRef): Promise<void>;
         /** Keeps a key provider's key in the operating system's keychain; an empty key removes it. */
         setProviderKey(providerId: string, key: string): Promise<void>;
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
@@ -1005,43 +1157,95 @@ export interface JasonDesktop {
          */
         disconnectPlugin(pluginId: string): Promise<void>;
         /**
-         * Connects a new account by a link the Reply CLI makes, which the desktop opens in the person's browser: a
+         * Connects a new sender by a link the Reply CLI makes, which the desktop opens in the person's browser: a
          * LinkedIn account under `name` (one line, 1 to 100 characters), a mailbox for its `provider`. `copy` asks the
-         * desktop to put the link on the clipboard instead of opening it, for the person to hand on.
+         * desktop to put the link on the clipboard instead of opening it, for the person to hand on. Each act on a sender
+         * acts in the Reply account `account` names, one `DesktopSetup.accounts` lists, and in the default one where it
+         * names none, as a page of an earlier version asks; the sender it names is one of that account's `senders`.
          */
         replyConnect(
             channel: DesktopReplyChannel,
             options: ({ name: string } | { provider: 'gmail' | 'office365' }) & {
                 copy?: boolean;
             },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
-        /** Reconnects an account `accounts` lists, the same way, with `copy` as above. */
+        /** Reconnects a sender, the same way, with `copy` as above. */
         replyReconnect(
             channel: DesktopReplyChannel,
-            accountId: string,
+            senderId: string,
             options?: { copy?: boolean },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyOpened | DesktopReplyCopied | DesktopReplyRefusal>;
         /**
          * A mailbox's daily limit: read without `daily`, set to it with one, after the person's yes in the desktop's
          * own box.
          */
-        replyLimits(accountId: string, daily?: number): Promise<{ daily: number | null } | DesktopReplyRefusal>;
-        /** Pauses a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyPause(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
-        /** Resumes a LinkedIn account `accounts` lists, after the person's yes in the desktop's own box. */
-        replyResume(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyLimits(
+            senderId: string,
+            daily?: number,
+            account?: DesktopAccountRef,
+        ): Promise<{ daily: number | null } | DesktopReplyRefusal>;
+        /** Pauses a LinkedIn account, after the person's yes in the desktop's own box. */
+        replyPause(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /** Resumes a LinkedIn account, after the person's yes in the desktop's own box. */
+        replyResume(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Lets a mailbox its provider stopped send again, after the person's yes in the desktop's own box. */
-        replyUnblock(accountId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        replyUnblock(senderId: string, account?: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /**
-         * Deletes an account `accounts` lists from Reply, after the person's yes in the desktop's own box. `force` deletes
+         * Deletes a sender from Reply, after the person's yes in the desktop's own box. `force` deletes
          * a LinkedIn account sequences use, only after a delete of it answered the offer `force`, and after a box of
          * its own.
          */
         replyDelete(
             channel: DesktopReplyChannel,
-            accountId: string,
+            senderId: string,
             options?: { force?: boolean },
+            account?: DesktopAccountRef,
         ): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Make default, only while Jason has no global default: the Reply account `DesktopSetup.accounts` lists becomes it.
+         * Jason's Reply plugin and its grant are placed where they are missing, and the runtime writes the route (`jason
+         * route set --global`) by the account's profile. Where a default is set by then, whatever its plugin or account,
+         * nothing is changed: the desktop never moves a default. A refusal is the desktop's sentence, and the runtime
+         * writes nothing it refuses. Absent from a desktop of an earlier version.
+         */
+        makeDefault(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Pins a team the account's last read offered (`teams`) on its profile in the Reply CLI (`reply --profile <name> team
+         * use <id>`), with no question first, and notes it as the account's. The account then reads as that team. An account
+         * bound to a team already is refused: the desktop never changes a pinned team; so is one whose `change` is not
+         * answered. A refusal is the desktop's own sentence. Absent from a desktop of an earlier version.
+         */
+        chooseTeam(account: DesktopAccountRef, teamId: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Add Reply account: a profile made in the Reply CLI under exactly `name` (`reply profile add`), with nothing of an
+         * account's own; it is the next status's card, not signed in. Refused before it is made, in the desktop's sentence,
+         * for a name that is empty after trimming, longer than the 64 characters a route's binding holds, begins with a
+         * hyphen, holds a control character or a line break, is `default`, or is one the Reply CLI holds. Absent from a
+         * desktop of an earlier version.
+         */
+        addAccount(name: string): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Sign out of a Reply account `DesktopSetup.accounts` lists, after the person's yes in the desktop's own box, which
+         * says that the Reply CLI itself signs it out and, where a route names it, that campaigns sending through it stop
+         * (`reply --profile <name> auth logout`). No route changes. Absent from a desktop of an earlier version.
+         */
+        signOut(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Remove a Reply account `DesktopSetup.accounts` lists whose profile the Reply CLI holds, never `default`, after
+         * the person's yes in the desktop's own box, which says that the Reply CLI itself deletes its profile and its
+         * sign-in and, where a route names it, that campaigns sending through it stop and its card stays (`reply profile
+         * delete <name> --yes`). No route changes. Absent from a desktop of an earlier version.
+         */
+        removeAccount(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
+        /**
+         * Keep it, for an account the last read found with a `change`: bound to another of its teams, the account as it now
+         * is becomes the one the desktop's note keeps; otherwise its team is picked afresh, by itself where its sign-in acts in
+         * one team and by `chooseTeam` where it acts in several. Nothing of the Reply CLI changes. Absent from a desktop of
+         * an earlier version.
+         */
+        keepChange(account: DesktopAccountRef): Promise<DesktopReplyDone | DesktopReplyRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

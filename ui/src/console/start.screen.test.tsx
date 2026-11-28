@@ -6,7 +6,14 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { mode } from '../platform/mode';
 import { route } from '../router';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import {
+    replyAccount,
+    setupFound,
+    stubDesktop,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { nothingWaitsInChats } from '../test/waiting';
 import type { FixtureName } from '../test/fixtures';
@@ -613,6 +620,8 @@ describe('the start screen', () => {
     });
 });
 
+const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+
 describe('Reply in a chat', () => {
     it('is not asked for at the start, even with no Reply sign-in', async () => {
         const desktop = renderConsole(stubDesktop(noReply));
@@ -644,7 +653,7 @@ describe('Reply in a chat', () => {
             await ready();
             await openCampaignChat(desktop, 'Autumn');
             const card = () => screen.getByRole('region', { name: 'Connect Reply' });
-            fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Add account' }));
+            fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Connect a mailbox or LinkedIn' }));
             fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' })));
             await waitFor(() => expect(heldDialog()).not.toBeNull());
             expect(calls(desktop, 'setup.replyConnect')).toHaveLength(1);
@@ -672,6 +681,39 @@ describe('Reply in a chat', () => {
         const id = Object.keys(chats.value)[0]!;
         flush(() => desktop.emit(id, { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' }));
         await waitFor(() => screen.getByRole('region', { name: 'Connect Reply' }));
+    });
+
+    it('with a desktop of this version, is asked for while no Reply account is the default or the default is not signed in, as the default account’s card, and not once it is signed in', async () => {
+        const accounts = (defaulted: boolean, signedIn: boolean) =>
+            withReplyAccounts(
+                setupFound,
+                [
+                    replyAccount('default', {
+                        default: defaulted,
+                        signedIn,
+                        user: signedIn ? 'ada@example.test' : null,
+                    }),
+                    replyAccount('outbound', { signedIn: true, user: 'bea@example.test' }),
+                ],
+                { noDefault: !defaulted },
+            );
+        for (const [defaulted, signedIn, head] of [
+            [false, true, 'Reply default Make default'],
+            [true, false, 'Reply default Default'],
+        ] as const) {
+            const desktop = renderConsole(stubDesktop(accounts(defaulted, signedIn)));
+            await waitFor(() => startForm());
+            await ready();
+            await openCampaignChat(desktop, 'Autumn');
+            const card = await waitFor(() => screen.getByRole('region', { name: 'Connect Reply' }));
+            expect(words(card.querySelector('.acct-head')!)).toBe(head);
+            cleanup();
+        }
+        const desktop = renderConsole(stubDesktop(accounts(true, true)));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
     });
 
     it('is not asked for when Reply is connected', async () => {

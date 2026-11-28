@@ -8,7 +8,14 @@ import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
+import {
+    chatDesktop,
+    replyAccount,
+    setupFound,
+    stubStream,
+    withReplyAccounts,
+    type StubDesktop,
+} from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -26,11 +33,12 @@ async function renderAt(
     kept: 'live' | 'demo',
     panel: 'Connect' | 'Accounts',
     reply: Partial<DesktopSetup['reply']> = {},
+    status: DesktopSetup = setupFound,
 ): Promise<StubDesktop> {
     const desktop = chatDesktop({
-        ...setupFound,
-        reply: { ...setupFound.reply, ...reply },
-        plugins: setupFound.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
+        ...status,
+        reply: { ...status.reply, ...reply },
+        plugins: status.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
     });
     desktop.modeKept = kept;
     await loadMode(desktop);
@@ -72,6 +80,8 @@ async function renderAt(
 }
 
 const replyCard = () => within(document.body).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+/** The Accounts page's card of the account, under its Reply section. */
+const accountCard = () => document.querySelector<HTMLElement>('.reply-account')!;
 const button = (inside: HTMLElement, name: string) => within(inside).getByRole('button', { name }) as HTMLButtonElement;
 const notes = () => screen.queryAllByRole('note').filter((each) => words(each) === sentence);
 const rowOf = (card: HTMLElement) =>
@@ -106,33 +116,74 @@ describe('The Connect panel in the demo', () => {
         expect(within(replyCard()).getAllByRole('note').map(words)).toContain(sentence);
     });
 
-    it('turns off Sign in with Reply, the API key, Add account and every act on an account row, and still lists the accounts', async () => {
+    it('turns off Sign in with Reply, the API key, Connect a mailbox or LinkedIn and every act on a mailbox’s or a LinkedIn account’s row, and still lists them', async () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
-        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
-            expect(button(card, name).disabled).toBe(true);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(true);
         const acts = within(rowOf(card)).getAllByRole('button') as HTMLButtonElement[];
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
         for (const each of acts) expect(each.disabled).toBe(true);
-        for (const each of [...acts, button(card, 'Add account'), button(card, 'Sign in with Reply')])
-            fireEvent.click(each);
-        expect(card.querySelector('.add-account')).toBeNull();
+        for (const each of [...acts, button(card, 'Connect a mailbox or LinkedIn')]) fireEvent.click(each);
+        expect(card.querySelector('.connect-sender')).toBeNull();
+        cleanup();
+        // A card not signed in offers the sign-in, turned off the same way.
+        const signedOut = await renderAt('demo', 'Connect', { signedIn: false, user: null, accounts: [] });
+        const out = replyCard();
+        for (const name of ['Sign in with Reply', 'Use key']) expect(button(out, name).disabled).toBe(true);
+        fireEvent.click(button(out, 'Sign in with Reply'));
         expect(
-            desktop.calls.filter((each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply'),
+            [...desktop.calls, ...signedOut.calls].filter(
+                (each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply',
+            ),
+        ).toEqual([]);
+    });
+
+    it('turns off Add Reply account, Sign out and Remove on the Accounts page, and none of them runs', async () => {
+        const mailbox = {
+            id: 'm_1',
+            channel: 'email',
+            name: 'Sales inbox',
+            address: 'sales@example.test',
+            status: 'connected',
+        };
+        const accounts = withReplyAccounts(setupFound, [
+            replyAccount('default', { default: true, signedIn: true, user: 'ada@example.test', senders: [mailbox] }),
+            replyAccount('spare'),
+        ]);
+        const desktop = await renderAt('demo', 'Accounts', {}, accounts);
+        const page = document.querySelector<HTMLElement>('.reply-accounts')!;
+        const card = (name: string) => within(page).getByRole('region', { name: `Reply account ${name}` });
+        fireEvent.input(within(page).getByRole('textbox', { name: 'Name for a new Reply account' }), {
+            target: { value: 'Made-up Ops' },
+        });
+        const controls = [
+            button(page, 'Add Reply account'),
+            button(card('default'), 'Sign out'),
+            button(card('spare'), 'Remove'),
+        ];
+        for (const each of controls) {
+            expect(each.disabled).toBe(true);
+            each.disabled = false;
+            fireEvent.click(each);
+        }
+        expect(
+            desktop.calls.filter((each) =>
+                ['setup.addAccount', 'setup.signOut', 'setup.removeAccount'].includes(each.name),
+            ),
         ).toEqual([]);
     });
 
     it('does not run a stale control either: the act itself refuses in the demo', async () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
-        const add = button(card, 'Add account');
+        const add = button(card, 'Connect a mailbox or LinkedIn');
         add.disabled = false;
         fireEvent.click(add);
         const del = button(rowOf(card), 'Delete');
         del.disabled = false;
         fireEvent.click(del);
-        expect(card.querySelector('.add-account')).toBeNull();
+        expect(card.querySelector('.connect-sender')).toBeNull();
         expect(desktop.calls.some((each) => each.name === 'setup.replyDelete')).toBe(false);
     });
 
@@ -195,13 +246,14 @@ describe('The Reply CLI in the demo', () => {
 });
 
 describe('The Accounts page in the demo', () => {
-    it('keeps the bar, lists the accounts, and says once that the Reply card acts are off', async () => {
+    it('keeps the bar, lists the accounts, and says once, in the Reply section, that the Reply cards’ acts are off', async () => {
         await renderAt('demo', 'Accounts');
         expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
-        const card = replyCard();
+        const card = accountCard();
         expect(words(card)).toContain('Sales inbox');
-        expect(within(card).getAllByRole('note').map(words)).toEqual([sentence]);
-        expect(button(card, 'Add account').disabled).toBe(true);
+        expect(within(replyCard()).getAllByRole('note').map(words)).toEqual([sentence]);
+        expect(notes()).toHaveLength(1);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(true);
     });
 });
 
@@ -211,18 +263,17 @@ describe('The same screens in Live', () => {
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
-        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
-            expect(button(card, name).disabled).toBe(false);
+        expect(button(card, 'Connect a mailbox or LinkedIn').disabled).toBe(false);
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);
-        fireEvent.click(button(card, 'Add account'));
-        await waitFor(() => expect(replyCard().querySelector('.add-account')).not.toBeNull());
+        fireEvent.click(button(card, 'Connect a mailbox or LinkedIn'));
+        await waitFor(() => expect(replyCard().querySelector('.connect-sender')).not.toBeNull());
     });
 
     it('keep the Accounts page Reply card on, with no sentence', async () => {
         await renderAt('live', 'Accounts');
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
-        expect(button(replyCard(), 'Add account').disabled).toBe(false);
+        expect(button(accountCard(), 'Connect a mailbox or LinkedIn').disabled).toBe(false);
     });
 });

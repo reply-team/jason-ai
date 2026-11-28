@@ -1,14 +1,20 @@
 import { effect, signal } from '@preact/signals-react';
 import type {
+    DesktopAccountChange,
+    DesktopAccountRef,
+    DesktopBoundTeam,
+    DesktopDefaultFor,
     DesktopHost,
     DesktopPlugin,
-    DesktopReplyAccount,
+    DesktopReplySender,
     DesktopReplyChannel,
     DesktopReplyCopied,
     DesktopReplyDone,
     DesktopReplyOpened,
     DesktopReplyPending,
     DesktopReplyRefusal,
+    DesktopReplySignIn,
+    DesktopReplyTeam,
     DesktopSetup,
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
@@ -16,8 +22,10 @@ import { mode } from '../platform/mode';
 import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
+import { svg } from './icons';
 import { signInSentence } from './live';
-import { here, messageOf, setup, setupBusy, setupError, setupReadFailed } from './state';
+import { earlier } from '../platform/window-desktop';
+import { here, messageOf, mounted, setup, setupBusy, setupError, setupReadFailed } from './state';
 
 // Connect: what the desktop found and set up, and the acts that set the rest up. The desktop does each act; the card
 // says where things stand afterwards, from what `setup.status()` answers.
@@ -46,6 +54,10 @@ const notInDemo = (): Html | null =>
 /** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
 const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
 
+/** `realBusy`, and disabled too while an act on a Reply account is asked: one act at a time, as the desktop holds it. */
+const asking = (busy: Html | null): Html | null =>
+    realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
+
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
 
@@ -61,7 +73,7 @@ effect(() => {
  */
 export const replyAccountsAddress = 'https://run.reply.io/';
 
-/** The channels the Reply CLI lists accounts for, in the order the card shows them, with their headings. */
+/** The channels the Reply CLI lists senders for, in the order the card shows them, with their headings. */
 const channels: readonly (readonly [string, string])[] = [
     ['email', 'Email'],
     ['linkedin', 'LinkedIn'],
@@ -70,7 +82,7 @@ const channels: readonly (readonly [string, string])[] = [
 type Tone = 'green' | 'amber' | 'red' | 'gray';
 
 /**
- * The state Reply reports for an account (`reply_status` in `reply account list --json`, see the Reply CLI's
+ * The state Reply reports for a sender (`reply_status` in `reply account list --json`, see the Reply CLI's
  * `src/operations/accounts.ts`), in words, by channel. A word not here is shown as Reply wrote it, in a neutral pill.
  */
 const states: Record<string, Record<string, readonly [string, Tone]>> = {
@@ -93,47 +105,273 @@ const cap = (text: string): string => {
     return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : text;
 };
 
+// ---- The Reply accounts: one card per profile of the Reply CLI ------------------------------------------------------
+//
+// The desktop reads the accounts at each status and keeps none: every profile the Reply CLI holds and every profile a
+// route to Jason's Reply plugin names, the default first. A desktop of an earlier version sends none, and its one Reply
+// state is drawn as one account whose name it cannot give, with the acts of its version, which name no account.
+
+/** One Reply account as the page draws it, from either desktop. */
+interface AccountView {
+    /** How the page names it to the desktop; null for an earlier desktop's one account, whose name it cannot give. */
+    ref: DesktopAccountRef | null;
+    isDefault: boolean;
+    /** Every other global route to Reply that names it, each a mark of its card. */
+    defaultFor: readonly DesktopDefaultFor[];
+    /** Whether the Reply CLI holds its profile; false for one only a route names. */
+    held: boolean;
+    /** Whether a route that names no profile follows it as the Reply CLI's current profile, so it is not removed. */
+    followed: boolean;
+    signedIn: boolean;
+    user: string | null;
+    /** The team its sign-in is bound to; null where it is bound to none, or the desktop does not say. */
+    team: DesktopBoundTeam | null;
+    /** Its sign-in could not be read: said as that, and no sign-in. */
+    authUnread: boolean;
+    /** The teams of its sign-in could not be read: said as that, its other reads standing. */
+    teamsUnread: boolean;
+    /** Who its sign-in is could not be read, once it was bound: said as that, `user` being null. */
+    loginUnread: boolean;
+    senders: readonly DesktopReplySender[];
+    absent: readonly DesktopReplyChannel[];
+    unread: readonly DesktopReplyChannel[];
+    pending: readonly DesktopReplyPending[];
+    pendingUnread: readonly DesktopReplyChannel[];
+    /** The teams its sign-in can act in, where Reply would not list it for want of one; null where there is no choice. */
+    teams: readonly DesktopReplyTeam[] | null;
+    /** Who it was last seen signed in as, as the desktop's note keeps it; null where nothing is noted. */
+    lastSignIn: DesktopReplySignIn | null;
+    /** How the last read found its sign-in changed from what the note says; null where it did not. */
+    change: DesktopAccountChange | null;
+    /** The API address its profile points at where that is not Reply's production; null on production or unsaid. */
+    nonProductionApi: string | null;
+}
+
+const listOf = <T>(value: readonly T[] | undefined): readonly T[] => (Array.isArray(value) ? value : []);
+
+/** Whether the desktop sent the accounts at all, which a desktop of an earlier version does not. */
+const accountsSent = (state: DesktopSetup): boolean => Array.isArray(state.accounts?.accounts);
+
 /**
- * The one line for each channel the desktop did not wholly read, from its lists of closed words: the channels the CLI
- * says are not in the plan or role, the channels that could not be read, then the listed channels whose links still
- * waiting could not be read. A channel read and empty has none: an error is said, an empty state is not. Only the
- * card's own sentences, never the CLI's.
+ * The accounts the page draws: the desktop's, in its order; or, from a desktop of an earlier version, its one Reply state
+ * as one account, where its Reply CLI was found.
  */
-const unlisted = (state: DesktopSetup['reply']): string[] => [
-    ...(Array.isArray(state.absent) ? state.absent : []).map(
-        (channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`,
+function accountViews(state: DesktopSetup): AccountView[] {
+    if (accountsSent(state))
+        return state.accounts!.accounts.map((each) => ({
+            ref: { type: each.type, name: each.name },
+            isDefault: each.default,
+            defaultFor: each.defaultFor,
+            held: each.held,
+            followed: each.followed,
+            signedIn: each.signedIn,
+            user: each.user,
+            team: each.team,
+            authUnread: each.notRead.includes('auth'),
+            teamsUnread: each.notRead.includes('teams'),
+            loginUnread: each.notRead.includes('login'),
+            senders: each.senders,
+            absent: each.absent,
+            unread: each.unread,
+            pending: each.pending,
+            pendingUnread: each.pendingUnread,
+            teams: each.teams !== undefined && each.teams.length > 0 ? each.teams : null,
+            lastSignIn: each.lastSignIn,
+            change: each.change,
+            nonProductionApi: each.nonProductionApi ?? null,
+        }));
+    const reply = state.reply;
+    if (!reply.cli.found) return [];
+    return [
+        {
+            ref: null,
+            isDefault: false,
+            defaultFor: [],
+            held: true,
+            followed: false,
+            signedIn: reply.signedIn,
+            user: reply.user,
+            team: null,
+            authUnread: listOf(reply.notRead).includes('auth'),
+            teamsUnread: false,
+            loginUnread: false,
+            senders: listOf(reply.accounts),
+            absent: listOf(reply.absent),
+            unread: listOf(reply.unread),
+            pending: listOf(reply.pending),
+            pendingUnread: listOf(reply.pendingUnread),
+            teams: null,
+            lastSignIn: null,
+            change: null,
+            nonProductionApi: null,
+        },
+    ];
+}
+
+/**
+ * The account drawn wherever the page offers Reply outside the Accounts page: the default, else the profile `default`;
+ * from a desktop of an earlier version, its one. Null where there is none to draw.
+ */
+function defaultAccount(state: DesktopSetup): AccountView | null {
+    const views = accountViews(state);
+    return (
+        views.find((each) => each.isDefault) ??
+        views.find((each) => each.ref === null || each.ref.name === 'default') ??
+        null
+    );
+}
+
+/** The Accounts page's place of an account's card: its own, so a dialog asked on one card never shows on another. */
+const accountPlace = (view: AccountView): Place =>
+    view.ref === null ? accountsPlace : `${accountsPlace}:${JSON.stringify(view.ref.name)}`;
+
+/** The account a card at `place` is: on the Accounts page, the one its place names; anywhere else, the default. */
+function accountAt(place: Place, state: DesktopSetup | null = setup.value): AccountView | null {
+    if (state === null) return null;
+    if (place === accountsPlace || place.startsWith(`${accountsPlace}:`))
+        return accountViews(state).find((each) => accountPlace(each) === place) ?? null;
+    return defaultAccount(state);
+}
+
+/** How an account is told from the others, an earlier desktop's one account included. */
+const accountKey = (view: AccountView): string =>
+    view.ref === null ? '' : JSON.stringify([view.ref.type, view.ref.name]);
+
+/** An account's sign-in as a read shows it: signed out, or signed in and as whom; null where it could not be read. */
+const signInOf = (view: AccountView): string | null =>
+    view.authUnread ? null : view.signedIn ? `in ${view.user ?? ''}` : 'out';
+
+/** Whether the desktop has Make default, which one of an earlier version does not: asked before it is offered. */
+const makesDefault = (): boolean => mounted() && typeof earlier(here().desktop).setup?.makeDefault === 'function';
+
+/** Whether the desktop can pin a team on a profile, which one of an earlier version cannot: asked before a choice is offered. */
+const choosesTeam = (): boolean => mounted() && typeof earlier(here().desktop).setup?.chooseTeam === 'function';
+
+/** Whether the desktop has Add Reply account, Sign out and Remove, which one of an earlier version does not. */
+const addsAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.addAccount === 'function';
+const signsOut = (): boolean => mounted() && typeof earlier(here().desktop).setup?.signOut === 'function';
+const removesAccount = (): boolean => mounted() && typeof earlier(here().desktop).setup?.removeAccount === 'function';
+const keepsChange = (): boolean => mounted() && typeof earlier(here().desktop).setup?.keepChange === 'function';
+
+/** Whether the Reply CLI is found, at the version the acts need and of a version that was read. */
+const usableCli = (reply: DesktopSetup['reply']): boolean =>
+    reply.cli.found && typeof reply.belowMinimum !== 'string' && !listOf(reply.notRead).includes('version');
+
+/** The account a card's act names, after the act's own arguments; none for an earlier desktop's one account. */
+const named = (view: AccountView): [] | [DesktopAccountRef] => (view.ref === null ? [] : [view.ref]);
+
+/**
+ * A team as the card names it: by the name Reply gives it, set as a name is, then the organization it belongs to in
+ * brackets, by its name, where Reply named one; never by an id. Null where Reply gives the team no name, or its name was not
+ * read: no team is named then, nor its organization.
+ */
+function teamWords(team: DesktopBoundTeam): Html | null {
+    if (team.name === null || team.name === '') return null;
+    const org = team.org === undefined || team.org === null || team.org.name === '' ? null : team.org.name;
+    return html`<b>${team.name}</b>${org === null ? null : html` (<b>${org}</b>)`}`;
+}
+
+/**
+ * A team as the sign-in line sets it: its name, set as a name is; where its name was not read, as the line says while the
+ * teams could not be read, words of the sentence that say so; nothing where Reply gives it none.
+ */
+function teamOnLine(team: DesktopBoundTeam): Html | null {
+    const named = teamWords(team);
+    if (named !== null) return named;
+    return team.name === null ? html`a team whose name could not be read` : null;
+}
+
+/** A sign-in as the card says it: the login, and the team it is bound to where the card can name it. */
+function signInWords(signIn: DesktopReplySignIn): Html {
+    const team = teamWords(signIn.team);
+    return html`<b>${signIn.user}</b>${team === null ? null : html` in ${team}`}`;
+}
+
+/** What a notice says of a change, by the kind the desktop gave it, each a sentence of the account as it was and as it is. */
+function changeWords(view: AccountView, last: DesktopReplySignIn): Html {
+    const was = teamWords(last.team);
+    switch (view.change) {
+        case 'login':
+            return html`This Reply account was ${signInWords(last)}, and is now <b>${view.user ?? ''}</b>: campaigns
+                sending through it now send as the new one.`;
+        case 'left':
+            return was === null
+                ? html`This Reply account’s sign-in can no longer work in the team it was in.`
+                : html`This Reply account was in ${was}, and this sign-in can no longer work in it.`;
+        case 'team': {
+            const now = view.team === null ? null : teamWords(view.team);
+            const inNow = now === null ? html`in another team` : html`in ${now}`;
+            return html`This Reply account ${was === null ? null : html`was in ${was}, and `}is now ${inNow}: campaigns
+            sending through it now send in the new team.`;
+        }
+        default:
+            return html`This Reply account was ${signInWords(last)}, and who is signed in now cannot be known until it
+            has a team.`;
+    }
+}
+
+/**
+ * What the desktop's note of an account says: on a card not signed in, who it was last signed in as; on one whose sign-in
+ * the last read found changed, the change as the desktop decided it (`changeWords`), with Keep it and Sign out.
+ */
+function noteView(view: AccountView, place: Place, real: Html | null): Html | null {
+    const last = view.lastSignIn;
+    if (last === null || view.authUnread) return null;
+    if (!view.signedIn)
+        return html`<div class="setrow meta acct-last">
+            <div class="grow">Last signed in as ${signInWords(last)}.</div>
+        </div>`;
+    if (view.change === null || !keepsChange()) return null;
+    return html`<div class="note am acct-changed" role="note">
+        <div>${changeWords(view, last)}</div>
+        <div class="setrow">
+            <button class="btn sm" type="button" ${real} ${act('connect.keepChange', place)}>Keep it</button>
+            ${signsOut() ? html`<button class="btn sm" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>` : null}
+        </div>
+    </div>`;
+}
+
+/**
+ * The one line for each read the desktop did not wholly make, from its lists of closed words: the teams of the sign-in
+ * that could not be read, the channels the CLI says are not in the plan or role, the channels that could not be read,
+ * then the listed channels whose links still waiting could not be read. A channel read and empty has none: an error is
+ * said, an empty state is not. Only the card's own sentences, never the CLI's.
+ */
+const unlisted = (view: AccountView): string[] => [
+    ...(view.signedIn && view.teamsUnread ? ['The teams of this sign-in could not be read. Check again.'] : []),
+    ...(view.signedIn && view.loginUnread ? ['The login of this sign-in could not be read. Check again.'] : []),
+    ...view.absent.map((channel) => `This Reply account has no ${channel === 'linkedin' ? 'LinkedIn' : 'email'}.`),
+    ...view.unread.map(
+        (channel) => `${channel === 'linkedin' ? 'LinkedIn accounts' : 'Mailboxes'} could not be read. Check again.`,
     ),
-    ...(Array.isArray(state.unread) ? state.unread : []).map(
-        (channel) => `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} accounts could not be read. Check again.`,
-    ),
-    ...(Array.isArray(state.pendingUnread) ? state.pendingUnread : []).map(
+    ...view.pendingUnread.map(
         (channel) =>
             `${channel === 'linkedin' ? 'LinkedIn' : 'Email'} links still waiting could not be read. Check again.`,
     ),
 ];
 
-function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
-    if (!account.status) return ['State unknown', 'gray'];
-    const known = Object.hasOwn(states, account.channel) ? states[account.channel]! : {};
-    return Object.hasOwn(known, account.status) ? known[account.status]! : [cap(account.status), 'gray'];
+function stateOf(sender: DesktopReplySender): readonly [string, Tone] {
+    if (!sender.status) return ['State unknown', 'gray'];
+    const known = Object.hasOwn(states, sender.channel) ? states[sender.channel]! : {};
+    return Object.hasOwn(known, sender.status) ? known[sender.status]! : [cap(sender.status), 'gray'];
 }
 
 /**
- * The accounts by channel: the known channels in their order, then any other under its own name, as it first comes;
- * each with the links made for it and not used yet, which make its heading even with no account.
+ * The senders by channel: the known channels in their order, then any other under its own name, as it first comes;
+ * each with the links made for it and not used yet, which make its heading even with no sender.
  */
 function grouped(
-    accounts: readonly DesktopReplyAccount[],
+    senders: readonly DesktopReplySender[],
     pending: readonly DesktopReplyPending[],
-): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]][] {
-    const others = [...new Set(accounts.map((each) => each.channel))].filter(
+): [string, string, DesktopReplySender[], readonly DesktopReplyPending[]][] {
+    const others = [...new Set(senders.map((each) => each.channel))].filter(
         (channel) => !channels.some(([known]) => known === channel),
     );
     return [...channels, ...others.map((channel) => [channel, cap(channel)] as const)]
-        .map(([channel, heading]): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]] => [
+        .map(([channel, heading]): [string, string, DesktopReplySender[], readonly DesktopReplyPending[]] => [
             channel,
             heading,
-            accounts.filter((each) => each.channel === channel),
+            senders.filter((each) => each.channel === channel),
             pending.filter((row) => row.channel === channel),
         ])
         .filter(([, , members, waiting]) => members.length > 0 || waiting.length > 0);
@@ -148,17 +386,19 @@ const good: Record<string, readonly string[]> = {
     linkedin: ['enabled', 'disabled', 'dailyLimitReached'],
 };
 
-const needsReconnect = (account: DesktopReplyAccount): boolean =>
-    Object.hasOwn(good, account.channel) && !good[account.channel]!.includes(account.status);
+const needsReconnect = (sender: DesktopReplySender): boolean =>
+    Object.hasOwn(good, sender.channel) && !good[sender.channel]!.includes(sender.status);
 
-// ---- The acts: each one verb of the Reply CLI, which the desktop runs ------------------------------------------------
+// ---- The acts: a Reply CLI verb each, which the desktop runs; Make default asks Jason's runtime, Keep it its note ---
 //
-// A link the Reply CLI makes for connecting or reconnecting an account goes from the desktop straight to the person's
+// A link the Reply CLI makes for connecting or reconnecting a sender goes from the desktop straight to the person's
 // browser: the card learns only that it was opened, when it stops working and its pending entry. A limit's change, a
-// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as does a forced delete;
-// the card can only ask for the act.
+// pause, a resume, an unblock and a delete ask the person first in a box of the desktop's own, as do a forced delete, a
+// sign-out and a removal; the card can only ask for the act.
 
-/** Which of the card's places a dialog or a choice belongs to: the Connect panel's card, or the chat's. */
+/**
+ * Which of the cards a dialog or a choice belongs to: the Connect panel's, a chat's, or an account's on the Accounts page.
+ */
 type Place = string;
 
 type Channel = DesktopReplyChannel;
@@ -173,20 +413,24 @@ interface ActDialog {
     place: Place;
     title: string;
     asking: boolean;
+    /** What the card says while the desktop has not answered. */
+    waiting: string;
     opened: DesktopReplyOpened | null;
     /** A link the desktop put on the clipboard for the person to hand on; the card never holds the link itself. */
     copied: DesktopReplyCopied | null;
     done: boolean;
     refused: DesktopReplyRefusal | null;
-    /** The account the act was on, for a Reconnect a signed-out refusal offers; null for a new account. */
-    account: { channel: Channel; id: string } | null;
+    /** The sender the act was on, for a Reconnect a signed-out refusal offers; null for a new one. */
+    sender: { channel: Channel; id: string } | null;
     /** The ask the refusal's offer makes: the forced delete; null for none. */
     again: Again | null;
+    /** Whether it goes with the sign-in it was asked under, as an act on the account's rows does; Make default's does not. */
+    signedIn: boolean;
 }
 
 const actDialog = signal<ActDialog | null>(null);
-/** The place whose Add account choices are open; null when none is. */
-const adding = signal<Place | null>(null);
+/** The place whose choices of Connect a mailbox or LinkedIn are open; null when none is. */
+const connecting = signal<Place | null>(null);
 /** The place whose LinkedIn name field is open; null when none is. */
 const naming = signal<Place | null>(null);
 /** The mailbox whose daily limit is shown for a change, at its place; null when none is. */
@@ -195,6 +439,13 @@ const limiting = signal<{ place: Place; id: string; daily: number | null } | nul
 const copying = signal(false);
 /** The LinkedIn accounts the CLI said are signed out, by id: Pause and Resume are not offered while that stands. */
 const signedOut = signal<readonly string[]>([]);
+/**
+ * A sign-in's or a key's refusal, said on the card it was asked on while that card draws the account it was said of,
+ * until the next act, or a read that shows that account's sign-in changed; null when none is. `read` is the number of
+ * reads begun when it was said, and `signIn` the account's sign-in as the first read begun after it showed it, since the
+ * act may have signed it in before it was refused.
+ */
+const cardRefused = signal<{ place: Place; account: string; said: string; read: number; signIn?: string } | null>(null);
 /** Moves on at each ask and each close, so an answer that comes after its dialog was closed or replaced is dropped. */
 let asked = 0;
 
@@ -218,9 +469,10 @@ function closeDialog(): void {
  */
 export function dropDialogs(place: Place): void {
     if (actDialog.peek()?.place === place) closeDialog();
-    if (adding.peek() === place) adding.value = null;
+    if (connecting.peek() === place) connecting.value = null;
     if (naming.peek() === place) naming.value = null;
     if (limiting.peek()?.place === place) limiting.value = null;
+    if (cardRefused.peek()?.place === place) cardRefused.value = null;
 }
 
 /** The place whose dialog the card holds open; null when none is. */
@@ -229,17 +481,42 @@ export const heldDialog = (): Place | null => actDialog.peek()?.place ?? null;
 /** Drops every dialog, choice and field the card has open: what a console that goes away leaves behind. */
 export function resetDialogs(): void {
     closeDialog();
-    adding.value = null;
+    connecting.value = null;
     naming.value = null;
     limiting.value = null;
     signedOut.value = [];
     copying.value = false;
+    cardRefused.value = null;
+    addingAccount.value = { asking: false, refused: null };
 }
 
-const listedAccount = (channel: unknown, id: unknown): DesktopReplyAccount | undefined =>
-    setup.value?.reply.accounts.find((each) => each.channel === channel && each.id === id);
+/** The card's account, and the sender of it a control names by channel and id, as the last read listed them. */
+function listedSender(
+    place: unknown,
+    channel: unknown,
+    id: unknown,
+): { view: AccountView; sender: DesktopReplySender } | null {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    const sender = view?.senders.find((each) => each.channel === channel && each.id === id);
+    return view && sender ? { view, sender } : null;
+}
 
-const accountTitle = (account: DesktopReplyAccount): string => cap(account.name || account.address || 'the account');
+const senderTitle = (sender: DesktopReplySender): string =>
+    cap(sender.name || sender.address || (sender.channel === 'linkedin' ? 'the LinkedIn account' : 'the mailbox'));
+
+/** What a link connects, by its channel: a mailbox or a LinkedIn account. */
+const linkedSender = (channel: DesktopReplyChannel): string =>
+    channel === 'linkedin' ? 'LinkedIn account' : 'mailbox';
+
+/**
+ * What an ask holds besides its act: what a refusal may offer next, whether the act goes with the sign-in it was asked
+ * under (`ActDialog.signedIn`), and what the card says while the desktop has not answered.
+ */
+interface AskOptions {
+    again?: (refusal: DesktopReplyRefusal) => Again | null;
+    signedIn?: boolean;
+    waiting?: string;
+}
 
 /**
  * Opens a dialog that asks the desktop for one act and says how it ended. A refusal that says the list may have changed
@@ -248,27 +525,30 @@ const accountTitle = (account: DesktopReplyAccount): string => cap(account.name 
 async function ask(
     place: Place,
     title: string,
-    account: ActDialog['account'],
+    sender: ActDialog['sender'],
     run: () => Promise<
         DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null }
     >,
-    again: (refusal: DesktopReplyRefusal) => Again | null = () => null,
+    { again = () => null, signedIn = true, waiting = 'Asking Reply…' }: AskOptions = {},
 ): Promise<void> {
     asked += 1;
     const mine = asked;
-    adding.value = null;
+    connecting.value = null;
     naming.value = null;
     limiting.value = null;
+    cardRefused.value = null;
     actDialog.value = {
         place,
         title,
         asking: true,
+        waiting,
         opened: null,
         copied: null,
         done: false,
         refused: null,
-        account,
+        sender,
         again: null,
+        signedIn,
     };
     let answer:
         DesktopReplyOpened | DesktopReplyCopied | DesktopReplyDone | DesktopReplyRefusal | { daily: number | null };
@@ -283,8 +563,8 @@ async function ask(
         return;
     }
     if ('refused' in answer) {
-        if (answer.offer === 'reconnect' && account !== null && !signedOut.value.includes(account.id))
-            signedOut.value = [...signedOut.value, account.id];
+        if (answer.offer === 'reconnect' && sender !== null && !signedOut.value.includes(sender.id))
+            signedOut.value = [...signedOut.value, sender.id];
         actDialog.value = { ...actDialog.value, asking: false, refused: answer, again: again(answer) };
         if (answer.reread) void reload();
         return;
@@ -292,12 +572,17 @@ async function ask(
     if ('daily' in answer) {
         // A limit read: shown in its field for a change, and the dialog that read it closed.
         actDialog.value = null;
-        if (account !== null) {
-            typed.set(`limit:${account.id}`, answer.daily === null ? '' : String(answer.daily));
-            limiting.value = { place, id: account.id, daily: answer.daily };
+        if (sender !== null) {
+            typed.set(`limit:${sender.id}`, answer.daily === null ? '' : String(answer.daily));
+            limiting.value = { place, id: sender.id, daily: answer.daily };
         }
         return;
     }
+    if ('done' in answer) {
+        // Said once the accounts are read again, so no card still offers what the act changed under its Done.
+        await reload();
+        if (mine !== asked || actDialog.value === null) return;
+    } else void reload();
     actDialog.value = {
         ...actDialog.value,
         asking: false,
@@ -305,144 +590,251 @@ async function ask(
         copied: 'copied' in answer ? answer : null,
         done: 'done' in answer,
     };
-    void reload();
 }
 
 /** A link act: connect or reconnect, copied instead of opened where the person asked so. */
 function askLink(
     place: Place,
     title: string,
-    account: ActDialog['account'],
+    sender: ActDialog['sender'],
     run: (how: { copy?: true }) => Promise<LinkAnswer>,
 ): Promise<void> {
     const copy = copying.value;
-    return ask(place, title, account, () => run(copy ? { copy } : {}));
+    return ask(place, title, sender, () => run(copy ? { copy } : {}));
 }
 
 define('connect.copyLinks', (_args, element) => {
     if (element instanceof HTMLInputElement) copying.value = element.checked;
 });
 
-defineReal('connect.addAccount', ([place]) => {
+defineReal('connect.connectSender', ([place]) => {
     if (typeof place !== 'string') return;
-    adding.value = adding.value === place ? null : place;
+    connecting.value = connecting.value === place ? null : place;
     naming.value = null;
 });
 
-define('connect.addCancel', () => {
-    adding.value = null;
+define('connect.connectCancel', () => {
+    connecting.value = null;
     naming.value = null;
 });
 
-defineReal('connect.addMailbox', ([place, provider]) => {
-    if (typeof place !== 'string' || !isProvider(provider)) return;
+defineReal('connect.connectMailbox', ([place, provider]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || !view || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
     void askLink(place, `Connect a ${name} mailbox`, null, (how) =>
-        here().desktop.setup.replyConnect('email', { provider, ...how }),
+        here().desktop.setup.replyConnect('email', { provider, ...how }, ...named(view)),
     );
 });
 
-defineReal('connect.addLinkedIn', ([place]) => {
+defineReal('connect.nameLinkedIn', ([place]) => {
     if (typeof place === 'string') naming.value = place;
 });
 
 defineReal('connect.makeLinkedIn', ([place]) => {
     const name = typedOf('linkedin-name');
-    if (typeof place !== 'string' || !name) return;
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || !view || !name) return;
     const copy = copying.value;
     void ask(place, 'Connect a LinkedIn account', null, async () => {
-        const answer = await here().desktop.setup.replyConnect('linkedin', { name, ...(copy ? { copy } : {}) });
+        const answer = await here().desktop.setup.replyConnect(
+            'linkedin',
+            { name, ...(copy ? { copy } : {}) },
+            ...named(view),
+        );
         if (!('refused' in answer)) forget('linkedin-name');
         return answer;
     });
 });
 
 defineReal('connect.reconnect', ([place, channel, id]) => {
-    const account = listedAccount(channel, id);
-    if (typeof place !== 'string' || !isChannel(channel) || !account) return;
-    signedOut.value = signedOut.value.filter((each) => each !== account.id);
-    void askLink(place, `Reconnect ${accountTitle(account)}`, { channel, id: account.id }, (how) =>
-        here().desktop.setup.replyReconnect(channel, account.id, how.copy ? how : undefined),
+    const on = listedSender(place, channel, id);
+    if (typeof place !== 'string' || !isChannel(channel) || !on) return;
+    const { view, sender } = on;
+    signedOut.value = signedOut.value.filter((each) => each !== sender.id);
+    void askLink(place, `Reconnect ${senderTitle(sender)}`, { channel, id: sender.id }, (how) =>
+        here().desktop.setup.replyReconnect(channel, sender.id, how.copy ? how : undefined, ...named(view)),
     );
 });
 
 defineReal('connect.pause', ([place, id]) => {
-    const account = listedAccount('linkedin', id);
-    if (typeof place === 'string' && account)
-        void ask(place, `Pause ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
-            here().desktop.setup.replyPause(account.id),
+    const on = listedSender(place, 'linkedin', id);
+    if (typeof place === 'string' && on)
+        void ask(place, `Pause ${senderTitle(on.sender)}`, { channel: 'linkedin', id: on.sender.id }, () =>
+            here().desktop.setup.replyPause(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.resume', ([place, id]) => {
-    const account = listedAccount('linkedin', id);
-    if (typeof place === 'string' && account)
-        void ask(place, `Resume ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
-            here().desktop.setup.replyResume(account.id),
+    const on = listedSender(place, 'linkedin', id);
+    if (typeof place === 'string' && on)
+        void ask(place, `Resume ${senderTitle(on.sender)}`, { channel: 'linkedin', id: on.sender.id }, () =>
+            here().desktop.setup.replyResume(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.unblock', ([place, id]) => {
-    const account = listedAccount('email', id);
-    if (typeof place === 'string' && account)
-        void ask(place, `Unblock ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
-            here().desktop.setup.replyUnblock(account.id),
+    const on = listedSender(place, 'email', id);
+    if (typeof place === 'string' && on)
+        void ask(place, `Unblock ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
+            here().desktop.setup.replyUnblock(on.sender.id, ...named(on.view)),
         );
 });
 
 defineReal('connect.delete', ([place, channel, id]) => {
-    const account = listedAccount(channel, id);
-    if (typeof place !== 'string' || !isChannel(channel) || !account) return;
+    const on = listedSender(place, channel, id);
+    if (typeof place !== 'string' || !isChannel(channel) || !on) return;
+    const { view, sender } = on;
     void ask(
         place,
-        `Delete ${accountTitle(account)}`,
-        { channel, id: account.id },
-        () => here().desktop.setup.replyDelete(channel, account.id),
-        (refusal) =>
-            refusal.offer === 'force'
-                ? () => here().desktop.setup.replyDelete(channel, account.id, { force: true })
-                : null,
+        `Delete ${senderTitle(sender)}`,
+        { channel, id: sender.id },
+        () => here().desktop.setup.replyDelete(channel, sender.id, undefined, ...named(view)),
+        {
+            again: (refusal) =>
+                refusal.offer === 'force'
+                    ? () => here().desktop.setup.replyDelete(channel, sender.id, { force: true }, ...named(view))
+                    : null,
+        },
     );
 });
 
 defineReal('connect.limits', ([place, id]) => {
-    const account = listedAccount('email', id);
-    if (typeof place !== 'string' || !account) return;
-    if (limiting.value?.place === place && limiting.value.id === account.id) {
+    const on = listedSender(place, 'email', id);
+    if (typeof place !== 'string' || !on) return;
+    if (limiting.value?.place === place && limiting.value.id === on.sender.id) {
         limiting.value = null;
         return;
     }
-    void ask(place, `Daily limit of ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
-        here().desktop.setup.replyLimits(account.id),
+    void ask(place, `Daily limit of ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
+        here().desktop.setup.replyLimits(on.sender.id, undefined, ...named(on.view)),
     );
 });
 
 defineReal('connect.setLimit', ([place, id]) => {
-    const account = listedAccount('email', id);
+    const on = listedSender(place, 'email', id);
     const text = typedOf(`limit:${typeof id === 'string' ? id : ''}`);
-    if (typeof place !== 'string' || !account || !/^\d{1,10}$/.test(text)) return;
-    void ask(place, `Daily limit of ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
+    if (typeof place !== 'string' || !on || !/^\d{1,10}$/.test(text)) return;
+    void ask(place, `Daily limit of ${senderTitle(on.sender)}`, { channel: 'email', id: on.sender.id }, () =>
         here()
-            .desktop.setup.replyLimits(account.id, Number(text))
+            .desktop.setup.replyLimits(on.sender.id, Number(text), ...named(on.view))
             .then((answer) => ('refused' in answer ? answer : { done: true as const })),
     );
 });
 
 defineReal('connect.again', () => {
     const shown = actDialog.value;
-    if (shown?.again != null) void ask(shown.place, shown.title, shown.account, shown.again);
+    if (shown?.again != null) void ask(shown.place, shown.title, shown.sender, shown.again);
+});
+
+// A team for an account whose sign-in belongs to several and whose profile pins none: one the desktop offered, pinned on
+// the profile in the Reply CLI with no question, since nothing is lost by it; the card reads as that team after.
+defineReal('connect.chooseTeam', ([place, teamId]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !choosesTeam()) return;
+    if (typeof teamId !== 'string' || !(view.teams ?? []).some((team) => team.id === teamId)) return;
+    const ref = view.ref;
+    void ask(place, 'Choose a team', null, () => here().desktop.setup.chooseTeam(ref, teamId));
+});
+
+// Make default, offered only while Jason has no default, and said on the card as it ended. It asks Jason's runtime, never
+// Reply, so meanwhile the card says the default is being made.
+defineReal('connect.makeDefault', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !makesDefault()) return;
+    const ref = view.ref;
+    void ask(place, 'Make default', null, () => here().desktop.setup.makeDefault(ref), {
+        signedIn: false,
+        waiting: 'Making it the default…',
+    });
+});
+
+// Sign out and Remove, said on the card as they ended. Each asks the person in the desktop's own box first, so meanwhile the
+// card says what it waits on.
+defineReal('connect.signOut', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !signsOut()) return;
+    const ref = view.ref;
+    void ask(place, 'Sign out', null, () => here().desktop.setup.signOut(ref), {
+        signedIn: false,
+        waiting: 'Signing it out…',
+    });
+});
+
+defineReal('connect.removeAccount', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !removesAccount()) return;
+    const ref = view.ref;
+    void ask(place, 'Remove', null, () => here().desktop.setup.removeAccount(ref), {
+        signedIn: false,
+        waiting: 'Removing it…',
+    });
+});
+
+// Keep it: the account as it now is becomes the one the desktop's note keeps, and the card no longer says the change.
+defineReal('connect.keepChange', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (typeof place !== 'string' || view?.ref == null || !keepsChange()) return;
+    const ref = view.ref;
+    void ask(place, 'Keep it', null, () => here().desktop.setup.keepChange(ref), { waiting: 'Keeping it…' });
+});
+
+/** Where the name of a new Reply account is kept until the desktop takes it. */
+const accountNameField = 'reply-account-name';
+
+/** Add Reply account's ask: whether one is going, and what the desktop refused the last one with, said under its field. */
+const addingAccount = signal<{ asking: boolean; refused: string | null }>({ asking: false, refused: null });
+
+// Add Reply account: the name typed, trimmed, asked of the desktop, an empty one too, which it refuses as it refuses every
+// name it does not take; its card is the next read's, and a refusal is said under the field, which keeps the name.
+defineReal('connect.addReplyAccount', () => {
+    const name = typedOf(accountNameField);
+    if (!addsAccount() || addingAccount.value.asking) return;
+    addingAccount.value = { asking: true, refused: null };
+    void here()
+        .desktop.setup.addAccount(name)
+        .catch((error: unknown): DesktopReplyRefusal => ({
+            refused: messageOf(error),
+            code: null,
+            offer: null,
+            reread: false,
+        }))
+        .then((answer) => {
+            if ('refused' in answer) {
+                addingAccount.value = { asking: false, refused: answer.refused };
+                if (answer.reread) void reload();
+                return;
+            }
+            forget(accountNameField);
+            addingAccount.value = { asking: false, refused: null };
+            void reload();
+        });
 });
 
 define('connect.closeLink', () => closeDialog());
 define('connect.checkNow', () => void reload());
 
-// A dialog is dropped with the sign-in it was asked under.
+// What a card holds open goes with the sign-in it was asked under, and with the card: Make default's dialog stays while
+// the account is drawn, signed in or not.
 effect(() => {
-    if (setup.value !== null && !setup.value.reply.signedIn) {
-        if (actDialog.peek() !== null) closeDialog();
-        adding.value = null;
-        naming.value = null;
-        limiting.value = null;
+    const state = setup.value;
+    if (state === null) return;
+    const gone = (place: Place) => accountAt(place, state) === null;
+    const signedOutAt = (place: Place) => !(accountAt(place, state)?.signedIn ?? false);
+    const shown = actDialog.peek();
+    if (shown !== null && (gone(shown.place) || (shown.signedIn && signedOutAt(shown.place)))) closeDialog();
+    if (connecting.peek() !== null && signedOutAt(connecting.peek()!)) connecting.value = null;
+    if (naming.peek() !== null && signedOutAt(naming.peek()!)) naming.value = null;
+    if (limiting.peek() !== null && signedOutAt(limiting.peek()!.place)) limiting.value = null;
+    const refused = cardRefused.peek();
+    if (refused === null) return;
+    const view = accountAt(refused.place, state);
+    if (view === null || accountKey(view) !== refused.account) cardRefused.value = null;
+    else if (shownRead > refused.read) {
+        const signIn = signInOf(view);
+        if (signIn === null) return;
+        if (refused.signIn === undefined) cardRefused.value = { ...refused, signIn };
+        else if (refused.signIn !== signIn) cardRefused.value = null;
     }
 });
 
@@ -464,16 +856,16 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
     const offer = shown.refused?.offer ?? null;
     return html`<div class="note act-dialog" role="dialog" aria-label="${shown.title}">
         <b>${shown.title}</b>
-        ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>Asking Reply…</div>` : null}
+        ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>${shown.waiting}</div>` : null}
         ${shown.refused !== null ? html`<div class="note am" role="alert">${shown.refused.refused}</div>` : null}
         ${
-            offer === 'reconnect' && shown.account !== null
+            offer === 'reconnect' && shown.sender !== null
                 ? html`<div class="setrow">
                       <button
                           class="btn sm"
                           type="button"
                           ${busy}
-                          ${act('connect.reconnect', shown.place, shown.account.channel, shown.account.id)}
+                          ${act('connect.reconnect', shown.place, shown.sender.channel, shown.sender.id)}
                       >
                           ${offers.reconnect}
                       </button>
@@ -487,10 +879,13 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
         ${
             opened !== null
                 ? html`<div class="meta" role="status">The link opened in your browser.</div>
-                      <p class="meta link-note">It connects one account until ${until ?? 'it expires'}.</p>
+                      <p class="meta link-note">
+                          It connects one ${linkedSender(opened.channel)} until ${until ?? 'it expires'}.
+                      </p>
                       <div class="setrow">
                           <div class="grow meta">
-                              The account appears in the list when the sign-in there is finished.
+                              The ${linkedSender(opened.channel)} appears in the list when the sign-in there is
+                              finished.
                           </div>
                           <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
                       </div>`
@@ -500,11 +895,14 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
             shown.copied !== null
                 ? html`<div class="meta" role="status">The link was copied.</div>
                       <p class="meta link-note">
-                          Hand it to whoever owns the account: it connects one account to this Reply account until
+                          Hand it to whoever owns the ${linkedSender(shown.copied.channel)}: it connects one
+                          ${linkedSender(shown.copied.channel)} to this Reply account until
                           ${momentOf(shown.copied.expiresAt) ?? 'it expires'}, so send it to no one else.
                       </p>
                       <div class="setrow">
-                          <div class="grow meta">The account appears in the list when they finish.</div>
+                          <div class="grow meta">
+                              The ${linkedSender(shown.copied.channel)} appears in the list when they finish.
+                          </div>
                           <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
                       </div>`
                 : null
@@ -514,10 +912,10 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
     </div>`;
 }
 
-/** Add account's choices: Gmail and Outlook where email is not absent, LinkedIn where it is not, and Cancel. */
-function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null): Html {
-    const absent = Array.isArray(state.absent) ? state.absent : [];
-    return html`<div class="setrow add-account">
+/** Connect a mailbox or LinkedIn's choices: Gmail and Outlook where email is not absent, LinkedIn where it is not, and Cancel. */
+function senderChoices(view: AccountView, place: Place, busy: Html | null): Html {
+    const absent = view.absent;
+    return html`<div class="setrow connect-sender">
             ${
                 absent.includes('email')
                     ? null
@@ -527,7 +925,7 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
                                   class="btn sm"
                                   type="button"
                                   ${busy}
-                                  ${act('connect.addMailbox', place, provider)}
+                                  ${act('connect.connectMailbox', place, provider)}
                               >
                                   ${name}
                               </button>`,
@@ -536,11 +934,11 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
             ${
                 absent.includes('linkedin')
                     ? null
-                    : html`<button class="btn sm" type="button" ${busy} ${act('connect.addLinkedIn', place)}>
+                    : html`<button class="btn sm" type="button" ${busy} ${act('connect.nameLinkedIn', place)}>
                           LinkedIn
                       </button>`
             }
-            <button class="btn sm" type="button" ${act('connect.addCancel')}>Cancel</button>
+            <button class="btn sm" type="button" ${act('connect.connectCancel')}>Cancel</button>
         </div>
         ${
             naming.value === place
@@ -554,37 +952,37 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
         }`;
 }
 
-/** The acts a row offers, by its channel and state; Pause and Resume not while the account is signed out. */
-function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null): Html[] {
+/** The acts a sender's row offers, by its channel and state; Pause and Resume not while it is signed out. */
+function rowActs(sender: DesktopReplySender, place: Place, busy: Html | null): Html[] {
     const button = (label: string, name: string, ...args: string[]) =>
         html`<button class="btn sm" type="button" ${busy} ${act(name, place, ...args)}>${label}</button>`;
     const acts: Html[] = [];
-    if (needsReconnect(account)) acts.push(button('Reconnect', 'connect.reconnect', account.channel, account.id));
-    if (account.channel === 'email') {
-        acts.push(button('Limits', 'connect.limits', account.id), button('Unblock', 'connect.unblock', account.id));
+    if (needsReconnect(sender)) acts.push(button('Reconnect', 'connect.reconnect', sender.channel, sender.id));
+    if (sender.channel === 'email') {
+        acts.push(button('Limits', 'connect.limits', sender.id), button('Unblock', 'connect.unblock', sender.id));
     } else if (
-        account.channel === 'linkedin' &&
-        account.status !== 'cookieInvalid' &&
-        !signedOut.value.includes(account.id)
+        sender.channel === 'linkedin' &&
+        sender.status !== 'cookieInvalid' &&
+        !signedOut.value.includes(sender.id)
     ) {
-        // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; an
-        // account at its daily limit is on and offers neither.
-        if (account.status === 'disabled') acts.push(button('Resume', 'connect.resume', account.id));
-        else if (account.status === 'enabled') acts.push(button('Pause', 'connect.pause', account.id));
+        // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; a
+        // LinkedIn account at its daily limit is on and offers neither.
+        if (sender.status === 'disabled') acts.push(button('Resume', 'connect.resume', sender.id));
+        else if (sender.status === 'enabled') acts.push(button('Pause', 'connect.pause', sender.id));
     }
-    if (account.channel === 'email' || account.channel === 'linkedin')
-        acts.push(button('Delete', 'connect.delete', account.channel, account.id));
+    if (sender.channel === 'email' || sender.channel === 'linkedin')
+        acts.push(button('Delete', 'connect.delete', sender.channel, sender.id));
     return acts;
 }
 
 /** A mailbox's daily limit, open for a change: the field, and Set, which the desktop asks the person about first. */
-function limitView(account: DesktopReplyAccount, place: Place, busy: Html | null): Html | null {
+function limitView(sender: DesktopReplySender, place: Place, busy: Html | null): Html | null {
     const open = limiting.value;
-    if (open === null || open.place !== place || open.id !== account.id) return null;
+    if (open === null || open.place !== place || open.id !== sender.id) return null;
     return html`<div class="setrow acct-limit">
         <div class="grow meta">Emails a day${open.daily === null ? '' : `, now ${open.daily}`}:</div>
-        ${field(`limit:${account.id}`, 'Daily limit', 'text')}
-        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, account.id)}>Set</button>
+        ${field(`limit:${sender.id}`, 'Daily limit', 'text')}
+        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, sender.id)}>Set</button>
     </div>`;
 }
 
@@ -592,7 +990,7 @@ function pendingView(row: DesktopReplyPending): Html {
     const until = momentOf(row.expiresAt);
     return html`<div class="setrow acct-pending">
         <div class="grow">
-            <b>${cap(row.name || (row.kind === 'reconnect' ? 'A reconnect' : 'A new account'))}</b>
+            <b>${cap(row.name || (row.kind === 'reconnect' ? 'A reconnect' : `A new ${linkedSender(row.channel)}`))}</b>
             <span class="meta"
                 >${row.expired ? 'Its link expired' : until ? `Link valid until ${until}` : 'Waiting to be finished'}</span
             >
@@ -604,6 +1002,11 @@ function pendingView(row: DesktopReplyPending): Html {
 /** How many reads of the setup are going, and when the last one began. */
 let reading = 0;
 let lastRead = Number.NEGATIVE_INFINITY;
+/** How many reads have begun, and which of them gave the state the page shows. */
+let begun = 0;
+let shownRead = 0;
+/** Whether the error the page says is a read's that failed, which the next read that succeeds takes away; an act's stays. */
+let readSaid = false;
 
 /** The window taking the focus back reads again no more often than this. */
 const focusReadSpacingMs = 30_000;
@@ -611,13 +1014,22 @@ const focusReadSpacingMs = 30_000;
 export async function reload(): Promise<void> {
     reading += 1;
     lastRead = Date.now();
+    begun += 1;
+    const read = begun;
     try {
         const status = await here().desktop.setup.status();
+        // A read that began before the one shown answers last: what it read is older, and is dropped.
+        if (read < shownRead) return;
+        shownRead = read;
         setup.value = { ...status, hosts: withModels(status.hosts) };
         setupReadFailed.value = false;
+        if (readSaid) setupError.value = null;
+        readSaid = false;
     } catch (error) {
+        if (read < shownRead) return;
         setupError.value = messageOf(error);
         setupReadFailed.value = true;
+        readSaid = true;
     } finally {
         reading -= 1;
     }
@@ -631,14 +1043,31 @@ export function reloadOnFocus(): void {
 
 define('connect.check', () => void reload());
 
-async function doing(what: string, run: () => Promise<void>): Promise<void> {
+/**
+ * Runs an act, with its busy line. Its refusal is said on the card at `place` of the account it was asked as where it has
+ * one (a sign-in, a key), else in the error line of the section or panel the act is on.
+ */
+async function doing(
+    what: string,
+    run: () => Promise<void>,
+    card: { place: Place; view: AccountView } | null = null,
+): Promise<void> {
     if (setupBusy.value !== null) return;
     setupBusy.value = what;
     setupError.value = null;
+    readSaid = false;
+    cardRefused.value = null;
     try {
         await run();
     } catch (error) {
-        setupError.value = messageOf(error);
+        if (card === null) setupError.value = messageOf(error);
+        else
+            cardRefused.value = {
+                place: card.place,
+                account: accountKey(card.view),
+                said: messageOf(error),
+                read: begun,
+            };
     } finally {
         setupBusy.value = null;
     }
@@ -664,17 +1093,32 @@ define('connect.install', ([program]) => {
         void doing(`Installing ${program}…`, () => here().desktop.setup.installProgram(program));
 });
 
-defineReal('connect.reply', () => {
-    void doing('Signing in to Reply…', () => here().desktop.setup.connectReply());
+// A sign-in is the card's account's: the desktop makes its profile in the Reply CLI where only a route names it, and makes
+// it the default where none is set.
+defineReal('connect.reply', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    if (view)
+        void doing('Signing in to Reply…', () => here().desktop.setup.connectReply(...named(view)), {
+            place: place as Place,
+            view,
+        });
 });
 
-defineReal('connect.replyKey', () => {
-    const key = typedOf('reply');
-    if (key)
-        void doing('Connecting Reply with the key…', async () => {
-            await here().desktop.setup.connectReplyWithKey(key);
-            forget('reply');
-        });
+/** Where a card's typed key is kept until the desktop takes it: one per card. */
+const keyField = (place: Place): string => `reply:${place}`;
+
+defineReal('connect.replyKey', ([place]) => {
+    const view = typeof place === 'string' ? accountAt(place) : null;
+    const key = typeof place === 'string' ? typedOf(keyField(place)) : '';
+    if (view && key)
+        void doing(
+            'Connecting Reply with the key…',
+            async () => {
+                await here().desktop.setup.connectReplyWithKey(key, ...named(view));
+                forget(keyField(place as string));
+            },
+            { place: place as Place, view },
+        );
 });
 
 define('connect.providerKey', ([provider, remove]) => {
@@ -993,28 +1437,26 @@ function keyPanel(providers: readonly DesktopHost[], busy: Html | null): Html | 
     </div>`;
 }
 
-function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, place: Place = 'connect'): Html {
-    const shown = actDialog.value?.place === place ? actDialog.value : null;
-    const pending = Array.isArray(state.pending) ? state.pending : [];
-    // Below the Reply CLI the acts need, the card says so and offers no act.
-    const below = typeof state.belowMinimum === 'string' ? state.belowMinimum : null;
-    const offering = state.signedIn && state.cli.found && below === null;
-    // What the desktop asked and could not read is said as that, never as a state; an earlier desktop sends no such word.
-    const notRead = Array.isArray(state.notRead) ? state.notRead : [];
-    const wiredWords = notRead.includes('route')
-        ? 'Whether Jason uses this sign-in could not be read'
-        : state.wired
-          ? 'Jason uses this sign-in'
-          : 'Jason does not use it yet';
-    // Every act is off while one is being asked for.
-    const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
-    const real = realBusy(busy);
-    // Only a CLI that is missing is said: the version of one that is there is nothing a person acts on.
-    const cli = state.cli.found
+/** What Reply is, as the head of the Reply section and of the one card drawn outside the Accounts page. */
+const replyHead = (): Html =>
+    html`<div class="reply-name"><b>Reply</b> <span class="pillc green">Recommended</span></div>
+        <p class="meta reply-why">
+            Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox and your
+            LinkedIn account to it, and Jason sends from them once you approve.
+        </p>`;
+
+/**
+ * The Reply CLI's state, only where there is something to say: not found and Install, or what to install where npm is
+ * missing too; what came of the update at the start; a version not read and Check again; below the minimum and Update.
+ */
+function cliLines(reply: DesktopSetup['reply'], real: Html | null): Html {
+    const below = typeof reply.belowMinimum === 'string' ? reply.belowMinimum : null;
+    const notRead = listOf(reply.notRead);
+    const missing = reply.cli.found
         ? null
-        : state.cli.install
+        : reply.cli.install
           ? html`<span class="meta">The Reply CLI was not found.</span>
-                <button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
+                <button class="btn sm" type="button" ${real} ${act('connect.install', reply.cli.install)}>
                     Install
                 </button>`
           : // Nothing installs it from here where npm is missing too: what to install, and from where, is said instead.
@@ -1024,123 +1466,342 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                 card will offer to install the Reply CLI.
             </div>`;
     // What came of the update the desktop made at its start: its own sentence, and npm's words in it, as text.
-    const startUpdate = typeof state.startUpdate === 'string' ? state.startUpdate : null;
+    const startUpdate = typeof reply.startUpdate === 'string' ? reply.startUpdate : null;
+    return html`${missing === null ? null : html`<div class="setrow"><div class="grow">${missing}</div></div>`}
+    ${startUpdate === null ? null : html`<div class="setrow start-update" role="note"><div class="grow meta">${startUpdate}</div></div>`}
+    ${
+        reply.cli.found && notRead.includes('version')
+            ? html`<div class="setrow version-unread">
+                  <div class="grow meta">The Reply CLI’s version could not be read.</div>
+                  <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
+              </div>`
+            : reply.cli.found && below !== null
+              ? html`<div class="setrow below-minimum">
+                    <div class="grow meta">${below}</div>
+                    ${
+                        reply.cli.install
+                            ? html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${real}
+                                  ${act('connect.install', reply.cli.install)}
+                              >
+                                  Update
+                              </button>`
+                            : null
+                    }
+                </div>`
+              : null
+    }`;
+}
+
+/**
+ * What of the accounts as a whole the desktop could not read, said as that and never as a state; and that no account is
+ * the default yet where the routes were read and name none: from a desktop of this version alone.
+ */
+function accountsLines(state: DesktopSetup): Html | null {
+    if (!accountsSent(state)) return null;
+    const notRead = listOf(state.accounts!.notRead);
+    return html`${
+        notRead.includes('profiles')
+            ? html`<div class="setrow accounts-unread">
+                  <div class="grow">The Reply accounts could not be read.</div>
+                  <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
+              </div>`
+            : null
+    }
+    ${notRead.includes('routes') ? html`<div class="setrow meta default-unread">Which Reply account is the default could not be read.</div>` : null}
+    ${
+        state.accounts!.noDefault
+            ? html`<div class="setrow meta no-default" role="note">
+                  No Reply account is the default yet. Campaigns have nothing to send through until you make one the
+                  default.
+              </div>`
+            : null
+    }`;
+}
+
+/** Where what the card does not do is managed. */
+const manageInReply = (): Html =>
+    html`<div class="setrow">
+        <div class="grow meta">
+            Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account’s limits are set in Reply.
+            <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer"
+                >Manage mailboxes and LinkedIn accounts in Reply</a
+            >
+        </div>
+    </div>`;
+
+/** A channel as a mark names it. */
+const channelWords = (channel: string): string => (channel === 'linkedin' ? 'LinkedIn' : cap(channel));
+
+/**
+ * The mark of a global route other than the default: "Default for LinkedIn" or "Default for email" for a channel's sends,
+ * else the work's name as Jason has it, with its channel where the route is one channel's.
+ */
+function defaultForWords(mark: DesktopDefaultFor): string {
+    if (mark.kind !== 'channel') return `Default for ${cap(mark.operation)}`;
+    if (mark.operation === 'message.send') return `Default for ${channelWords(mark.channel)}`;
+    return `Default for ${cap(mark.operation)} on ${channelWords(mark.channel)}`;
+}
+
+/**
+ * An account's head: Reply and its name exactly as the Reply CLI has it, the default mark and a mark for each other global
+ * route that names it, or Make default where the desktop has it and the routes were read and name no default at all. None
+ * for an earlier desktop's account, which has no name.
+ */
+function accountHead(state: DesktopSetup, view: AccountView, place: Place, real: Html | null): Html | null {
+    if (view.ref === null) return null;
+    const offered = state.accounts?.noDefault === true && makesDefault();
+    return html`<div class="acct-head">
+        <span class="acct-type">Reply</span> <b class="acct-name">${view.ref.name}</b>${elsewhereMark(view)}
+        ${view.isDefault ? html`<span class="pillc green acct-default">Default</span>` : null}
+        ${view.defaultFor.map((mark) => html` <span class="pillc green acct-default">${defaultForWords(mark)}</span>`)}
+        ${offered ? html`<button class="btn sm" type="button" ${real} ${act('connect.makeDefault', place)}>Make default</button>` : null}
+    </div>`;
+}
+
+/**
+ * The mark beside an account's name where its profile points at another Reply than production: the hint says so and
+ * gives the API address, shown while the pointer is over the mark or the keyboard's focus is on it, and read by a screen
+ * reader as the mark's name. None on production.
+ */
+function elsewhereMark(view: AccountView): Html | null {
+    if (view.nonProductionApi === null) return null;
+    const hint = `Not Reply’s production: ${view.nonProductionApi}`;
+    return html`<span class="acct-elsewhere" role="img" tabindex="0" aria-label="${hint}"
+        >${svg('att', 14)}<span class="acct-elsewhere-hint" aria-hidden="true">${hint}</span></span
+    >`;
+}
+
+/**
+ * The teams of a sign-in that belongs to more than one, in place of its account's senders, where the profile pins none
+ * and Reply would not list it without one: each by its name, or as one Reply gives none, with Choose.
+ */
+function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
+    return html`<div class="acct-group acct-teams">
+        <div class="setrow meta acct-teams-why">
+            This sign-in belongs to more than one Reply team. Choose the one this Reply account works in.
+        </div>
+        ${teams.map(
+            (team) =>
+                html`<div class="setrow acct-team">
+                    <div class="grow">${team.name === '' ? 'A team with no name' : html`<b>${team.name}</b>`}</div>
+                    <button class="btn sm" type="button" ${asks} ${act('connect.chooseTeam', place, team.id)}>
+                        Choose
+                    </button>
+                </div>`,
+        )}
+    </div>`;
+}
+
+/**
+ * An account's body: its sign-in line, the sign-in and the key for it, its senders (its mailboxes and LinkedIn accounts)
+ * with their acts, what of them could not be read, its Connect a mailbox or LinkedIn and Check again, and the dialog an act on it opened.
+ */
+function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html | null, place: Place): Html {
+    const shown = actDialog.value?.place === place ? actDialog.value : null;
+    // Below the Reply CLI the acts need, the card offers no act: only a desktop of an earlier version draws an account then.
+    // While a change of its sign-in is not answered, nothing is done in the account: no act on a sender, no connect.
+    const offering = view.signedIn && usableCli(reply) && view.change === null;
+    const team = view.team === null ? null : teamOnLine(view.team);
+    // A sign-in in several teams, its profile pinning none: the teams to choose from, in place of its senders and acts.
+    const choosing = view.signedIn && view.teams !== null && choosesTeam();
+    // Every act is off while one is being asked for.
+    const asks = asking(busy);
+    const real = realBusy(busy);
+    const shownRefusal = cardRefused.value;
+    const refused =
+        shownRefusal?.place === place && shownRefusal.account === accountKey(view) ? shownRefusal.said : null;
+    return html`<div class="setrow reply-state">
+            ${
+                view.authUnread
+                    ? html`<div class="grow">The Reply sign-in could not be read.</div>
+                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>`
+                    : html`<div class="grow">
+                          ${
+                              !view.signedIn
+                                  ? 'Not signed in'
+                                  : view.user === null
+                                    ? html`Signed in${team === null ? null : html`, in ${team}`}`
+                                    : html`Signed in as <b>${view.user}</b>${team === null ? null : html` in ${team}`}`
+                          }
+                      </div>`
+            }
+        </div>
+        ${noteView(view, place, asks)}
+        ${
+            view.signedIn || view.authUnread
+                ? null
+                : html`<div class="reply-key">
+                          ${secret(keyField(place), 'Or paste a Reply API key')}
+                          <button class="btn" type="button" ${real} ${act('connect.replyKey', place)}>Use key</button>
+                      </div>
+                      <div class="meta reply-key-why">For a Reply account the browser sign-in does not reach.</div>`
+        }
+        ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
+        ${choosing ? teamChoice(view.teams!, place, asks) : null}
+        ${(choosing ? [] : grouped(view.senders, view.pending)).map(
+            ([, heading, members, waiting]) =>
+                html`<div class="acct-group">
+                    <div class="setrow meta acct-hd">${heading}</div>
+                    ${members.map((sender) => {
+                        const [words, tone] = stateOf(sender);
+                        return html`<div class="setrow acct">
+                                <div class="grow">
+                                    <b>${sender.name}</b> <span class="meta">${sender.address}</span>
+                                </div>
+                                <span class="pillc ${tone}">${words}</span>
+                                ${offering ? rowActs(sender, place, asks) : null}
+                            </div>
+                            ${offering ? limitView(sender, place, asks) : null}`;
+                    })}
+                    ${waiting.map((row) => pendingView(row))}
+                    ${
+                        waiting.length > 0
+                            ? html`<div class="setrow meta acct-pending-hint">
+                                  A link here is not shown again: connect the mailbox or LinkedIn account again to make
+                                  a new link.
+                              </div>`
+                            : null
+                    }
+                </div>`,
+        )}
+        ${(choosing ? [] : unlisted(view)).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
+        ${
+            offering && !choosing
+                ? html`<div class="setrow">
+                          <div class="grow meta">
+                              Mailboxes and LinkedIn accounts are read again when this window takes the focus back.
+                          </div>
+                          <button class="btn sm" type="button" ${asks} ${act('connect.connectSender', place)}>
+                              Connect a mailbox or LinkedIn
+                          </button>
+                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
+                      </div>
+                      <label class="setrow meta link-copy">
+                          <input
+                              type="checkbox"
+                              data-change="connect.copyLinks"
+                              ${copying.value ? html`checked` : null}
+                          />
+                          Copy a new link to hand on to whoever owns the mailbox or LinkedIn account, instead of opening
+                          it here
+                      </label>
+                      ${connecting.value === place ? senderChoices(view, place, asks) : null}`
+                : null
+        }
+        ${shown !== null ? dialogView(shown, asks) : null}`;
+}
+
+/**
+ * The acts on the card's account as a whole, beside its name: Sign in with Reply while it is not signed in, Sign out once it
+ * is, but where the notice of a change offers it, and Remove where the Reply CLI holds its profile, it is not the Reply
+ * CLI's own `default` and no route that names no profile follows it; each only where the desktop has it.
+ */
+function accountActs(view: AccountView, place: Place, real: Html | null): Html[] {
+    const signIn = signInButton(view, place, real);
+    const acts = signIn === null ? [] : [signIn];
+    if (view.ref === null) return acts;
+    if (view.signedIn && signsOut() && (view.change === null || !keepsChange()))
+        acts.push(html`<button class="btn" type="button" ${real} ${act('connect.signOut', place)}>Sign out</button>`);
+    if (view.held && !view.followed && view.ref.name !== 'default' && removesAccount())
+        acts.push(
+            html`<button class="btn" type="button" ${real} ${act('connect.removeAccount', place)}>Remove</button>`,
+        );
+    return acts;
+}
+
+/** Add Reply account, where the accounts were read: a name asked, and the desktop's refusal of it under the field. */
+function addAccountView(state: DesktopSetup, real: Html | null): Html | null {
+    if (
+        !addsAccount() ||
+        !accountsSent(state) ||
+        listOf(state.accounts!.notRead).includes('profiles') ||
+        !usableCli(state.reply)
+    )
+        return null;
+    const { asking, refused } = addingAccount.value;
+    return html`<div class="reply-add">
+        <div class="setrow">
+            ${field(accountNameField, 'Name for a new Reply account', 'text')}
+            <button class="btn sm" type="button" ${asking ? html`disabled` : real} ${act('connect.addReplyAccount')}>
+                Add Reply account
+            </button>
+        </div>
+        ${refused === null ? null : html`<div class="note am" role="alert">${refused}</div>`}
+    </div>`;
+}
+
+/**
+ * "Sign in with Reply" for the card's account, its first act, only while it is not signed in, since another login is
+ * another Reply account; none where its sign-in could not be read, which a sign-in would replace unseen.
+ */
+const signInButton = (view: AccountView, place: Place, real: Html | null): Html | null =>
+    view.signedIn || view.authUnread
+        ? null
+        : html`<button class="btn p" type="button" ${real} ${act('connect.reply', place)}>Sign in with Reply</button>`;
+
+/**
+ * The one Reply card drawn outside the Accounts page, on the Connect panel and in a chat: what Reply is, the Reply CLI's
+ * state and what of the accounts could not be read, then the default account, or the profile `default` where no Reply
+ * account is the default, as its card on the Accounts page draws it. With the busy line and the error where `notes`.
+ */
+function replyCard(
+    state: DesktopSetup,
+    busy: Html | null,
+    label?: string,
+    place: Place = 'connect',
+    notes = false,
+): Html {
+    const view = defaultAccount(state);
+    const real = realBusy(busy);
+    const failure = setupError.value;
     return html`<div class="card reply-card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="bd">
             <div class="reply-top">
+                <div class="grow">${replyHead()}</div>
+                ${view === null ? null : accountActs(view, place, asking(busy))}
+            </div>
+            ${notInDemo()}
+            ${notes && setupBusy.value ? html`<div class="note" role="status"><span class="spin"></span>${setupBusy.value}</div>` : null}
+            ${notes && failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+            ${cliLines(state.reply, real)} ${accountsLines(state)}
+            ${view === null ? null : html`${accountHead(state, view, place, asking(busy))}${accountBody(state.reply, view, busy, place)}`}
+            ${manageInReply()}
+        </div>
+    </div>`;
+}
+
+/** The Accounts page's Reply section: what Reply is, the CLI's state, what of the accounts could not be read. */
+function replySection(state: DesktopSetup, busy: Html | null): Html {
+    const failure = setupError.value;
+    return html`<div class="card reply-card reply-section" role="region" aria-label="Reply">
+        <div class="bd">
+            <div class="reply-top"><div class="grow">${replyHead()}</div></div>
+            ${notInDemo()}
+            ${setupBusy.value ? html`<div class="note" role="status"><span class="spin"></span>${setupBusy.value}</div>` : null}
+            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+            ${cliLines(state.reply, realBusy(busy))} ${accountsLines(state)} ${addAccountView(state, realBusy(busy))}
+            ${manageInReply()}
+        </div>
+    </div>`;
+}
+
+/** One account's card on the Accounts page, at a place of its own. */
+function accountCard(state: DesktopSetup, view: AccountView, busy: Html | null): Html {
+    const place = accountPlace(view);
+    const asks = asking(busy);
+    const label = view.ref === null ? 'Reply account' : `Reply account ${view.ref.name}`;
+    return html`<div class="card reply-card reply-account" role="region" aria-label="${label}">
+        <div class="bd">
+            <div class="reply-top">
                 <div class="grow">
-                    <div class="reply-name"><b>Reply</b> <span class="pillc green">Recommended</span></div>
-                    <p class="meta reply-why">
-                        Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox
-                        and your LinkedIn account to it, and Jason sends from them once you approve.
-                    </p>
+                    ${accountHead(state, view, place, asks) ?? html`<div class="acct-head"><span class="acct-type">Reply</span></div>`}
                 </div>
-                ${state.cli.found ? html`<button class="${state.signedIn || notRead.includes('auth') ? 'btn' : 'btn p'}" type="button" ${real} ${act('connect.reply')}>Sign in with Reply</button>` : null}
+                ${accountActs(view, place, asks)}
             </div>
-            ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
-            ${startUpdate === null ? null : html`<div class="setrow start-update" role="note"><div class="grow meta">${startUpdate}</div></div>`}
-            ${
-                state.cli.found && notRead.includes('version')
-                    ? html`<div class="setrow version-unread">
-                          <div class="grow meta">The Reply CLI’s version could not be read.</div>
-                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
-                      </div>`
-                    : state.cli.found && below !== null
-                      ? html`<div class="setrow below-minimum">
-                            <div class="grow meta">${below}</div>
-                            ${
-                                state.cli.install
-                                    ? html`<button
-                                          class="btn sm"
-                                          type="button"
-                                          ${real}
-                                          ${act('connect.install', state.cli.install)}
-                                      >
-                                          Update
-                                      </button>`
-                                    : null
-                            }
-                        </div>`
-                      : null
-            }
-            ${
-                // Without the Reply CLI nothing was asked of the sign-in, so nothing is said of it.
-                state.cli.found
-                    ? html`<div class="setrow reply-state">
-                              ${
-                                  notRead.includes('auth')
-                                      ? html`<div class="grow">The Reply sign-in could not be read.</div>
-                                            <button class="btn sm" type="button" ${act('connect.check')}>
-                                                Check again
-                                            </button>`
-                                      : html`<div class="grow">
-                                            ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
-                                            ${state.signedIn ? html`<span class="meta">${wiredWords}</span>` : null}
-                                        </div>`
-                              }
-                          </div>
-                          <div class="reply-key">
-                              ${secret('reply', 'Or paste a Reply API key')}
-                              <button class="btn" type="button" ${real} ${act('connect.replyKey')}>Use key</button>
-                          </div>
-                          <div class="meta reply-key-why">For an account the browser sign-in does not reach.</div>`
-                    : null
-            }
-            ${grouped(state.accounts, pending).map(
-                ([, heading, members, waiting]) =>
-                    html`<div class="acct-group">
-                        <div class="setrow meta acct-hd">${heading}</div>
-                        ${members.map((account) => {
-                            const [words, tone] = stateOf(account);
-                            return html`<div class="setrow acct">
-                                    <div class="grow">
-                                        <b>${account.name}</b> <span class="meta">${account.address}</span>
-                                    </div>
-                                    <span class="pillc ${tone}">${words}</span>
-                                    ${offering ? rowActs(account, place, asks) : null}
-                                </div>
-                                ${offering ? limitView(account, place, asks) : null}`;
-                        })}
-                        ${waiting.map((row) => pendingView(row))}
-                        ${
-                            waiting.length > 0
-                                ? html`<div class="setrow meta acct-pending-hint">
-                                      A link here is not shown again: add the account again to make a new link.
-                                  </div>`
-                                : null
-                        }
-                    </div>`,
-            )}
-            ${unlisted(state).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
-            ${
-                offering
-                    ? html`<div class="setrow">
-                              <div class="grow meta">
-                                  Accounts are read again when this window takes the focus back.
-                              </div>
-                              <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
-                                  Add account
-                              </button>
-                              <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
-                          </div>
-                          <label class="setrow meta link-copy">
-                              <input
-                                  type="checkbox"
-                                  data-change="connect.copyLinks"
-                                  ${copying.value ? html`checked` : null}
-                              />
-                              Copy a new link to hand on to whoever owns the account, instead of opening it here
-                          </label>
-                          ${adding.value === place ? addView(state, place, asks) : null}
-                          ${shown !== null ? dialogView(shown, asks) : null}`
-                    : null
-            }
-            <div class="setrow">
-                <div class="grow meta">
-                    Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account’s limits are set in Reply.
-                    <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer">Manage accounts in Reply</a>
-                </div>
-            </div>
+            ${accountBody(state.reply, view, busy, place)}
         </div>
     </div>`;
 }
@@ -1266,7 +1927,7 @@ const chatCards = new Map<string, () => Html>();
 
 /**
  * The Reply card alone, for the moment a chat's work needs a way to send: one view per chat, the same each time it is
- * asked for, so a region painting it is painted once.
+ * asked for, so a region painting it is painted once. It draws the default account, as the Connect panel does.
  */
 export function replyCardFor(chatId: string): () => Html {
     let view = chatCards.get(chatId);
@@ -1274,11 +1935,12 @@ export function replyCardFor(chatId: string): () => Html {
         view = () => {
             const state = setup.value;
             if (!state) return html``;
-            return reply(
-                state.reply,
+            return replyCard(
+                state,
                 setupBusy.value === null ? null : html`disabled`,
                 'Connect Reply',
                 chatPlace(chatId),
+                true,
             );
         };
         chatCards.set(chatId, view);
@@ -1286,12 +1948,12 @@ export function replyCardFor(chatId: string): () => Html {
     return view;
 }
 
-/** The place of the Accounts page's Reply card: its own, so a link asked there never shows on the Connect panel. */
+/** The Accounts page's place, and the prefix of each of its cards' places. */
 export const accountsPlace: Place = 'accounts';
 
 /**
- * The Reply card alone for the Accounts page: the same card, with the same acts, at a place of its own. One function, so
- * the region painting it is painted once.
+ * The Accounts page's Reply accounts: the Reply section, then one card per account, the default first, each at a place of
+ * its own. One function, so the region painting it is painted once.
  */
 export function accountsReplyView(): Html {
     const state = setup.value;
@@ -1301,11 +1963,23 @@ export function accountsReplyView(): Html {
             ? html`<div class="note am" role="alert">${failure}</div>`
             : html`<div class="empty">Reading what is set up…</div>`;
     }
-    return reply(state.reply, setupBusy.value === null ? null : html`disabled`, 'Reply accounts', accountsPlace);
+    const busy = setupBusy.value === null ? null : html`disabled`;
+    return html`<div class="reply-accounts" role="region" aria-label="Reply accounts">
+        ${replySection(state, busy)} ${accountViews(state).map((view) => accountCard(state, view, busy))}
+    </div>`;
 }
 
-/** The Accounts page stopped painting the card: a dialog it held open is dropped. */
-export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
+/** The Accounts page stopped painting its cards: a dialog or a choice one of them held open is dropped. */
+export function accountsReplyGone(): void {
+    const ours = (place: Place | null | undefined) =>
+        place === accountsPlace || (place ?? '').startsWith(`${accountsPlace}:`);
+    if (ours(actDialog.peek()?.place)) closeDialog();
+    if (ours(connecting.peek())) connecting.value = null;
+    if (ours(naming.peek())) naming.value = null;
+    if (ours(limiting.peek()?.place)) limiting.value = null;
+    if (ours(cardRefused.peek()?.place)) cardRefused.value = null;
+    addingAccount.value = { ...addingAccount.peek(), refused: null };
+}
 
 /**
  * The AI card, what Connect and Settings' Models hold for the AI, in two groups. What is on this computer: each program
@@ -1382,7 +2056,7 @@ export function connectView(): Html {
     const header = html`<div class="ph">
         <div>
             <h1>Connect</h1>
-            <p>The AI that does the work, and the accounts it works through.</p>
+            <p>The AI that does the work, and the services it works through.</p>
         </div>
     </div>`;
     if (!state)
@@ -1394,7 +2068,7 @@ export function connectView(): Html {
     return html`<div class="panel-body">
         ${header} ${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
         ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
-        ${aiCards(programs, providers, disabled)} ${reply(state.reply, disabled)}
+        ${aiCards(programs, providers, disabled)} ${replyCard(state, disabled)}
         ${state.plugins.length ? plugins(state, disabled) : null}
         <div class="meta versions">
             Jason Desktop ${state.bundleVersion} · runtime ${state.runtimeVersion ?? 'not running'}

@@ -62,6 +62,11 @@ export interface DesktopPaths {
     /** `<data>/desktop/models.json`: the models Codex offered when last asked, on the person's sign-in and on the OpenAI key. */
     models: string;
     /**
+     * `<data>/desktop/reply-account-notes.json`: the desktop's note of who each Reply account was last seen signed in as, and in
+     * which team (`account-notes.ts`); never read to decide which accounts there are.
+     */
+    replyAccountNotes: string;
+    /**
      * `<data>/desktop/skills-records/`: what the desktop placed in the chat folder's skills folders, outside the chat
      * folder: the record of each skills deployment, and the Reply skills' files with their digests (`chat-agent-folder.ts`).
      */
@@ -128,6 +133,7 @@ export function desktopPaths(data: string): DesktopPaths {
         codexKeyed: join(desktop, 'codex-keyed'),
         turns: join(desktop, 'turns'),
         models: join(desktop, 'models.json'),
+        replyAccountNotes: join(desktop, 'reply-account-notes.json'),
         skillsRecords: join(desktop, 'skills-records'),
         rollback: join(desktop, 'rollback'),
         bundle: join(desktop, 'bundle'),

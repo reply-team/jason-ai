@@ -1,5 +1,7 @@
 import type { JournalEntry } from '../api/types';
 import type {
+    DesktopAccount,
+    DesktopAccounts,
     DesktopAgentMade,
     DesktopChatEvent,
     DesktopChatOptions,
@@ -208,6 +210,63 @@ export const setupFound: DesktopSetup = {
     versionsDiffer: null,
     settingsRefused: null,
 };
+
+/** One Reply account as a desktop of this version answers it: a profile the Reply CLI holds, not signed in, unless told. */
+export const replyAccount = (name: string, over: Partial<DesktopAccount> = {}): DesktopAccount => ({
+    type: 'reply',
+    name,
+    default: false,
+    defaultFor: [],
+    held: true,
+    followed: false,
+    signedIn: false,
+    user: null,
+    team: null,
+    senders: [],
+    absent: [],
+    unread: [],
+    pending: [],
+    pendingUnread: [],
+    notRead: [],
+    lastSignIn: null,
+    change: null,
+    ...over,
+});
+
+/**
+ * A desktop of this version with these Reply accounts. The Reply state a page of an earlier version reads, and this page's
+ * chat, is the default account's, or the profile `default`'s where none is the default, wired only for the default, as the
+ * desktop answers it (`#reply` in the desktop's `setup.ts`) where its routes and its plugin list were read.
+ */
+export function withReplyAccounts(
+    status: DesktopSetup,
+    accounts: DesktopAccount[],
+    over: Partial<DesktopAccounts> = {},
+): DesktopSetup {
+    const acting = accounts.find((each) => each.default) ?? accounts.find((each) => each.name === 'default');
+    return {
+        ...status,
+        accounts: {
+            accounts,
+            notRead: [],
+            noDefault: false,
+            ...over,
+        },
+        reply: {
+            ...status.reply,
+            signedIn: acting?.signedIn ?? false,
+            user: acting?.user ?? null,
+            wired: acting?.default ?? false,
+            accounts: acting?.senders ?? [],
+            absent: acting?.absent ?? [],
+            unread: acting?.unread ?? [],
+            pending: acting?.pending ?? [],
+            pendingUnread: acting?.pendingUnread ?? [],
+            // The teams are this desktop's own fact, which a page of an earlier version knows none of.
+            notRead: acting === undefined ? ['auth'] : acting.notRead.filter((fact) => fact === 'auth'),
+        },
+    };
+}
 
 const efforts: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const modelShape = /^[A-Za-z0-9][A-Za-z0-9._:[\]/-]{0,99}$/;
@@ -725,6 +784,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             replyResume: acting('setup.replyResume', done),
             replyUnblock: acting('setup.replyUnblock', done),
             replyDelete: acting('setup.replyDelete', done),
+            makeDefault: acting('setup.makeDefault', done),
+            chooseTeam: acting('setup.chooseTeam', done),
+            addAccount: acting('setup.addAccount', done),
+            signOut: acting('setup.signOut', done),
+            removeAccount: acting('setup.removeAccount', done),
+            keepChange: acting('setup.keepChange', done),
             onChanged(handler) {
                 changeHandlers.add(handler);
                 return () => changeHandlers.delete(handler);

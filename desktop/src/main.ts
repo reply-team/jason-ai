@@ -61,7 +61,7 @@ import { Setup } from './setup.ts';
 import { runtimeVersionIn } from './setup-model.ts';
 import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
-import { askBox } from './reply-accounts.ts';
+import { askBox } from './reply-senders.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { accountShell, handedPath, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
@@ -201,21 +201,34 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
         ['setup.status', () => setup.status()],
-        ['setup.connectReply', () => setup.connectReply()],
-        ['setup.connectReplyWithKey', (key) => setup.connectReplyWithKey(key)],
+        ['setup.connectReply', (account) => setup.connectReply(account)],
+        ['setup.connectReplyWithKey', (key, account) => setup.connectReplyWithKey(key, account)],
         ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.useProgram', (id) => setup.useProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
-        // The Reply card's acts, each a verb of the Reply CLI on the person's click; a link goes to the browser, never here.
-        ['setup.replyConnect', (channel, options) => setup.replyConnect(channel, options)],
-        ['setup.replyReconnect', (channel, id, options) => setup.replyReconnect(channel, id, options)],
-        ['setup.replyLimits', (id, daily) => setup.replyLimits(id, daily)],
-        ['setup.replyPause', (id) => setup.replyPause(id)],
-        ['setup.replyResume', (id) => setup.replyResume(id)],
-        ['setup.replyUnblock', (id) => setup.replyUnblock(id)],
-        ['setup.replyDelete', (channel, id, options) => setup.replyDelete(channel, id, options)],
+        // The Reply card's acts, each a verb of the Reply CLI on the person's click as the account the page names; a link
+        // goes to the browser, never here.
+        ['setup.replyConnect', (channel, options, account) => setup.replyConnect(channel, options, account)],
+        ['setup.replyReconnect', (channel, id, options, account) => setup.replyReconnect(channel, id, options, account)],
+        ['setup.replyLimits', (id, daily, account) => setup.replyLimits(id, daily, account)],
+        ['setup.replyPause', (id, account) => setup.replyPause(id, account)],
+        ['setup.replyResume', (id, account) => setup.replyResume(id, account)],
+        ['setup.replyUnblock', (id, account) => setup.replyUnblock(id, account)],
+        ['setup.replyDelete', (channel, id, options, account) => setup.replyDelete(channel, id, options, account)],
+        // Make default: the runtime names the account the global default, only while Jason has none.
+        ['setup.makeDefault', (account) => setup.makeDefault(account)],
+        // A team pinned on an account's profile in the Reply CLI, where its sign-in belongs to several and the last read
+        // offered them.
+        ['setup.chooseTeam', (account, teamId) => setup.chooseTeam(account, teamId)],
+        // A profile made in the Reply CLI under the name asked; a sign-out and a removal there, each after the person's yes
+        // in the main process's box.
+        ['setup.addAccount', (name) => setup.addAccount(name)],
+        ['setup.signOut', (account) => setup.signOut(account)],
+        ['setup.removeAccount', (account) => setup.removeAccount(account)],
+        // Keep it: the account as it now is becomes the one the desktop's note keeps.
+        ['setup.keepChange', (account) => setup.keepChange(account)],
     ];
     for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
     setup.onChanged(changed);
@@ -608,7 +621,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const models = new ModelLists({
         file: paths.models,
         ask: codexAsker({ paths, env, bundle, dataNamed, bundleVersion: version, keyFor: (id) => keys.keyFor(id) }),
-        changed: () => toPage('setup.changed'),
+        // Only the setup's listing asks for the models, so the setup is made by the time they change.
+        changed: () => setup.announceChange(),
         ...loggedModels(log),
     });
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
@@ -666,6 +680,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         saveSettings: (next) => saveSettings(paths.settings, next, (kept) => (settings = kept)),
         // Where a variable of the runtime's settings may turn the start's update of the Reply CLI off.
         environment: process.env,
+        // The person a change of the global default is journaled as, as the chat's header names them.
+        person: accountName(),
         models,
         bypass: () => chatMade?.bypassUnavailable() ?? null,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
@@ -712,7 +728,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // What the page drew a turn's mode from, and its way to draw it again once a turn finds Claude Code on the other
         // side of the floor of Full access, or its bypass not available here.
         handedClaudeVersion: () => setup.handedClaudeVersion(),
-        setupChanged: () => toPage('setup.changed'),
+        setupChanged: () => setup.announceChange(),
         skillsGate,
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.

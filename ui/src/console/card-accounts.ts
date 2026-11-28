@@ -1,6 +1,6 @@
 import type { Plugin, Routes } from '../api/types';
 import { pluginLabel } from './unavailable-model';
-import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
+import type { DesktopReply, DesktopReplyChannel, DesktopReplySender, DesktopSetup } from '../platform/desktop';
 import { act, define } from './actions';
 import { cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
 import type { Chat } from './chat-model';
@@ -67,22 +67,22 @@ const channelOf = (channel: string): string =>
 
 const accountsWord = (n: number): string => (n === 0 ? 'No accounts' : n === 1 ? '1 account' : `${n} accounts`);
 
-/** The statuses Reply gives an account that mean it can be used; any other word is shown as given, with no tone. */
+/** The statuses Reply gives a sender that mean it can be used; any other word is shown as given, with no tone. */
 const readyStatus: ReadonlySet<string> = new Set(['connected', 'enabled']);
 
-function accountRow(account: DesktopReplyAccount): Html {
-    const glyph = account.channel === 'email' ? 'mail' : account.channel === 'linkedin' ? 'linkedin' : null;
+function senderRow(sender: DesktopReplySender): Html {
+    const glyph = sender.channel === 'email' ? 'mail' : sender.channel === 'linkedin' ? 'linkedin' : null;
     return html`<tr>
         <td>
-            ${account.name === '' ? null : html`<div class="acct-name">${account.name}</div>`}
-            <div class="${account.name === '' ? 'acct-name' : 'acct-sub'}">${account.address}</div>
+            ${sender.name === '' ? null : html`<div class="acct-name">${sender.name}</div>`}
+            <div class="${sender.name === '' ? 'acct-name' : 'acct-sub'}">${sender.address}</div>
         </td>
         <td>
-            <span class="acct-chan">${glyph === null ? null : svg(glyph, 14)}${channelOf(account.channel)}</span>
+            <span class="acct-chan">${glyph === null ? null : svg(glyph, 14)}${channelOf(sender.channel)}</span>
         </td>
         <td>
-            <span class="acct-chip ${readyStatus.has(account.status) ? 'ready' : ''}"
-                >${account.status === '' ? 'none given' : account.status}</span
+            <span class="acct-chip ${readyStatus.has(sender.status) ? 'ready' : ''}"
+                >${sender.status === '' ? 'none given' : sender.status}</span
             >
         </td>
     </tr>`;
@@ -154,7 +154,7 @@ function replyFacts(part: Part<DesktopReply>): Html {
                           </tr>
                       </thead>
                       <tbody>
-                          ${accounts.map(accountRow)}
+                          ${accounts.map(senderRow)}
                       </tbody>
                   </table>`
         }

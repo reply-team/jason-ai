@@ -9,6 +9,60 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deployReplySkills } from './reply-skills.ts';
+import {
+    accountArguments,
+    accountBox,
+    accountNameProblem,
+    accountsOf,
+    accountSentences,
+    defaultBinding,
+    defaultReason,
+    followedProfile,
+    signInReason,
+    defaultRefusal,
+    defaultTeam,
+    isAccountRef,
+    nonProductionApi,
+    readBackend,
+    readProfiles,
+    readReplyWhoami,
+    readRoutes,
+    readTeams,
+    sameAccount,
+    type AccountRef,
+    type DefaultFor,
+    type ProfileBackend,
+    type ReplyWhoami,
+    type ReplyTeam,
+    withReason,
+} from './accounts.ts';
+import {
+    actsIn,
+    asksIn,
+    bindingOf,
+    namedBy,
+    notedOf,
+    readAccountNotes,
+    recordedAs,
+    recordOf,
+    sameSignIn,
+    restsOnPin,
+    sameUser,
+    signInKept,
+    signInRead,
+    noSignInSince,
+    whoIsAsked,
+    withNote,
+    writeAccountNotes,
+    type BoundTeam,
+    type Change,
+    type CliRecord,
+    type Noted,
+    type NotedSignIn,
+    type SignIn,
+    type SignInFiles,
+} from './account-notes.ts';
+import { usableAccount } from './chat-header.ts';
 import { AgentFolderUnowned } from './chat-agent-folder.ts';
 import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
@@ -45,12 +99,12 @@ import {
     isUsageCode,
     linkedInNameProblem,
     refusalOf,
-    replyAccountSentences as said,
+    senderSentences,
     replyActLimitMs,
     type ReplyAct,
     type ReplyBox,
     type ReplyRefusal,
-} from './reply-accounts.ts';
+} from './reply-senders.ts';
 import {
     connectArguments,
     deleteArguments,
@@ -76,26 +130,25 @@ import {
     hasBinding,
     isConfigured,
     parseInstallationSettings,
-    parseReplyAccounts,
-    readGlobalDefault,
+    parseReplySenders,
     readReplyAuth,
     readReplyChannel,
+    type ReplyAuth,
     replyChannels,
     type ReplyChannel,
-    parseReplyAuth,
     pluginRuntimes,
     programInstalls,
     replyMinimumVersion,
-    replyPluginValid,
+    replyPlacement,
     Refused,
     versionAtLeast,
     versionIn,
     withPluginConfigured,
     withPluginDisconnected,
-    withReplyWired,
+    withReplyGranted,
     type PluginRuntime,
     type PluginValues,
-    type ReplyAccount,
+    type ReplySender,
 } from './setup-model.ts';
 import { npmLine, readUpdateSwitch, replyAtWork, runtimeReplyVersion, startUpdateSentences, versionUnsaid } from './reply-update.ts';
 
@@ -165,18 +218,23 @@ export interface HostState {
 }
 
 /**
- * A fact of the Reply card that was asked and could not be read: `version`, the Reply CLI's, where `reply --version` said
- * none; `auth`, its sign-in, where `reply auth status` did not answer; `route`, whether Jason uses that sign-in, where the
- * runtime gave no plugin list or no route list.
+ * A fact of `ReplyState` that was asked and could not be read: `version`, the Reply CLI's, where `reply --version` said
+ * none; `auth`, the account's sign-in, where `reply auth status` did not answer, or no account could be read; `route`,
+ * whether Jason's Reply plugin is valid and the global default, where the runtime gave no plugin list or no route list.
  */
 export type ReplyFact = 'version' | 'auth' | 'route';
 
+/**
+ * The Reply connection as one card draws it: the Reply CLI, and of the accounts the default one, or the profile
+ * `default`'s where no Reply account is the default. A page of an earlier version reads it, and so does this page's chat
+ * until the chat's own part reads the accounts.
+ */
 export interface ReplyState {
     cli: { found: boolean; version: string | null; install: string | null };
     signedIn: boolean;
     user: string | null;
     wired: boolean;
-    accounts: ReplyAccount[];
+    accounts: ReplySender[];
     /** The channels the CLI says are not in this account's plan or role (`email`, `linkedin`). */
     absent: ReplyChannel[];
     /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
@@ -214,6 +272,110 @@ export interface ReplyState {
     startCheck?: 'pending' | 'ended';
 }
 
+/** An account's mailboxes and LinkedIn accounts as one look read them, and their links still waiting. */
+type Lists = Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'>;
+
+/** A sign-in as the card shows it, without what only the note keeps; null for none or a team picked afresh. */
+const shownSignIn = (noted: Noted): SignIn | null => (noted === null || noted === 'fresh' ? null : { user: noted.user, team: noted.team });
+
+/** The user Reply's whoami names. */
+const userOf = (said: ReplyWhoami) => ({ user: said.login, id: said.userId });
+
+/**
+ * An account's sign-in as a look read it: the pin it is left with, Reply's id of the user the card shows, and the Reply CLI's
+ * record, null where no sign-in was read.
+ */
+interface ListedSignIn {
+    pin: string | null;
+    userId: string | null;
+    record: CliRecord | null;
+}
+
+/** What a look read of an account's sign-in. */
+interface SignInRead extends ListedSignIn {
+    state: AccountState;
+    keyed: boolean;
+}
+
+/** How `Setup.#asked` holds an account and a team. */
+const askedKey = (account: AccountRef, team: string): string => JSON.stringify([account.type, account.name, team]);
+
+/** What of the accounts as a whole was asked and could not be read: the Reply CLI's profiles, or the routes. */
+export type AccountsFact = 'profiles' | 'routes';
+
+/**
+ * One Reply account, one profile of the Reply CLI, as Jason's work acts as it, and what was read of it under its own name:
+ * its sign-in and, signed in, its senders (its mailboxes and LinkedIn accounts) and the links still waiting.
+ */
+export interface AccountState extends AccountRef {
+    /** Whether the global default route names this account. */
+    default: boolean;
+    /**
+     * Every other global route to Jason's Reply plugin that names it, as closed data: the operation it routes, and the
+     * channel where it is one channel's route; a route that names no profile names the Reply CLI's current one.
+     */
+    defaultFor: DefaultFor[];
+    /** Whether the Reply CLI holds the profile; false for one only a route names, of which nothing was asked. */
+    held: boolean;
+    /**
+     * Whether a route to Jason's Reply plugin that names no profile follows it, it being the Reply CLI's current profile,
+     * or might, the routes not read: then it is not removed, since that would move the route to `default`'s login.
+     */
+    followed: boolean;
+    signedIn: boolean;
+    user: string | null;
+    /**
+     * The team the account is bound to (`bindingOf`), by its id and the name Reply gives it, or the note keeps where its
+     * teams were not read: empty where Reply gives it none, null where it was not read. Null while it is not signed in, or
+     * signed in and bound to none.
+     */
+    team: BoundTeam | null;
+    senders: ReplySender[];
+    absent: ReplyChannel[];
+    unread: ReplyChannel[];
+    pending: ReplyCliPending[];
+    pendingUnread: ReplyChannel[];
+    /**
+     * `auth` where its sign-in could not be read: no sign-in then, and nothing listed; `teams` where the teams of its
+     * sign-in could not be read, its other reads standing; `login` where `auth status` did not name the sign-in and the
+     * Reply CLI could not say who it is once it was bound.
+     */
+    notRead: ('auth' | 'teams' | 'login')[];
+    /**
+     * The teams its sign-in can act in, where it can act in more than one and is bound to none (`bindingOf`): the choice
+     * the card offers. Absent otherwise; its channels are unread then, since Reply lists none of them without a team.
+     */
+    teams?: ReplyTeam[];
+    /**
+     * Who the account was last seen signed in as, and in which team, as the desktop's note keeps it; null where nothing is
+     * noted.
+     */
+    lastSignIn: SignIn | null;
+    /**
+     * How this look found its sign-in changed from what the note says (`bindingOf`), until Keep it or a sign-out: another
+     * login, the same login no longer in the noted team, the same login in another of its teams, or a login not known
+     * before it has a team; null where it is not.
+     */
+    change: Change | null;
+    /**
+     * The API address its profile points at, where that is not Reply's production (`nonProductionApi`); absent on
+     * production, and where it points could not be read.
+     */
+    nonProductionApi?: string;
+}
+
+/**
+ * The accounts, read at each status and kept nowhere: none without a Reply CLI at the minimum; else the default first, then
+ * the CLI's own order, then the profiles only a route names.
+ */
+export interface AccountsState {
+    accounts: AccountState[];
+    /** What could not be read: no account where the profiles were not, none marked default where the routes were not. */
+    notRead: AccountsFact[];
+    /** Whether the routes were read and no global default is set at all, whatever its plugin. */
+    noDefault: boolean;
+}
+
 /**
  * A link the Reply CLI made, opened in the person's browser by the main process: what the page learns of it. The link
  * itself never reaches the page.
@@ -245,7 +407,7 @@ export interface ReplyDone {
     done: true;
 }
 
-export type { ReplyRefusal } from './reply-accounts.ts';
+export type { ReplyRefusal } from './reply-senders.ts';
 
 export interface PluginState {
     id: string;
@@ -263,6 +425,8 @@ export interface PluginState {
 export interface SetupState {
     hosts: HostState[];
     reply: ReplyState;
+    /** The Reply accounts, one per profile. Always sent; optional as the page reads it, since an earlier desktop sends none. */
+    accounts?: AccountsState;
     runtimeVersion: string | null;
     bundleVersion: string;
     /**
@@ -303,6 +467,12 @@ export interface SetupDeps {
     saveSettings?(next: DesktopSettings): void;
     /** The desktop's own environment, where a `JASON_` variable may set the switch of the start's update (`updateSwitch`). */
     environment: Readonly<Record<string, string | undefined>>;
+    /**
+     * The name of the person signed in to this computer, as the operating system gives it: a change of the global default
+     * is journaled as theirs, `human:<name>`. Absent, or a name an actor cannot hold (`usableAccount`), no default is
+     * changed.
+     */
+    person?: string | null;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -361,6 +531,11 @@ export type RolesOutcome =
     | 'named';
 /** The ends of `connectRoles` that leave it to the next turn: a runtime that did not answer, or no connected host. */
 const unsettling: ReadonlySet<RolesOutcome> = new Set(['settled', 'profiles_unread', 'no_host', 'default_unanswered']);
+/**
+ * The ends of `connectRoles` where the default profile in force, which a listing reads, may have changed: named, or asked
+ * for with no answer. The others changed nothing a listing reads.
+ */
+const rolesDefaultMoved: ReadonlySet<RolesOutcome> = new Set(['made', 'named', 'default_unanswered']);
 export const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
@@ -393,6 +568,24 @@ const editByHand = 'Edit it by hand, then press Reload.';
 
 function words(result: RunResult, otherwise: string): string {
     return (result.stderr.trim() || result.stdout.trim() || otherwise).slice(-1000);
+}
+
+/**
+ * A refusal of the Reply CLI's in the desktop's words: the desktop's sentence, then the Reply CLI's own reason as the error
+ * it prints last under `--json` gives it, its detail, else its title. Never its hint, which tells the person to run another
+ * command (to sign in with no profile named, say), nor its other fields; an ending that does not read as that error is the
+ * sentence alone.
+ */
+function withCliReason(result: RunResult, sentence: string): string {
+    const last = result.stderr.trim().split('\n').pop() ?? '';
+    let error: { detail?: unknown; title?: unknown } | undefined;
+    try {
+        error = (JSON.parse(last) as { error?: { detail?: unknown; title?: unknown } } | null)?.error;
+    } catch {
+        return sentence;
+    }
+    const reason = [error?.detail, error?.title].find((each): each is string => typeof each === 'string' && each.trim() !== '');
+    return reason === undefined ? sentence : withReason(sentence, reason);
 }
 
 /**
@@ -456,10 +649,29 @@ export function unreadSentence(label: string, unread: 'waiting' | 'failed' | nul
     return null;
 }
 
+/** The account a page of an earlier version knows: the default, else the profile `default`; null where neither is listed. */
+const actingOf = (accounts: readonly AccountState[]): AccountState | null =>
+    accounts.find((each) => each.default) ?? accounts.find((each) => each.name === 'default') ?? null;
+
 /** An act refused by the desktop itself, before or after the CLI: its sentence, no code and nothing offered. */
 function refusal(refused: string, reread = false): ReplyRefusal {
     return { refused, code: null, offer: null, reread };
 }
+
+/**
+ * An act on a Reply account the Reply CLI refused: the desktop's sentence and the CLI's reason (`withCliReason`), its code,
+ * and the accounts read again to show where they stand.
+ */
+function cliRefusal(result: RunResult, sentence: string): ReplyRefusal {
+    const ending = replyCliEnding(result);
+    return { refused: withCliReason(result, sentence), code: ending.kind === 'refused' ? ending.code : null, offer: null, reread: true };
+}
+
+/**
+ * What a placing of Jason's Reply plugin did: nothing, it being in place; a load alone; the grant and a load; the package
+ * and a load; or all three.
+ */
+type Placing = 'in_place' | 'loaded' | 'granted' | 'placed' | 'placed_granted';
 
 /**
  * What came of the look at the Reply CLI at a start: npm was run and it is `updated`, `still_old` or `failed`; or nothing was
@@ -471,17 +683,52 @@ export type StartUpdateOutcome =
     | 'updated' | 'still_old' | 'failed'
     | 'settled' | 'not_found' | 'off' | 'switch_unread' | 'version_unread' | 'current' | 'no_npm' | 'tried' | 'in_use' | 'plugins_unread' | 'unmarked';
 
+/** The outcomes of the start's look at the Reply CLI that ran npm: the others changed nothing a listing reads. */
+const npmRan: ReadonlySet<StartUpdateOutcome> = new Set(['updated', 'still_old', 'failed']);
+
 export class Setup {
     #deps: SetupDeps;
     #listeners = new Set<() => void>();
     #versions = new Map<ProgramName, string | null>();
     #queue: Promise<unknown> = Promise.resolve();
+    /** The writes of the Reply CLI's profiles, one after another (`#writingConfig`). */
+    #configWrites: Promise<unknown> = Promise.resolve();
     /** What the last reload said about the settings file, when it could not read it. */
     #reloadRefusal: string | null = null;
     /** Whether an act on a Reply account is going: one at a time, and a second click meanwhile is refused. */
     #acts = false;
-    /** The accounts the last listing gave: an act names only one of them, and its box names it as the list does. */
-    #listed: ReplyAccount[] = [];
+    /**
+     * The accounts the next look checks against their note (`bindingOf`) whatever their login and pin, each with the count
+     * of marks at its own mark: one signed in on its card in this run; one a look found changed, while that change is not
+     * answered, so every look checks it again, listing nothing under another login or a team left, and the new team's under
+     * a change of team; and one a look left undecided,
+     * another look having noted it meanwhile or Reply naming another login once it was decided. Only a look that began
+     * after the mark, and found the account bound with nothing changed and nothing unread, clears it.
+     */
+    #toCheck = new Map<string, number>();
+    #marks = 0;
+    /**
+     * Each account and team `auth whoami` was asked in during this run (`#whoami`): with no sign-in since, a look asks it of
+     * an account whose note holds no organization for its team only while it is not here (`whoIsAsked`), once in each run.
+     */
+    #asked = new Set<string>();
+    /**
+     * The accounts the last read gave, each with the senders it listed: an act names only one of them and one of its
+     * senders, and its box names the sender as the list does.
+     */
+    #listed: AccountState[] = [];
+    /**
+     * Each account's sign-in at the read that gave `#listed`: the team its profile pinned, which Choose may write over,
+     * Reply's id of the user the card shows and the Reply CLI's record, which Choose and Keep it note beside the login.
+     */
+    #listedSignIns = new Map<string, ListedSignIn>();
+    /** The profiles a route named at the last read, at any level; null where the routes were not read, or none was read. */
+    #routed: Set<string> | null = null;
+    /** How many reads of the setup have begun, and which of them gave `#listed` and `#routed`. */
+    #readsBegun = 0;
+    #listedBy = 0;
+    /** The accounts removed in this run, each with the reads begun by then: a read that began before notes nothing of it. */
+    #removed = new Map<string, number>();
     /** The offers a refusal opened, each for the one ask it answered: a forced delete. */
     #doors = new Set<string>();
     /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
@@ -500,6 +747,13 @@ export class Setup {
     #startCheckEnded = false;
     /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
     #rolesSettled = false;
+    /**
+     * How many changes have ended, moved only by the doors every change passes through: the setup's queue (`#serial`), an
+     * act on a Reply account (`#acting`), and a change the desktop learnt of elsewhere (`announceChange`).
+     */
+    #ended = 0;
+    /** The listing being read now, and how many changes had ended when it began. */
+    #reading: { listing: Promise<SetupState>; ended: number } | null = null;
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -515,9 +769,30 @@ export class Setup {
         for (const listener of this.#listeners) listener();
     }
 
-    /** One change at a time: two cards clicked together never write the settings file over each other. */
-    #serial<T>(work: () => Promise<T>): Promise<T> {
-        const next = this.#queue.then(work, work);
+    /**
+     * A change the desktop learnt of outside the setup, the models Codex offers or Full access's bypass: announced to the
+     * page as every change is, so a listing asked after it is never answered by a read that began before it.
+     */
+    announceChange(): void {
+        this.#ended += 1;
+        this.#changed();
+    }
+
+    /**
+     * One change at a time: two cards clicked together never write the settings file over each other. Each ends a change,
+     * but where `changed` says of what it answered that it changed nothing a listing reads.
+     */
+    #serial<T>(work: () => Promise<T>, changed: (answer: T) => boolean = () => true): Promise<T> {
+        const next = this.#queue.then(work, work).then(
+            (answer) => {
+                if (changed(answer)) this.#ended += 1;
+                return answer;
+            },
+            (error: unknown) => {
+                this.#ended += 1;
+                throw error;
+            },
+        );
         this.#queue = next.catch(() => undefined);
         return next;
     }
@@ -579,7 +854,28 @@ export class Setup {
         return this.#handedClaude;
     }
 
-    async status(): Promise<SetupState> {
+    /**
+     * What is set up, each host and each Reply account. A listing asked while one is read is answered by that read, so one
+     * check reads each account once: a click on Check again that also brings the window forward, or an act's end and the
+     * change it announced, both ask. A listing asked after a change ended is never answered by a read that began before
+     * it ended. Whether the start's check of the Reply CLI has ended is taken as the read ends, so a window told of that
+     * end may be answered by the read already going.
+     */
+    status(): Promise<SetupState> {
+        const going = this.#reading;
+        if (going !== null && going.ended === this.#ended) return going.listing;
+        const listing = this.#status()
+            .then((state): SetupState => ({ ...state, reply: { ...state.reply, startCheck: this.#startCheck() } }))
+            .finally(() => {
+                if (this.#reading?.listing === listing) this.#reading = null;
+            });
+        this.#reading = { listing, ended: this.#ended };
+        return listing;
+    }
+
+    async #status(): Promise<SetupState> {
+        this.#readsBegun += 1;
+        const begun = this.#readsBegun;
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
         const claude = programs.find('claude') !== null ? await this.#claude() : null;
@@ -682,9 +978,11 @@ export class Setup {
         const answered = listed.exit === 0 ? pluginRuntimes(listed.stdout) : new Map<string, PluginRuntime>();
 
         const runtimeVersion = this.#deps.runtimeVersion();
+        const { reply, accounts } = await this.#reply(begun, replyPlacement(listed)?.valid ?? null, listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null);
         return {
             hosts: [...programHosts, ...providerHosts],
-            reply: await this.#reply(replyPluginValid(listed), listed.exit === 0 ? runtimeReplyVersion(listed.stdout) : null),
+            reply,
+            accounts,
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
             versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null, this.#deps.deb ?? false),
@@ -727,70 +1025,368 @@ export class Setup {
     }
 
     /**
-     * Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. `valid` is null where the
-     * runtime gave no plugin list, which leaves whether Jason uses the sign-in unread, as a route list that did not answer.
+     * The Reply CLI, and the accounts: the Reply CLI's profiles and every profile a route to Reply names, each read under
+     * its own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account, and a
+     * profile only a route names is asked nothing. `ReplyState` is the default account's, or the profile `default`'s where
+     * no Reply account is the default; its `wired` says that Jason's Reply plugin is valid and the global default names
+     * that very account, and no team beside it but the one the account is bound to, so the plugin sends as its sign-in.
+     * `valid` is null where the runtime gave no plugin list.
      */
-    async #reply(valid: boolean | null, runtimeVersion: string | null): Promise<ReplyState> {
+    async #reply(begun: number, valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
+        const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            this.#listed = [];
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() };
+            this.#keepListing(begun, [], null);
+            return {
+                reply: { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], belowMinimum: null, startCheck: this.#startCheck() },
+                accounts: none,
+            };
         }
-        const route = valid === true ? readGlobalDefault(await this.#deps.cli.run(['route', 'list'])) : null;
-        const wired = route?.plugin === 'reply';
-        const routeUnread = valid === null || (valid && route === null);
         const version = await this.#replyVersion();
-        // Older than the card's acts need, the CLI is offered the update, is not asked for its accounts, and the card
-        // offers no act.
+        // Older than the acts and Jason's Reply plugin need, or of a version not read, the CLI is offered the update and
+        // asked nothing of an account.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         // What came of the start's update, but a failure only while a CLI below the minimum is still in use, here or by the runtime.
         const startUpdate =
             this.#startUpdate !== null && (this.#startUpdate.updated || !current || (runtimeVersion !== null && !versionAtLeast(runtimeVersion, replyMinimumVersion)))
                 ? this.#startUpdate.said
                 : null;
-        // A sign-in that could not be read is named, and is no sign-in: no account is asked for.
-        const authRead = readReplyAuth(await this.#run('reply', 'auth status', ['auth', 'status', '--json']));
-        const auth = authRead ?? { signedIn: false, user: null, profile: null };
-        const accounts: ReplyAccount[] = [];
-        const absent: ReplyChannel[] = [];
-        const unread: ReplyChannel[] = [];
-        const pending: ReplyCliPending[] = [];
-        const pendingUnread: ReplyChannel[] = [];
-        if (auth.signedIn && current) {
-            // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
-            for (const channel of replyChannels) {
-                const read = readReplyChannel(await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']));
-                if (read.kind === 'listed') accounts.push(...read.accounts);
-                else (read.kind === 'absent' ? absent : unread).push(channel);
+        const cli = { found, version, install: current ? null : this.#installable('reply') };
+        const tail = { belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion), ...(startUpdate === null ? {} : { startUpdate }), startCheck: this.#startCheck() };
+        const nobody = { signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], pending: [], pendingUnread: [] };
+        if (!current) {
+            this.#keepListing(begun, [], null);
+            // Nothing was asked of a sign-in: an earlier page says so, never that nobody is signed in.
+            return { reply: { cli, ...nobody, notRead: [...(version === null ? ['version' as const] : []), 'auth'], ...tail }, accounts: none };
+        }
+        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+        const listing = profiles === null ? null : accountsOf(profiles, routes);
+        const notes = readAccountNotes(this.#deps.paths.replyAccountNotes);
+        const read = await Promise.all(
+            (listing?.accounts ?? []).map(async (account) => {
+                const noted = notedOf(notes, account);
+                const { state, pin, userId, record, keyed, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
+                const marked = {
+                    ...state,
+                    default: listing?.default != null && sameAccount(account, listing.default),
+                    defaultFor: listing?.defaultFor.get(account.name) ?? [],
+                    followed: listing?.followed === account.name,
+                };
+                return { account: marked, noted, pin, userId, record, keyed, backend };
+            }),
+        );
+        for (const each of read) {
+            const elsewhere = nonProductionApi(each.backend);
+            if (elsewhere !== null) each.account = { ...each.account, nonProductionApi: elsewhere };
+        }
+        // Noted in the listing's order once every account is read, so the note is written in one order.
+        const accounts = read.map(({ account, noted, userId, record }) => (begun <= (this.#removed.get(account.name) ?? 0) ? account : this.#noted(account, noted, userId, record)));
+        // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
+        this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin, userId, record }) => [account.name, { pin, userId, record }])));
+        const acting = actingOf(accounts);
+        const routeUnread = valid === null || routes === null ? ['route' as const] : [];
+        // The team the global default sends in, where it names one; a key acts in its own team whatever team is asked.
+        const sendsIn = read.find(({ account }) => account.name === acting?.name)?.keyed === true ? null : defaultTeam(routes);
+        const reply: ReplyState =
+            acting === null
+                ? { cli, ...nobody, notRead: ['auth', ...routeUnread], ...tail }
+                : {
+                      cli,
+                      signedIn: acting.signedIn,
+                      user: acting.user,
+                      wired: valid === true && acting.default && (sendsIn === null || sendsIn === acting.team?.id),
+                      accounts: acting.senders,
+                      absent: acting.absent,
+                      unread: acting.unread,
+                      pending: acting.pending,
+                      pendingUnread: acting.pendingUnread,
+                      // The teams are this desktop's own fact: a page of an earlier version knows none.
+                      notRead: [...acting.notRead.filter((fact) => fact === 'auth'), ...routeUnread],
+                      ...tail,
+                  };
+        return {
+            reply,
+            accounts: {
+                accounts,
+                notRead: [...(profiles === null ? ['profiles' as const] : []), ...(routes === null ? ['routes' as const] : [])],
+                noDefault: routes !== null && routes.globalDefault === null,
+            },
+        };
+    }
+
+    /**
+     * One account's reads, each run naming its profile: the sign-in and its pin and what follows from it (`#readSignIn`);
+     * beside it, where the profile points (`profile show`, which names the profile as its argument). A profile the CLI
+     * does not hold is asked nothing.
+     */
+    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<SignInRead & { backend: ProfileBackend | null }> {
+        const [read, backend] = await Promise.all([this.#readSignIn(account, held, noted), held ? this.#backend(account) : null]);
+        return { ...read, backend };
+    }
+
+    /**
+     * An account's sign-in, in three steps. With no sign-in since (`noSignInSince`), the account is its note: its lists are
+     * read, and only Reply refusing them in that team gives a sign-in away; where nothing is to be asked of Reply besides
+     * (`whoIsAsked`), that is all. Otherwise what Reply and the Reply CLI say of the sign-in is gathered whole: after a
+     * sign-in its teams, the lists first where nothing else can decide (`restsOnPin`), and who it is, asked in the team it
+     * acts in (`asksIn`); `bindingOf` decides once; and the account is bound where it says, who it is asked in the team
+     * pinned where the gathering could not ask there. Who the account is, is Reply's answer wherever it answered, and else
+     * what the Reply CLI's record tells (`recordedAs`). The pin is the one the account is left with; the record is the Reply
+     * CLI's as this look read it, which the note keeps.
+     */
+    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<SignInRead> {
+        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: shownSignIn(noted), change: null };
+        if (!held) return { state: read, pin: null, userId: null, record: null, keyed: false };
+        const marks = this.#marks;
+        // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
+        const auth = await this.#pinned(account);
+        if (auth === null) return { state: { ...read, notRead: ['auth'] }, pin: null, userId: null, record: null, keyed: false };
+        if (!auth.signedIn) return { state: read, pin: auth.team, userId: null, record: null, keyed: false };
+        const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
+        const files: SignInFiles = { pin: auth.team, login: auth.user, userId: auth.userId, keyTeam: auth.keyTeam };
+        const [record, keyed] = [recordOf(files), auth.keyTeam !== null];
+        const asked = (team: string) => this.#asked.has(askedKey(account, team));
+        let listed: Lists | null = null;
+        let refused = false;
+        let [asking, askedIn]: [ReplyWhoami | null | undefined, string | null] = [undefined, null];
+        if (noSignInSince(files, noted, this.#toCheck.has(account.name))) {
+            const { lists, outOfTeam } = await this.#lists(account);
+            if (!outOfTeam) {
+                // What the note owes: its team's name, read until it is read, and who it is, by the one rule. Reply's answer
+                // decides one thing alone: whether it names another user than noted, which gives the sign-in away; else it is
+                // who the account is, its address and its seat in the noted team.
+                const owed = noted.team.name === null ? await this.#teams(account) : undefined;
+                if (whoIsAsked(noted, files.login === null, asked)) [asking, askedIn] = [await this.#whoami(account, noted.team.id), noted.team.id];
+                if (asking == null || sameUser(userOf(asking), noted)) {
+                    const named = { ...noted.team, name: owed?.find((each) => each.id === noted.team.id)?.name ?? noted.team.name };
+                    const state: AccountState = { ...signedIn, ...lists, user: asking?.login ?? noted.user, team: namedBy(named, asking ?? null), notRead: owed === null ? ['teams'] : [] };
+                    return { state, pin: auth.team, userId: asking?.userId ?? noted.id ?? auth.userId, record, keyed };
+                }
             }
-            // The links made and not used yet, for each channel that was listed; a read that fails lists none and names its
-            // channel, unless the CLI's refusal says the channel has none here.
-            for (const channel of replyChannels) {
-                if (absent.includes(channel) || unread.includes(channel)) continue;
-                const ending = replyCliEnding(await this.#run('reply', 'account pending', pendingArguments(channel), { timeoutMs: replyActLimitMs }));
-                if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
-                const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
-                if (rows === null) pendingUnread.push(channel);
-                else pending.push(...rows.filter((row) => row.channel === channel));
+            [listed, refused] = [lists, outOfTeam];
+        }
+        // After a sign-in: what Reply and the Reply CLI say of it, gathered whole.
+        const teams = await this.#teams(account);
+        if (listed === null && restsOnPin({ ...files, teams }, noted)) {
+            const { lists, outOfTeam } = await this.#lists(account);
+            [listed, refused] = [lists, outOfTeam];
+        }
+        const gathered = { ...files, refused, teams };
+        if (asking === undefined) {
+            askedIn = asksIn(gathered);
+            if (askedIn !== null) asking = await this.#whoami(account, askedIn);
+        }
+        const binding = bindingOf({ ...gathered, said: asking == null ? null : userOf(asking) }, noted);
+        let [team, pin, said] = [binding.team, auth.team, asking];
+        if (binding.bind !== null) {
+            team = await this.#bind(account, binding.bind, auth.team, actsIn(gathered));
+            if (team !== null) {
+                pin = team.id;
+                if (team.id !== askedIn) said = await this.#whoami(account, team.id);
             }
         }
-        // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
-        this.#listed = auth.signedIn && current ? accounts : [];
-        return {
-            cli: { found, version, install: current ? null : this.#installable('reply') },
-            signedIn: auth.signedIn,
-            user: auth.user,
-            wired,
-            accounts,
-            absent,
-            unread,
-            pending,
-            pendingUnread,
-            notRead: [...(version === null ? ['version' as const] : []), ...(authRead === null ? ['auth' as const] : []), ...(routeUnread ? ['route' as const] : [])],
-            belowMinimum: current ? null : belowMinimumSentence(replyMinimumVersion),
-            ...(startUpdate === null ? {} : { startUpdate }),
-            startCheck: this.#startCheck(),
-        };
+        // Who it is: Reply's last answer, but one that names another user than the noted login it was found to be, as a
+        // terminal signs in meanwhile, which is left to the next look; else as the Reply CLI's record tells it.
+        const notedLogin = noted !== null && noted !== 'fresh' && binding.change === null;
+        const answer = said != null && !(notedLogin && !sameUser(userOf(said), noted)) ? said : null;
+        const later = said != null && answer === null;
+        const who = answer !== null ? userOf(answer) : recordedAs(files, noted);
+        const [user, id] = [who?.user ?? null, who?.id ?? null];
+        const notRead: AccountState['notRead'] = [...(teams === null ? ['teams' as const] : []), ...(user === null && said !== undefined ? ['login' as const] : [])];
+        // Checked by a look that began after the mark, that bound it with nothing changed and who it is known; a change is
+        // checked again at every look until it is answered. A team's name not read is owed as the note's, not checked.
+        if (binding.change !== null || later) this.#markToCheck(account);
+        else if (team !== null && user !== null) this.#checked(account, marks);
+        const now: AccountState = { ...signedIn, user, team: team === null ? null : namedBy(team, answer), change: binding.change, notRead };
+        if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin, userId: id, record, keyed };
+        if (!binding.lists) return { state: now, pin, userId: id, record, keyed };
+        // The account's own read made before it was decided stands for the same pin.
+        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin, userId: id, record, keyed };
+    }
+
+    /** Marks the account for the next look to check (`#toCheck`). */
+    #markToCheck(account: AccountRef): void {
+        this.#marks += 1;
+        this.#toCheck.set(account.name, this.#marks);
+    }
+
+    /** The account is checked, by a look that began after its mark (`marks`, taken at the look's start). */
+    #checked(account: AccountRef, marks: number): void {
+        const at = this.#toCheck.get(account.name);
+        if (at !== undefined && at <= marks) this.#toCheck.delete(account.name);
+    }
+
+    /**
+     * An account as the desktop's note says it was (`account-notes.ts`). One signed in and bound, with its login and no
+     * change, is noted now, with Reply's id of its user (`userId`) and the Reply CLI's record as this look read it
+     * (`record`), where nothing is noted for it, or its team is picked afresh; the noted sign-in is noted again where this
+     * look read of it what the note does not hold (`signInRead`), and shows it as the note keeps it (`signInKept`). Where
+     * another look wrote the note meanwhile, this one decides nothing of it: the card names what the note holds now, and the
+     * account is marked for the next look, whose `bindingOf` reads it against that note. A team picked afresh is set aside
+     * no longer once it is bound, whether or not its login is known. The card's login is who the look found the account to
+     * be, never the Reply CLI's older address (`recordedAs`).
+     */
+    #noted(account: AccountState, noted: Noted, userId: string | null, record: CliRecord | null): AccountState {
+        if (!account.signedIn || account.change !== null || account.team === null) return account;
+        if (account.user === null) {
+            if (noted === 'fresh') this.#note(account, null, 'look', noted);
+            return account;
+        }
+        let now: NotedSignIn = { user: account.user, ...(userId === null ? {} : { id: userId }), team: account.team, ...(record === null ? {} : { record }) };
+        if (noted !== null && noted !== 'fresh') {
+            if (!sameSignIn(noted, now)) return account;
+            const kept = signInKept(noted, now);
+            if (!signInRead(noted, now)) return { ...account, user: kept.user, team: kept.team };
+            now = kept;
+        }
+        const kept = this.#note(account, now, 'look', noted);
+        const shown = { ...account, user: now.user, team: now.team };
+        if (kept === undefined) return shown;
+        if (kept === null || kept === 'fresh') return { ...shown, lastSignIn: null };
+        if (!sameSignIn(kept, now)) this.#markToCheck(account);
+        return { ...shown, lastSignIn: shownSignIn(kept) };
+    }
+
+    /**
+     * Writes one account's entry in the note, or takes it away (null), on the file as it is at this moment, read and written in
+     * one turn of the event loop so no other write comes between. A look passes what it read (`over`), and writes only where
+     * the file still holds that; otherwise what another look wrote meanwhile is the answer. What is noted for the account
+     * after it; undefined where the note could not be written.
+     */
+    #note(account: AccountRef, entry: NotedSignIn | 'fresh' | null, moment: 'look' | 'choose' | 'keep' | 'remove', over?: Noted): Noted | undefined {
+        const file = this.#deps.paths.replyAccountNotes;
+        const notes = readAccountNotes(file);
+        const next = withNote(notes, account, entry, over);
+        if (next === null) return notedOf(notes, account);
+        if (entry === null && notedOf(notes, account) === null) return null;
+        try {
+            writeAccountNotes(file, next);
+        } catch {
+            this.#deps.log.warn('reply_account_noted', { Moment: moment, Written: false });
+            return undefined;
+        }
+        this.#deps.log.info('reply_account_noted', { Moment: moment, Written: true });
+        return entry;
+    }
+
+    /**
+     * Where an account's profile points (`reply profile show --json -- <name>`), with no call to Reply; null where not read.
+     * The name comes after `--`, so one shaped like a flag of the Reply CLI is read as a name.
+     */
+    async #backend(account: AccountRef): Promise<ProfileBackend | null> {
+        return readBackend(await this.#run('reply', 'profile show', ['profile', 'show', '--json', '--', account.name]));
+    }
+
+    /**
+     * Who an account's sign-in is (`reply --profile <name> auth whoami --json`), asked in `team`, the one its runs act in
+     * now, with the team's name and organization where Reply's answer carries them; null where not said. Kept in this run's
+     * `#asked` before it is asked, so two looks at once ask once.
+     */
+    async #whoami(account: AccountRef, team: string): Promise<ReplyWhoami | null> {
+        this.#asked.add(askedKey(account, team));
+        return readReplyWhoami(await this.#run('reply', 'auth whoami', [...accountArguments(account), 'auth', 'whoami', '--json'], { timeoutMs: replyActLimitMs }));
+    }
+
+    /** The teams an account's sign-in can act in (`reply --profile <name> team list --json`); null where they were not read. */
+    async #teams(account: AccountRef): Promise<ReplyTeam[] | null> {
+        return readTeams(await this.#run('reply', 'team list', [...accountArguments(account), 'team', 'list', '--json'], { timeoutMs: replyActLimitMs }));
+    }
+
+    /**
+     * Binds an account to the team `bindingOf` gives it with no question (`reply --profile <name> team use <id>`): its
+     * sign-in's one team, where it is bound as a first sign-in is, or its noted team put back; nothing is lost by it. The log
+     * says that it was done. The pin is read again in the write's own turn, and one other than the look saw, a terminal's,
+     * is left as it is: its team where the sign-in acts in it (`own`, as the look read them), else none. The team bound, or
+     * null where none is.
+     */
+    async #bind(account: AccountRef, team: BoundTeam, seen: string | null, own: readonly BoundTeam[] | null): Promise<BoundTeam | null> {
+        return this.#writingConfig(async () => {
+            const pinned = (await this.#pinned(account))?.team ?? null;
+            if (pinned !== seen) return pinned === team.id ? team : (own?.find((each) => each.id === pinned) ?? null);
+            const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
+            this.#deps.log.info('reply_team_bound', { Exit: result.exit });
+            return result.exit === 0 ? team : null;
+        });
+    }
+
+    /** An account's sign-in as the Reply CLI says it now (`reply --profile <name> auth status --json`), with its pin. */
+    async #pinned(account: AccountRef): Promise<ReplyAuth | null> {
+        return readReplyAuth(await this.#run('reply', 'auth status', [...accountArguments(account), 'auth', 'status', '--json']));
+    }
+
+    /**
+     * The profiles as the Reply CLI holds them, read again in a write's own turn (`#writingConfig`), and the profile made
+     * there under `name` where it holds none of that name, since an add of a name it holds would replace that profile's
+     * settings without a word. Whether it was made; null where the profiles could not be read.
+     */
+    async #addProfile(name: string): Promise<{ made: boolean; held: boolean; result?: RunResult } | null> {
+        return this.#writingConfig(async () => {
+            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+            if (profiles === null) return null;
+            if (profiles.available.includes(name)) return { made: false, held: true };
+            const result = await this.#run('reply', 'profile add', ['profile', 'add', name, '--json']);
+            return { made: result.exit === 0, held: false, result };
+        });
+    }
+
+    /**
+     * An account's mailboxes and LinkedIn accounts, each channel read on its own, and the links still waiting of each
+     * channel that was listed; and whether Reply refused a channel's read because the sign-in cannot act in the team it
+     * was asked in, its pinned one.
+     */
+    async #lists(account: AccountRef): Promise<{ lists: Lists; outOfTeam: boolean }> {
+        const as = accountArguments(account);
+        const lists: Lists = { senders: [], absent: [], unread: [], pending: [], pendingUnread: [] };
+        let outOfTeam = false;
+        // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
+        for (const channel of replyChannels) {
+            const listed = readReplyChannel(await this.#run('reply', 'account list', [...as, 'account', 'list', '--channel', channel, '--json']));
+            if (listed.kind === 'listed') lists.senders.push(...listed.senders);
+            else (listed.kind === 'absent' ? lists.absent : lists.unread).push(channel);
+            outOfTeam ||= listed.kind === 'outOfTeam';
+        }
+        // A read that fails lists none and names its channel, unless the CLI's refusal says the channel has none here.
+        for (const channel of replyChannels) {
+            if (lists.absent.includes(channel) || lists.unread.includes(channel)) continue;
+            const ending = replyCliEnding(await this.#run('reply', 'account pending', [...as, ...pendingArguments(channel)], { timeoutMs: replyActLimitMs }));
+            if (ending.kind === 'refused' && ending.code !== null && pendingNoneCodes.has(ending.code)) continue;
+            const rows = ending.kind === 'done' ? readPending(ending.stdout) : null;
+            if (rows === null) lists.pendingUnread.push(channel);
+            else lists.pending.push(...rows.filter((row) => row.channel === channel));
+        }
+        return { lists, outOfTeam };
+    }
+
+    /**
+     * One write of the Reply CLI's profiles at a time (`team use`, `profile add`, `profile delete`): reply-cli rewrites its
+     * configuration whole, so two at once would lose one, and a look binds accounts side by side.
+     */
+    #writingConfig<T>(work: () => Promise<T>): Promise<T> {
+        const next = this.#configWrites.then(work, work);
+        this.#configWrites = next.catch(() => undefined);
+        return next;
+    }
+
+    /**
+     * The account an act names, among those the last read listed: the one named, or where none is named, as a page of an
+     * earlier version asks, the default, else the profile `default`. Null for a name the last read did not list.
+     */
+    #accountOf(named: unknown): AccountState | null {
+        if (named === undefined) return actingOf(this.#listed);
+        return isAccountRef(named) ? (this.#listed.find((each) => sameAccount(each, named)) ?? null) : null;
+    }
+
+    /**
+     * Keeps a read's accounts as the ones acts are checked against, unless a read that began after it gave them already: an
+     * older read that ends last answers its own asker and changes nothing here.
+     */
+    #keepListing(begun: number, accounts: AccountState[], routed: Set<string> | null, signIns: Map<string, ListedSignIn> = new Map()): void {
+        if (begun < this.#listedBy) return;
+        this.#listedBy = begun;
+        this.#listed = accounts;
+        this.#routed = routed;
+        this.#listedSignIns = signIns;
     }
 
     #startCheck(): 'pending' | 'ended' {
@@ -807,26 +1403,59 @@ export class Setup {
         return this.#version('reply');
     }
 
-    /** The account the last listing gave on that channel by that id, or null: an act names only an account Reply listed. */
-    #account(channel: ReplyCliChannel, id: unknown): ReplyAccount | null {
-        if (!isReplyId(id)) return null;
-        return this.#listed.find((each) => each.channel === channel && each.id === id) ?? null;
+    /**
+     * The account an act names and the sender of it the act is on, as the last read listed both: an act names only an
+     * account and a sender that read gave, the sender by its channel and id among that account's own; and nothing of an
+     * account whose change of sign-in is not answered yet.
+     */
+    #named(named: unknown, channel: ReplyCliChannel, id: unknown): { account: AccountState; sender: ReplySender } | ReplyRefusal {
+        const account = this.#accountOf(named);
+        // With no account named and none to act as, there is no sender: said as one the list did not give.
+        if (account === null) return refusal(named === undefined ? senderSentences.badId : accountSentences.badAccount);
+        if (account.change !== null) return refusal(accountSentences.unanswered);
+        const sender = isReplyId(id) ? account.senders.find((each) => each.channel === channel && each.id === id) : undefined;
+        return sender === undefined ? refusal(senderSentences.badId) : { account, sender };
     }
 
     /**
-     * One act at a time, at or above the Reply CLI the acts need; a second click meanwhile is refused. The answer is the
-     * act's, or the sentence it ended with.
+     * One act on a Reply account at a time, whatever it is: a sign-in, Make default, Choose, Add Reply account, Sign out,
+     * Remove, Keep it or an act on a sender. One asked while another goes is `busy`'s answer, and runs nothing; every act
+     * that ran ends a change.
      */
-    async #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
-        if (this.#acts) return refusal(said.busy);
+    async #oneAct<T>(busy: () => T, work: () => Promise<T>): Promise<T> {
+        if (this.#acts) return busy();
         this.#acts = true;
         try {
-            const version = await this.#replyVersion();
-            if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
             return await work();
         } finally {
             this.#acts = false;
+            this.#ended += 1;
         }
+    }
+
+    /**
+     * An act of the Reply CLI's on a Reply account, one at a time (`#oneAct`), at or above the Reply CLI the acts need. The
+     * answer is the act's, or the sentence it ended with.
+     */
+    #acting<T>(work: () => Promise<T | ReplyRefusal>): Promise<T | ReplyRefusal> {
+        return this.#oneAct<T | ReplyRefusal>(
+            () => refusal(senderSentences.busy),
+            async () => {
+                const version = await this.#replyVersion();
+                if (version === null || !versionAtLeast(version, replyMinimumVersion)) return refusal(belowMinimumSentence(replyMinimumVersion));
+                return work();
+            },
+        );
+    }
+
+    /** A sign-in, one act at a time (`#oneAct`), in the setup's queue, since it ends in a write of the settings file. */
+    #signingInAct(work: () => Promise<void>): Promise<void> {
+        return this.#oneAct(
+            () => {
+                throw new Refused(senderSentences.busy);
+            },
+            () => this.#serial(work),
+        );
     }
 
     /** The person's yes in the main process's own box; no box to ask in is a no. */
@@ -835,11 +1464,12 @@ export class Setup {
     }
 
     /**
-     * Runs one verb. The log says the act, the channel, the exit and the CLI's code, never what the verb printed or
-     * wrote on stderr: a link's stdout is never logged, recorded or put into an error.
+     * Runs one verb as the account it is on. The log says the act, the channel, the exit and the CLI's code, never the
+     * account, what the verb printed or what it wrote on stderr: a link's stdout is never logged, recorded or put into an
+     * error.
      */
-    async #verb(act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
-        const result = await this.#run('reply', `account ${act}`, args, { timeoutMs: replyActLimitMs });
+    async #verb(account: AccountRef, act: ReplyAct, channel: ReplyCliChannel, args: string[], options: { write: boolean; force?: boolean }): Promise<{ stdout: string } | ReplyRefusal> {
+        const result = await this.#run('reply', `account ${act}`, [...accountArguments(account), ...args], { timeoutMs: replyActLimitMs });
         const ending = replyCliEnding(result);
         const code = ending.kind === 'refused' ? ending.code : ending.kind === 'unknown' ? 'outcome.unknown' : null;
         this.#deps.log.info('reply_account_act', { Act: act, Channel: channel, Exit: result.exit, Code: code ?? 'none', Usage: isUsageCode(code) });
@@ -855,22 +1485,22 @@ export class Setup {
     async #open(answer: { stdout: string } | ReplyRefusal, copy: boolean): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         if ('refused' in answer) return answer;
         const printed = readLink(answer.stdout);
-        if (printed === null) return refusal(said.outcomeUnknown, true);
-        if (!isOpenableLink(printed.link)) return refusal(said.badLink, true);
+        if (printed === null) return refusal(senderSentences.outcomeUnknown, true);
+        if (!isOpenableLink(printed.link)) return refusal(senderSentences.badLink, true);
         if (copy) {
-            if (this.#deps.copyLink === undefined) return refusal(said.notCopied, true);
+            if (this.#deps.copyLink === undefined) return refusal(senderSentences.notCopied, true);
             try {
                 this.#deps.copyLink(printed.link);
             } catch {
-                return refusal(said.notCopied, true);
+                return refusal(senderSentences.notCopied, true);
             }
             return { copied: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
         }
-        if (this.#deps.openLink === undefined) return refusal(said.badLink, true);
+        if (this.#deps.openLink === undefined) return refusal(senderSentences.badLink, true);
         try {
             await this.#deps.openLink(printed.link);
         } catch {
-            return refusal(said.notOpened, true);
+            return refusal(senderSentences.notOpened, true);
         }
         return { opened: true, channel: printed.channel, kind: printed.kind, linkKind: printed.linkKind, expiresAt: printed.expiresAt, pendingId: printed.pendingId };
     }
@@ -881,138 +1511,180 @@ export class Setup {
     }
 
     /**
-     * Connects a new account by a link the CLI makes (`reply account connect`): LinkedIn under the name typed for it, a
-     * mailbox for its provider. With `copy`, the link is copied instead of opened, as `#open` says. `sharedPage`, the
-     * shared mailbox page an earlier desktop offered, is no option any more and is refused.
+     * Connects a new sender by a link the CLI makes (`reply account connect`) in the Reply account named, the default where
+     * none is: a LinkedIn account under the name typed for it, a mailbox for its provider. With `copy`, the link is copied instead of
+     * opened, as `#open` says. `sharedPage`, the shared mailbox page a desktop of an earlier version offered, is refused, and
+     * so is an account whose change of sign-in is not answered yet.
      */
-    replyConnect(channel: unknown, options: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
+    replyConnect(channel: unknown, options: unknown, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
+        if (asked['sharedPage'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
+        const account = this.#accountOf(named);
+        if (named !== undefined && account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (account !== null && account.change !== null) return Promise.resolve(refusal(accountSentences.unanswered));
+        // With no account named and none to act as, the CLI below the minimum is said first, as the card's every act does.
+        const connect = (request: Parameters<typeof connectArguments>[0]) =>
+            this.#acting(async () => (account === null ? refusal(accountSentences.badAccount) : this.#open(await this.#verb(account, 'connect', request.channel, connectArguments(request), { write: true }), copy)));
         if (channel === 'linkedin') {
             const problem = linkedInNameProblem(asked['name']);
             if (problem !== null) return Promise.resolve(refusal(problem));
-            if (asked['provider'] !== undefined) return Promise.resolve(refusal(said.badRequest));
-            const name = (asked['name'] as string).trim();
-            return this.#acting(async () => this.#open(await this.#verb('connect', 'linkedin', connectArguments({ channel: 'linkedin', name }), { write: true }), copy));
+            if (asked['provider'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
+            return connect({ channel: 'linkedin', name: (asked['name'] as string).trim() });
         }
         const provider = asked['provider'];
-        if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(said.badRequest));
-        return this.#acting(async () => this.#open(await this.#verb('connect', 'email', connectArguments({ channel: 'email', provider }), { write: true }), copy));
+        if (channel !== 'email' || (provider !== 'gmail' && provider !== 'office365')) return Promise.resolve(refusal(senderSentences.badRequest));
+        return connect({ channel: 'email', provider });
     }
 
-    /** Reconnects an account the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
-    replyReconnect(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
+    /** Reconnects a sender the list gave (`reply account reconnect`) by a link the CLI makes; `sharedPage` as above. */
+    replyReconnect(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyOpened | ReplyCopied | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
         const copy = asked['copy'] === true;
-        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(said.badRequest));
-        const account = this.#account(channel, accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
-        return this.#acting(async () => this.#open(await this.#verb('reconnect', channel, reconnectArguments(channel, account.id), { write: true }), copy));
+        if (!isReplyChannel(channel) || asked['sharedPage'] !== undefined) return Promise.resolve(refusal(senderSentences.badRequest));
+        const on = this.#named(named, channel, senderId);
+        if ('refused' in on) return Promise.resolve(on);
+        return this.#acting(async () => this.#open(await this.#verb(on.account, 'reconnect', channel, reconnectArguments(channel, on.sender.id), { write: true }), copy));
     }
 
     /**
      * A mailbox's daily limit (`reply account limits --channel email`): read with no limit given, and set to the one
      * given only on the person's yes to the box that names the mailbox.
      */
-    replyLimits(accountId: unknown, daily?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
-        const account = this.#account('email', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    replyLimits(senderId: unknown, daily?: unknown, named?: unknown): Promise<{ daily: number | null } | ReplyRefusal> {
+        const on = this.#named(named, 'email', senderId);
+        if ('refused' in on) return Promise.resolve(on);
         if (daily !== undefined && (typeof daily !== 'number' || !Number.isSafeInteger(daily) || daily < 0 || daily > dailyLimitMost)) {
-            return Promise.resolve(refusal(said.badLimit));
+            return Promise.resolve(refusal(senderSentences.badLimit));
         }
         return this.#acting(async () => {
-            if (daily !== undefined && !(await this.#confirmed(actBox('limits', account, daily)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb('limits', 'email', limitsArguments(account.id, daily), { write: daily !== undefined });
+            if (daily !== undefined && !(await this.#confirmed(actBox('limits', on.sender, daily)))) return refusal(senderSentences.notConfirmed);
+            const answer = await this.#verb(on.account, 'limits', 'email', limitsArguments(on.sender.id, daily), { write: daily !== undefined });
             if ('refused' in answer) return answer;
-            return readDailyLimit(answer.stdout) ?? refusal(said.outcomeUnknown, true);
+            return readDailyLimit(answer.stdout) ?? refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
     /** Pauses a LinkedIn account the list gave, on the person's yes (`reply account pause`). */
-    replyPause(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('pause', accountId);
+    replyPause(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('pause', senderId, named);
     }
 
     /** Resumes a LinkedIn account the list gave, on the person's yes (`reply account resume`). */
-    replyResume(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        return this.#state('resume', accountId);
+    replyResume(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        return this.#state('resume', senderId, named);
     }
 
-    #state(verb: 'pause' | 'resume', accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const account = this.#account('linkedin', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    #state(verb: 'pause' | 'resume', senderId: unknown, named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'linkedin', senderId);
+        if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox(verb, account)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb(verb, 'linkedin', stateArguments(verb, account.id), { write: true });
+            if (!(await this.#confirmed(actBox(verb, on.sender)))) return refusal(senderSentences.notConfirmed);
+            const answer = await this.#verb(on.account, verb, 'linkedin', stateArguments(verb, on.sender.id), { write: true });
             if ('refused' in answer) return answer;
-            return readState(answer.stdout) === null ? refusal(said.outcomeUnknown, true) : { done: true };
+            return readState(answer.stdout) === null ? refusal(senderSentences.outcomeUnknown, true) : { done: true };
         });
     }
 
     /** Lets a mailbox the list gave send again after its provider stopped it, on the person's yes (`reply account unblock`). */
-    replyUnblock(accountId: unknown): Promise<ReplyDone | ReplyRefusal> {
-        const account = this.#account('email', accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
+    replyUnblock(senderId: unknown, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const on = this.#named(named, 'email', senderId);
+        if ('refused' in on) return Promise.resolve(on);
         return this.#acting(async () => {
-            if (!(await this.#confirmed(actBox('unblock', account)))) return refusal(said.notConfirmed);
-            const answer = await this.#verb('unblock', 'email', unblockArguments(account.id), { write: true });
+            if (!(await this.#confirmed(actBox('unblock', on.sender)))) return refusal(senderSentences.notConfirmed);
+            const answer = await this.#verb(on.account, 'unblock', 'email', unblockArguments(on.sender.id), { write: true });
             if ('refused' in answer) return answer;
-            return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(said.outcomeUnknown, true);
+            return readDone(answer.stdout, 'unblocked') ? { done: true } : refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
     /**
-     * Deletes an account the list gave (`reply account delete`), passing `--yes` only after the person's yes to the box
-     * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that account
-     * without it, and only on the person's yes to a box of its own that says sequences use it.
+     * Deletes a sender the list gave (`reply account delete`), passing `--yes` only after the person's yes to the box
+     * that names it. With `force`, only after the CLI answered `linkedin.account_in_use` to a delete of that LinkedIn
+     * account without it, and only on the person's yes to a box of its own that says sequences use it.
      */
-    replyDelete(channel: unknown, accountId: unknown, options: unknown = {}): Promise<ReplyDone | ReplyRefusal> {
+    replyDelete(channel: unknown, senderId: unknown, options: unknown = {}, named?: unknown): Promise<ReplyDone | ReplyRefusal> {
         const asked = (typeof options === 'object' && options !== null ? options : {}) as Record<string, unknown>;
-        if (!isReplyChannel(channel)) return Promise.resolve(refusal(said.badRequest));
+        if (!isReplyChannel(channel)) return Promise.resolve(refusal(senderSentences.badRequest));
         const force = asked['force'] === true;
-        if (force && channel !== 'linkedin') return Promise.resolve(refusal(said.badRequest));
-        const account = this.#account(channel, accountId);
-        if (account === null) return Promise.resolve(refusal(said.badId));
-        const door = `delete:linkedin:${account.id}`;
+        if (force && channel !== 'linkedin') return Promise.resolve(refusal(senderSentences.badRequest));
+        const on = this.#named(named, channel, senderId);
+        if ('refused' in on) return Promise.resolve(on);
+        // A door is the one sender's of the one Reply account: two profiles may list the same sender.
+        const door = JSON.stringify(['delete', on.account.name, 'linkedin', on.sender.id]);
         return this.#acting(async () => {
-            if (force && !this.#doors.has(door)) return refusal(said.notOffered);
-            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', account)))) return refusal(said.notConfirmed);
+            if (force && !this.#doors.has(door)) return refusal(senderSentences.notOffered);
+            if (!(await this.#confirmed(actBox(force ? 'force' : 'delete', on.sender)))) return refusal(senderSentences.notConfirmed);
             if (force) this.#doors.delete(door);
-            const answer = await this.#verb('delete', channel, deleteArguments(channel, account.id, force), { write: true, force });
+            const answer = await this.#verb(on.account, 'delete', channel, deleteArguments(channel, on.sender.id, force), { write: true, force });
             if (channel === 'linkedin') this.#keepDoor(door, answer, 'force');
             if ('refused' in answer) return answer;
-            return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(said.outcomeUnknown, true);
+            return readDone(answer.stdout, 'deleted') ? { done: true } : refusal(senderSentences.outcomeUnknown, true);
         });
     }
 
-    connectReply(): Promise<void> {
-        return this.#serial(async () => {
+    /**
+     * Signs the Reply account named in through the browser, the default where none is named (`reply auth login`, as that
+     * account), then places Jason's Reply plugin and, where no default is set, makes it the default (`#signedIn`).
+     */
+    connectReply(named?: unknown): Promise<void> {
+        return this.#signingInAct(async () => {
             // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
             this.#writableLayout();
-            const result = await this.#run('reply', 'auth login', ['auth', 'login'], { timeoutMs: signInLimit });
+            const account = await this.#signingIn(named);
+            const result = await this.#run('reply', 'auth login', [...accountArguments(account), 'auth', 'login', '--json'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
-            await this.#signedIn();
+            if (result.exit !== 0) throw new Refused(withCliReason(result, 'Reply did not sign in.'));
+            await this.#signedIn(account);
         });
     }
 
-    connectReplyWithKey(key: unknown): Promise<void> {
-        return this.#serial(async () => {
+    /** The same with a Reply API key the person pasted, on the CLI's standard input and never in an argument. */
+    connectReplyWithKey(key: unknown, named?: unknown): Promise<void> {
+        return this.#signingInAct(async () => {
             this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
-            const result = await this.#run('reply', 'auth login --with-token', ['auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
+            const account = await this.#signingIn(named);
+            const result = await this.#run('reply', 'auth login --with-token', [...accountArguments(account), 'auth', 'login', '--with-token', '--json'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
-            if (result.exit !== 0) throw new Refused(words(result, 'Reply did not accept that key.'));
-            await this.#signedIn();
+            if (result.exit !== 0) throw new Refused(withCliReason(result, 'Reply did not accept that key.'));
+            await this.#signedIn(account);
         });
     }
 
-    /** After a sign-in: Jason's Reply plugin wired to the profile signed in, and the Reply skills deployed either way. */
-    async #signedIn(): Promise<void> {
+    /**
+     * The account a sign-in is for, as the last read listed it, with its profile in the Reply CLI: a profile only a route
+     * names is made there first (`reply profile add`), and only where the CLI, asked again now, does not hold it, since an
+     * add of a name it holds would replace that profile's settings without a word. An account the Reply CLI, asked now,
+     * says is signed in is refused: another login is another Reply account, or a sign-out first; and so is one whose sign-in
+     * it could not say then, since a sign-in would replace whatever it holds. With no account named and none listed, as a
+     * page of an earlier version asks, the refusal says why there is none.
+     */
+    async #signingIn(named: unknown): Promise<AccountRef> {
+        const account = this.#accountOf(named);
+        if (account === null && named !== undefined) throw new Refused(accountSentences.badAccount);
+        if (account === null) {
+            if (this.#deps.programs.find('reply') === null) throw new Refused(accountSentences.cliMissing);
+            const version = await this.#replyVersion();
+            if (version === null || !versionAtLeast(version, replyMinimumVersion)) throw new Refused(belowMinimumSentence(replyMinimumVersion));
+            throw new Refused(accountSentences.profilesUnread);
+        }
+        const profile = await this.#addProfile(account.name);
+        if (profile === null) throw new Refused(accountSentences.profilesUnread);
+        if (!profile.held && !profile.made) throw new Refused(accountSentences.profileNotMade);
+        if (profile.held) {
+            const auth = await this.#pinned(account);
+            if (auth === null) throw new Refused(accountSentences.signInUnread);
+            if (auth.signedIn) throw new Refused(accountSentences.signedInAlready);
+        }
+        return { type: account.type, name: account.name };
+    }
+
+    /** After a sign-in: Jason's Reply plugin placed, the first default made, and the Reply skills deployed either way. */
+    async #signedIn(account: AccountRef): Promise<void> {
+        this.#markToCheck(account);
         try {
-            const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-            await this.#wireReply(auth.profile ?? 'default');
+            await this.#placeAndMakeFirstDefault(account);
         } finally {
             await this.#deployReplySkills();
             this.#changed();
@@ -1020,19 +1692,246 @@ export class Setup {
     }
 
     /**
-     * Places Jason's Reply plugin with the CLI, grants it the Reply CLI and, where the settings file names no global
-     * default, names it that default for the profile signed in, as the golden path does by hand; then the reload.
+     * After a sign-in: places what is missing of Jason's Reply plugin (`#placeMissing`); then, where the routes name no
+     * global default at all, has the runtime name the account signed in that default, as Make default does. A default
+     * already set, whatever its plugin, is left as it is. Routes that could not be read are said, and so is a placing that
+     * failed. The log says what was placed and what came of the default.
      */
-    async #wireReply(profile: string): Promise<void> {
-        let routeWritten = false;
-        await this.#placeAndEdit('reply', (settings) => {
-            const wired = withReplyWired(settings, profile);
-            routeWritten = wired.routeWritten;
-            return wired.settings;
-        });
+    async #placeAndMakeFirstDefault(account: AccountRef): Promise<void> {
+        const placed = await this.#placeMissing(accountSentences.notPlacedAtSignIn);
+        const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+        const outcome = routes === null ? 'unread' : routes.globalDefault !== null ? 'kept' : (await this.#setDefault(account, signInReason)) === null ? 'made' : 'refused';
+        this.#deps.log.info('reply_placed_after_sign_in', { Placed: placed, Default: outcome });
+        if (outcome === 'unread') throw new Refused(accountSentences.routesUnreadAtSignIn);
+        if (outcome === 'refused') throw new Refused(accountSentences.notDefaultAtSignIn);
+    }
+
+    /**
+     * Jason's Reply plugin placed and granted the Reply CLI where either is missing, as `jason plugin list` answers it now:
+     * the package fetched with `jason plugin install` only where the runtime lists none, the grant written only where it
+     * does not hold `reply`, and the plugins loaded again where either was, or where the plugin is listed and not valid, as
+     * after a Reply CLI installed or updated outside the desktop. So an installation where the plugin is listed valid and
+     * granted asks no release feed, loads nothing again, and its settings file is neither read nor written by the desktop,
+     * one with comments included; where the runtime gives no list, both are placed. A refusal is `sentence`, then the
+     * reason of what refused: the fetch, the load, or the desktop's reading of a settings file it cannot parse.
+     */
+    async #placeMissing(sentence: string): Promise<Placing> {
+        const refused = (reason: string) => new Refused(withReason(sentence, reason));
+        const readForEdit = () => {
+            try {
+                return this.#readForEdit();
+            } catch (error) {
+                throw error instanceof Refused ? refused(error.message) : error;
+            }
+        };
+        const placement = replyPlacement(await this.#deps.cli.run(['plugin', 'list']));
+        const placed = placement?.placed === true;
+        const granted = placement?.granted === true;
+        if (placed && placement?.valid === true && granted) return 'in_place';
+        // A file the edit cannot keep is refused before anything is fetched.
+        if (!granted) readForEdit();
+        if (!placed) {
+            const install = await this.#deps.cli.run(['plugin', 'install', 'reply', ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
+            if (install.exit !== 0) throw refused(words(install, ''));
+        }
+        if (!granted) {
+            const { file, settings } = readForEdit();
+            writeAtomically(file, `${JSON.stringify(withReplyGranted(settings), null, 2)}\n`);
+        }
         const reload = await this.#reloadPlugins();
-        this.#deps.log.info('reply_wired', { RouteWritten: routeWritten, Exit: reload.exit });
-        if (reload.exit !== 0) throw this.#reloadRefused(reload);
+        if (reload.exit !== 0) throw refused(this.#reloadRefusal ?? words(reload, ''));
+        return placed ? (granted ? 'loaded' : 'granted') : granted ? 'placed' : 'placed_granted';
+    }
+
+    /**
+     * Has the runtime name the account the global default (`jason route set --global`), which checks the route before it
+     * writes it, writes it through its one writer of the settings file, puts the file back on a refusal and journals the
+     * change under the person who made it, by this account's name, with the reason of the act that made it. Null where it
+     * did, else the desktop's sentence why not.
+     */
+    async #setDefault(account: AccountRef, reason: string): Promise<string | null> {
+        const person = this.#deps.person;
+        if (!usableAccount(person)) return accountSentences.noActor;
+        const binding = JSON.stringify(defaultBinding(account));
+        const set = await this.#deps.cli.run(['route', 'set', '--global', '--plugin', 'reply', '--binding', binding, '--actor', `human:${person}`, '--reason', reason]);
+        this.#deps.log.info('reply_default_set', { Exit: set.exit });
+        return set.exit === 0 ? null : defaultRefusal(set);
+    }
+
+    /**
+     * Choose: pins a team on an account's profile in the Reply CLI (`reply --profile <name> team use <id>`, which checks the
+     * id against the sign-in's own teams), only a team the last read offered that account, bound to none of them, its
+     * change of sign-in, if any, answered. The pin that read saw is written over; one a terminal set since to a team
+     * offered is that account's team now, and is refused as bound. The pick is the person's, and is noted at once with who
+     * Reply's whoami, asked once the team is pinned, says it is, else the last read's login, the team's name and
+     * organization as Reply names them, and the Reply CLI's record as the last read saw it: it is never said as a change
+     * made outside, and it checks a sign-in made on the card before it, so the next look does not ask Reply again. Nothing
+     * is asked of the person first, since nothing is lost by it. The answer is done, or the desktop's sentence and the Reply
+     * CLI's reason, but where the CLI refuses the team, whose words number it: the desktop's sentence alone. The page reads
+     * the accounts again either way.
+     */
+    chooseTeam(named: unknown, teamId: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (account.change !== null) return Promise.resolve(refusal(accountSentences.unanswered));
+        if ((account.team ?? null) !== null) return Promise.resolve(refusal(accountSentences.teamPinned));
+        const offered = account.teams ?? [];
+        const team = typeof teamId === 'string' ? offered.find((each) => each.id === teamId) : undefined;
+        if (team === undefined) return Promise.resolve(refusal(accountSentences.teamNotOffered));
+        const seen: ListedSignIn = this.#listedSignIns.get(account.name) ?? { pin: null, userId: null, record: null };
+        return this.#acting(async () => {
+            const chosen = await this.#writingConfig(async (): Promise<ReplyRefusal | null> => {
+                const pinned = (await this.#pinned(account))?.team ?? null;
+                if (pinned !== seen.pin && offered.some((each) => each.id === pinned)) return refusal(accountSentences.teamPinned, true);
+                const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
+                this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
+                if (result.exit === 0) return null;
+                // Where the Reply CLI refuses the team, its words name it by its number: the desktop's sentence is said alone.
+                const ending = replyCliEnding(result);
+                if (ending.kind === 'refused' && ending.code === 'usage.team') return { refused: accountSentences.teamGone, code: ending.code, offer: null, reread: true };
+                return cliRefusal(result, accountSentences.teamNotChosen);
+            });
+            if (chosen !== null) return chosen;
+            const said = await this.#whoami(account, team.id);
+            const [user, id] = said !== null ? [said.login, said.userId] : [account.user, seen.userId];
+            const record = seen.record === null ? {} : { record: seen.record };
+            const noted = this.#note(account, user === null ? null : { user, ...(id === null ? {} : { id }), team: namedBy(team, said), ...record }, 'choose');
+            // Named and noted, the pick is the check of the sign-in made on the card before it: the look after asks Reply
+            // nothing of it again.
+            if (user !== null && noted !== undefined) this.#checked(account, this.#marks);
+            return { done: true };
+        });
+    }
+
+    /**
+     * Add Reply account: the profile made in the Reply CLI under exactly the name given (`reply profile add <name>`), with
+     * nothing of an account's own, which the CLI would pin on it; its card is the next read's, not signed in. A name
+     * `accountNameProblem` refuses is refused before anything runs, and so is one the Reply CLI, asked now, holds, since an
+     * add of it would replace that profile's settings without a word.
+     */
+    addAccount(name: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const problem = accountNameProblem(name);
+        if (problem !== null) return Promise.resolve(refusal(problem));
+        const asked = name as string;
+        return this.#acting(async () => {
+            const profile = await this.#addProfile(asked);
+            if (profile === null) return refusal(accountSentences.profilesUnreadAtAdd, true);
+            if (profile.held) return refusal(accountSentences.nameTaken, true);
+            this.#deps.log.info('reply_account_added', { Exit: profile.result?.exit ?? -1 });
+            return profile.made ? this.#announced({ done: true }) : cliRefusal(profile.result!, accountSentences.notAdded);
+        });
+    }
+
+    /**
+     * Sign out, on the person's yes to the box that names the Reply account (`accountBox`): its sign-in removed in the Reply
+     * CLI itself (`reply --profile <name> auth logout`). No route changes.
+     */
+    signOut(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        return this.#acting(async () => {
+            if (!(await this.#confirmed(accountBox('signOut', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(senderSentences.notConfirmed);
+            const result = await this.#run('reply', 'auth logout', [...accountArguments(account), 'auth', 'logout', '--json']);
+            this.#deps.log.info('reply_signed_out', { Exit: result.exit });
+            return result.exit === 0 ? this.#announced({ done: true }) : cliRefusal(result, accountSentences.notSignedOut);
+        });
+    }
+
+    /**
+     * Remove, never for the Reply CLI's own profile `default` nor for an account whose profile it does not hold, on the
+     * person's yes to the box that names the Reply account (`accountBox`): its profile and its sign-in deleted in the
+     * Reply CLI itself (`reply profile delete <name> --yes`). No route changes, so an account a route names keeps its
+     * card, not signed in. Never either for the account a route that names no profile follows, as the last read showed it
+     * or the Reply CLI and the routes, asked again before the box, say now: the delete would reset the CLI's current
+     * profile, and that route would send as another login. Where the routes could not be read, the current profile is
+     * taken as followed.
+     */
+    removeAccount(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        if (account.name === 'default') return Promise.resolve(refusal(accountSentences.defaultKept));
+        if (!account.held) return Promise.resolve(refusal(accountSentences.notHeld));
+        if (account.followed) return Promise.resolve(refusal(this.#routed === null ? accountSentences.followedUnread : accountSentences.followed));
+        return this.#acting(async () => {
+            const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+            const profiles = readProfiles(await this.#run('reply', 'profile list', ['profile', 'list', '--json']));
+            if (profiles !== null && followedProfile(profiles, routes) === account.name) return refusal(routes === null ? accountSentences.followedUnread : accountSentences.followed, true);
+            if (!(await this.#confirmed(accountBox('remove', account.name, this.#routed?.has(account.name) ?? true)))) return refusal(senderSentences.notConfirmed);
+            const result = await this.#writingConfig(() => this.#run('reply', 'profile delete', ['profile', 'delete', account.name, '--yes', '--json']));
+            this.#deps.log.info('reply_account_removed', { Exit: result.exit });
+            if (result.exit !== 0) return cliRefusal(result, accountSentences.notRemoved);
+            this.#removed.set(account.name, this.#readsBegun);
+            this.#note(account, null, 'remove');
+            return this.#announced({ done: true });
+        });
+    }
+
+    /**
+     * Keep it, where the last read found the account's sign-in changed from what the desktop's note says (`bindingOf`).
+     * Bound to another of its sign-in's teams, the account as it now is becomes the noted one: who the last read found it
+     * to be, and the Reply CLI's record as that read saw it. Signed in as another login, no longer in the noted team, or as
+     * a login not known, it is bound to no team, and its team is picked afresh: the note says so in place of the sign-in it
+     * held, so the pin the profile holds no longer stands, and the next look binds it as a first sign-in is bound, one team
+     * by itself and several by Choose, which writes over that pin, and notes it. Nothing is run, and nothing of the Reply
+     * CLI's changes.
+     */
+    keepChange(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
+        const { change, user, team } = account;
+        if (change === null || (change === 'team' && (user === null || team === null))) return Promise.resolve(refusal(accountSentences.nothingToKeep));
+        const { userId: id, record } = this.#listedSignIns.get(account.name) ?? { userId: null, record: null };
+        const kept: NotedSignIn | 'fresh' = change === 'team' ? { user: user!, ...(id === null ? {} : { id }), team: team!, ...(record === null ? {} : { record }) } : 'fresh';
+        return this.#oneAct<ReplyDone | ReplyRefusal>(
+            () => refusal(senderSentences.busy),
+            async () => (this.#note(account, kept, 'keep') === undefined ? refusal(accountSentences.notKept) : this.#announced({ done: true })),
+        );
+    }
+
+    /** An act's answer, once every page has been told the accounts changed: the acts on a Reply account as a whole. */
+    #announced<T>(answer: T): T {
+        this.#changed();
+        return answer;
+    }
+
+    /**
+     * Make default, only while Jason has no global default: in the setup's queue the routes are read, and a default set by
+     * then, whatever its plugin or account, is left as it is, since a campaign with no route of its own follows the default
+     * at every step and moving it would move running campaigns. Otherwise what is missing of the plugin and its grant is
+     * placed (`#placeMissing`), the routes are read again, and a default set while it placed is left as it is too; then the
+     * runtime names the account (`#setDefault`). Nothing is asked of the person. A refusal is the desktop's sentence, and
+     * the runtime writes nothing it refuses.
+     */
+    async makeDefault(named: unknown): Promise<ReplyDone | ReplyRefusal> {
+        const account = named === undefined ? null : this.#accountOf(named);
+        if (account === null) return refusal(accountSentences.badAccount);
+        const answer = await this.#oneAct(() => refusal(senderSentences.busy), () => this.#makeDefault(account));
+        this.#deps.log.info('reply_default_made', { Done: 'done' in answer });
+        this.#changed();
+        return answer;
+    }
+
+    #makeDefault(account: AccountState): Promise<ReplyDone | ReplyRefusal> {
+        if (!usableAccount(this.#deps.person)) return Promise.resolve(refusal(accountSentences.noActor));
+        return this.#serial(async () => {
+            const unset = async () => {
+                const routes = readRoutes(await this.#deps.cli.run(['route', 'list']));
+                return routes === null ? refusal(accountSentences.routesUnread) : routes.globalDefault !== null ? refusal(accountSentences.defaultExists) : null;
+            };
+            const before = await unset();
+            if (before !== null) return before;
+            try {
+                await this.#placeMissing(accountSentences.notPlaced);
+            } catch (error) {
+                if (error instanceof Refused) return refusal(error.message);
+                throw error;
+            }
+            // A placing may fetch the package for minutes: a default set meanwhile is left as it is too.
+            const placed = await unset();
+            if (placed !== null) return placed;
+            const refused = await this.#setDefault(account, defaultReason);
+            return refused === null ? { done: true } : refusal(refused);
+        });
     }
 
     /**
@@ -1116,12 +2015,15 @@ export class Setup {
      * settles it for this run.
      */
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
-        return this.#serial(async () => {
-            const outcome = await this.#connectRoles(chosen);
-            if (!unsettling.has(outcome)) this.#rolesSettled = true;
-            this.#deps.log.info('roles_profile', { Outcome: outcome });
-            return outcome;
-        });
+        return this.#serial(
+            async () => {
+                const outcome = await this.#connectRoles(chosen);
+                if (!unsettling.has(outcome)) this.#rolesSettled = true;
+                this.#deps.log.info('roles_profile', { Outcome: outcome });
+                return outcome;
+            },
+            (outcome) => rolesDefaultMoved.has(outcome),
+        );
     }
 
     async #connectRoles(chosen: string | null): Promise<RolesOutcome> {
@@ -1379,7 +2281,7 @@ export class Setup {
                 // Where the check had already ended, by the bound on the machine set-up, a sentence set now is told anew.
                 if (!this.#endStartCheck() && this.#startUpdate !== said) this.#changed();
             }
-        });
+        }, (outcome) => npmRan.has(outcome));
     }
 
     /**

@@ -1,4 +1,4 @@
-// The Reply card's account acts: each one verb of the Reply CLI, run by the main process on the person's click, behind
+// The acts on a Reply account's senders: each one verb of the Reply CLI, run by the main process on the person's click, behind
 // the main process's own box where it changes something; a link the CLI makes goes to the system opener and nowhere else.
 
 import assert from 'node:assert/strict';
@@ -10,7 +10,7 @@ import { fileLogger, type Logger } from '../src/log.ts';
 import type { Programs } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import {
-    accountWords,
+    senderWords,
     actBox,
     askBox,
     belowMinimumSentence,
@@ -19,10 +19,10 @@ import {
     linkedInNameProblem,
     otherRefusal,
     refusalOf,
-    replyAccountSentences as said,
+    senderSentences as said,
     replyActLimitMs,
     type ReplyBox,
-} from '../src/reply-accounts.ts';
+} from '../src/reply-senders.ts';
 import {
     connectArguments,
     deleteArguments,
@@ -40,6 +40,9 @@ import {
     unblockArguments,
 } from '../src/reply-cli-account.ts';
 import { replyMinimumVersion } from '../src/setup-model.ts';
+import { accountArguments } from '../src/accounts.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Setup } from '../src/setup.ts';
 import { bench, fakeBox, memoryLog, snapshot, type Bench } from './harness.ts';
 import { cliCodes, fixtureLinks, printed } from './reply-cli-account-fixture.ts';
@@ -54,6 +57,12 @@ const listed = {
 };
 const print = (value: unknown) => JSON.stringify({ print: value });
 const refused = (code: string, extra: Record<string, unknown> = {}) => JSON.stringify({ code, ...extra });
+/** A run's own command, after the argument that names the account it acts as (`--profile <name>`). */
+const bare = (args: readonly string[]): readonly string[] => {
+    let rest = args;
+    while (rest[0] === '--profile' && rest.length > 1) rest = rest.slice(2);
+    return rest;
+};
 /** What a refusal said, read off an answer of either kind. */
 const why = (answer: unknown) => answer as { refused?: string; offer?: string | null };
 
@@ -105,7 +114,11 @@ function harness(
         runtimeVersion: () => '0.37.0',
         settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
     });
-    const verbs = () => b.record().filter((entry) => entry.name === 'reply' && entry.args[0] === 'account' && entry.args[1] !== 'list' && entry.args[1] !== 'pending').map((entry) => entry.args);
+    const verbs = () =>
+        b
+            .record()
+            .filter((entry) => entry.name === 'reply' && bare(entry.args)[0] === 'account' && bare(entry.args)[1] !== 'list' && bare(entry.args)[1] !== 'pending')
+            .map((entry) => [...bare(entry.args)]);
     return { setup, boxes, opened, copied, log, verbs };
 }
 
@@ -135,6 +148,69 @@ test('each verb is started with its own arguments: a name as one argument, the f
     assert.deepEqual(deleteArguments('email', '12', true), ['account', 'delete', '12', '--channel', 'email', '--yes', '--json'], 'never forced for email');
     assert.deepEqual(deleteArguments('linkedin', '34', false), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--json']);
     assert.deepEqual(deleteArguments('linkedin', '34', true), ['account', 'delete', '34', '--channel', 'linkedin', '--yes', '--force', '--json']);
+    // Each run names the account it acts as before the command: its profile, as one argument, and nothing else of the
+    // account.
+    assert.deepEqual(accountArguments({ type: 'reply', name: 'default' }), ['--profile', 'default']);
+    assert.deepEqual(accountArguments({ type: 'reply', name: 'Made-up Ops' }), ['--profile', 'Made-up Ops']);
+});
+
+test('every act runs as the account it names, its profile before the verb and no team, a route’s among them; one that names none acts as the default account; a row of another account, or an account the read did not list, runs nothing', async (t) => {
+    const folder = mkdtempSync(join(tmpdir(), 'jason-reply-world-'));
+    t.after(() => rmSync(folder, { recursive: true, force: true }));
+    const world = join(folder, 'world.json');
+    const row = (id: number, channel: string, status: string) => ({ id, channel, name: `Made-up ${id}`, address: channel === 'email' ? `m${id}@example.test` : '', reply_status: status });
+    writeFileSync(
+        world,
+        JSON.stringify({
+            profiles: { outbound: { team_id: 9 } },
+            credentials: { default: 'ada@example.test', outbound: 'bea@example.test' },
+            seats: { 'ada@example.test': [3], 'bea@example.test': [5, 9] },
+            lists: { 'ada@example.test#3': { email: [row(12, 'email', 'connected')] }, 'bea@example.test#9': { email: [row(56, 'email', 'disconnected')], linkedin: [row(78, 'linkedin', 'disabled'), row(79, 'linkedin', 'enabled')] } },
+        }),
+    );
+    const env = {
+        STUB_REPLY_WORLD: world,
+        STUB_CAMPAIGN_ROUTES: JSON.stringify([{ campaign_id: 'cmp_1', default: { plugin_id: 'reply', binding: { profile: 'outbound', team_id: '9' }, binding_identity: null }, operations: {}, channels: {} }]),
+        STUB_REPLY_ACCOUNT_CONNECT: print(printed.connectLinkedIn),
+        STUB_REPLY_ACCOUNT_RECONNECT: print(printed.reconnectEmail),
+        STUB_REPLY_ACCOUNT_LIMITS: print(printed.limitsEmail),
+        STUB_REPLY_ACCOUNT_PAUSE: print(printed.pause),
+        STUB_REPLY_ACCOUNT_RESUME: print(printed.resume),
+        STUB_REPLY_ACCOUNT_UNBLOCK: print(printed.unblock),
+        STUB_REPLY_ACCOUNT_DELETE: print(printed.deleteLinkedIn),
+    };
+    const b = bench(t, { programs: ['reply'], env });
+    const h = harness(b);
+    await h.setup.status();
+    const outbound = { type: 'reply', name: 'outbound' } as const;
+    const from = b.record().length;
+    await h.setup.replyConnect('linkedin', { name: 'Made-up Bea' }, outbound);
+    await h.setup.replyConnect('email', { provider: 'gmail' }, outbound);
+    await h.setup.replyReconnect('email', '56', {}, outbound);
+    await h.setup.replyLimits('56', undefined, outbound);
+    await h.setup.replyLimits('56', 40, outbound);
+    await h.setup.replyResume('78', outbound);
+    await h.setup.replyPause('79', outbound);
+    await h.setup.replyUnblock('56', outbound);
+    await h.setup.replyDelete('linkedin', '79', {}, outbound);
+    const acts = b.record().slice(from).filter((entry) => entry.name === 'reply' && entry.args.includes('account'));
+    assert.equal(acts.length, 9);
+    for (const entry of acts) assert.deepEqual(entry.args.slice(0, 3), ['--profile', 'outbound', 'account'], entry.args.join(' '));
+    // No account named, as a page of an earlier version asks: the default, here the profile default, by its rows alone.
+    const unnamed = b.record().length;
+    assert.deepEqual(await h.setup.replyUnblock('12'), { done: true });
+    assert.deepEqual(b.record().slice(unnamed).filter((entry) => entry.name === 'reply').map((entry) => entry.args.slice(0, 3)), [['--profile', 'default', 'account']]);
+    // A row is its own account's: ada's mailbox is no row of bea's, nor bea's of ada's; and an account the read did not
+    // list, or a value of another shape, is refused before reply starts.
+    const none = b.record().length;
+    const no = (sentence: string) => ({ refused: sentence, code: null, offer: null, reread: false });
+    assert.deepEqual(await h.setup.replyUnblock('12', outbound), no(said.badId));
+    assert.deepEqual(await h.setup.replyUnblock('56'), no(said.badId));
+    for (const named of [{ type: 'reply', name: 'outbound', team: '9' }, { type: 'reply', name: 'nobody' }, { type: 'reply', name: 'outbound', team: null }, { type: 'reply', name: 'outbound', extra: 1 }, 'outbound', null]) {
+        assert.deepEqual(await h.setup.replyPause('79', named), no('That is not a Reply account the desktop listed.'), JSON.stringify(named));
+        assert.deepEqual(await h.setup.replyConnect('email', { provider: 'gmail' }, named), no('That is not a Reply account the desktop listed.'), JSON.stringify(named));
+    }
+    assert.deepEqual(b.record().slice(none).filter((entry) => entry.name === 'reply'), []);
 });
 
 test('the prints the CLI’s own tests pin are read, and a print of any other shape is not', () => {
@@ -261,13 +337,13 @@ test('a link is handed to the opener only as https on a host name, with no user,
     }
 });
 
-test('the boxes are the main process’s own: they name the account as the list does and the act, Cancel focused', async () => {
+test('the boxes are the main process’s own: they name the sender as the list does and the act, Cancel focused', async () => {
     const mailbox = { channel: 'email', name: 'Made-up Sales', address: 'sales@example.test' };
     const linkedin = { channel: 'linkedin', name: 'Made-up Ada', address: '' };
-    assert.equal(accountWords(mailbox), 'the mailbox Made-up Sales (sales@example.test)');
-    assert.equal(accountWords(linkedin), 'the LinkedIn account Made-up Ada');
-    assert.equal(accountWords({ channel: 'email', name: '', address: '' }), 'the mailbox with no name');
-    assert.equal(accountWords({ channel: 'email', name: `two\nlines${'x'.repeat(100)}`, address: '' }).includes('\n'), false);
+    assert.equal(senderWords(mailbox), 'the mailbox Made-up Sales (sales@example.test)');
+    assert.equal(senderWords(linkedin), 'the LinkedIn account Made-up Ada');
+    assert.equal(senderWords({ channel: 'email', name: '', address: '' }), 'the mailbox with no name');
+    assert.equal(senderWords({ channel: 'email', name: `two\nlines${'x'.repeat(100)}`, address: '' }).includes('\n'), false);
     assert.deepEqual(actBox('delete', mailbox), {
         type: 'warning',
         title: 'Delete the mailbox Made-up Sales (sales@example.test) from Reply?',
@@ -344,7 +420,7 @@ test('a mailbox is connected for its provider, and reconnected by the id the lis
     assert.deepEqual(h.opened, [fixtureLinks.emailConnect, fixtureLinks.linkedinConnect]);
 });
 
-test('an act names only an account the list gave, by channel and id, and anything out of shape is refused before reply starts', async (t) => {
+test('an act names only a sender the list gave, by channel and id, and anything out of shape is refused before reply starts', async (t) => {
     const h = await listedHarness(t, {});
     const no = (refusedWith: string) => ({ refused: refusedWith, code: null, offer: null, reread: false });
     assert.deepEqual(await h.setup.replyReconnect('email', '34'), no(said.badId), 'a LinkedIn id named as a mailbox');
@@ -577,7 +653,7 @@ test('below the Reply CLI the acts need, the card says to update it and offers n
     assert.deepEqual([reply.accounts, reply.pending], [[], []]);
     assert.deepEqual(await h.setup.replyConnect('linkedin', { name: 'x' }), { refused: reply.belowMinimum, code: null, offer: null, reread: false });
     assert.deepEqual(await h.setup.replyDelete('email', '12'), { refused: said.badId, code: null, offer: null, reread: false }, 'nothing listed, so nothing to name');
-    assert.equal(b.record().some((entry) => entry.name === 'reply' && entry.args[0] === 'account'), false);
+    assert.equal(b.record().some((entry) => entry.name === 'reply' && bare(entry.args)[0] === 'account'), false);
     assert.equal(h.boxes.length, 0);
     // At the minimum there is nothing to say.
     const current = await listedHarness(t, {});
@@ -593,7 +669,7 @@ test('an act clicked while the list is being read again names the accounts the l
     const programs: Programs = {
         find: (name) => b.programs.find(name),
         run: async (name, args, options) => {
-            if (args[0] === 'account' && args[1] === 'list' && hold !== null) {
+            if (bare(args)[0] === 'account' && bare(args)[1] === 'list' && hold !== null) {
                 arrived();
                 await hold;
             }
@@ -644,12 +720,12 @@ test('the links made and not used yet are read for each channel that was listed,
         { channel: 'email', id: '52', name: '', kind: 'reconnect', expiresAt: '2026-11-01T12:00:00Z', expired: true },
         { channel: 'linkedin', id: '7', name: 'Made-up LinkedIn', kind: 'connect', expiresAt: '2026-11-19T00:00:00Z', expired: false },
     ]);
-    const asked = h.b.record().filter((entry) => entry.args[1] === 'pending').map((entry) => entry.args);
+    const asked = h.b.record().filter((entry) => bare(entry.args)[1] === 'pending').map((entry) => [...bare(entry.args)]);
     assert.deepEqual(asked.slice(0, 2), [pendingArguments('email'), pendingArguments('linkedin')]);
     // A channel the plan lacks is not read; a read that fails lists none.
     const absent = await listedHarness(t, { STUB_REPLY_ACCOUNTS_LINKEDIN: 'refused', STUB_REPLY_ACCOUNT_PENDING: refused('reply.unavailable') });
     assert.deepEqual((await absent.setup.status()).reply.pending, []);
-    assert.deepEqual(absent.b.record().filter((entry) => entry.args[1] === 'pending').map((entry) => entry.args[3]), ['email', 'email']);
+    assert.deepEqual(absent.b.record().filter((entry) => bare(entry.args)[1] === 'pending').map((entry) => bare(entry.args)[3]), ['email', 'email']);
 });
 
 test('one act at a time: a second click while one runs is refused, and a verb is stopped at thirty seconds', async (t) => {
@@ -664,7 +740,7 @@ test('one act at a time: a second click while one runs is refused, and a verb is
     const programs: Programs = {
         find: (name) => b.programs.find(name),
         run: (name, args, options) => {
-            if (args[0] === 'account' && args[1] === 'delete') {
+            if (bare(args)[0] === 'account' && bare(args)[1] === 'delete') {
                 limits.push(options?.timeoutMs);
                 return Promise.resolve({ exit: -1, stdout: '', stderr: '' });
             }

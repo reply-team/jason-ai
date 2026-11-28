@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopReply, DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
+import type {
+    DesktopAccount,
+    DesktopAccounts,
+    DesktopBoundTeam,
+    DesktopReply,
+    DesktopReplyOrg,
+    DesktopReplySignIn,
+    DesktopReplyTeam,
+    DesktopSetup,
+    JasonDesktop,
+} from '../../src/platform/desktop';
 
 // The seam is the whole of what the page may ask of the desktop, and the desktop's main process is written to it. A
 // member added or dropped is a change of the seam, so each object below names exactly the members of its part:
@@ -78,12 +88,24 @@ const setup = {
     replyResume: true,
     replyUnblock: true,
     replyDelete: true,
+    // Make default: the account it names becomes the global default, only while Jason has none, with no box.
+    makeDefault: true,
+    // A team chosen for an account whose sign-in belongs to more than one, pinned on its profile in the Reply CLI.
+    chooseTeam: true,
+    // Add Reply account, Sign out and Remove: a profile made, signed out or deleted in the Reply CLI itself.
+    addAccount: true,
+    signOut: true,
+    removeAccount: true,
+    // Keep it: the account as it now is becomes the one the desktop's note keeps.
+    keepChange: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
 const status = {
     hosts: true,
     reply: true,
+    // The Reply accounts, one per profile, which a desktop of an earlier version does not send.
+    accounts: true,
     runtimeVersion: true,
     bundleVersion: true,
     versionsDiffer: true,
@@ -106,6 +128,44 @@ const reply = {
     startUpdate: true,
     startCheck: true,
 } as const satisfies Record<keyof DesktopReply, true>;
+// And the accounts, each one profile of the Reply CLI with what was read of it, and what of them could not be read.
+const accounts = {
+    accounts: true,
+    notRead: true,
+    noDefault: true,
+} as const satisfies Record<keyof DesktopAccounts, true>;
+const account = {
+    type: true,
+    name: true,
+    default: true,
+    // Every other global route to Reply that names it: the kind, the operation and the channel, never a sentence.
+    defaultFor: true,
+    held: true,
+    // Whether a route that names no profile follows it as the Reply CLI's current profile, which Remove then refuses.
+    followed: true,
+    signedIn: true,
+    user: true,
+    // The team it is bound to, its profile's pin, by its id and name.
+    team: true,
+    senders: true,
+    absent: true,
+    unread: true,
+    pending: true,
+    pendingUnread: true,
+    notRead: true,
+    // The teams its sign-in can act in, where its profile has none pinned and Reply would not list it without one.
+    teams: true,
+    // Who it was last seen signed in as, in which team, and how the last read found its sign-in changed from that.
+    lastSignIn: true,
+    change: true,
+    // The API address its profile points at, where that is not Reply's production; absent otherwise.
+    nonProductionApi: true,
+} as const satisfies Record<keyof DesktopAccount, true>;
+const accountTeam = { id: true, name: true } as const satisfies Record<keyof DesktopReplyTeam, true>;
+const accountSignIn = { user: true, team: true } as const satisfies Record<keyof DesktopReplySignIn, true>;
+// The organization a bound team belongs to, as Reply named it after a sign-in; absent where Reply has not said it.
+const boundTeam = { id: true, name: true, org: true } as const satisfies Record<keyof DesktopBoundTeam, true>;
+const replyOrg = { id: true, name: true } as const satisfies Record<keyof DesktopReplyOrg, true>;
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
@@ -118,13 +178,38 @@ const held: [
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof reply, keyof DesktopReply>,
+    Exactly<keyof typeof accounts, keyof DesktopAccounts>,
+    Exactly<keyof typeof account, keyof DesktopAccount>,
+    Exactly<keyof typeof accountTeam, keyof DesktopReplyTeam>,
+    Exactly<keyof typeof accountSignIn, keyof DesktopReplySignIn>,
+    Exactly<keyof typeof boundTeam, keyof DesktopBoundTeam>,
+    Exactly<keyof typeof replyOrg, keyof DesktopReplyOrg>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+        ]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
@@ -200,11 +285,18 @@ describe('the desktop seam', () => {
             'setup.replyResume',
             'setup.replyUnblock',
             'setup.replyDelete',
+            'setup.makeDefault',
+            'setup.chooseTeam',
+            'setup.addAccount',
+            'setup.signOut',
+            'setup.removeAccount',
+            'setup.keepChange',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([
             'hosts',
             'reply',
+            'accounts',
             'runtimeVersion',
             'bundleVersion',
             'versionsDiffer',
@@ -226,5 +318,31 @@ describe('the desktop seam', () => {
             'startUpdate',
             'startCheck',
         ]);
+        expect(Object.keys(accounts)).toEqual(['accounts', 'notRead', 'noDefault']);
+        expect(Object.keys(account)).toEqual([
+            'type',
+            'name',
+            'default',
+            'defaultFor',
+            'held',
+            'followed',
+            'signedIn',
+            'user',
+            'team',
+            'senders',
+            'absent',
+            'unread',
+            'pending',
+            'pendingUnread',
+            'notRead',
+            'teams',
+            'lastSignIn',
+            'change',
+            'nonProductionApi',
+        ]);
+        expect(Object.keys(accountTeam)).toEqual(['id', 'name']);
+        expect(Object.keys(accountSignIn)).toEqual(['user', 'team']);
+        expect(Object.keys(boundTeam)).toEqual(['id', 'name', 'org']);
+        expect(Object.keys(replyOrg)).toEqual(['id', 'name']);
     });
 });
