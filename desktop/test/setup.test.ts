@@ -1460,6 +1460,10 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         // A record that names a user where the noted one named none is another record too, and the Reply CLI's login is
         // never held against who is noted: until Reply says who it is, nothing is decided and its login is said as not read.
         ['a record that names a user where the noted one named none, Reply not saying who it is', { ...room, credentials: { web: bea } }, { user: bea, record: { user: null, id: null } }, none, null, [`? - [] unlisted same last ${bea} 5 pin 5 login unread`], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) } }],
+        // A record that changes alone, as a sign-in in a terminal whose fetch of who it is failed leaves it holding no user:
+        // the look checks it, Reply names the noted login, nothing is said, and the note takes the new record, so the looks
+        // after it are unchanged looks, which ask Reply who it is once in a run and its teams never.
+        ['a record that changes alone, a sign-in in a terminal leaving the Reply CLI no user, Reply naming the noted login', { ...room, credentials: { web: bea } }, bea, pinned({ ...room, credentials: { web: { login: bea, unnamed: true } } }), null, [`${bea} 5 [12] same last ${bea} 5 pin 5`, `${bea} 5 [12] same last ${bea} 5 pin 5 asks auth whoami`, `${bea} 5 [12] same last ${bea} 5 pin 5 asks -`, `${bea} 5 [12] same last ${bea} 5 pin 5 asks auth whoami`, `${bea} 5 [12] same last ${bea} 5 pin 5 asks -`, `noted ${bea} 4205 5 record - -`, 'team list ×1'], { then: (current) => current, starts: 2, note: true, count: 'team list' }],
         // With no sign-in since, Reply's answer is who the account is, its id with its address: a noted id of another team's
         // seat gives way to Reply's seat in the noted team when Reply is next asked.
         ['a noted id of another of its teams’ seats, Reply asked at a start', { ...room, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: bea } }, { user: bea, id: '4206' }, none, null, [`${bea} 5 [12] same last ${bea} 5 pin 5`, `noted ${bea} 4205 5 record ${bea} 4205`], { note: true }],
@@ -1930,6 +1934,16 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const unchangedSetup = new Setup({ ...setupDeps(unchanged), programs: switching(unchanged, 'outbound') });
     assert.deepEqual(await cardOf(unchangedSetup, 'outbound'), { user: 'cy@example.test', team: null, change: 'login' }, 'at an unchanged look');
     assert.deepEqual(notedTeam(unchanged, 'outbound'), unnamedNine);
+    // Where a look finds the noted login by the Reply CLI's record and puts its noted team back, Reply then naming another
+    // login in that team, as a terminal signs it in meanwhile, is not who the account is at that look: the card shows the
+    // noted login, and the note stays. The next look finds another record in the files and says the other login.
+    const putBack = replyBench(t, { ...orgWorld, profiles: { outbound: { team_id: 3 } } });
+    mkdirSync(dirname(putBack.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(putBack.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'outbound', user: 'bea@example.test', id: '4209', team: nine, record: beaRecord }] }));
+    const putBackSetup = new Setup({ ...setupDeps(putBack), programs: switching(putBack, 'outbound') });
+    assert.deepEqual(await cardOf(putBackSetup, 'outbound'), { user: 'bea@example.test', team: nine, change: null }, 'at a look that puts the noted team back');
+    assert.deepEqual([putBack.world().profiles?.['outbound'], (notedAs(readFileSync(putBack.paths.replyAccountNotes, 'utf8'), 'outbound') as { user?: string } | undefined)?.user], [{ team_id: 9 }, 'bea@example.test']);
+    assert.deepEqual(await cardOf(putBackSetup, 'outbound'), { user: 'cy@example.test', team: null, change: 'login' }, 'at a look that puts the noted team back, the next look');
     // A whoami that fails takes nothing away and says nothing: after a sign-in the team keeps the organization the note
     // holds, the account bound and listed; an organization not known is not asked again in that run.
     const failing = replyBench(t, { ...orgWorld, credentials: { default: 'ada@example.test' }, browser: 'bea@example.test' }, { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
