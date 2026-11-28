@@ -191,11 +191,13 @@ export const whoIsAsked = (noted: NotedSignIn, unnamed: boolean, asked: (team: s
     !asked(noted.team.id) && (noted.team.org === undefined || unnamed);
 
 /**
- * Whether what is decided of a signed-in account rests on its pin alone: nothing noted, a browser's sign-in whose teams
- * could not be read, and a pin. Its own read in that pin, made in any case then, is made before it is decided, so a
- * refusal there is part of what is decided (`SignInSeen.refused`).
+ * Whether what is decided of a signed-in account rests on its pin alone: a browser's sign-in whose teams could not be
+ * read, and a pin, with nothing noted, or noted where the Reply CLI does not name the login, which Reply can name only in
+ * a team it works in. Its own read in that pin, made in any case then, is made before it is decided, so a refusal there
+ * is part of what is decided (`SignInSeen.refused`).
  */
-export const restsOnPin = (seen: Omit<SignInSeen, 'refused'>, noted: Noted): boolean => noted === null && actsIn(seen) === null && seen.pin !== null;
+export const restsOnPin = (seen: Omit<SignInSeen, 'refused'>, noted: Noted): boolean =>
+    (noted === null || (noted !== 'fresh' && seen.login === null)) && actsIn(seen) === null && seen.pin !== null;
 
 /**
  * What a look makes of a signed-in account's team, unless it takes the account as noted (`noSignInSince`), decided here and
