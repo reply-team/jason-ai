@@ -687,8 +687,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   never read, and names the team from the note. A sign-in is one made on the card (the browser decides who signs in),
   one made in a terminal that the Reply CLI's files show by another record or another pinned team, or one Reply gives
   away by refusing the Reply account's own read because the sign-in cannot act in its pinned team, or by naming another
-  login than the noted one when Jason Desktop asks who the sign-in is. Like is compared with like: the Reply CLI keeps the
-  user Reply gave it when you signed in, the seat of the team pinned then under that day's address, for good, while
+  login than the noted one when Jason Desktop asks who the sign-in is. Like is compared with like: the Reply CLI keeps
+  the user Reply gave it when you signed in, the seat of the team pinned then under that day's address, for good, while
   Reply, asked now, names the seat of the team pinned now under today's address, so Jason Desktop holds the Reply CLI's
   record only against the record it noted and Reply's answer only against the login it noted, and a Reply account is,
   on its card and in the note, who Reply says it is wherever Reply answered. A login is your Reply sign-in, by its
@@ -696,9 +696,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   is the same, whatever the team and the id, or where Reply's id is the same under another address, as after you changed
   the address at Reply: then the card and the note take the new address, and nothing is said. Another address and
   another id is another login. After a sign-in the teams are read and the Reply account is checked against the note.
-  The same login, still in the noted team, is said nothing of, and a pin cleared, or set to a team it does not act in, is put back. Another login: the card says what the
-  Reply account was and who it is now, and that campaigns sending through it now send as the new one. The same login, no
-  longer in the noted team: the card says that the Reply account was in that team and that this sign-in can no longer
+  The same login, still in the noted team, is said nothing of, and a pin cleared, or set to a team it does not act in,
+  is put back. Another login: the card says what the Reply account was and who it is now, and that campaigns sending
+  through it now send as the new one. The same login, no longer in the noted team: the card says that the Reply account
+  was in that team and that this sign-in can no longer
   work in it. A sign-in the Reply CLI does not name, with no pinned team it acts in to be named in: the card says what
   the Reply account was, and that who is signed in now cannot be known until it has a team; no pin is written before it
   is known. For these three the card shows no team, and Reply is asked for none of its mailboxes and LinkedIn accounts,
