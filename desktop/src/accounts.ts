@@ -13,7 +13,9 @@
  */
 
 import { box, capped, type ReplyBox } from './reply-senders.ts';
-import { profileLimit } from './setup-model.ts';
+
+/** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
+const profileLimit = 64;
 
 /** An account as a member of the seam names it: the provider, and the profile's name exactly. */
 export interface AccountRef {

@@ -428,12 +428,9 @@ export interface ReplySender {
 // `--json` is the CLI's global flag for compact output (src/index.ts, src/utils/output.ts); without it the same object is
 // printed indented, so it is passed to both.
 
-/** The profile a route's binding may name: the Reply plugin's binding schema takes one to sixty-four characters. */
-export const profileLimit = 64;
-
 /**
- * A sign-in as `reply auth status --json` prints it: whether there is one, as whom, under which profile, and the team its
- * runs send, the top-level `team_id`, which is the profile's pin where the run names no team and the environment holds no
+ * A sign-in as `reply auth status --json` prints it: whether there is one, as whom, and the team its runs send, the
+ * top-level `team_id`, which is the profile's pin where the run names no team and the environment holds no
  * `REPLY_TEAM_ID`, as the desktop's runs never do: by its id, digits only, or null for none. For a key (`method`
  * `api_key`), `keyTeam` is the team it acts in, whatever team a run asks: the `team_id` of the user reply-cli stored from
  * Reply's whoami when the key signed in (src/commands/auth.ts `handle_login_token`); null for a browser's sign-in, or a key
@@ -442,7 +439,6 @@ export const profileLimit = 64;
 export interface ReplyAuth {
     signedIn: boolean;
     user: string | null;
-    profile: string | null;
     team: string | null;
     keyTeam: string | null;
 }
@@ -451,17 +447,15 @@ const teamIdOf = (value: unknown): string | null => (typeof value === 'number' &
 
 export function parseReplyAuth(stdout: string): ReplyAuth {
     try {
-        const raw = JSON.parse(stdout) as { authenticated?: unknown; profile?: unknown; method?: unknown; user?: { username?: unknown; team_id?: unknown }; team_id?: unknown };
-        const profile = typeof raw.profile === 'string' && raw.profile.length > 0 && raw.profile.length <= profileLimit ? raw.profile : null;
+        const raw = JSON.parse(stdout) as { authenticated?: unknown; method?: unknown; user?: { username?: unknown; team_id?: unknown }; team_id?: unknown };
         return {
             signedIn: raw.authenticated === true,
             user: typeof raw.user?.username === 'string' ? raw.user.username : null,
-            profile,
             team: teamIdOf(raw.team_id),
             keyTeam: raw.method === 'api_key' ? teamIdOf(raw.user?.team_id) : null,
         };
     } catch {
-        return { signedIn: false, user: null, profile: null, team: null, keyTeam: null };
+        return { signedIn: false, user: null, team: null, keyTeam: null };
     }
 }
 

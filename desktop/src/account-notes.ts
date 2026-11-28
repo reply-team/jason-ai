@@ -139,7 +139,7 @@ export function asksIn(seen: Omit<SignInSeen, 'login'>): string | null {
  * sign-in on its card, or a change not answered yet), and the Reply CLI's own files hold the noted login, or none, and the
  * noted team both pinned and as the team its runs act in (`runsIn`: a key acts in its own, whatever is pinned).
  */
-export const noSignInSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
+const noSignInSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
     noted !== null && noted !== 'fresh' && !marked && files.pin === noted.team.id && runsIn(files) === noted.team.id && (files.login ?? noted.user) === noted.user;
 
 /**

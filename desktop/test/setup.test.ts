@@ -302,14 +302,12 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } })), {
         signedIn: true,
         user: 'someone@example.com',
-        profile: 'work',
         team: null,
         keyTeam: '3',
     });
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', method: 'oauth', user: { username: 'someone@example.com', team_id: 3 }, team_id: 9 })), {
         signedIn: true,
         user: 'someone@example.com',
-        profile: 'work',
         team: '9',
         keyTeam: null,
     });
@@ -317,9 +315,8 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
         const read = parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', method: 'api_key', user: { username: 'someone@example.com', team_id: team }, team_id: team }));
         assert.deepEqual([read.team, read.keyTeam], [null, null], JSON.stringify(team));
     }
-    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, profile: 'default', team: null, keyTeam: null });
-    assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, profile: null, team: null, keyTeam: null });
-    assert.equal(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'x'.repeat(65) })).profile, null, 'a profile the binding cannot hold is not taken');
+    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, team: null, keyTeam: null });
+    assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, team: null, keyTeam: null });
     assert.deepEqual(parseReplySenders(JSON.stringify({ items: [{ id: 5, channel: 'email', name: 'Sales', address: 'sales@example.com', owner_user_id: 7, status: 'active', reply_status: 'connected' }] })), [
         { id: '5', channel: 'email', name: 'Sales', address: 'sales@example.com', status: 'connected' },
     ], "the state is Reply's own word, reply_status, never the CLI's summary of it");
@@ -338,8 +335,8 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     // is a read that did not answer: a usage error (exit 2), a store it cannot read (exit 1, nothing on stdout), the time
     // limit (-1), or what is not that object.
     const auth = (exit: number, stdout: string) => readReplyAuth({ exit, stdout });
-    assert.deepEqual(auth(0, JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'oauth', user: { id: 7, username: 'someone@example.com', team_id: 3 }, team_id: 3 })), { signedIn: true, user: 'someone@example.com', profile: 'work', team: '3', keyTeam: null });
-    assert.deepEqual(auth(1, JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, profile: 'default', team: null, keyTeam: null });
+    assert.deepEqual(auth(0, JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'oauth', user: { id: 7, username: 'someone@example.com', team_id: 3 }, team_id: 3 })), { signedIn: true, user: 'someone@example.com', team: '3', keyTeam: null });
+    assert.deepEqual(auth(1, JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, team: null, keyTeam: null });
     for (const [exit, stdout] of [[2, ''], [2, JSON.stringify({ authenticated: false, profile: 'default' })], [1, ''], [-1, ''], [0, ''], [0, 'Not signed in.'], [0, '{}'], [0, '{"authenticated":"yes"}'], [0, 'null'], [0, '[]']] as const) {
         assert.equal(auth(exit, stdout), null, `${exit} ${stdout}`);
     }
