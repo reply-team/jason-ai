@@ -1100,6 +1100,7 @@ export class Setup {
         const marked = this.#toCheck.has(account.name);
         let listed: Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'> | null = null;
         let refused = false;
+        let givenAway = false;
         // What `auth whoami` answered at this look, and the team it was asked in: asked once in a team.
         let said: ReplyWhoami | null = null;
         let askedIn: string | null | undefined;
@@ -1109,12 +1110,14 @@ export class Setup {
             const asking = orgDue();
             if (asking) this.#orgAsked.add(account.name);
             const [{ lists, outOfTeam }, answer] = await Promise.all([this.#lists(account), asking ? this.#whoami(account) : null]);
-            if (!outOfTeam) return { state: { ...signedIn, ...lists, user: noted.user, team: namedBy(noted.team, answer?.login === noted.user ? answer : null) }, pin: auth.team };
-            [listed, refused] = [lists, true];
+            // Reply naming another login than noted gives a sign-in away: the login is the credential's, in whatever team.
+            const another = answer !== null && answer.login !== noted.user;
+            if (!outOfTeam && !another) return { state: { ...signedIn, ...lists, user: noted.user, team: namedBy(noted.team, answer) }, pin: auth.team };
+            [listed, refused, givenAway] = [lists, outOfTeam, another];
             if (asking) [said, askedIn] = [answer, runsIn(files)];
         }
         // A sign-in since the note: once it is bound, who it is and its team's organization are asked again.
-        const signIn = refused || !asNoted(files, noted, marked);
+        const signIn = refused || givenAway || !asNoted(files, noted, marked);
         const teams = await this.#teams(account);
         if (listed === null && restsOnPin({ ...files, teams }, noted)) {
             const { lists, outOfTeam } = await this.#lists(account);
@@ -1123,21 +1126,29 @@ export class Setup {
         const asked = whoCanBeAsked({ ...files, teams });
         if (asked && askedIn !== runsIn(files)) [said, askedIn] = [await this.#whoami(account), runsIn(files)];
         const seen: SignInSeen = { ...files, login: asked ? (said?.login ?? null) : auth.user, refused, teams };
-        const binding = bindingOf(seen, noted);
+        let binding = bindingOf(seen, noted);
         let { login } = seen;
         let team = binding.team;
         let named = asked;
-        if (binding.bind !== null) team = await this.#bind(account, binding.bind, auth.team, actsIn(seen));
+        const bound = binding.bind !== null;
+        if (bound) team = await this.#bind(account, binding.bind!, auth.team, actsIn(seen));
+        const pin = bound && team !== null ? team.id : auth.team;
         // Bound with nothing to answer, after a sign-in or with an organization due: who it is, its team's name and its
-        // organization, asked once in that team, which Reply names them in. The organization decides nothing here.
+        // organization, asked once in that team, which Reply names them in. The organization decides nothing; Reply naming
+        // another login than noted gives the sign-in away, and it is decided as one by that login.
         if (team !== null && binding.change === null && (signIn || orgDue())) {
             if (askedIn !== team.id) {
                 [said, askedIn] = [await this.#whoami(account), team.id];
                 named = true;
             }
             this.#orgAsked.add(account.name);
-            login ??= said?.login ?? null;
-            team = namedBy(team, said?.login === login ? said : null);
+            if (noted !== null && noted !== 'fresh' && said !== null && said.login !== noted.user) {
+                binding = bindingOf({ ...seen, login: said.login }, noted);
+                [team, login] = [binding.team, said.login];
+            } else {
+                login ??= said?.login ?? null;
+                team = namedBy(team, said?.login === login ? said : null);
+            }
         }
         const notRead: AccountState['notRead'] = [...(teams === null ? ['teams' as const] : []), ...(login === null && named ? ['login' as const] : [])];
         // Checked by a look that began after the mark, that bound it with nothing changed and nothing unread; a change is
@@ -1145,11 +1156,10 @@ export class Setup {
         if (binding.change !== null) this.#markToCheck(account);
         else if (team !== null && login !== null && teams !== null) this.#checked(account, marks);
         const now: AccountState = { ...signedIn, user: login, team, change: binding.change, notRead };
-        const pin = binding.bind !== null && team !== null ? team.id : auth.team;
         if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin };
         if (!binding.lists) return { state: now, pin };
         // The account's own read made before it was decided stands for the same pin.
-        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin };
+        return { state: { ...now, ...(listed !== null && !bound ? listed : (await this.#lists(account)).lists) }, pin };
     }
 
     /** Marks the account for the next look to check (`#toCheck`). */

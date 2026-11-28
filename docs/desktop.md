@@ -674,24 +674,24 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   Reply CLI holds no login for is taken as the noted one while its pin is the noted team. A sign-in is one made on the
   card (the browser decides who signs in), one made in a terminal that the Reply CLI's files show as another login or
   another pinned team, or one Reply gives away by refusing the Reply account's own read because the sign-in cannot act
-  in its pinned team. After it the teams are read and the Reply account is checked against the note. The same login,
-  still in the noted team, is said nothing of, and a pin cleared, or set to a team it does not act in, is put back.
-  Another login: the card says what the Reply account was and who it is now, and that campaigns sending through it now
-  send as the new one. The same login, no longer in the noted team: the card says that the Reply account was in that
-  team and that this sign-in can no longer work in it. A sign-in the Reply CLI does not name, with no pinned team it
-  acts in to be named in: the card says what the Reply account was, and that who is signed in now cannot be known until
-  it has a team; no pin is written before it is known. For these three the card shows no team, and Reply is asked for
-  none of its mailboxes and LinkedIn accounts, until you answer. The same login in another of its teams: the card says
-  the Reply account's team changed, and lists it as it now is. Each offers **Keep it** and **Sign out**, which keeps
-  the note, so the card then says who it was. Until you answer, the card offers nothing to do in the Reply account, and
-  Jason Desktop refuses a connect, an act on a mailbox or a LinkedIn account and a **Choose** for it ("The sign-in of
-  this Reply account changed: keep it or sign it out on its card first, so nothing was changed."). **Keep it** makes the
-  Reply account as it now is the noted one, where it is in another of its teams; otherwise its team is picked afresh:
-  the pin its profile holds no longer stands, even where the new sign-in acts in it, one team is bound by itself, and
-  several are offered with **Choose**, which writes over that pin; the Reply account is noted once it is bound. Until
-  you answer, the card says it at every look. Where the teams could not be read, nothing is rebound: the card says so
-  ("The teams of this sign-in could not be read.") with **Check again**, its other reads standing. Nothing prevents such
-  a change: the Reply CLI is yours.
+  in its pinned team, or by naming another login than the noted one when Jason Desktop asks who the sign-in is. After it
+  the teams are read and the Reply account is checked against the note. The same login, still in the noted team, is said
+  nothing of, and a pin cleared, or set to a team it does not act in, is put back. Another login: the card says what the
+  Reply account was and who it is now, and that campaigns sending through it now send as the new one. The same login, no
+  longer in the noted team: the card says that the Reply account was in that team and that this sign-in can no longer
+  work in it. A sign-in the Reply CLI does not name, with no pinned team it acts in to be named in: the card says what
+  the Reply account was, and that who is signed in now cannot be known until it has a team; no pin is written before it
+  is known. For these three the card shows no team, and Reply is asked for none of its mailboxes and LinkedIn accounts,
+  until you answer. The same login in another of its teams: the card says the Reply account's team changed, and lists it
+  as it now is. Each offers **Keep it** and **Sign out**, which keeps the note, so the card then says who it was. Until
+  you answer, the card offers nothing to do in the Reply account, and Jason Desktop refuses a connect, an act on a
+  mailbox or a LinkedIn account and a **Choose** for it ("The sign-in of this Reply account changed: keep it or sign it
+  out on its card first, so nothing was changed."). **Keep it** makes the Reply account as it now is the noted one,
+  where it is in another of its teams; otherwise its team is picked afresh: the pin its profile holds no longer stands,
+  even where the new sign-in acts in it, one team is bound by itself, and several are offered with **Choose**, which
+  writes over that pin; the Reply account is noted once it is bound. Until you answer, the card says it at every look.
+  Where the teams could not be read, nothing is rebound: the card says so ("The teams of this sign-in could not be
+  read.") with **Check again**, its other reads standing. Nothing prevents such a change: the Reply CLI is yours.
   A signed-in card lists its Reply account's mailboxes and LinkedIn accounts, each channel read on its own, so a Reply
   account without LinkedIn still shows its mailboxes. A channel that Reply account's plan or role does not have says so
   ("This Reply account has no LinkedIn."), and one that could not be read says that and offers **Check again**; what the

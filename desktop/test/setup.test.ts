@@ -1320,6 +1320,9 @@ test('the desktop notes who each Reply account was last signed in as, and in whi
         // A sign-in the Reply CLI does not name, pinned to another of its teams, whose login Reply did not say when asked:
         // nothing is decided and nothing said, but that its login could not be read.
         ['a sign-in the Reply CLI does not name, pinned to another of its teams, its login not read', { ...room, profiles: { web: { team_id: 6 } }, seats: { ...room.seats, [bea]: [5, 6] }, credentials: { web: { login: bea, unnamed: true } } }, bea, none, null, [`? - [] unlisted same last ${bea} 5 pin 6 login unread`], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) } }],
+        // Reply, asked once in this run who a sign-in the Reply CLI does not name is, names another login than noted: a
+        // sign-in given away, decided as any by another login.
+        ['an unchanged look whose Reply names another login than noted', { ...room, credentials: { web: { login: dee, unnamed: true } }, seats: { ...room.seats, [dee]: [5] }, whoami: { '5': { orgId: 4242, orgName: 'Made-up Org' } } }, bea, none, null, [`${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} - [] unlisted login last ${bea} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`, `${dee} 5 [] same last ${dee} 5 pin 5`]],
         // Another login, its teams not readable: once its team is picked afresh, nothing is read in the pin set aside.
         ['another login, by a browser, its teams not readable', { ...room, browser: cy }, bea, byBrowser, null, [`${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted login last ${bea} 5 pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`, `${cy} - [] unlisted same last - pin 5 teams unread`], { env: { STUB_REPLY_TEAM_LIST: JSON.stringify({ code: 'teams.unavailable' }) } }],
     ];
@@ -1705,6 +1708,46 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     };
     const racedOrg = (await new Setup({ ...setupDeps(racingOrg), programs: repinning }).status()).accounts?.accounts.find((each) => each.name === 'outbound');
     assert.deepEqual([repinned, racedOrg?.team, (notedAs(readFileSync(racingOrg.paths.replyAccountNotes, 'utf8'), 'outbound') as { team?: unknown } | undefined)?.team], [true, { id: '9', name: 'Made-up Nine' }, { id: '9', name: 'Made-up Nine' }]);
+    // Nor does an answer for another login than the account's, signed in in a terminal as Reply was asked: after a first
+    // sign-in, at Choose, and at an unchanged look. Where the note holds a login, Reply naming another one gives the sign-in
+    // away at once; elsewhere the next look finds the other login in the Reply CLI's files. Either way the change is said.
+    const switching = (on: ReturnType<typeof replyBench>, profile: string) => {
+        let switched = false;
+        const programs: Programs = {
+            find: (name) => on.programs.find(name),
+            run: async (name, args, options) => {
+                if (!switched && name === 'reply' && args.join(' ') === `--profile ${profile} auth whoami --json`) {
+                    switched = true;
+                    writeFileSync(on.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...on.world(), credentials: { ...on.world().credentials, [profile]: 'cy@example.test' }, seats: { ...on.world().seats, 'cy@example.test': [9] } }));
+                }
+                return on.programs.run(name, args, options);
+            },
+        };
+        return programs;
+    };
+    const cardOf = async (setup: Setup, name: string) => {
+        const each = (await setup.status()).accounts?.accounts.find((one) => one.name === name);
+        return { user: each?.user, team: each?.team, change: each?.change };
+    };
+    const notedTeam = (on: Bench, name: string) => (notedAs(readFileSync(on.paths.replyAccountNotes, 'utf8'), name) as { team?: unknown } | undefined)?.team;
+    const unnamedNine = { id: '9', name: 'Made-up Nine' };
+    const afterSignIn = replyBench(t, orgWorld);
+    const afterSignInSetup = new Setup({ ...setupDeps(afterSignIn), programs: switching(afterSignIn, 'outbound') });
+    assert.deepEqual(await cardOf(afterSignInSetup, 'outbound'), { user: 'bea@example.test', team: unnamedNine, change: null }, 'after a first sign-in');
+    assert.deepEqual(notedTeam(afterSignIn, 'outbound'), unnamedNine);
+    assert.deepEqual(await cardOf(afterSignInSetup, 'outbound'), { user: 'cy@example.test', team: null, change: 'login' }, 'after a first sign-in, the next look');
+    const picks = replyBench(t, { ...orgWorld, profiles: { ...orgWorld.profiles, picking: {} }, credentials: { ...orgWorld.credentials, picking: 'bea@example.test' } });
+    const picksSetup = new Setup({ ...setupDeps(picks), programs: switching(picks, 'picking') });
+    await picksSetup.status();
+    assert.deepEqual(await picksSetup.chooseTeam({ type: 'reply', name: 'picking' }, '9'), { done: true });
+    assert.deepEqual(notedTeam(picks, 'picking'), unnamedNine, 'at Choose');
+    assert.deepEqual(await cardOf(picksSetup, 'picking'), { user: 'cy@example.test', team: null, change: 'login' }, 'at Choose, the next look');
+    const unchanged = replyBench(t, orgWorld);
+    mkdirSync(dirname(unchanged.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(unchanged.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'outbound', user: 'bea@example.test', team: unnamedNine }] }));
+    const unchangedSetup = new Setup({ ...setupDeps(unchanged), programs: switching(unchanged, 'outbound') });
+    assert.deepEqual(await cardOf(unchangedSetup, 'outbound'), { user: 'cy@example.test', team: null, change: 'login' }, 'at an unchanged look');
+    assert.deepEqual(notedTeam(unchanged, 'outbound'), unnamedNine);
     const { whoami: _carried, ...uncarriedWorld } = orgWorld;
     const plain = replyBench(t, uncarriedWorld);
     const asToday = [['default', { id: '3', name: '' }], ['outbound', { id: '9', name: 'Made-up Nine' }]];
