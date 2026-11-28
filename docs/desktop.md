@@ -284,10 +284,10 @@ runtime's start at logon is the machine set-up's, and no item of the menu's.
   system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
-- `<data>/desktop/reply-account-notes.json`: the login, with Reply's id of its user, and the team each Reply account was
-  last seen signed in and bound to, with the team's name and organization as Reply named them, or, after **Keep it**,
-  that its team is to be picked afresh ([Connect](#connect), Reply), readable by your account alone where the system has
-  modes.
+- `<data>/desktop/reply-account-notes.json`: the login, with Reply's id of its user in that team, and the team each
+  Reply account was last seen signed in and bound to, with the team's name and organization as Reply named them, or,
+  after **Keep it**, that its team is to be picked afresh ([Connect](#connect), Reply), readable by your account alone
+  where the system has modes.
 - `<data>/desktop/full-access.json` and `full-access-taken-back`, which an earlier version kept for a standing choice of
   Full access, are removed when Jason starts; no mode is read from them.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
@@ -669,27 +669,29 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   the sign-in (`reply auth whoami`, which prints Reply's answer as it comes), and are remembered with the team. Jason
   Desktop asks that after a sign-in, at every look until the sign-in is answered (a look while a notice waits is one),
   since who it is must be known anyway; and with no sign-in since, once in a run of Jason Desktop for a team whose
-  organization the note does not hold. Reply is asked in the team the sign-in works in, or, where Jason Desktop binds it,
-  once that team is pinned, as at **Choose**. The organization follows the team in brackets wherever a team is named to
-  you: on the sign-in line, in a notice of a change and in who a card was last signed in as; the teams to choose from
-  show their names alone. A team outside an organization, of an organization Reply gives no name, or on a Reply whose
-  answer does not carry the organization, stands alone, and nothing is said of it. The organization decides nothing: no
-  notice says that an organization or a team was renamed, and it is never logged.
-  Jason Desktop notes, for each Reply account, the login and Reply's id of its user, and the team it last saw there,
-  with the team's name and organization as Reply last named them, in a file of its own
-  (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the account signed in and bound with
-  nothing noted, or reads of the noted sign-in what the note does not hold, at **Choose** and at **Keep it**. Remove takes
-  the note away, and a look begun before it does not write it back. The note is never used to tell which Reply accounts
-  there are. A card that is not signed in says who it was last signed in as.
+  organization the note does not hold, or for a sign-in the Reply CLI does not name, which nothing else could give away.
+  Reply is asked in the team the sign-in works in, or, where Jason Desktop binds it, once that team is pinned, as at
+  **Choose**. The organization follows the team in brackets wherever a team is named to you: on the sign-in line, in a
+  notice of a change and in who a card was last signed in as; the teams to choose from show their names alone. A team
+  outside an organization, of an organization Reply gives no name, or on a Reply whose answer does not carry the
+  organization, stands alone, and nothing is said of it. The organization decides nothing: no notice says that an
+  organization or a team was renamed, and it is never logged. Jason Desktop notes, for each Reply account, the login and
+  Reply's id of its user in that team, and the team it last saw there, with the team's name and organization as Reply
+  last named them, in a file of its own (`<data>/desktop/reply-account-notes.json`, below): at the look that finds the
+  account signed in and bound with nothing noted, or reads of the noted sign-in what the note does not hold, at
+  **Choose** and at **Keep it**. Remove takes the note away, and a look begun before it does not write it back. The note
+  is never used to tell which Reply accounts there are. A card that is not signed in says who it was last signed in as.
   With no sign-in since, nothing is taken to have changed: a look that finds the noted login in the noted pinned team,
-  as the Reply CLI's own files give them, asks Reply for no teams and names the team from the note, and a sign-in the
-  Reply CLI holds no login for is taken as the noted one while its pin is the noted team. A sign-in is one made on the
-  card (the browser decides who signs in), one made in a terminal that the Reply CLI's files show as another login or
-  another pinned team, or one Reply gives away by refusing the Reply account's own read because the sign-in cannot act
-  in its pinned team, or by naming another login than the noted one when Jason Desktop asks who the sign-in is. A login
-  is a Reply user: where the Reply CLI's files and Reply both give the user's id, the id says whether two sign-ins are
-  the same login, and where Reply names the same user by another address, as after you changed it at Reply, the card and
-  the note take the new one and nothing is said. After a sign-in the teams are read and the Reply account is checked
+  as the Reply CLI's own files give them, asks Reply for no teams but for a team's name the note never read, and names
+  the team from the note, and a sign-in the Reply CLI holds no login for is taken as the noted one while its pin is the
+  noted team. A sign-in is one made on the card (the browser decides who signs in), one made in a terminal that the
+  Reply CLI's files show as another login or another pinned team, or one Reply gives away by refusing the Reply
+  account's own read because the sign-in cannot act in its pinned team, or by naming another login than the noted one
+  when Jason Desktop asks who the sign-in is. A login is your Reply sign-in, by its address. Reply gives a login one
+  user id in each of its teams, so two sign-ins are the same login where their address is the same, whatever the team
+  and the id, or where Reply's id is the same under another address, as after you changed the address at Reply: then the
+  card and the note take the new address, and nothing is said. Another address and another id is another login. After a
+  sign-in the teams are read and the Reply account is checked
   against the note. The same login, still in the noted team, is said
   nothing of, and a pin cleared, or set to a team it does not act in, is put back. Another login: the card says what the
   Reply account was and who it is now, and that campaigns sending through it now send as the new one. The same login, no
