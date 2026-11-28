@@ -11,6 +11,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class ClaimOrderDocTests
 {
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Routing_s_table_numbers_the_claim_s_checks_in_the_order_the_code_asks_them()
     {
         var page = Source("docs/routing.md").ReplaceLineEndings("\n");
@@ -31,6 +32,7 @@ public sealed partial class ClaimOrderDocTests
     /// are the next ones free, each taken once.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void No_check_s_number_moves()
     {
         string[] numbered =
@@ -56,6 +58,7 @@ public sealed partial class ClaimOrderDocTests
     /// is whatever the published order gives it, after every number published before it.
     /// </summary>
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_opt_out_lock_is_asked_right_after_the_register_and_numbered_after_the_published_checks()
     {
         var codes = ProviderOpPreflight.Codes.ToList();
@@ -65,6 +68,7 @@ public sealed partial class ClaimOrderDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Work_execution_s_chain_is_the_order_the_code_asks_the_checks_in()
     {
         var page = Source("docs/work-execution.md").ReplaceLineEndings("\n");
@@ -74,6 +78,7 @@ public sealed partial class ClaimOrderDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void Routing_names_the_bound_a_read_on_request_does_not_have()
     {
         Assert.Contains(
@@ -88,6 +93,7 @@ public sealed partial class ClaimOrderDocTests
     /// read as a number, so a check added or removed fails here until every count in prose follows the table.
     /// </summary>
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData("docs/routing.md", "Of the (?<n>[\\w-]+) answers a claim can give", "all")]
     [InlineData("docs/routing.md", "The last (?<n>[\\w-]+) are questions about a work item", "after binding_invalid")]
     [InlineData("docs/routing.md", "### At the claim — the (?<n>[\\w-]+), in the order they are checked", "all")]

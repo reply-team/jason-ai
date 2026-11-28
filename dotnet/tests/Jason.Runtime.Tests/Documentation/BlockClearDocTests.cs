@@ -13,6 +13,7 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class BlockClearDocTests
 {
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_philosophy_page_says_a_clear_from_a_role_or_a_run_is_refused_and_so_is_one_naming_no_person()
     {
         var page = Whitespace().Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "philosophy.md")), " ");
@@ -24,6 +25,7 @@ public sealed partial class BlockClearDocTests
     }
 
     [Fact]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     public void The_readme_says_a_clear_from_a_role_or_a_run_is_refused_and_no_longer_that_an_agent_cannot_clear()
     {
         var readme = Whitespace().Replace(File.ReadAllText(Path.Combine(RepositoryTree.Root(), "docs", "handbook.md")), " ");
@@ -36,6 +38,7 @@ public sealed partial class BlockClearDocTests
     }
 
     [Theory]
+    [Critical(Family.D3, "a page says what the tree has outgrown")]
     [InlineData(ActorType.Role)]
     [InlineData(ActorType.Attempt)]
     public void The_contract_names_the_code_the_runtime_refuses_a_role_or_an_attempt_with(ActorType type)
