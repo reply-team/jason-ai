@@ -1645,7 +1645,7 @@ function accountBody(reply: DesktopSetup['reply'], view: AccountView, busy: Html
         </div>
         ${noteView(view, place, asks)}
         ${
-            view.signedIn
+            view.signedIn || view.authUnread
                 ? null
                 : html`<div class="reply-key">
                           ${secret(keyField(place), 'Or paste a Reply API key')}
@@ -1748,20 +1748,13 @@ function addAccountView(state: DesktopSetup, real: Html | null): Html | null {
 }
 
 /**
- * "Sign in with Reply" for the card's account, only while it is not signed in, since another login is another Reply
- * account: the card's first act where its sign-in was read, a plain one where it could not be.
+ * "Sign in with Reply" for the card's account, its first act, only while it is not signed in, since another login is
+ * another Reply account; none where its sign-in could not be read, which a sign-in would replace unseen.
  */
 const signInButton = (view: AccountView, place: Place, real: Html | null): Html | null =>
-    view.signedIn
+    view.signedIn || view.authUnread
         ? null
-        : html`<button
-              class="${view.authUnread ? 'btn' : 'btn p'}"
-              type="button"
-              ${real}
-              ${act('connect.reply', place)}
-          >
-              Sign in with Reply
-          </button>`;
+        : html`<button class="btn p" type="button" ${real} ${act('connect.reply', place)}>Sign in with Reply</button>`;
 
 /**
  * The one Reply card drawn outside the Accounts page, on the Connect panel and in a chat: what Reply is, the Reply CLI's

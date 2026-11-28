@@ -440,8 +440,8 @@ describe('the Reply card, its acts', () => {
         cleanup();
 
         // A sign-in the desktop could not read is said as that, in the sign-in's place, with Check again in its row:
-        // neither "Not signed in" nor "Signed in as". The sign-in and the key field stay, signing in no longer the card's
-        // first act, since nothing says it is needed; no act on an account is offered.
+        // neither "Not signed in" nor "Signed in as". No sign-in and no key field are offered, since either could replace
+        // a sign-in the card cannot see; nor any act on an account.
         const signedOut = { ...setupFound.reply, signedIn: false, user: null, accounts: [] };
         const desktop = renderConnect({ ...setupFound, reply: { ...signedOut, notRead: ['auth'] } });
         const unread = replyCard(await openConnect());
@@ -449,8 +449,8 @@ describe('the Reply card, its acts', () => {
         expect(words(row.querySelector('.grow')!)).toBe('The Reply sign-in could not be read.');
         expect(within(row).getAllByRole('button').map(words)).toEqual(['Check again']);
         expect(words(unread)).not.toMatch(/not signed in|signed in as|uses this sign-in|does not use it yet/i);
-        expect(within(unread).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
-        expect(within(unread).getByPlaceholderText('Or paste a Reply API key')).toBeTruthy();
+        expect(within(unread).queryByRole('button', { name: 'Sign in with Reply' })).toBeNull();
+        expect(within(unread).queryByPlaceholderText('Or paste a Reply API key')).toBeNull();
         expect(within(unread).queryByRole('button', { name: 'Connect a mailbox or LinkedIn' })).toBeNull();
         const reads = statusReads(desktop);
         fireEvent.click(within(row).getByRole('button', { name: 'Check again' }));

@@ -871,6 +871,15 @@ test('a sign-in signs in the account its card names: its key on standard input, 
     await assert.rejects(setup.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'default' }), (error: unknown) => error instanceof Refused && error.message === signedInAlready);
     assert.equal(runsAfter(b, from, 'reply').some((run) => run.includes('login')), false);
     assert.deepEqual(b.world().credentials, { default: 'ada@example.test' });
+    // Nor one whose sign-in the Reply CLI, asked just before, could not say: the sign-in it holds stays.
+    const authUnread = replyBench(t, { profiles: { outbound: { team_id: 9 } }, credentials: { outbound: 'ada@example.test' }, seats: { 'ada@example.test': [9] }, browser: 'bea@example.test', keys: { 'planted-reply-key': { login: 'bea@example.test', team: 9 } } }, { STUB_REPLY_AUTH_STATUS: JSON.stringify({ exit: -1 }) });
+    const unreadSignIn = await readSetup(authUnread);
+    from = authUnread.record().length;
+    for (const ask of [() => unreadSignIn.connectReply({ type: 'reply', name: 'outbound' }), () => unreadSignIn.connectReplyWithKey('planted-reply-key', { type: 'reply', name: 'outbound' })]) {
+        await assert.rejects(ask(), (error: unknown) => error instanceof Refused && error.message === 'This Reply account’s sign-in could not be read, so nobody was signed in: check again.');
+    }
+    assert.equal(runsAfter(authUnread, from, 'reply').some((run) => run.includes('login')), false);
+    assert.deepEqual(authUnread.world().credentials, { outbound: 'ada@example.test' });
     from = b.record().length;
     // A route that names a team beside the profile is the profile's: the sign-in names the profile alone.
     await setup.connectReply({ type: 'reply', name: 'routed-only' });
