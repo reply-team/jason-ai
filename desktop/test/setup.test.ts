@@ -1691,6 +1691,22 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(runsAfter(carried, from, 'reply').filter((run) => run.includes('auth whoami')), ['--profile picking auth whoami --json']);
     assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', team: nine });
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine], ['picking', nine]], whoami: [] }, 'the look after Choose');
+    // Another of the login's teams pinned in a terminal: the change names the new team with its organization too, Reply
+    // asked once in it while the change waits. The answer decides nothing.
+    const five = { id: '5', name: 'Made-up Five', org: { id: '4242', name: 'Made-up Org' } };
+    writeFileSync(
+        carried.env['STUB_REPLY_WORLD']!,
+        JSON.stringify({ ...carried.world(), profiles: { ...carried.world().profiles, outbound: { team_id: 5 } }, teams: { ...carried.world().teams, '5': 'Made-up Five' }, whoami: { ...orgWorld.whoami, '5': { orgId: 4242, orgName: 'Made-up Org' } } }),
+    );
+    for (const [look, whoami] of [['the change said', ['--profile outbound auth whoami --json']], ['while it waits', []]] as const) {
+        const since = carried.record().length;
+        const outbound = (await carriedSetup.status()).accounts?.accounts.find((each) => each.name === 'outbound');
+        assert.deepEqual(
+            { change: outbound?.change, team: outbound?.team, last: outbound?.lastSignIn?.team, whoami: runsAfter(carried, since, 'reply').filter((run) => run.includes('auth whoami')) },
+            { change: 'team', team: five, last: nine, whoami },
+            look,
+        );
+    }
     assert.equal(JSON.stringify(orgLog.lines).includes('Made-up Org'), false, 'the organization reaches no log');
     // An answer in another team than the one bound, pinned in a terminal meanwhile, names nothing of it, and nothing of it
     // is noted.
@@ -1759,7 +1775,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(await looked(plain, plainSetup), { teams: asToday, whoami: [] }, 'its next look');
     // Another of the login's teams pinned in a terminal is a sign-in: once kept, the next look asks again, once.
     writeFileSync(plain.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...plain.world(), profiles: { ...plain.world().profiles, outbound: { team_id: 5 } } }));
-    assert.deepEqual(await looked(plain, plainSetup), { teams: [asToday[0], ['outbound', { id: '5', name: '' }]], whoami: [] }, 'the change said');
+    assert.deepEqual(await looked(plain, plainSetup), { teams: [asToday[0], ['outbound', { id: '5', name: '' }]], whoami: ['--profile outbound auth whoami --json'] }, 'the change said');
     assert.deepEqual(await plainSetup.keepChange({ type: 'reply', name: 'outbound' }), { done: true });
     assert.deepEqual(await looked(plain, plainSetup), { teams: [asToday[0], ['outbound', { id: '5', name: '' }]], whoami: ['--profile outbound auth whoami --json'] }, 'kept');
     assert.deepEqual((await looked(plain, plainSetup)).whoami, [], 'kept, the next look');

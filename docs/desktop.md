@@ -654,16 +654,16 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   holds no login for a sign-in, as for a browser's sign-in of a login in several teams, the card says it is signed in,
   and once it has a team Jason Desktop asks the Reply CLI who it is; where that could not be read, the card says so
   ("The login of this sign-in could not be read.") with **Check again**.
-  After a sign-in, once the Reply account is bound with nothing to answer, and at **Choose**, Jason Desktop asks the
-  Reply CLI once who the sign-in is (`reply auth whoami`, which prints Reply's answer as it comes, asked in the team the
-  Reply account is bound to), and takes from Reply's answer the organization the team belongs to, and the team's name
-  where `reply team list` gives none or was not read; where both name the team, the name `reply team list` gives stands,
-  the one the teams to choose from show. The organization follows the team in brackets wherever a team is named to you:
-  on the sign-in line, in a notice of a change and in who a card was last signed in as; the teams to choose from show
-  their names alone, and a team outside an organization stands alone. A Reply whose answer does not carry the
-  organization shows the team as before and says nothing of it; it is asked again once at each start of Jason Desktop,
-  at that Reply account's first look. The organization decides nothing: no notice says that an organization or a team
-  was renamed, and it is never logged.
+  After a sign-in, once the Reply account is bound with nothing to answer, at **Choose**, and while a change to another
+  of its teams waits, Jason Desktop asks the Reply CLI once who the sign-in is (`reply auth whoami`, which prints
+  Reply's answer as it comes, asked in the team the Reply account is bound to), and takes from Reply's answer the
+  organization the team belongs to, and the team's name where `reply team list` gives none or was not read; where both
+  name the team, the name `reply team list` gives stands, the one the teams to choose from show. The organization
+  follows the team in brackets wherever a team is named to you: on the sign-in line, in a notice of a change and in who
+  a card was last signed in as; the teams to choose from show their names alone, and a team outside an organization
+  stands alone. A Reply whose answer does not carry the organization shows the team as before and says nothing of it; it
+  is asked again once at each start of Jason Desktop, at that Reply account's first look. The organization decides
+  nothing: no notice says that an organization or a team was renamed, and it is never logged.
   Jason Desktop notes, for each Reply account, the login and the team it last saw there, with the team's name and
   organization as Reply last named them, in a file of its own (`<data>/desktop/reply-account-notes.json`, below): at
   the look that finds the account signed in and bound with nothing noted, or reads of the noted sign-in's team a name or

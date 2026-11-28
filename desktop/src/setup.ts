@@ -678,6 +678,11 @@ export class Setup {
      */
     #orgAsked = new Set<string>();
     /**
+     * For a Reply account found bound to another of its teams, while that change waits: what `auth whoami` answered in that
+     * team, asked once, so its card names the team's organization at every look without asking again.
+     */
+    #changeSaid = new Map<string, { team: string; said: ReplyWhoami | null }>();
+    /**
      * The accounts the last read gave, each with the senders it listed: an act names only one of them and one of its
      * senders, and its box names the sender as the list does.
      */
@@ -1133,15 +1138,19 @@ export class Setup {
         const bound = binding.bind !== null;
         if (bound) team = await this.#bind(account, binding.bind!, auth.team, actsIn(seen));
         const pin = bound && team !== null ? team.id : auth.team;
-        // Bound with nothing to answer, after a sign-in or with an organization due: who it is, its team's name and its
-        // organization, asked once in that team, which Reply names them in. The organization decides nothing; Reply naming
-        // another login than noted gives the sign-in away, and it is decided as one by that login.
-        if (team !== null && binding.change === null && (signIn || orgDue())) {
-            if (askedIn !== team.id) {
+        // Bound with nothing to answer, after a sign-in or with an organization due, or bound to another of its teams while
+        // that change waits: who it is, its team's name and its organization, asked once in that team, which Reply names
+        // them in. The organization decides nothing; Reply naming another login than noted gives the sign-in away, and it is
+        // decided as one by that login.
+        if (team !== null && (binding.change === 'team' || (binding.change === null && (signIn || orgDue())))) {
+            const waiting = binding.change === 'team' ? this.#changeSaid.get(account.name) : undefined;
+            if (waiting?.team === team.id) [said, askedIn] = [waiting.said, team.id];
+            else if (askedIn !== team.id) {
                 [said, askedIn] = [await this.#whoami(account), team.id];
                 named = true;
             }
             this.#orgAsked.add(account.name);
+            if (binding.change === 'team') this.#changeSaid.set(account.name, { team: team.id, said });
             if (noted !== null && noted !== 'fresh' && said !== null && said.login !== noted.user) {
                 binding = bindingOf({ ...seen, login: said.login }, noted);
                 [team, login] = [binding.team, said.login];
@@ -1150,6 +1159,7 @@ export class Setup {
                 team = namedBy(team, said?.login === login ? said : null);
             }
         }
+        if (binding.change !== 'team') this.#changeSaid.delete(account.name);
         const notRead: AccountState['notRead'] = [...(teams === null ? ['teams' as const] : []), ...(login === null && named ? ['login' as const] : [])];
         // Checked by a look that began after the mark, that bound it with nothing changed and nothing unread; a change is
         // checked again at every look until it is answered.
