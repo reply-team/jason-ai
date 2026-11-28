@@ -1040,7 +1040,7 @@ describe('Reply accounts, one card per profile', () => {
         const desktop = inDesktop(withReplyAccounts(setupFound, [ada, replyAccount('outbound')]));
         const page = await openAccounts('.reply-account');
         const bea = () => cardOf(page, 'Reply account outbound');
-        const why = 'This sign-in belongs to more than one Reply team. Choose the one this profile works in.';
+        const why = 'This sign-in belongs to more than one Reply team. Choose the one this Reply account works in.';
         const teamRows = () => Array.from(bea().querySelectorAll<HTMLElement>('.acct-team')).map(words);
         // A browser's sign-in of a login in several teams: the read that follows the sign-in offers them at once, one Reply
         // gives no name as that, and no line says that something could not be read.

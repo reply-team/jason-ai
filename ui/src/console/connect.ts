@@ -1594,7 +1594,7 @@ function elsewhereMark(view: AccountView): Html | null {
 function teamChoice(teams: readonly DesktopReplyTeam[], place: Place, asks: Html | null): Html {
     return html`<div class="acct-group acct-teams">
         <div class="setrow meta acct-teams-why">
-            This sign-in belongs to more than one Reply team. Choose the one this profile works in.
+            This sign-in belongs to more than one Reply team. Choose the one this Reply account works in.
         </div>
         ${teams.map(
             (team) =>
