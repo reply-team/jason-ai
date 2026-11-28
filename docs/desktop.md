@@ -695,10 +695,8 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   address. Reply gives a login one user id in each of its teams, so two sign-ins are the same login where their address
   is the same, whatever the team and the id, or where Reply's id is the same under another address, as after you changed
   the address at Reply: then the card and the note take the new address, and nothing is said. Another address and
-  another id is another login. After a
-  sign-in the teams are read and the Reply account is checked
-  against the note. The same login, still in the noted team, is said
-  nothing of, and a pin cleared, or set to a team it does not act in, is put back. Another login: the card says what the
+  another id is another login. After a sign-in the teams are read and the Reply account is checked against the note.
+  The same login, still in the noted team, is said nothing of, and a pin cleared, or set to a team it does not act in, is put back. Another login: the card says what the
   Reply account was and who it is now, and that campaigns sending through it now send as the new one. The same login, no
   longer in the noted team: the card says that the Reply account was in that team and that this sign-in can no longer
   work in it. A sign-in the Reply CLI does not name, with no pinned team it acts in to be named in: the card says what

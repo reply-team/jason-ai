@@ -220,11 +220,11 @@ carries it, and nothing of the CLI's own words is shown or logged.
   (`org`, null for a team outside one, absent until then), and the Reply CLI's own record of that sign-in as it stood
   then (`record`: the `user`'s address and id `auth status` gave, each null where it named none; absent from a note
   written before it was kept, whose login then stands for it until a look notes it); or, after Keep it on a sign-in
-  bound to no team, that its team is picked afresh. `0600`, written whole beside itself and renamed over, a look writing only over what it read: at
-  the look that finds an account signed in and bound with its login and nothing noted, or reads of a noted sign-in what
-  the note does not hold (`signInRead`); at Choose; and at Keep it. Remove takes the account's note out. A note that
-  cannot be read is no note. It never decides which accounts there are, and a chat turn on Claude Code is refused it as
-  every entry of the desktop's folder.
+  bound to no team, that its team is picked afresh. `0600`, written whole beside itself and renamed over, a look
+  writing only over what it read: at the look that finds an account signed in and bound with its login and nothing
+  noted, or reads of a noted sign-in what the note does not hold (`signInRead`); at Choose; and at Keep it. Remove takes
+  the account's note out. A note that cannot be read is no note. It never decides which accounts there are, and a chat
+  turn on Claude Code is refused it as every entry of the desktop's folder.
 - `<data>/desktop/provider-keys`: AI providers' keys, encrypted by the operating system (`safeStorage`). On Linux a key
   is kept and read only where the session offers a keyring (GNOME Keyring or KWallet): where Electron falls back to its
   `basic_text` store, a fixed key, the card says so and the key is not kept.
