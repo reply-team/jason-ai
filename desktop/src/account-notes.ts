@@ -1,10 +1,11 @@
 /**
  * The desktop's note of each Reply account: `<data>/desktop/reply-account-notes.json`, the desktop's alone, never in the
- * installation's settings or the Reply CLI's files. For an account it holds who it was last seen signed in as, and in which
- * team, with the team's name and organization as Reply last named them; or, after Keep it on a sign-in that was bound to
- * no team, that its team is picked afresh. A look writes it for an account signed in and bound with nothing noted, or
- * where it read of the noted sign-in's team what the note does not hold (`teamRead`); Choose and Keep it write it;
- * removing the account takes it away. It is never used to tell which Reply accounts there are.
+ * installation's settings or the Reply CLI's files. For an account it holds who it was last seen signed in as, with Reply's
+ * id of that user where it was known, and in which team, with the team's name and organization as Reply last named them;
+ * or, after Keep it on a sign-in that was bound to no team, that its team is picked afresh. A look writes it for an
+ * account signed in and bound with nothing noted, or where it read of the noted sign-in what the note does not hold
+ * (`signInRead`): the address Reply names the user by now, the user's id, the team's name or organization. Choose and Keep
+ * it write it; removing the account takes it away. It is never used to tell which Reply accounts there are.
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -22,30 +23,49 @@ export interface BoundTeam {
     org?: ReplyOrg | null;
 }
 
-/** A sign-in as the note keeps it: the login, and the team it is bound to. */
+/** A sign-in as the card shows it: the login, and the team it is bound to. */
 export interface SignIn {
     user: string;
     team: BoundTeam;
 }
 
+/** A login: the address Reply names the user by, and Reply's id of the user where it is known. */
+export interface Login {
+    user: string;
+    id?: string | null;
+}
+
+/** A sign-in as the note keeps it: the card's, and Reply's id of the user where it was known. */
+export interface NotedSignIn extends SignIn {
+    id?: string;
+}
+
 /** What the note holds of one account: the sign-in it last saw, `fresh` where its team is picked afresh, null for nothing. */
-export type Noted = SignIn | 'fresh' | null;
+export type Noted = NotedSignIn | 'fresh' | null;
 
 /** One account's entry in the note. */
 export interface AccountNote extends AccountRef {
-    noted: SignIn | 'fresh';
+    noted: NotedSignIn | 'fresh';
 }
 
-/** Whether two sign-ins are one: the same login in the same team, whatever the team's name is now. */
-export const sameSignIn = (a: SignIn, b: SignIn): boolean => a.user === b.user && a.team.id === b.team.id;
+/**
+ * Whether two logins are one Reply user: by Reply's id of the user where both hold one, which stays when the person changes
+ * the address at Reply; else by the address.
+ */
+export const sameUser = (a: Login, b: Login): boolean => (a.id != null && b.id != null ? a.id === b.id : a.user === b.user);
+
+/** Whether two sign-ins are one: the same user in the same team, whatever the address and the team's name are now. */
+export const sameSignIn = (a: SignIn & Login, b: SignIn & Login): boolean => sameUser(a, b) && a.team.id === b.team.id;
 
 /** Whether two teams are named alike: the same name, and the same organization or none said of either. */
 const sameWords = (a: BoundTeam, b: BoundTeam): boolean =>
     a.name === b.name && (a.org === undefined || b.org === undefined || a.org === null || b.org === null ? a.org === b.org : a.org.id === b.org.id && a.org.name === b.org.name);
 
-/** Whether two notes of an account hold the same, the team's name and organization included. */
+/** Whether two notes of an account hold the same, the address, the user's id, and the team's name and organization included. */
 const sameNoted = (a: Noted, b: Noted): boolean =>
-    a === null || b === null || a === 'fresh' || b === 'fresh' ? a === b : sameSignIn(a, b) && sameWords(a.team, b.team);
+    a === null || b === null || a === 'fresh' || b === 'fresh'
+        ? a === b
+        : a.user === b.user && a.id === b.id && a.team.id === b.team.id && sameWords(a.team, b.team);
 
 /**
  * A bound team as Reply's whoami names it besides, where it answered in that team (`said`, null where it was not asked or
@@ -69,18 +89,29 @@ export function teamKept(noted: BoundTeam, now: BoundTeam): BoundTeam {
     return { id: now.id, name, ...(org === undefined ? {} : { org }) };
 }
 
-/** Whether a look read anything of a noted sign-in's team that its note does not hold. */
-export const teamRead = (noted: BoundTeam, now: BoundTeam): boolean => !sameWords(teamKept(noted, now), noted);
+/**
+ * The sign-in the note keeps of a noted one after a look that read `now` of the same user in the same team: the address
+ * Reply names the user by now, the user's id where the note held none, and the team as `teamKept` keeps it.
+ */
+export function signInKept(noted: NotedSignIn, now: NotedSignIn): NotedSignIn {
+    const id = now.id ?? noted.id;
+    return { user: now.user, ...(id === undefined ? {} : { id }), team: teamKept(noted.team, now.team) };
+}
+
+/** Whether a look read anything of a noted sign-in that its note does not hold. */
+export const signInRead = (noted: NotedSignIn, now: NotedSignIn): boolean => !sameNoted(signInKept(noted, now), noted);
 
 /** What a look read of a signed-in account. */
 export interface SignInSeen {
     /** The team its profile pins, which every run of the account asks in. */
     pin: string | null;
     /**
-     * Who it is: as `auth status` names it, else as `auth whoami` answered; Reply's answer where it names another login
-     * than the note holds, which gives the sign-in away. Null where neither said.
+     * Who it is: as `auth status` names it, else as `auth whoami` answered; Reply's answer where it names the same user
+     * otherwise (`sameUser`), or another user than the note holds, which gives the sign-in away. Null where neither said.
      */
     login: string | null;
+    /** Reply's id of that user, where `auth status` or `auth whoami` gave one. */
+    userId: string | null;
     /** The team a key acts in, whatever team is asked (`ReplyAuth.keyTeam`); null for a browser's sign-in. */
     keyTeam: string | null;
     /** Whether Reply refused the account's own read in its pin at this look, the sign-in not acting in that team. */
@@ -90,7 +121,7 @@ export interface SignInSeen {
 }
 
 /** What the Reply CLI's own files say of a sign-in, read with no call to Reply. */
-export type SignInFiles = Pick<SignInSeen, 'pin' | 'login' | 'keyTeam'>;
+export type SignInFiles = Pick<SignInSeen, 'pin' | 'login' | 'userId' | 'keyTeam'>;
 
 /**
  * How a sign-in differs from the note: another login; the same login, no longer in the noted team; the same login,
@@ -140,7 +171,7 @@ export function asksIn(seen: Omit<SignInSeen, 'login'>): string | null {
  * noted team both pinned and as the team its runs act in (`runsIn`: a key acts in its own, whatever is pinned).
  */
 const noSignInSince = (files: SignInFiles, noted: Noted, marked: boolean): noted is SignIn =>
-    noted !== null && noted !== 'fresh' && !marked && files.pin === noted.team.id && runsIn(files) === noted.team.id && (files.login ?? noted.user) === noted.user;
+    noted !== null && noted !== 'fresh' && !marked && files.pin === noted.team.id && runsIn(files) === noted.team.id && (files.login === null || sameUser({ user: files.login, id: files.userId }, noted));
 
 /**
  * Whether a look takes a signed-in account as its note says and reads only its lists: no sign-in since, the noted team's
@@ -191,7 +222,7 @@ export function bindingOf(seen: SignInSeen, noted: Noted): Binding {
         return { ...unbound(null), choose: [...(seen.teams ?? [])] };
     }
     if (seen.login === null) return unbound(asksIn(seen) !== null ? null : 'unknown');
-    if (seen.login !== noted.user) return unbound('login');
+    if (!sameUser({ user: seen.login, id: seen.userId }, noted)) return unbound('login');
     if (own === null) return bound(seen.pin === null ? null : seen.pin === noted.team.id ? noted.team : { id: seen.pin, name: null });
     const kept = ownTeam(noted.team.id);
     if (kept === undefined) return unbound('left');
@@ -216,15 +247,15 @@ function orgOf(value: unknown): ReplyOrg | null | undefined {
     return typeof id === 'string' && idShape.test(id) && typeof name === 'string' ? { id, name } : undefined;
 }
 
-/** One entry's sign-in, or its team picked afresh; null for an entry of another shape. */
-function entryOf(note: Record<string, unknown>): SignIn | 'fresh' | null {
+/** One entry's sign-in, or its team picked afresh; null for an entry of another shape. A user's id of another shape is none. */
+function entryOf(note: Record<string, unknown>): NotedSignIn | 'fresh' | null {
     if (note['pick'] === 'fresh') return 'fresh';
     const team = objectOf(note['team']);
-    const [user, id, teamName] = [note['user'], team?.['id'], team?.['name']];
+    const [user, userId, id, teamName] = [note['user'], note['id'], team?.['id'], team?.['name']];
     if (typeof user !== 'string' || user === '' || typeof id !== 'string' || !idShape.test(id)) return null;
     if (typeof teamName !== 'string' && teamName !== null) return null;
     const org = orgOf(team?.['org']);
-    return { user, team: { id, name: teamName, ...(org === undefined ? {} : { org }) } };
+    return { user, ...(typeof userId === 'string' && idShape.test(userId) ? { id: userId } : {}), team: { id, name: teamName, ...(org === undefined ? {} : { org }) } };
 }
 
 /** The notes a file's text holds, each account once, the first kept; an entry of another shape is left out. */
@@ -254,7 +285,7 @@ export const accountNotesText = (notes: readonly AccountNote[]): string =>
             accounts: notes.map(({ type, name, noted }) =>
                 noted === 'fresh'
                     ? { type, name, pick: 'fresh' }
-                    : { type, name, user: noted.user, team: { id: noted.team.id, name: noted.team.name, ...(noted.team.org === undefined ? {} : { org: noted.team.org }) } },
+                    : { type, name, user: noted.user, ...(noted.id === undefined ? {} : { id: noted.id }), team: { id: noted.team.id, name: noted.team.name, ...(noted.team.org === undefined ? {} : { org: noted.team.org }) } },
             ),
         },
         null,
@@ -279,7 +310,7 @@ export const notedOf = (notes: readonly AccountNote[], account: AccountRef): Not
  * The notes with one account's entry written, or taken away (null), where they hold `over` for it; a look passes what it
  * read, so it writes over nothing another wrote meanwhile. Null where they hold something else.
  */
-export function withNote(notes: readonly AccountNote[], account: AccountRef, entry: SignIn | 'fresh' | null, over?: Noted): AccountNote[] | null {
+export function withNote(notes: readonly AccountNote[], account: AccountRef, entry: NotedSignIn | 'fresh' | null, over?: Noted): AccountNote[] | null {
     if (over !== undefined && !sameNoted(notedOf(notes, account), over)) return null;
     const others = notes.filter((each) => !(each.type === account.type && each.name === account.name));
     return entry === null ? others : [...others, { type: account.type, name: account.name, noted: entry }];

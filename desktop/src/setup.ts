@@ -44,14 +44,16 @@ import {
     readAccountNotes,
     sameSignIn,
     restsOnPin,
+    sameUser,
+    signInKept,
+    signInRead,
     takenAsNoted,
-    teamKept,
-    teamRead,
     withNote,
     writeAccountNotes,
     type BoundTeam,
     type Change,
     type Noted,
+    type NotedSignIn,
     type SignIn,
     type SignInFiles,
 } from './account-notes.ts';
@@ -267,6 +269,12 @@ export interface ReplyState {
 
 /** An account's mailboxes and LinkedIn accounts as one look read them, and their links still waiting. */
 type Lists = Pick<AccountState, 'senders' | 'absent' | 'unread' | 'pending' | 'pendingUnread'>;
+
+/** A sign-in as the card shows it, without what only the note keeps; null for none or a team picked afresh. */
+const shownSignIn = (noted: Noted): SignIn | null => (noted === null || noted === 'fresh' ? null : { user: noted.user, team: noted.team });
+
+/** The user Reply's whoami names. */
+const userOf = (said: ReplyWhoami) => ({ user: said.login, id: said.userId });
 
 /** How `Setup.#asked` holds an account and a team. */
 const askedKey = (account: AccountRef, team: string): string => JSON.stringify([account.type, account.name, team]);
@@ -687,8 +695,11 @@ export class Setup {
      * senders, and its box names the sender as the list does.
      */
     #listed: AccountState[] = [];
-    /** The team each account's profile pinned at the read that gave `#listed`, which Choose may write over. */
-    #listedPins = new Map<string, string | null>();
+    /**
+     * Each account's sign-in at the read that gave `#listed`: the team its profile pinned, which Choose may write over, and
+     * Reply's id of the user the card shows, which Choose and Keep it note beside the login.
+     */
+    #listedSignIns = new Map<string, { pin: string | null; userId: string | null }>();
     /** The profiles a route named at the last read, at any level; null where the routes were not read, or none was read. */
     #routed: Set<string> | null = null;
     /** How many reads of the setup have begun, and which of them gave `#listed` and `#routed`. */
@@ -1030,14 +1041,14 @@ export class Setup {
         const read = await Promise.all(
             (listing?.accounts ?? []).map(async (account) => {
                 const noted = notedOf(notes, account);
-                const { state, pin, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
+                const { state, pin, userId, backend } = await this.#readAccount(account, profiles?.available.includes(account.name) ?? false, noted);
                 const marked = {
                     ...state,
                     default: listing?.default != null && sameAccount(account, listing.default),
                     defaultFor: listing?.defaultFor.get(account.name) ?? [],
                     followed: listing?.followed === account.name,
                 };
-                return { account: marked, noted, pin, backend };
+                return { account: marked, noted, pin, userId, backend };
             }),
         );
         for (const each of read) {
@@ -1045,9 +1056,9 @@ export class Setup {
             if (elsewhere !== null) each.account = { ...each.account, nonProductionApi: elsewhere };
         }
         // Noted in the listing's order once every account is read, so the note is written in one order.
-        const accounts = read.map(({ account, noted }) => this.#noted(account, noted));
+        const accounts = read.map(({ account, noted, userId }) => this.#noted(account, noted, userId));
         // Kept once the read is whole: an act clicked while a read is going names the accounts the last one listed.
-        this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin }) => [account.name, pin])));
+        this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin, userId }) => [account.name, { pin, userId }])));
         const acting = actingOf(accounts);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
         const reply: ReplyState =
@@ -1082,7 +1093,7 @@ export class Setup {
      * beside it, where the profile points (`profile show`, which names the profile as its argument). A profile the CLI
      * does not hold is asked nothing.
      */
-    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; backend: ProfileBackend | null }> {
+    async #readAccount(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null; backend: ProfileBackend | null }> {
         const [read, backend] = await Promise.all([this.#readSignIn(account, held, noted), held ? this.#backend(account) : null]);
         return { ...read, backend };
     }
@@ -1094,21 +1105,21 @@ export class Setup {
      * asked in the team it acts in (`asksIn`); `bindingOf` decides once; and the account is bound where it says, who it is
      * asked in the team pinned where the gathering could not ask there. The pin is the one the account is left with.
      */
-    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null }> {
-        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: noted === 'fresh' ? null : noted, change: null };
-        if (!held) return { state: read, pin: null };
+    async #readSignIn(account: AccountRef, held: boolean, noted: Noted): Promise<{ state: AccountState; pin: string | null; userId: string | null }> {
+        const read: AccountState = { ...account, default: false, defaultFor: [], held, followed: false, signedIn: false, user: null, team: null, senders: [], absent: [], unread: [], pending: [], pendingUnread: [], notRead: [], lastSignIn: shownSignIn(noted), change: null };
+        if (!held) return { state: read, pin: null, userId: null };
         const marks = this.#marks;
         // A sign-in that could not be read is named, and is no sign-in: nothing is listed.
         const auth = await this.#pinned(account);
-        if (auth === null) return { state: { ...read, notRead: ['auth'] }, pin: null };
-        if (!auth.signedIn) return { state: read, pin: auth.team };
+        if (auth === null) return { state: { ...read, notRead: ['auth'] }, pin: null, userId: null };
+        if (!auth.signedIn) return { state: read, pin: auth.team, userId: null };
         const signedIn: AccountState = { ...read, signedIn: true, user: auth.user };
-        const files: SignInFiles = { pin: auth.team, login: auth.user, keyTeam: auth.keyTeam };
+        const files: SignInFiles = { pin: auth.team, login: auth.user, userId: auth.userId, keyTeam: auth.keyTeam };
         let listed: Lists | null = null;
         let refused = false;
         if (takenAsNoted(files, noted, this.#toCheck.has(account.name), (team) => this.#asked.has(askedKey(account, team)))) {
             const { lists, outOfTeam } = await this.#lists(account);
-            if (!outOfTeam) return { state: { ...signedIn, ...lists, user: noted.user, team: noted.team }, pin: auth.team };
+            if (!outOfTeam) return { state: { ...signedIn, ...lists, user: noted.user, team: noted.team }, pin: auth.team, userId: noted.id ?? auth.userId };
             [listed, refused] = [lists, true];
         }
         const teams = await this.#teams(account);
@@ -1119,10 +1130,12 @@ export class Setup {
         const gathered = { ...files, refused, teams };
         const askedIn = asksIn(gathered);
         const who = askedIn === null ? undefined : await this.#whoami(account, askedIn);
-        // Reply naming another login than noted gives the sign-in away, and the rule decides it as that login's.
-        const givenAway = who != null && noted !== null && noted !== 'fresh' && who.login !== noted.user;
-        const login = givenAway ? who.login : (files.login ?? who?.login ?? null);
-        const binding = bindingOf({ ...gathered, login }, noted);
+        // Who it is: Reply's answer where it names the user the Reply CLI's files hold, by whatever address, or they hold
+        // none, or it names another user than noted, which gives the sign-in away; the files' otherwise.
+        const fromFiles = files.login === null ? null : { user: files.login, id: files.userId };
+        const givenAway = who != null && noted !== null && noted !== 'fresh' && !sameUser(userOf(who), noted);
+        const [login, userId] = who != null && (givenAway || fromFiles === null || sameUser(userOf(who), fromFiles)) ? [who.login, who.userId] : [files.login, files.userId];
+        const binding = bindingOf({ ...gathered, login, userId }, noted);
         let [team, pin, said] = [binding.team, auth.team, who];
         if (binding.bind !== null) {
             team = await this.#bind(account, binding.bind, auth.team, actsIn(gathered));
@@ -1131,19 +1144,21 @@ export class Setup {
                 if (team.id !== askedIn) said = await this.#whoami(account, team.id);
             }
         }
-        const user = login ?? said?.login ?? null;
-        // Reply naming another login than the one decided, as a terminal signs in meanwhile, is left to the next look.
-        const later = said != null && user !== null && said.login !== user;
+        // Reply's answer for this sign-in's user; one for another user, as a terminal signs in meanwhile, is left to the
+        // next look.
+        const answer = said != null && (login === null || sameUser(userOf(said), { user: login, id: userId })) ? said : null;
+        const later = said != null && answer === null;
+        const [user, id] = answer !== null ? [answer.login, answer.userId] : [login, userId];
         const notRead: AccountState['notRead'] = [...(teams === null ? ['teams' as const] : []), ...(user === null && said !== undefined ? ['login' as const] : [])];
         // Checked by a look that began after the mark, that bound it with nothing changed and nothing unread; a change is
         // checked again at every look until it is answered.
         if (binding.change !== null || later) this.#markToCheck(account);
         else if (team !== null && user !== null && teams !== null) this.#checked(account, marks);
-        const now: AccountState = { ...signedIn, user, team: team === null ? null : namedBy(team, later ? null : (said ?? null)), change: binding.change, notRead };
-        if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin };
-        if (!binding.lists) return { state: now, pin };
+        const now: AccountState = { ...signedIn, user, team: team === null ? null : namedBy(team, answer), change: binding.change, notRead };
+        if (binding.choose !== null) return { state: { ...now, unread: [...replyChannels], teams: binding.choose }, pin, userId: id };
+        if (!binding.lists) return { state: now, pin, userId: id };
         // The account's own read made before it was decided stands for the same pin.
-        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin };
+        return { state: { ...now, ...(listed !== null && binding.bind === null ? listed : (await this.#lists(account)).lists) }, pin, userId: id };
     }
 
     /** Marks the account for the next look to check (`#toCheck`). */
@@ -1160,31 +1175,31 @@ export class Setup {
 
     /**
      * An account as the desktop's note says it was (`account-notes.ts`). One signed in and bound, with its login and no
-     * change, is noted now where nothing is noted for it, or its team is picked afresh; the noted sign-in is noted again
-     * where this look read of its team what the note does not hold (`teamRead`), and shows its team as the note keeps it
-     * (`teamKept`). Where another look wrote the note meanwhile, this one decides nothing of it: the card names what the note
-     * holds now, and the account is marked for the next look, whose `bindingOf` reads it against that note. A team picked
-     * afresh is set aside no longer once it is bound, whether or not its login is known.
+     * change, is noted now, with Reply's id of its user (`userId`), where nothing is noted for it, or its team is picked
+     * afresh; the noted sign-in is noted again where this look read of it what the note does not hold (`signInRead`), and
+     * shows it as the note keeps it (`signInKept`). Where another look wrote the note meanwhile, this one decides nothing
+     * of it: the card names what the note holds now, and the account is marked for the next look, whose `bindingOf` reads
+     * it against that note. A team picked afresh is set aside no longer once it is bound, whether or not its login is known.
      */
-    #noted(account: AccountState, noted: Noted): AccountState {
+    #noted(account: AccountState, noted: Noted, userId: string | null): AccountState {
         if (!account.signedIn || account.change !== null || account.team === null) return account;
         if (account.user === null) {
             if (noted === 'fresh') this.#note(account, null, 'look', noted);
             return account;
         }
-        let now: SignIn = { user: account.user, team: account.team };
+        let now: NotedSignIn = { user: account.user, ...(userId === null ? {} : { id: userId }), team: account.team };
         if (noted !== null && noted !== 'fresh') {
             if (!sameSignIn(noted, now)) return account;
-            const team = teamKept(noted.team, now.team);
-            if (!teamRead(noted.team, now.team)) return { ...account, team };
-            now = { ...now, team };
+            const kept = signInKept(noted, now);
+            if (!signInRead(noted, now)) return { ...account, user: kept.user, team: kept.team };
+            now = kept;
         }
         const kept = this.#note(account, now, 'look', noted);
-        const shown = { ...account, team: now.team };
+        const shown = { ...account, user: now.user, team: now.team };
         if (kept === undefined) return shown;
         if (kept === null || kept === 'fresh') return { ...shown, lastSignIn: null };
         if (!sameSignIn(kept, now)) this.#markToCheck(account);
-        return { ...shown, lastSignIn: kept };
+        return { ...shown, lastSignIn: shownSignIn(kept) };
     }
 
     /**
@@ -1193,7 +1208,7 @@ export class Setup {
      * the file still holds that; otherwise what another look wrote meanwhile is the answer. What is noted for the account
      * after it; undefined where the note could not be written.
      */
-    #note(account: AccountRef, entry: SignIn | 'fresh' | null, moment: 'look' | 'choose' | 'keep' | 'remove', over?: Noted): Noted | undefined {
+    #note(account: AccountRef, entry: NotedSignIn | 'fresh' | null, moment: 'look' | 'choose' | 'keep' | 'remove', over?: Noted): Noted | undefined {
         const file = this.#deps.paths.replyAccountNotes;
         const notes = readAccountNotes(file);
         const next = withNote(notes, account, entry, over);
@@ -1320,12 +1335,12 @@ export class Setup {
      * Keeps a read's accounts as the ones acts are checked against, unless a read that began after it gave them already: an
      * older read that ends last answers its own asker and changes nothing here.
      */
-    #keepListing(begun: number, accounts: AccountState[], routed: Set<string> | null, pins: Map<string, string | null> = new Map()): void {
+    #keepListing(begun: number, accounts: AccountState[], routed: Set<string> | null, signIns: Map<string, { pin: string | null; userId: string | null }> = new Map()): void {
         if (begun < this.#listedBy) return;
         this.#listedBy = begun;
         this.#listed = accounts;
         this.#routed = routed;
-        this.#listedPins = pins;
+        this.#listedSignIns = signIns;
     }
 
     #startCheck(): 'pending' | 'ended' {
@@ -1711,11 +1726,11 @@ export class Setup {
         const offered = account.teams ?? [];
         const team = typeof teamId === 'string' ? offered.find((each) => each.id === teamId) : undefined;
         if (team === undefined) return Promise.resolve(refusal(accountSentences.teamNotOffered));
-        const seen = this.#listedPins.get(account.name) ?? null;
+        const seen = this.#listedSignIns.get(account.name) ?? { pin: null, userId: null };
         return this.#acting(async () => {
             const chosen = await this.#writingConfig(async (): Promise<ReplyRefusal | null> => {
                 const pinned = (await this.#pinned(account))?.team ?? null;
-                if (pinned !== seen && offered.some((each) => each.id === pinned)) return refusal(accountSentences.teamPinned, true);
+                if (pinned !== seen.pin && offered.some((each) => each.id === pinned)) return refusal(accountSentences.teamPinned, true);
                 const result = await this.#run('reply', 'team use', [...accountArguments(account), 'team', 'use', team.id, '--json'], { timeoutMs: replyActLimitMs });
                 this.#deps.log.info('reply_team_chosen', { Exit: result.exit });
                 if (result.exit === 0) return null;
@@ -1725,12 +1740,14 @@ export class Setup {
                 return cliRefusal(result, accountSentences.teamNotChosen);
             });
             if (chosen !== null) return chosen;
-            const answer = await this.#whoami(account, team.id);
-            const login = account.user ?? answer?.login ?? null;
-            const noted = this.#note(account, login === null ? null : { user: login, team: namedBy(team, answer?.login === login ? answer : null) }, 'choose');
+            const said = await this.#whoami(account, team.id);
+            // Reply's answer for the user the card showed, by whatever address, or for a sign-in it showed none for.
+            const answer = said !== null && (account.user === null || sameUser(userOf(said), { user: account.user, id: seen.userId })) ? said : null;
+            const [user, id] = answer !== null ? [answer.login, answer.userId] : [account.user, seen.userId];
+            const noted = this.#note(account, user === null ? null : { user, ...(id === null ? {} : { id }), team: namedBy(team, answer) }, 'choose');
             // Named and noted, the pick is the check of the sign-in made on the card before it: the look after asks Reply
             // nothing of it again.
-            if (login !== null && noted !== undefined) this.#checked(account, this.#marks);
+            if (user !== null && noted !== undefined) this.#checked(account, this.#marks);
             return { done: true };
         });
     }
@@ -1810,7 +1827,8 @@ export class Setup {
         if (account === null) return Promise.resolve(refusal(accountSentences.badAccount));
         const { change, user, team } = account;
         if (change === null || (change === 'team' && (user === null || team === null))) return Promise.resolve(refusal(accountSentences.nothingToKeep));
-        const kept: SignIn | 'fresh' = change === 'team' ? { user: user!, team: team! } : 'fresh';
+        const id = this.#listedSignIns.get(account.name)?.userId ?? null;
+        const kept: NotedSignIn | 'fresh' = change === 'team' ? { user: user!, ...(id === null ? {} : { id }), team: team! } : 'fresh';
         return this.#oneAct<ReplyDone | ReplyRefusal>(
             () => refusal(senderSentences.busy),
             async () => (this.#note(account, kept, 'keep') === undefined ? refusal(accountSentences.notKept) : this.#announced({ done: true })),

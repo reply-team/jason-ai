@@ -88,6 +88,10 @@ interface ReplyWorld {
      * organization: absent for a Reply that does not.
      */
     whoami?: Record<string, { teamName?: string | null; orgId?: number | null; orgName?: string | null }>;
+    /** Reply's id of each user, by the login the Reply CLI stored; absent, a number of the login's own. */
+    ids?: Record<string, number>;
+    /** The address Reply names a user by now, by the login the Reply CLI stored, as after the person changed it at Reply. */
+    renamed?: Record<string, string>;
 }
 
 /** A bench whose Reply CLI holds `world`, read back as the CLI left it. */
@@ -299,15 +303,18 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     // The team a sign-in is bound to is the top-level `team_id`, the team its runs send, never the team Reply's whoami gave
     // at the sign-in (`user.team_id`); one that is no positive whole number is none. A key acts in its own team whatever
     // is asked: for a key (`method` `api_key`), the team Reply's whoami gave at its sign-in is that team; a browser's has none.
+    // The user's id is Reply's, which stays when the person changes the login's address; one of another shape is none.
     assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'api_key', user: { id: 7, username: 'someone@example.com', team_id: 3 } })), {
         signedIn: true,
         user: 'someone@example.com',
+        userId: '7',
         team: null,
         keyTeam: '3',
     });
-    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', method: 'oauth', user: { username: 'someone@example.com', team_id: 3 }, team_id: 9 })), {
+    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', method: 'oauth', user: { id: '7', username: 'someone@example.com', team_id: 3 }, team_id: 9 })), {
         signedIn: true,
         user: 'someone@example.com',
+        userId: null,
         team: '9',
         keyTeam: null,
     });
@@ -315,8 +322,8 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
         const read = parseReplyAuth(JSON.stringify({ authenticated: true, profile: 'work', method: 'api_key', user: { username: 'someone@example.com', team_id: team }, team_id: team }));
         assert.deepEqual([read.team, read.keyTeam], [null, null], JSON.stringify(team));
     }
-    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, team: null, keyTeam: null });
-    assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, team: null, keyTeam: null });
+    assert.deepEqual(parseReplyAuth(JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, userId: null, team: null, keyTeam: null });
+    assert.deepEqual(parseReplyAuth('Not signed in.'), { signedIn: false, user: null, userId: null, team: null, keyTeam: null });
     assert.deepEqual(parseReplySenders(JSON.stringify({ items: [{ id: 5, channel: 'email', name: 'Sales', address: 'sales@example.com', owner_user_id: 7, status: 'active', reply_status: 'connected' }] })), [
         { id: '5', channel: 'email', name: 'Sales', address: 'sales@example.com', status: 'connected' },
     ], "the state is Reply's own word, reply_status, never the CLI's summary of it");
@@ -335,8 +342,8 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     // is a read that did not answer: a usage error (exit 2), a store it cannot read (exit 1, nothing on stdout), the time
     // limit (-1), or what is not that object.
     const auth = (exit: number, stdout: string) => readReplyAuth({ exit, stdout });
-    assert.deepEqual(auth(0, JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'oauth', user: { id: 7, username: 'someone@example.com', team_id: 3 }, team_id: 3 })), { signedIn: true, user: 'someone@example.com', team: '3', keyTeam: null });
-    assert.deepEqual(auth(1, JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, team: null, keyTeam: null });
+    assert.deepEqual(auth(0, JSON.stringify({ authenticated: true, profile: 'work', source: 'store', method: 'oauth', user: { id: 7, username: 'someone@example.com', team_id: 3 }, team_id: 3 })), { signedIn: true, user: 'someone@example.com', userId: '7', team: '3', keyTeam: null });
+    assert.deepEqual(auth(1, JSON.stringify({ authenticated: false, profile: 'default' })), { signedIn: false, user: null, userId: null, team: null, keyTeam: null });
     for (const [exit, stdout] of [[2, ''], [2, JSON.stringify({ authenticated: false, profile: 'default' })], [1, ''], [-1, ''], [0, ''], [0, 'Not signed in.'], [0, '{}'], [0, '{"authenticated":"yes"}'], [0, 'null'], [0, '[]']] as const) {
         assert.equal(auth(exit, stdout), null, `${exit} ${stdout}`);
     }
@@ -370,21 +377,22 @@ test('Reply’s answers are read in the shapes reply-cli and the runtime print, 
     for (const [exit, stdout] of [[1, listedTeams([{ team_id: 5, team_name: 'x' }])], [0, listedTeams([])], [0, listedTeams([{ team_id: 0 }])], [0, '{}'], [0, 'not json'], [0, 'null']] as const) {
         assert.equal(teams(exit, stdout), null, `${exit} ${stdout}`);
     }
-    // Who a sign-in is, as `auth whoami --json` prints Reply's answer as it came: the login and the team it answered in;
-    // and where Reply's answer carries them, the team's name and its organization, null where there is none, a name held
+    // Who a sign-in is, as `auth whoami --json` prints Reply's answer as it came: the login, Reply's id of the user and the
+    // team it answered in; and where Reply's answer carries them, the team's name and its organization, null where there is none, a name held
     // as a team's is. A member the answer does not carry is no part of what was read: a Reply that has none of them.
     const whoami = (exit: number, body: unknown) => readReplyWhoami({ exit, stdout: JSON.stringify(body) });
-    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3 }), { login: 'ada@example.test', team: '3' });
-    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3, teamName: 'Default Team', orgId: null, orgName: null }), { login: 'ada@example.test', team: '3', teamName: 'Default Team', org: null });
+    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3 }), { login: 'ada@example.test', userId: '7', team: '3' });
+    assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 3, teamName: 'Default Team', orgId: null, orgName: null }), { login: 'ada@example.test', userId: '7', team: '3', teamName: 'Default Team', org: null });
     assert.deepEqual(whoami(0, { userId: 7, username: 'ada@example.test', teamId: 9, teamName: ' Made-up\u0007Nine ', orgId: 4242, orgName: `${'O'.repeat(101)}​` }), {
         login: 'ada@example.test',
+        userId: '7',
         team: '9',
         teamName: 'Made-up Nine',
         org: { id: '4242', name: 'O'.repeat(100) },
     });
-    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, teamName: null, orgId: 0, orgName: 'Made-up Org' }), { login: 'ada@example.test', team: '9', teamName: null }, 'an organization of another shape is not read');
-    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: '9', orgId: 4242 }), { login: 'ada@example.test', team: null }, 'nor one half said');
-    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, orgId: 4242, orgName: null }), { login: 'ada@example.test', team: '9' }, 'nor one half null');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, teamName: null, orgId: 0, orgName: 'Made-up Org' }), { login: 'ada@example.test', userId: null, team: '9', teamName: null }, 'an organization of another shape is not read');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: '9', orgId: 4242 }), { login: 'ada@example.test', userId: null, team: null }, 'nor one half said');
+    assert.deepEqual(whoami(0, { username: 'ada@example.test', teamId: 9, orgId: 4242, orgName: null }), { login: 'ada@example.test', userId: null, team: '9' }, 'nor one half null');
     for (const [exit, body] of [[0, { userId: 7, teamId: 3 }], [0, { username: '' }], [0, null], [2, { username: 'ada@example.test' }]] as const) {
         assert.equal(whoami(exit, body), null, `${exit} ${JSON.stringify(body)}`);
     }
@@ -1096,6 +1104,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         seats: { 'ada@example.test': [3, 6], 'bea@example.test': [5, 9], 'cy@example.test': [4] },
         teams: { '3': 'Made-up Three', '4': 'Made-up Four', '6': 'Made-up Six', '9': 'Made-up Nine' },
         lists: { 'cy@example.test#4': { email: [mailbox] }, 'ada@example.test#6': { email: [mailbox] } },
+        ids: { 'ada@example.test': 41, 'bea@example.test': 42, 'cy@example.test': 43 },
     });
     const setup = new Setup({ ...setupDeps(b, log), confirm: () => Promise.resolve(true) });
     const file = b.paths.replyAccountNotes;
@@ -1107,9 +1116,10 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     const bea9 = { user: 'bea@example.test', team: { id: '9', name: 'Made-up Nine' } };
     const cy4 = { user: 'cy@example.test', team: { id: '4', name: 'Made-up Four' } };
     const world = (change: (current: ReplyWorld) => ReplyWorld) => writeFileSync(b.env['STUB_REPLY_WORLD']!, JSON.stringify(change(b.world())));
-    // The first look notes each account signed in and bound; one signed out, or never signed in, has nothing noted.
+    // The first look notes each account signed in and bound, with Reply's id of its user; one signed out, or never signed
+    // in, has nothing noted.
     assert.deepEqual(await seen(), { default: { last: ada3, change: null }, outbound: { last: bea9, change: null }, spare: { last: null, change: null } });
-    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3 }, { type: 'reply', name: 'outbound', ...bea9 }] });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '41' }, { type: 'reply', name: 'outbound', ...bea9, id: '42' }] });
     assert.deepEqual(log.lines.filter((line) => line.name === 'reply_account_noted').map((line) => line.fields), [{ Moment: 'look', Written: true }, { Moment: 'look', Written: true }]);
     // Signed out in a terminal: who it was last signed in as stays.
     world((current) => ({ ...current, credentials: { default: 'ada@example.test' } }));
@@ -1153,7 +1163,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     await setup.signOut(outbound);
     assert.deepEqual((await seen())['outbound'], { last: cy4, change: null });
     await setup.removeAccount(outbound);
-    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3 }] });
+    assert.deepEqual(noted(), { accounts: [{ type: 'reply', name: 'default', ...ada3, id: '41' }] });
     assert.deepEqual(Object.keys(await seen()), ['default', 'spare']);
     // The note never decides which accounts there are: one it names that the Reply CLI holds not, and no route names, is
     // no account. A note that cannot be read is no note: the next look finds nothing noted, and notes again.
@@ -1166,7 +1176,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     // Two looks overlap, both having found nothing noted: the one that ends last answers the note the other wrote, writes
     // nothing over it, though it read another pin, and decides nothing of it: the next look checks the account against
     // that note, and finds it so.
-    const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3, 6] } });
+    const overlapping = replyBench(t, { profiles: { default: { team_id: 3 } }, credentials: { default: 'ada@example.test' }, seats: { 'ada@example.test': [3, 6] }, ids: { 'ada@example.test': 41 } });
     let release: () => void = () => undefined;
     let holding = false;
     const slow: Programs = {
@@ -1191,7 +1201,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     const late = (await older).accounts?.accounts[0];
     const ada6 = { user: 'ada@example.test', team: { id: '6', name: '' } };
     assert.deepEqual([newer?.lastSignIn, late?.lastSignIn, late?.change], [ada6, ada6, null]);
-    assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6 }] });
+    assert.deepEqual(JSON.parse(readFileSync(overlapping.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'default', ...ada6, id: '41' }] });
     from = overlapping.record().length;
     const next = (await looks.status()).accounts?.accounts[0];
     assert.deepEqual([next?.team, next?.change, runsAfter(overlapping, from, 'reply').filter((run) => run.includes('team list'))], [ada6.team, null, ['--profile default team list --json']]);
@@ -1204,6 +1214,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         seats: { 'bea@example.test': [5], 'cy@example.test': [4, 5] },
         teams: { '4': 'Made-up Four', '5': 'Made-up Five' },
         browser: 'cy@example.test',
+        ids: { 'cy@example.test': 43 },
     });
     writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
     mkdirSync(dirname(unnamed.paths.replyAccountNotes), { recursive: true });
@@ -1223,7 +1234,7 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
     assert.deepEqual(await webSetup.keepChange(web), { done: true });
     assert.deepEqual(await webSeen(), { user: null, team: null, last: null, change: null, teams: ['4', '5'] });
     assert.deepEqual(await webSetup.chooseTeam(web, '5'), { done: true });
-    assert.deepEqual(JSON.parse(readFileSync(unnamed.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'web', ...cy5 }] }, 'the pick is noted at once');
+    assert.deepEqual(JSON.parse(readFileSync(unnamed.paths.replyAccountNotes, 'utf8')), { accounts: [{ type: 'reply', name: 'web', ...cy5, id: '43' }] }, 'the pick is noted at once');
     assert.deepEqual(await webSeen(), { ...cy5, last: cy5, change: null, teams: undefined });
     writeFileSync(unnamed.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...unnamed.world(), profiles: { web: { team_id: 4 } } }));
     assert.deepEqual(await webSeen(), { user: 'cy@example.test', team: { id: '4', name: 'Made-up Four' }, last: cy5, change: 'team', teams: undefined });
@@ -1341,6 +1352,28 @@ test('the desktop’s note holds each Reply account’s one login and team, and 
         ['another login the Reply CLI does not name, kept, bound while Reply cannot say who it is', { ...room, credentials: { web: { login: dee, unnamed: true } } }, bea, none, null, [`? - [] unlisted unknown last ${bea} 5 pin 5`, `? - [] unlisted unknown last ${bea} 5 pin 5`, '? 7 [] same last - pin 7 login unread', '? 7 [] same last - pin 7 login unread', 'team use ×1'], { env: { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) }, count: 'team use' }],
     ];
     for (const [name, world, noted, act, pick, expected, options] of cases) assert.deepEqual(await checked(world, noted, act, pick, options), expected, name);
+    // A login is a Reply user. Reply naming the noted user by another address, as after the person changed it at Reply, is
+    // no change: from the next start, which asks Reply who it is, the card names the new address with nothing said, and
+    // the note takes it beside the same id. Another user signed in in a terminal, whom Reply names otherwise too, is a
+    // change said by the address Reply names, and Keep it remembers what the card showed.
+    const [beaNew, cyNew] = ['bea.new@example.test', 'cy.new@example.test'];
+    const renamedAt = replyBench(t, { profiles: { web: { team_id: 5 } }, credentials: { web: bea }, seats: { [bea]: [5], [cy]: [5] }, teams: { '5': 'Made-up Five' }, ids: { [bea]: 42, [cy]: 43 } });
+    const atStart = async (setup = setupOn(renamedAt)) => {
+        const card = (await setup.status()).accounts?.accounts.find((one) => one.name === 'web');
+        return { user: card?.user, team: card?.team?.id, change: card?.change, last: card?.lastSignIn?.user };
+    };
+    const notedWeb = () => (JSON.parse(readFileSync(renamedAt.paths.replyAccountNotes, 'utf8')) as { accounts: unknown[] }).accounts;
+    const rename = (to: Partial<ReplyWorld>) => writeFileSync(renamedAt.env['STUB_REPLY_WORLD']!, JSON.stringify({ ...renamedAt.world(), ...to }));
+    assert.deepEqual(await atStart(), { user: bea, team: '5', change: null, last: bea });
+    rename({ renamed: { [bea]: beaNew } });
+    for (const start of ['the next start', 'a start after it']) assert.deepEqual(await atStart(), { user: beaNew, team: '5', change: null, last: beaNew }, start);
+    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: beaNew, id: '42', team: { id: '5', name: 'Made-up Five' } }]);
+    rename({ credentials: { web: cy }, renamed: { [bea]: beaNew, [cy]: cyNew } });
+    const keepingRenamed = setupOn(renamedAt);
+    assert.deepEqual(await atStart(keepingRenamed), { user: cyNew, team: undefined, change: 'login', last: beaNew });
+    assert.deepEqual(await keepingRenamed.keepChange(web), { done: true });
+    assert.deepEqual(await atStart(keepingRenamed), { user: cyNew, team: '5', change: null, last: cyNew });
+    assert.deepEqual(notedWeb(), [{ type: 'reply', name: 'web', user: cyNew, id: '43', team: { id: '5', name: 'Made-up Five' } }]);
     // A look that began before a sign-in on the card does not count as its check: the next look still checks it.
     const racing = replyBench(t, { ...room, credentials: { web: bea } });
     writeInstallationSettings(racing, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'web' } } } });
@@ -1456,6 +1489,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
         teams: { '5': 'Made-up Five', '9': 'Made-up Nine' },
         lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#5': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
         browser: 'bea@example.test',
+        ids: { 'ada@example.test': 41, 'bea@example.test': 42 },
     });
     const accountOf = async (setup: Setup, name: string) => (await setup.status()).accounts?.accounts.find((each) => each.name === name);
     const bound = (account: Awaited<ReturnType<typeof accountOf>>) => ({ team: account?.team, teams: account?.teams, notRead: account?.notRead, ids: account?.senders.map((each) => each.id), unread: account?.unread });
@@ -1522,9 +1556,9 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(bound(await accountOf(setupOn(unread), 'outbound')), { team: { id: '9', name: null }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [] });
     const notedUnread = readFileSync(unread.paths.replyAccountNotes, 'utf8');
     const notedAs = (text: string, name: string) => (JSON.parse(text) as { accounts: { name: string }[] }).accounts.find((each) => each.name === name);
-    assert.deepEqual(notedAs(notedUnread, 'outbound'), { type: 'reply', name: 'outbound', user: 'bea@example.test', team: { id: '9', name: null } });
+    assert.deepEqual(notedAs(notedUnread, 'outbound'), { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '42', team: { id: '9', name: null } });
     // So is a key's, though its team is known without them: its own.
-    assert.deepEqual(notedAs(notedUnread, 'keyed'), { type: 'reply', name: 'keyed', user: 'bea@example.test', team: { id: '5', name: null } });
+    assert.deepEqual(notedAs(notedUnread, 'keyed'), { type: 'reply', name: 'keyed', user: 'bea@example.test', id: '42', team: { id: '5', name: null } });
     // While they still cannot be read, the noted login in its noted pin is taken as noted: nothing rebound, nothing said.
     const stillUnread = (await setupOn(unread).status()).accounts?.accounts.find((each) => each.name === 'outbound');
     assert.deepEqual({ ...bound(stillUnread), change: stillUnread?.change }, { team: { id: '9', name: null }, teams: undefined, notRead: ['teams'], ids: ['34'], unread: [], change: null });
@@ -1653,6 +1687,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
         teams: { '9': 'Made-up Nine' },
         lists: { 'ada@example.test#3': { email: [mailbox] }, 'bea@example.test#9': { linkedin: [linkedIn] } },
         whoami: { '3': { teamName: 'Default Team' }, '9': { teamName: 'Made-up Nine Too', orgId: 4242, orgName: 'Made-up Org' } },
+        ids: { 'ada@example.test': 41, 'bea@example.test': 42 },
     };
     const default3 = { id: '3', name: 'Default Team', org: null };
     const nine = { id: '9', name: 'Made-up Nine', org: { id: '4242', name: 'Made-up Org' } };
@@ -1668,8 +1703,8 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: bothAsked });
     const orgNoted = readFileSync(carried.paths.replyAccountNotes, 'utf8');
     assert.deepEqual([notedAs(orgNoted, 'default'), notedAs(orgNoted, 'outbound')], [
-        { type: 'reply', name: 'default', user: 'ada@example.test', team: default3 },
-        { type: 'reply', name: 'outbound', user: 'bea@example.test', team: nine },
+        { type: 'reply', name: 'default', user: 'ada@example.test', id: '41', team: default3 },
+        { type: 'reply', name: 'outbound', user: 'bea@example.test', id: '42', team: nine },
     ]);
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'the next look');
     assert.deepEqual(await looked(carried, setupOn(carried, orgLog)), { teams: [['default', default3], ['outbound', nine]], whoami: [] }, 'a desktop started again');
@@ -1679,7 +1714,7 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     from = carried.record().length;
     assert.deepEqual(await carriedSetup.chooseTeam({ type: 'reply', name: 'picking' }, '9'), { done: true });
     assert.deepEqual(runsAfter(carried, from, 'reply').filter((run) => run.includes('auth whoami')), ['--profile picking auth whoami --json']);
-    assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', team: nine });
+    assert.deepEqual(notedAs(readFileSync(carried.paths.replyAccountNotes, 'utf8'), 'picking'), { type: 'reply', name: 'picking', user: 'bea@example.test', id: '42', team: nine });
     assert.deepEqual(await looked(carried, carriedSetup), { teams: [['default', default3], ['outbound', nine], ['picking', nine]], whoami: [] }, 'the look after Choose');
     // Another of the login's teams pinned in a terminal: the change names the new team with its organization too. Each look
     // while the change waits checks the sign-in, so Reply is asked once at each, in that team; the answer decides nothing.

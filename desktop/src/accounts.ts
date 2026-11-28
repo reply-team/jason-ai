@@ -171,6 +171,8 @@ export interface ReplyOrg {
  */
 export interface ReplyWhoami {
     login: string;
+    /** Reply's id of the user, which stays when the person changes the login's address; null where it named none. */
+    userId: string | null;
     /** The team Reply answered in, the one the sign-in's runs act in; null where it named none. */
     team: string | null;
     /** The team's name; null where Reply gives it none. */
@@ -197,7 +199,7 @@ export function readReplyWhoami(result: { exit: number; stdout: string }): Reply
     }
     const login = raw?.['username'];
     if (raw === null || typeof login !== 'string' || login === '') return null;
-    const said: ReplyWhoami = { login, team: replyId(raw['teamId']) };
+    const said: ReplyWhoami = { login, userId: replyId(raw['userId']), team: replyId(raw['teamId']) };
     const teamName = raw['teamName'];
     if (teamName === null || typeof teamName === 'string') said.teamName = teamName === null || replyName(teamName) === '' ? null : replyName(teamName);
     const [orgId, orgName] = [raw['orgId'], raw['orgName']];
