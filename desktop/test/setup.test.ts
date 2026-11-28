@@ -1764,6 +1764,23 @@ test('every signed-in Reply account is bound to one team, which it shows: a prof
     const unchangedSetup = new Setup({ ...setupDeps(unchanged), programs: switching(unchanged, 'outbound') });
     assert.deepEqual(await cardOf(unchangedSetup, 'outbound'), { user: 'cy@example.test', team: null, change: 'login' }, 'at an unchanged look');
     assert.deepEqual(notedTeam(unchanged, 'outbound'), unnamedNine);
+    // A whoami that fails takes nothing away and says nothing: after a sign-in the team keeps the organization the note
+    // holds, the account bound and listed; an organization not known is not asked again in that run.
+    const failing = replyBench(t, { ...orgWorld, credentials: { default: 'ada@example.test' }, browser: 'bea@example.test' }, { STUB_REPLY_WHOAMI: JSON.stringify({ code: 'reply.unavailable' }) });
+    mkdirSync(dirname(failing.paths.replyAccountNotes), { recursive: true });
+    writeFileSync(failing.paths.replyAccountNotes, JSON.stringify({ accounts: [{ type: 'reply', name: 'default', user: 'ada@example.test', team: { id: '3', name: 'Default Team' } }, { type: 'reply', name: 'outbound', user: 'bea@example.test', team: nine }] }));
+    const failingSetup = setupOn(failing);
+    const failed = async () => {
+        const since = failing.record().length;
+        const cards = Object.fromEntries(((await failingSetup.status()).accounts?.accounts ?? []).map((each) => [each.name, [each.signedIn, each.team, each.senders.map((sender) => sender.id), each.notRead, each.change]]));
+        return { cards, whoami: runsAfter(failing, since, 'reply').filter((run) => run.includes('auth whoami')) };
+    };
+    const ada = [true, { id: '3', name: 'Default Team' }, ['12'], [], null];
+    assert.deepEqual(await failed(), { cards: { default: ada, outbound: [false, null, [], [], null] }, whoami: ['--profile default auth whoami --json'] }, 'the first look');
+    await failingSetup.connectReply({ type: 'reply', name: 'outbound' });
+    assert.deepEqual(await failed(), { cards: { default: ada, outbound: [true, nine, ['34'], [], null] }, whoami: ['--profile outbound auth whoami --json'] }, 'after the sign-in');
+    assert.deepEqual(await failed(), { cards: { default: ada, outbound: [true, nine, ['34'], [], null] }, whoami: [] }, 'the next look');
+    assert.deepEqual(notedTeam(failing, 'outbound'), nine);
     const { whoami: _carried, ...uncarriedWorld } = orgWorld;
     const plain = replyBench(t, uncarriedWorld);
     const asToday = [['default', { id: '3', name: '' }], ['outbound', { id: '9', name: 'Made-up Nine' }]];

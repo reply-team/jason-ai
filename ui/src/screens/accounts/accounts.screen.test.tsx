@@ -908,10 +908,10 @@ describe('Reply accounts, one card per profile', () => {
                     lastSignIn: bea9,
                     change: 'team',
                 }),
-                // Bound, and its login could not be read.
+                // Bound, and its login could not be read; its organization one Reply gives no name: no brackets.
                 replyAccount('unnamed', {
                     signedIn: true,
-                    team: { id: '6', name: 'Made-up Six' },
+                    team: { id: '6', name: 'Made-up Six', org: { id: '7', name: '' } },
                     notRead: ['login'],
                 }),
             ]),
