@@ -2126,6 +2126,15 @@ test('the members a page of an earlier version reads are the default account’s
         belowMinimum: null,
         startCheck: 'pending',
     });
+    // A Reply default that names a team beside the profile sends in that team: the plugin uses the account's sign-in only
+    // where it is the team the account is bound to. The account is the default's all the same.
+    for (const [team, wired] of [['5', false], ['9', true]] as const) {
+        const teamed = replyBench(t, { profiles: { outbound: { team_id: 9 } }, credentials: { outbound: 'ada@example.test' }, seats: { 'ada@example.test': [9, 5] } });
+        writeInstallationSettings(teamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: { profile: 'outbound', team_id: team } } } });
+        const { reply: teamedReply, accounts: teamedAccounts } = await setupOn(teamed).status();
+        const card = teamedAccounts?.accounts.find((each) => each.name === 'outbound');
+        assert.deepEqual([teamedReply.wired, teamedReply.user, card?.default, card?.team?.id], [wired, 'ada@example.test', true, '9'], team);
+    }
     // A Reply default that names no profile is the account of the profile the Reply CLI is set to, and names it.
     const unnamed = bench(t, { programs: ['reply'] });
     writeInstallationSettings(unnamed, { Plugins: { Grants: { reply: { Exec: ['reply'] } } }, Routes: { Default: { Plugin: 'reply', Binding: {} } } });

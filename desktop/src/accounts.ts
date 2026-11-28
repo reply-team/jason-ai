@@ -239,6 +239,12 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 /** The profile a binding of a route to `reply` names, a team beside it no part of it; null where it names none. */
 const profileOf = (binding: Record<string, unknown> | null): string | null => text(binding?.['profile']);
 
+/**
+ * The team the global default's binding names beside its profile, which it sends in whatever the profile pins; null where it
+ * names none, or the routes were not read.
+ */
+export const defaultTeam = (routes: Routes | null): string | null => text(routes?.globalDefault?.binding?.['team_id']);
+
 /** The profile each route to `reply` of these names, null for one that names none. */
 const replyProfiles = (routes: Record<string, unknown>[]): (string | null)[] =>
     routes.filter((route) => route['plugin_id'] === 'reply').map((route) => profileOf(objectOf(route['binding'])));

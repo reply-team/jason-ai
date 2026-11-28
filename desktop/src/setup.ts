@@ -20,6 +20,7 @@ import {
     followedProfile,
     signInReason,
     defaultRefusal,
+    defaultTeam,
     isAccountRef,
     nonProductionApi,
     readBackend,
@@ -1005,7 +1006,8 @@ export class Setup {
      * its own name as Jason's work acts as it. With no Reply CLI at the minimum nothing is asked of an account, and a
      * profile only a route names is asked nothing. `ReplyState` is the default account's, or the profile `default`'s where
      * no Reply account is the default; its `wired` says that Jason's Reply plugin is valid and the global default names
-     * that very account. `valid` is null where the runtime gave no plugin list.
+     * that very account, and no team beside it but the one the account is bound to, so the plugin sends as its sign-in.
+     * `valid` is null where the runtime gave no plugin list.
      */
     async #reply(begun: number, valid: boolean | null, runtimeVersion: string | null): Promise<{ reply: ReplyState; accounts: AccountsState }> {
         const none: AccountsState = { accounts: [], notRead: [], noDefault: false };
@@ -1061,6 +1063,7 @@ export class Setup {
         this.#keepListing(begun, accounts, listing?.routed ?? null, new Map(read.map(({ account, pin, userId }) => [account.name, { pin, userId }])));
         const acting = actingOf(accounts);
         const routeUnread = valid === null || routes === null ? ['route' as const] : [];
+        const sendsIn = defaultTeam(routes);
         const reply: ReplyState =
             acting === null
                 ? { cli, ...nobody, notRead: ['auth', ...routeUnread], ...tail }
@@ -1068,7 +1071,7 @@ export class Setup {
                       cli,
                       signedIn: acting.signedIn,
                       user: acting.user,
-                      wired: valid === true && acting.default,
+                      wired: valid === true && acting.default && (sendsIn === null || sendsIn === acting.team?.id),
                       accounts: acting.senders,
                       absent: acting.absent,
                       unread: acting.unread,
